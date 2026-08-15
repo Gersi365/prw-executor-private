@@ -35,6 +35,39 @@ use super::worker_registry::{
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
+/// Immutable operational inputs for one production-local runtime invocation.
+#[derive(Debug, Clone, Copy)]
+pub struct LocalLinuxProductionRuntimeInputs<'a> {
+    config: LocalLinuxProductionRuntimeConfig,
+    policy: BoundedLocalReadPolicy,
+    status_snapshot: LocalAgentStatusSnapshot,
+    private_dns_snapshot: &'a LocalPrivateDnsSnapshot,
+}
+
+impl<'a> LocalLinuxProductionRuntimeInputs<'a> {
+    /// Creates one immutable runtime-input bundle from already-validated values.
+    #[must_use]
+    pub const fn new(
+        config: LocalLinuxProductionRuntimeConfig,
+        policy: BoundedLocalReadPolicy,
+        status_snapshot: LocalAgentStatusSnapshot,
+        private_dns_snapshot: &'a LocalPrivateDnsSnapshot,
+    ) -> Self {
+        Self {
+            config,
+            policy,
+            status_snapshot,
+            private_dns_snapshot,
+        }
+    }
+
+    /// Returns the validated production runtime configuration.
+    #[must_use]
+    pub const fn config(self) -> LocalLinuxProductionRuntimeConfig {
+        self.config
+    }
+}
+
 /// Terminal evidence produced inside the worker scope, before listener cleanup.
 #[derive(Debug, PartialEq, Eq)]
 pub struct LocalLinuxProductionRuntimeLoopExit {
@@ -98,17 +131,14 @@ pub fn run_local_linux_production_runtime_loop(
     wake: &LocalLinuxRuntimeWake,
     capacity: &LocalLinuxWorkerCapacity,
     control: &LocalLinuxSchedulerControl,
-    config: LocalLinuxProductionRuntimeConfig,
-    policy: &BoundedLocalReadPolicy,
-    status_snapshot: LocalAgentStatusSnapshot,
-    private_dns_snapshot: &LocalPrivateDnsSnapshot,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
 ) -> LocalLinuxProductionRuntimeLoopExit {
     let context = LocalLinuxRuntimeSchedulerContext::new(
         capacity,
-        policy,
-        status_snapshot,
-        private_dns_snapshot,
-        config.worker_config(),
+        &inputs.policy,
+        inputs.status_snapshot,
+        inputs.private_dns_snapshot,
+        inputs.config.worker_config(),
         wake.notifier(),
     );
 
@@ -124,7 +154,7 @@ pub fn run_local_linux_production_runtime_loop(
                 &mut registry,
                 control,
                 &context,
-                config.scheduling_attempt_budget(),
+                inputs.config.scheduling_attempt_budget(),
             );
 
             match iteration {
@@ -191,32 +221,20 @@ fn record_error_evidence(
 /// Returns only Phase 096 lifecycle assembly failures. Runtime readiness and
 /// scheduling failures are represented as bounded terminal report reasons.
 pub fn run_local_linux_production_runtime_from_env<F>(
-    config: LocalLinuxProductionRuntimeConfig,
-    policy: &BoundedLocalReadPolicy,
-    status_snapshot: LocalAgentStatusSnapshot,
-    private_dns_snapshot: &LocalPrivateDnsSnapshot,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
     on_started: F,
 ) -> Result<LocalLinuxProductionRuntimeTerminalReport, LocalLinuxProductionLifecycleAssemblyError>
 where
     F: FnOnce(LocalLinuxRuntimeShutdownHandle),
 {
     let execution = with_local_linux_production_lifecycle_from_env(
-        config,
+        inputs.config(),
         |listener, wake, capacity, control| {
             on_started(LocalLinuxRuntimeShutdownHandle::new(
                 control.clone(),
                 wake.notifier(),
             ));
-            run_local_linux_production_runtime_loop(
-                listener,
-                wake,
-                capacity,
-                control,
-                config,
-                policy,
-                status_snapshot,
-                private_dns_snapshot,
-            )
+            run_local_linux_production_runtime_loop(listener, wake, capacity, control, inputs)
         },
     )?;
 
@@ -227,10 +245,7 @@ where
 #[cfg(test)]
 fn run_local_linux_production_runtime_in_root_path<F>(
     root_path: &std::path::Path,
-    config: LocalLinuxProductionRuntimeConfig,
-    policy: &BoundedLocalReadPolicy,
-    status_snapshot: LocalAgentStatusSnapshot,
-    private_dns_snapshot: &LocalPrivateDnsSnapshot,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
     on_started: F,
 ) -> Result<LocalLinuxProductionRuntimeTerminalReport, LocalLinuxProductionLifecycleAssemblyError>
 where
@@ -238,22 +253,13 @@ where
 {
     let execution = super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
         root_path,
-        config,
+        inputs.config(),
         |listener, wake, capacity, control| {
             on_started(LocalLinuxRuntimeShutdownHandle::new(
                 control.clone(),
                 wake.notifier(),
             ));
-            run_local_linux_production_runtime_loop(
-                listener,
-                wake,
-                capacity,
-                control,
-                config,
-                policy,
-                status_snapshot,
-                private_dns_snapshot,
-            )
+            run_local_linux_production_runtime_loop(listener, wake, capacity, control, inputs)
         },
     )?;
 
@@ -268,15 +274,17 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixStream;
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Mutex};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
 
     use prw_network::PrivateDnsConfig;
     use prw_policy::BoundedLocalReadPolicy;
 
-    use super::run_local_linux_production_runtime_in_root_path;
+    use super::{
+        LocalLinuxProductionRuntimeInputs, run_local_linux_production_runtime_in_root_path,
+    };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
@@ -325,8 +333,13 @@ mod tests {
             .expect("default DNS config is bounded")
     }
 
-    fn status() -> LocalAgentStatusSnapshot {
-        LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready)
+    fn inputs(dns: &LocalPrivateDnsSnapshot) -> LocalLinuxProductionRuntimeInputs<'_> {
+        LocalLinuxProductionRuntimeInputs::new(
+            config(),
+            BoundedLocalReadPolicy::allow_local_reads(),
+            LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready),
+            dns,
+        )
     }
 
     fn socket_path(root: &Path) -> PathBuf {
@@ -341,15 +354,11 @@ mod tests {
     #[test]
     fn programmatic_shutdown_before_first_wait_returns_clean_terminal_report() {
         let root = create_root("shutdown-first");
-        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
 
         let report = run_local_linux_production_runtime_in_root_path(
             &root,
-            config(),
-            &policy,
-            status(),
-            &dns,
+            inputs(&dns),
             |shutdown| {
                 shutdown
                     .request_shutdown_and_wake()
@@ -376,17 +385,13 @@ mod tests {
     fn one_client_round_trip_then_programmatic_shutdown_exits_and_cleans() {
         let root = create_root("client-shutdown");
         let path = socket_path(&root);
-        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let client_thread = Arc::new(Mutex::new(None));
         let client_thread_slot = Arc::clone(&client_thread);
 
         let report = run_local_linux_production_runtime_in_root_path(
             &root,
-            config(),
-            &policy,
-            status(),
-            &dns,
+            inputs(&dns),
             move |shutdown| {
                 let path = path.clone();
                 let handle = thread::spawn(move || {
