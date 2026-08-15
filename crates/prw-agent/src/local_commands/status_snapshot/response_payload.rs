@@ -46,17 +46,27 @@ pub fn decode_success_status_response(
     decode_status_snapshot(body).map_err(map_body_error)
 }
 
-const fn map_status_error(error: LocalAgentResponseDecodeError) -> LocalAgentStatusResponseDecodeError {
+const fn map_status_error(
+    error: LocalAgentResponseDecodeError,
+) -> LocalAgentStatusResponseDecodeError {
     match error {
-        LocalAgentResponseDecodeError::MissingStatus => LocalAgentStatusResponseDecodeError::MissingStatus,
-        LocalAgentResponseDecodeError::UnknownStatus => LocalAgentStatusResponseDecodeError::UnknownStatus,
+        LocalAgentResponseDecodeError::MissingStatus => {
+            LocalAgentStatusResponseDecodeError::MissingStatus
+        }
+        LocalAgentResponseDecodeError::UnknownStatus => {
+            LocalAgentStatusResponseDecodeError::UnknownStatus
+        }
     }
 }
 
 const fn map_body_error(error: LocalAgentStatusDecodeError) -> LocalAgentStatusResponseDecodeError {
     match error {
-        LocalAgentStatusDecodeError::InvalidLength => LocalAgentStatusResponseDecodeError::InvalidBodyLength,
-        LocalAgentStatusDecodeError::UnknownRuntimeState => LocalAgentStatusResponseDecodeError::UnknownRuntimeState,
+        LocalAgentStatusDecodeError::InvalidLength => {
+            LocalAgentStatusResponseDecodeError::InvalidBodyLength
+        }
+        LocalAgentStatusDecodeError::UnknownRuntimeState => {
+            LocalAgentStatusResponseDecodeError::UnknownRuntimeState
+        }
         LocalAgentStatusDecodeError::UnsupportedProtocolVersion => {
             LocalAgentStatusResponseDecodeError::UnsupportedProtocolVersion
         }
@@ -86,7 +96,9 @@ mod tests {
         LOCAL_AGENT_STATUS_SUCCESS_PAYLOAD_LENGTH, LocalAgentStatusResponseDecodeError,
         decode_success_status_response, encode_success_status_response,
     };
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
 
     #[test]
     fn successful_status_payload_length_is_locked_to_seven_bytes() {
