@@ -132,12 +132,9 @@ pub fn decode_private_dns_snapshot(
         .map_err(LocalPrivateDnsDecodeError::SnapshotInvariant)
 }
 
-fn append_string(
-    output: &mut Vec<u8>,
-    value: &str,
-) -> Result<(), LocalPrivateDnsEncodeError> {
-    let length = u16::try_from(value.len())
-        .map_err(|_| LocalPrivateDnsEncodeError::EntryLengthInvariant)?;
+fn append_string(output: &mut Vec<u8>, value: &str) -> Result<(), LocalPrivateDnsEncodeError> {
+    let length =
+        u16::try_from(value.len()).map_err(|_| LocalPrivateDnsEncodeError::EntryLengthInvariant)?;
     output.extend_from_slice(&length.to_be_bytes());
     output.extend_from_slice(value.as_bytes());
     Ok(())
