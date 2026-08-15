@@ -1,0 +1,124 @@
+Private Remote Workspace
+Phase 095 Linux Production Runtime Types
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+AUDIT TYPE: PRODUCTION-RUNTIME CONFIGURATION / BOUNDED EVIDENCE / ERROR-DISPOSITION IMPLEMENTATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Integrated source commit: 598a99378341f2800d81cc68ff6d98692fd54bde
+Authoritative validated source/trigger head: 0eda7626584e9205546929ba45e13139e05486bf
+Final architecture-status commit: b059e0db7ee2d02a0171f6bb7dd10c9016d939a8
+Authoritative permanent CI run: 31901455301
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+IMPLEMENTED SOURCE
+
+- crates/prw-agent/src/linux_production_runtime_types.rs
+- crates/prw-agent/src/linux_identity.rs — module export/documentation only
+- docs/architecture/PHASE_095_LINUX_PRODUCTION_RUNTIME_TYPES.md
+
+VALIDATED TYPE SURFACE
+
+`LocalLinuxProductionRuntimeConfig`
+- explicit non-zero worker capacity;
+- explicit non-zero listener backlog;
+- explicit non-zero per-readiness scheduling-attempt budget;
+- finite per-worker request budget;
+- finite read I/O budget;
+- finite write I/O budget.
+
+`LocalLinuxRuntimeCounter`
+- u64 storage;
+- saturating increment/add semantics;
+- no wraparound.
+
+`LocalLinuxProductionRuntimeCounters`
+- readiness-step count;
+- listener-armed step count;
+- runtime-wake count;
+- wait-interruption count;
+- scheduling-attempt count;
+- worker-registration count;
+- worker-completion count;
+- peer-rejection count;
+- fixed-size aggregate memory footprint independent of process lifetime.
+
+ERROR DISPOSITION
+
+Locked Phase 094-A01 policy is represented explicitly:
+
+- same-UID peer-authorization rejection => `ContinueAfterPeerRejection`;
+- readiness failures => `FailStop`;
+- ordinary accept failure => `FailStop`;
+- cancellation clone failure => `FailStop`;
+- worker spawn failure => `FailStop`.
+
+Fatal errors preserve exact readiness/scheduling classification rather than collapsing to a generic failure.
+
+TERMINAL EVIDENCE
+
+`LocalLinuxProductionRuntimeTerminalReport` keeps:
+
+- original terminal reason;
+- process-lifetime aggregate counters;
+- final cancellation outcomes;
+- final joined worker completions;
+- listener/socket cleanup outcome.
+
+Final cancellation/completion vectors are bounded by configured maximum worker capacity rather than growing with daemon lifetime. Cleanup failure is represented independently and does not overwrite the terminal reason.
+
+CORRECTIVE HISTORY
+
+Initial integration run `31901374645` stopped safely at Clippy before source integration. The only reported defects were three `clippy::missing_const_for_fn` findings.
+
+Phase 095-A01 run `31901410245` applied exactly the mechanical const qualification to:
+
+- `classify_production_runtime_error`;
+- `LocalLinuxProductionRuntimeFatalError::from_orchestration_error`;
+- `LocalLinuxProductionRuntimeTerminalReport::new`.
+
+A01 then passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check` before committing the source. Both temporary Phase 095 workflows were deleted in the integration commit.
+
+AUTHORITATIVE VALIDATION
+
+Permanent PRW Rust Validation run `31901455301` passed:
+
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+POST-VALIDATION GUARDS
+
+- `Cargo.lock` remains byte-identical at blob SHA `76af6bd831191309ac904dfe02ef76729de9a4fb`.
+- `.github/workflows/` contains only permanent `phase-001-rust-validation.yml`.
+- no temporary Phase 095 workflow remains.
+
+BOUNDARY PRESERVED
+
+Phase 095 did not:
+
+- assemble production lifecycle resources;
+- start/listen on the Agent socket as a production runtime;
+- implement a long-running outer loop;
+- add OS signal handling or a signal dependency;
+- edit/activate `crates/prw-agent/src/main.rs`;
+- install, enable, or start systemd;
+- deploy anything;
+- expose remote/public networking;
+- change auth/enrollment, DNS/TUN/relay/database/private-key behavior;
+- introduce Wake-on-LAN.
+
+NEXT AUTHORIZED STEP
+
+Phase 096 may implement the Phase 094-A01-authorized production lifecycle owner + rollback assembly in test-owned temporary runtime directories, without `main.rs` wiring, OS signal handling, or service activation.
+
+FINAL CLASSIFICATION
+
+PRODUCTION_RUNTIME_TYPES_IMPLEMENTED / IMMUTABLE_VALIDATED_CONFIG / SATURATING_MEMORY_BOUNDED_COUNTERS / CONNECTION_LOCAL_PEER_REJECTION / OTHER_INITIAL_RUNTIME_ERRORS_FAIL_STOP / TERMINAL_REASON_PRESERVED_ACROSS_CLEANUP / NO_RUNTIME_LOOP / NO_BOOTSTRAP_ACTIVATION / PASS
+
+This file is the single authoritative user-facing Phase 095 audit report.
