@@ -70,9 +70,7 @@ pub enum LocalRequestAdmissionError {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        LocalRequestAdmissionError, policy_admit_local_request, required_capability,
-    };
+    use super::{LocalRequestAdmissionError, policy_admit_local_request, required_capability};
     use crate::LocalIpcRequestId;
     use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
     use prw_policy::{Capability, Decision, PolicyEvaluator};
@@ -116,11 +114,8 @@ mod tests {
     #[test]
     fn exact_allow_produces_token_with_preserved_request_metadata() {
         let request = LocalAgentRequestEnvelope::new(id(190), LocalAgentCommand::GetAgentStatus);
-        let admitted = policy_admit_local_request(
-            request,
-            &AllowOnly(Capability::AgentStatusRead),
-        )
-        .expect("matching capability admits request");
+        let admitted = policy_admit_local_request(request, &AllowOnly(Capability::AgentStatusRead))
+            .expect("matching capability admits request");
 
         assert_eq!(admitted.request_id(), id(190));
         assert_eq!(admitted.command(), LocalAgentCommand::GetAgentStatus);
@@ -128,10 +123,8 @@ mod tests {
 
     #[test]
     fn allowing_status_does_not_allow_private_dns_read() {
-        let request = LocalAgentRequestEnvelope::new(
-            id(191),
-            LocalAgentCommand::GetPrivateDnsConfig,
-        );
+        let request =
+            LocalAgentRequestEnvelope::new(id(191), LocalAgentCommand::GetPrivateDnsConfig);
 
         assert_eq!(
             policy_admit_local_request(request, &AllowOnly(Capability::AgentStatusRead)),
