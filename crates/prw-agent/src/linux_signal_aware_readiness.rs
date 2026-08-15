@@ -121,12 +121,12 @@ pub enum LocalLinuxSignalAwareReadinessError {
 /// Returns a bounded fail-closed error for impossible `poll` results, descriptor
 /// error/unknown flags, signal-read failure, wake-drain failure, or a listener
 /// capacity invariant violation.
-pub fn wait_once_for_signal_aware_linux_runtime_readiness<'scope>(
+pub fn wait_once_for_signal_aware_linux_runtime_readiness(
     listener: &AcceptReadyAgentSocket<'_>,
     signal_source: &LocalLinuxTerminationSignalSource,
     wake: &LocalLinuxRuntimeWake,
     capacity: &LocalLinuxWorkerCapacity,
-    registry: &mut LocalLinuxScopedWorkerRegistry<'scope>,
+    registry: &mut LocalLinuxScopedWorkerRegistry<'_>,
     control: &LocalLinuxSchedulerControl,
 ) -> Result<LocalLinuxSignalAwareReadinessReport, LocalLinuxSignalAwareReadinessError> {
     if control.is_shutdown_requested() {
@@ -282,7 +282,7 @@ const fn report(
     }
 }
 
-fn classify_poll_call(
+const fn classify_poll_call(
     result: Result<usize, Errno>,
     descriptor_count: usize,
 ) -> Result<LocalLinuxSignalAwarePollCall, LocalLinuxSignalAwareReadinessError> {
@@ -373,8 +373,7 @@ mod tests {
     use super::{
         LocalLinuxSignalAwarePollCall, LocalLinuxSignalAwarePollDescriptor,
         LocalLinuxSignalAwareReadinessError, LocalLinuxSignalAwareReadyPath,
-        classify_descriptor_revents, classify_poll_call, select_ready_path,
-        validate_ready_count,
+        classify_descriptor_revents, classify_poll_call, select_ready_path, validate_ready_count,
     };
 
     #[test]
@@ -413,13 +412,7 @@ mod tests {
     #[test]
     fn ready_count_matches_exact_three_descriptor_observation() {
         assert_eq!(
-            validate_ready_count(
-                3,
-                PollFlags::IN,
-                PollFlags::IN,
-                PollFlags::IN,
-                true,
-            ),
+            validate_ready_count(3, PollFlags::IN, PollFlags::IN, PollFlags::IN, true,),
             Ok(())
         );
         assert_eq!(
@@ -442,10 +435,7 @@ mod tests {
             Err(LocalLinuxSignalAwareReadinessError::SignalDescriptorFailed)
         );
         assert_eq!(
-            classify_descriptor_revents(
-                PollFlags::HUP,
-                LocalLinuxSignalAwarePollDescriptor::Wake,
-            ),
+            classify_descriptor_revents(PollFlags::HUP, LocalLinuxSignalAwarePollDescriptor::Wake,),
             Err(LocalLinuxSignalAwareReadinessError::WakeDescriptorFailed)
         );
         assert_eq!(
