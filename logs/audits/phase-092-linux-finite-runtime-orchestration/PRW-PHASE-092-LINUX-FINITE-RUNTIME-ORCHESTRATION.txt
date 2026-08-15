@@ -1,0 +1,300 @@
+Private Remote Workspace
+Phase 092 Linux Finite Runtime Orchestration
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / NO_RUNTIME_ACTIVATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 architecture decision report commit: 8a033fb86d65dfca5ef9ec9980cae0dd6e31d486
+Phase 091 authoritative report commit: 0c9ac4348f19bff2171b6b6ded6991a2d365ed7d
+Integrated Phase 092 source commit: 4162b1ceeba14dbab8ef33cecd036f2e93e8b4d2
+Authoritative validation source/trigger head: 9700e9ec4343a0877104cacd5a40205aef84a4bf
+Validated architecture-status commit: 157dea7be546d531d06dcbd82b68e088f6e296af
+Authoritative GitHub Actions run: 31900742402
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+PURPOSE
+
+Complete the Phase 088-authorized implementation sequence below the production Agent bootstrap boundary by composing the validated Phase 091 capacity-aware one-step readiness primitive with a runtime-specific, caller-bounded scheduling cycle whose workers always emit the validated Phase 090 completion wake.
+
+Phase 092 proves the finite orchestration semantics required before any future production outer loop/bootstrap architecture may be considered.
+
+IMPLEMENTED SOURCE
+
+Primary runtime source:
+
+- crates/prw-agent/src/linux_runtime_orchestration.rs
+
+Integration/export update:
+
+- crates/prw-agent/src/linux_identity.rs
+
+Deterministic test-only corrective exposed by the wider Phase 092 suite:
+
+- crates/prw-agent/src/linux_worker_registry.rs
+- crates/prw-agent/src/linux_bounded_scheduler_cycle.rs
+
+Architecture evidence:
+
+- docs/architecture/PHASE_092_LINUX_FINITE_RUNTIME_ORCHESTRATION.md
+
+RUNTIME-SPECIFIC SCHEDULING
+
+Phase 092 adds LocalLinuxRuntimeSchedulerContext containing:
+
+- existing Phase 075 worker capacity;
+- existing bounded local policy;
+- existing local Agent status snapshot;
+- existing private-DNS snapshot;
+- existing finite worker configuration;
+- one Phase 089 completion-wake notifier.
+
+The runtime-specific one-shot scheduling transaction preserves Phase 084 ordering but uses only the Phase 090 completion-wake spawn path.
+
+Ordering remains:
+
+1. acquire capacity permit before accept;
+2. return AtCapacity without touching listener when no slot exists;
+3. perform one authenticated accept attempt;
+4. release permit on NoConnectionReady;
+5. create authenticated-stream cancellation authority;
+6. compose authenticated session;
+7. spawn one scoped worker through spawn_authenticated_session_worker_with_completion_wake(...);
+8. register scoped handle and matching cancellation authority.
+
+The pre-existing Phase 084/086 APIs remain intact and are not silently converted to require runtime wake state.
+
+BOUNDED RUNTIME SCHEDULING CYCLE
+
+run_bounded_runtime_scheduling_cycle(...) preserves Phase 085/086 finite semantics while guaranteeing completion-wake workers:
+
+- caller supplies NonZeroUsize attempt budget;
+- registry.reap_finished() occurs before every possible schedule;
+- shutdown is rechecked before every possible accept;
+- first error terminates without scheduler retry;
+- AtCapacity terminates current cycle immediately;
+- NoConnectionReady terminates current cycle immediately;
+- WorkerRegistered may continue only while attempt budget remains;
+- report records completions, workers registered, scheduling attempts, and Phase 085-compatible stop reason.
+
+FINITE READINESS + SCHEDULING ORCHESTRATION
+
+run_finite_linux_runtime_orchestration(...) contains no outer loop.
+
+It performs exactly one Phase 091 readiness invocation.
+
+- ShutdownObserved => zero scheduling attempts and immediate return.
+- RuntimeWake => zero scheduling attempts and immediate return.
+- WaitInterrupted => zero scheduling attempts and immediate return.
+- ListenerReady => exactly one caller-bounded runtime-specific scheduling cycle may run.
+
+The scheduling cycle independently rechecks shutdown before every possible accept, preserving a second fail-closed gate after Phase 091 wake-first handling.
+
+SHUTDOWN STATE-BEFORE-WAKE
+
+Phase 092 adds LocalLinuxRuntimeShutdownHandle as a bounded producer helper.
+
+request_shutdown_and_wake() ordering is locked and implemented as:
+
+1. LocalLinuxSchedulerControl::request_shutdown();
+2. Phase 089 notifier.notify().
+
+Shutdown state remains committed even if wake notification reports a bounded error.
+
+No OS signal handler or production service-manager source is introduced.
+
+FOCUSED RUNTIME PROOFS
+
+1. COMPLETION-WAKE WORKER REGISTRATION
+
+A listener-ready finite orchestration step registers one worker through the Phase 090 completion-wake path, produces a valid bounded local status response, and later exposes a completion wake with released capacity.
+
+2. COMPLETION WAKE RESTORES CAPACITY FOR THE NEXT CLIENT
+
+The deterministic proof uses capacity one:
+
+- first worker is scheduled;
+- capacity is observed full and no completion wake is pending;
+- first client is closed;
+- Phase 091 waits while no second client is queued and receives the completion wake;
+- capacity is observed zero;
+- only then is the second client connected and its bounded request written;
+- a later finite Phase 092 invocation registers exactly one second completion-wake worker;
+- second response validates;
+- second completion wake returns capacity to zero.
+
+This proves progress without polling cadence, arbitrary sleep, listener spin, or missed completion wake.
+
+3. SHUTDOWN PREVENTS QUEUED ACCEPT
+
+A client is queued, shutdown state is committed and wake posted, and finite orchestration returns ShutdownObserved with:
+
+- zero scheduling attempts;
+- zero workers registered;
+- zero active workers.
+
+An explicit later test accept proves the queued client remained in the listener, demonstrating that shutdown orchestration did not consume it.
+
+4. AT-CAPACITY PRESERVES QUEUED CLIENT
+
+With the sole capacity permit held and a client queued, the runtime-specific bounded scheduling cycle:
+
+- performs exactly one attempt;
+- returns AtCapacity;
+- registers no worker;
+- leaves the client queued.
+
+5. EVENTFD COUNTER IS NOT SEMANTIC DATA
+
+Multiple wake notifications may coalesce into one drainable Phase 089 state. The counter is not interpreted as worker-result count, scheduling attempt count, request identity, or protocol data.
+
+PHASE 086 TEST-RACE CORRECTIVE
+
+Phase 092 A01 exposed one latent flaky assumption in the existing Phase 086 test reaps_finished_worker_before_next_schedule_attempt.
+
+The old test waited until LocalLinuxWorkerCapacity::active_workers() == 0 and treated that as proof that ScopedJoinHandle::is_finished() must already be true.
+
+That implication is invalid: worker-owned LocalLinuxWorkerPermit may be dropped during worker-body completion before the scoped thread has necessarily completed the final state transition observed by ScopedJoinHandle::is_finished().
+
+No production Phase 086 or registry semantics were changed.
+
+A test-only #[cfg(test)] method was added:
+
+LocalLinuxScopedWorkerRegistry::has_finished_worker_for_test()
+
+It observes the actual condition used by reap_finished(): retained handle.is_finished().
+
+The existing Phase 086 test now waits for that exact condition and then additionally confirms active worker capacity is zero before calling the bounded cycle.
+
+This corrective changes test synchronization only; it adds no production API or behavior.
+
+PREFLIGHT HISTORY
+
+Initial integration preflight run 31900494375:
+
+- stopped safely before commit;
+- defect limited to a borrowed test-fixture cleanup method attempting to move owned fixture fields;
+- no integrated source committed.
+
+A01 workflow history:
+
+- initial A01 commit 7bc17f7b2cf1197b56e3c21cee51b598d6518c7e produced no jobs due YAML indentation in embedded Python text;
+- YAML-safe correction commit 6a6dd9f2ea8885664ccc873a3b7cd25b76ab6ce9 produced valid run 31900571690;
+- A01 passed compilation/Clippy and all new Phase 092 tests;
+- A01 failed only the latent Phase 086 test-race described above;
+- no integrated source commit occurred from the failed A01 run.
+
+A02 preflight run 31900636680:
+
+- applied the deterministic test-only Phase 086 corrective;
+- mutation guard allowed exactly four source files;
+- passed locked metadata;
+- passed rustfmt;
+- passed Clippy with -D warnings;
+- passed all workspace/all-target tests;
+- passed all workspace/all-target builds;
+- passed git diff --check;
+- committed integrated source only after full PASS;
+- removed every temporary Phase 092 workflow in the same integration commit.
+
+Integrated source commit:
+
+4162b1ceeba14dbab8ef33cecd036f2e93e8b4d2
+
+AUTHORITATIVE PERMANENT VALIDATION
+
+Permanent PRW Rust Validation run:
+
+31900742402
+
+Validated source/trigger head:
+
+9700e9ec4343a0877104cacd5a40205aef84a4bf
+
+Conclusion: SUCCESS
+
+Passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+The permanent run independently validates the integrated Phase 092 code and the deterministic Phase 086 test corrective outside the temporary integration preflight.
+
+DEPENDENCY / TOOLCHAIN GUARDS
+
+- Rust/Cargo source pin remains exact 1.97.1.
+- rustix remains 1.1.4.
+- Phase 092 adds no dependency or Cargo feature change.
+- Cargo.lock remains byte-identical with blob SHA 76af6bd831191309ac904dfe02ef76729de9a4fb.
+
+NET MUTATION SURFACE
+
+Comparison from Phase 091 authoritative report commit:
+
+0c9ac4348f19bff2171b6b6ded6991a2d365ed7d
+
+to Phase 092 authoritative validation head:
+
+9700e9ec4343a0877104cacd5a40205aef84a4bf
+
+contains exactly:
+
+- crates/prw-agent/src/linux_runtime_orchestration.rs — new Phase 092 runtime source;
+- crates/prw-agent/src/linux_identity.rs — Phase 092 module export/documentation;
+- crates/prw-agent/src/linux_worker_registry.rs — test-only finished-handle observer;
+- crates/prw-agent/src/linux_bounded_scheduler_cycle.rs — test-only deterministic reap-first wait;
+- docs/architecture/PHASE_092_LINUX_FINITE_RUNTIME_ORCHESTRATION.md.
+
+No temporary Phase 092 workflow is present in the net mutation.
+
+WORKFLOW CLEANUP
+
+After Phase 092 integration, .github/workflows contains only:
+
+.github/workflows/phase-001-rust-validation.yml
+
+No Phase 092 integration/preflight/corrective workflow remains.
+
+SCOPE PRESERVED
+
+Phase 092 does NOT:
+
+- introduce a production infinite or long-running outer runtime loop;
+- wire runtime orchestration into crates/prw-agent/src/main.rs;
+- select production capacity, backlog, request budgets, scheduling cadence, or deadlines;
+- install or activate OS signal handling;
+- create/install/enable/start systemd service state;
+- bind remote/public listeners;
+- change enrollment/account authentication;
+- mutate private DNS or TUN state;
+- add relay runtime;
+- change databases;
+- change private-key handling;
+- deploy or activate production runtime state.
+
+PHASE 088 AUTHORIZATION COMPLETION
+
+The bounded implementation sequence explicitly authorized by Phase 088 is complete:
+
+- Phase 089 runtime wake primitive — PASS;
+- Phase 090 scoped worker completion wake — PASS;
+- Phase 091 one-step capacity-aware readiness — PASS;
+- Phase 092 finite readiness + scheduling orchestration proof — PASS.
+
+NEXT BOUNDARY
+
+The next technically natural work would cross into a new runtime architecture boundary: a production long-running outer Agent runtime loop/bootstrap, including concrete runtime configuration, shutdown source/signal lifecycle, partial-initialization rollback, and eventual service-manager integration.
+
+Phase 088 explicitly deferred that boundary. Phase 092 does not authorize it.
+
+Read-only architecture audit/preparation may occur without activating runtime state, but production loop/bootstrap/source implementation requires a new explicit approval.
+
+FINAL CLASSIFICATION
+
+PHASE_092_IMPLEMENTED_AND_VALIDATED / FINITE_READINESS_PLUS_RUNTIME_SCHEDULING / COMPLETION_WAKE_WORKERS_ONLY / SHUTDOWN_STATE_BEFORE_WAKE / AT_CAPACITY_NO_ACCEPT / COMPLETION_WAKE_RESTORES_CAPACITY / PHASE_086_TEST_RACE_CORRECTED_TEST_ONLY / CARGO_LOCK_UNCHANGED / TEMP_WORKFLOWS_REMOVED / NO_RUNTIME_ACTIVATION / PASS
+
+This is the single authoritative user-facing Phase 092 report.
