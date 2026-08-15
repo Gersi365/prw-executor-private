@@ -70,6 +70,13 @@ impl<'scope> LocalLinuxScopedWorkerRegistry<'scope> {
         self.entries.is_empty()
     }
 
+    /// Returns whether any retained scoped handle is kernel/thread-finished.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn has_finished_worker_for_test(&self) -> bool {
+        self.entries.iter().any(|entry| entry.handle.is_finished())
+    }
+
     /// Issues terminal socket shutdown to every currently registered worker.
     ///
     /// The registry and join handles remain intact. A shutdown syscall failure is

@@ -16,9 +16,10 @@
 //! cancellation authority, Phase 084 composes one capacity-gated scheduling
 //! transaction, Phase 086 adds a finite shutdown-gated scheduling cycle, Phase
 //! 089 adds an isolated coalescing Linux runtime wake transport, Phase 090 adds
-//! a runtime-specific worker completion wake wrapper, and Phase 091 adds one
-//! capacity-aware blocking readiness wait step. The Agent bootstrap remains
-//! inactive and no long-running accept/readiness loop is enabled.
+//! a runtime-specific worker completion wake wrapper, Phase 091 adds one
+//! capacity-aware blocking readiness wait step, and Phase 092 adds finite
+//! readiness-plus-completion-wake scheduling orchestration. The Agent bootstrap
+//! remains inactive and no long-running accept/readiness loop is enabled.
 
 #[allow(
     dead_code,
@@ -80,6 +81,12 @@ pub mod one_shot_scheduler;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-runtime finite Linux readiness/scheduling orchestration is intentionally crate-internal"
+)]
+#[path = "linux_runtime_orchestration.rs"]
+pub mod runtime_orchestration;
 #[allow(
     dead_code,
     reason = "pre-runtime one-step Linux readiness wait is intentionally crate-internal"

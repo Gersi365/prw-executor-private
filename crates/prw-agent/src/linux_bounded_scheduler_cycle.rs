@@ -583,9 +583,10 @@ mod tests {
                 Ok(LocalLinuxOneShotScheduleOutcome::WorkerRegistered)
             );
 
-            while capacity.active_workers() != 0 {
+            while !registry.has_finished_worker_for_test() {
                 thread::yield_now();
             }
+            assert_eq!(capacity.active_workers(), 0);
             assert_eq!(registry.len(), 1);
 
             let report = run_bounded_scheduling_cycle(

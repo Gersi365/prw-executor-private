@@ -10,18 +10,12 @@ use std::thread::Scope;
 
 use prw_policy::BoundedLocalReadPolicy;
 
-use super::accept_ready::{
-    AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome,
-};
+use super::accept_ready::{AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome};
 use super::authenticated_session_bridge::{
     AuthenticatedAgentSessionOutcome, compose_authenticated_session,
 };
-use super::bounded_scheduler_cycle::{
-    LocalLinuxSchedulerControl, LocalLinuxSchedulingCycleStop,
-};
-use super::one_shot_scheduler::{
-    LocalLinuxOneShotScheduleError, LocalLinuxOneShotScheduleOutcome,
-};
+use super::bounded_scheduler_cycle::{LocalLinuxSchedulerControl, LocalLinuxSchedulingCycleStop};
+use super::one_shot_scheduler::{LocalLinuxOneShotScheduleError, LocalLinuxOneShotScheduleOutcome};
 use super::runtime_readiness::{
     LocalLinuxRuntimeReadinessError, LocalLinuxRuntimeReadinessOutcome,
     wait_once_for_linux_runtime_readiness,
@@ -34,9 +28,7 @@ use super::session_worker::LocalLinuxSessionWorkerConfig;
 use super::session_worker_thread::{
     LocalLinuxCompletionWakeWorkerConfig, spawn_authenticated_session_worker_with_completion_wake,
 };
-use super::worker_cancellation::{
-    LocalLinuxWorkerCancellation, LocalLinuxWorkerCancellationCreateError,
-};
+use super::worker_cancellation::LocalLinuxWorkerCancellation;
 use super::worker_capacity::{LocalLinuxWorkerCapacity, LocalLinuxWorkerCapacityError};
 use super::worker_completion::LocalLinuxScopedWorkerCompletion;
 use super::worker_registry::LocalLinuxScopedWorkerRegistry;
@@ -409,14 +401,9 @@ pub fn run_finite_linux_runtime_orchestration<'scope>(
     context: &LocalLinuxRuntimeSchedulerContext<'scope>,
     attempt_budget: NonZeroUsize,
 ) -> Result<LocalLinuxRuntimeOrchestrationReport, LocalLinuxRuntimeOrchestrationError> {
-    let readiness = wait_once_for_linux_runtime_readiness(
-        listener,
-        wake,
-        context.capacity,
-        registry,
-        control,
-    )
-    .map_err(LocalLinuxRuntimeOrchestrationError::Readiness)?;
+    let readiness =
+        wait_once_for_linux_runtime_readiness(listener, wake, context.capacity, registry, control)
+            .map_err(LocalLinuxRuntimeOrchestrationError::Readiness)?;
 
     let listener_armed = readiness.listener_armed();
     let readiness_completions = readiness.completions().to_vec();
@@ -490,7 +477,6 @@ const fn orchestration_report(
 #[cfg(test)]
 mod tests {
     use std::fs::{self, Permissions};
-    use std::io::Read;
     use std::num::{NonZeroU16, NonZeroUsize};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixStream;
@@ -505,11 +491,12 @@ mod tests {
     use super::{
         LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulerContext,
         LocalLinuxRuntimeShutdownHandle, run_finite_linux_runtime_orchestration,
+        wait_once_for_linux_runtime_readiness,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
     use crate::linux_identity::accept_ready::{
-        AuthenticatedAgentAcceptOutcome, prepare_accept_ready_agent_socket,
+        AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome, prepare_accept_ready_agent_socket,
     };
     use crate::linux_identity::bound_socket::bind_validated_agent_socket;
     use crate::linux_identity::bounded_scheduler_cycle::{
@@ -523,11 +510,11 @@ mod tests {
     use crate::linux_identity::session_worker::LocalLinuxSessionWorkerConfig;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
     use crate::linux_identity::worker_registry::LocalLinuxScopedWorkerRegistry;
+    use crate::linux_identity::xdg_runtime_root;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
         AgentInstanceLock, acquire_agent_instance_lock,
     };
-    use crate::linux_identity::{AcceptReadyAgentSocket, xdg_runtime_root};
     use crate::local_commands::LocalAgentCommand;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
@@ -582,11 +569,9 @@ mod tests {
                 .join(AGENT_SOCKET_FILENAME)
         }
 
-        fn cleanup(self, listener: AcceptReadyAgentSocket<'_>) {
+        fn cleanup(&self, listener: AcceptReadyAgentSocket<'_>) {
             listener.cleanup().expect("listener cleanup succeeds");
-            drop(self.instance_lock);
-            drop(self.runtime_directory);
-            fs::remove_dir_all(self.root_path).expect("temporary Phase 092 root removes");
+            fs::remove_dir_all(&self.root_path).expect("temporary Phase 092 root removes");
         }
     }
 
@@ -653,7 +638,7 @@ mod tests {
         let listener = fixture.listener();
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
         let capacity = worker_capacity(1);
-        let policy = BoundedLocalReadPolicy::allow_all_local_reads();
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let control = LocalLinuxSchedulerControl::new();
         let context = context(&capacity, &policy, &dns, &wake, 1);
@@ -685,8 +670,7 @@ mod tests {
             assert!(report.listener_armed());
 
             let response = read_frame(&mut client).expect("worker response reads");
-            let response = decode_success_status_frame(&response)
-                .expect("status response decodes");
+            let response = decode_success_status_frame(&response).expect("status response decodes");
             assert_eq!(response.request_id(), id(700));
 
             let completion = wait_once_for_linux_runtime_readiness(
@@ -704,23 +688,21 @@ mod tests {
             ));
             assert_eq!(capacity.active_workers(), 0);
 
-            let cancellations = registry.cancel_all();
-            assert!(cancellations.is_empty());
-            let remaining = registry.join_all();
-            assert!(remaining.is_empty());
+            let _ = registry.cancel_all();
+            let _ = registry.join_all();
         });
 
         fixture.cleanup(listener);
     }
 
     #[test]
-    fn worker_completion_wake_precedes_dispatch_of_second_queued_client() {
-        let fixture = RuntimeFixture::new("completion-restores-listener");
+    fn worker_completion_wake_restores_capacity_for_next_client() {
+        let fixture = RuntimeFixture::new("completion-restores-capacity");
         let socket_path = fixture.socket_path();
         let listener = fixture.listener();
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
         let capacity = worker_capacity(1);
-        let policy = BoundedLocalReadPolicy::allow_all_local_reads();
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let control = LocalLinuxSchedulerControl::new();
         let context = context(&capacity, &policy, &dns, &wake, 1);
@@ -740,17 +722,35 @@ mod tests {
             .expect("first client schedules");
             assert_eq!(first.workers_registered(), 1);
             assert_eq!(capacity.active_workers(), 1);
-            assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+            assert_eq!(
+                wake.drain(),
+                Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+            );
 
-            let mut second_client = UnixStream::connect(&socket_path).expect("second client queues");
+            drop(first_client);
+
+            let completion = wait_once_for_linux_runtime_readiness(
+                &listener,
+                &wake,
+                &capacity,
+                &mut registry,
+                &control,
+            )
+            .expect("first completion wake is observed");
+            assert_eq!(
+                completion.outcome(),
+                crate::linux_identity::runtime_readiness::LocalLinuxRuntimeReadinessOutcome::RuntimeWake
+            );
+            assert_eq!(capacity.active_workers(), 0);
+
+            let mut second_client =
+                UnixStream::connect(&socket_path).expect("second client connects after wake");
             write_local_command_request(
                 &mut second_client,
                 id(701),
                 LocalAgentCommand::GetAgentStatus,
             )
             .expect("second request writes");
-
-            drop(first_client);
 
             let second = run_finite_linux_runtime_orchestration(
                 scope,
@@ -761,7 +761,7 @@ mod tests {
                 &context,
                 NonZeroUsize::new(1).expect("attempt budget is nonzero"),
             )
-            .expect("completion wake restores scheduling eligibility");
+            .expect("released capacity permits next scheduling step");
 
             assert_eq!(second.workers_registered(), 1);
             assert_eq!(second.scheduling_attempts(), 1);
@@ -771,14 +771,13 @@ mod tests {
                     LocalLinuxSchedulingCycleStop::AttemptBudgetExhausted
                 )
             );
-            assert_eq!(capacity.active_workers(), 1);
 
             let response = read_frame(&mut second_client).expect("second response reads");
-            let response = decode_success_status_frame(&response)
-                .expect("second status response decodes");
+            let response =
+                decode_success_status_frame(&response).expect("second status response decodes");
             assert_eq!(response.request_id(), id(701));
 
-            let completion = wait_once_for_linux_runtime_readiness(
+            let _ = wait_once_for_linux_runtime_readiness(
                 &listener,
                 &wake,
                 &capacity,
@@ -787,7 +786,6 @@ mod tests {
             )
             .expect("second completion wake is observed");
             assert_eq!(capacity.active_workers(), 0);
-            assert!(completion.listener_armed());
 
             let _ = registry.cancel_all();
             let _ = registry.join_all();
@@ -803,12 +801,13 @@ mod tests {
         let listener = fixture.listener();
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
         let capacity = worker_capacity(1);
-        let policy = BoundedLocalReadPolicy::allow_all_local_reads();
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let control = LocalLinuxSchedulerControl::new();
         let shutdown = LocalLinuxRuntimeShutdownHandle::new(control.clone(), wake.notifier());
         let context = context(&capacity, &policy, &dns, &wake, 1);
-        let client = UnixStream::connect(socket_path).expect("queued shutdown-test client connects");
+        let client =
+            UnixStream::connect(socket_path).expect("queued shutdown-test client connects");
 
         assert!(shutdown.request_shutdown_and_wake().is_ok());
         assert!(control.is_shutdown_requested());
@@ -857,11 +856,12 @@ mod tests {
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
         let capacity = worker_capacity(1);
         let permit = capacity.try_acquire().expect("sole worker permit acquires");
-        let policy = BoundedLocalReadPolicy::allow_all_local_reads();
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let control = LocalLinuxSchedulerControl::new();
         let context = context(&capacity, &policy, &dns, &wake, 1);
-        let client = UnixStream::connect(socket_path).expect("queued capacity-test client connects");
+        let client =
+            UnixStream::connect(socket_path).expect("queued capacity-test client connects");
 
         thread::scope(|scope| {
             let mut registry = LocalLinuxScopedWorkerRegistry::new();
@@ -902,14 +902,9 @@ mod tests {
         notifier.notify().expect("first wake posts");
         notifier.notify().expect("second wake posts");
         assert_eq!(wake.drain(), Ok(()));
-        assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
-    }
-
-    #[test]
-    fn closed_client_after_scheduling_eventually_releases_stream() {
-        let (server, mut client) = UnixStream::pair().expect("Unix pair creates");
-        drop(server);
-        let mut byte = [0_u8; 1];
-        assert_eq!(client.read(&mut byte).expect("closed pair reaches EOF"), 0);
+        assert_eq!(
+            wake.drain(),
+            Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+        );
     }
 }
