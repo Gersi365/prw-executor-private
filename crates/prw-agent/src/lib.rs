@@ -260,8 +260,12 @@ pub enum LocalIpcFrameHeaderError {
 impl fmt::Display for LocalIpcFrameHeaderError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnsupportedVersion => formatter.write_str("unsupported local IPC protocol version"),
-            Self::PayloadTooLarge => formatter.write_str("local IPC payload exceeds maximum length"),
+            Self::UnsupportedVersion => {
+                formatter.write_str("unsupported local IPC protocol version")
+            }
+            Self::PayloadTooLarge => {
+                formatter.write_str("local IPC payload exceeds maximum length")
+            }
         }
     }
 }
@@ -274,9 +278,9 @@ mod tests {
 
     use super::{
         AGENT_RUNTIME_DIRECTORY_MODE, AGENT_SOCKET_MODE, LOCAL_IPC_FRAME_HEADER_LENGTH,
-        LOCAL_IPC_FRAME_MAGIC, LOCAL_IPC_MAX_PAYLOAD_LENGTH, LocalIpcContract,
-        LocalIpcFrameHeader, LocalIpcFrameHeaderError, LocalIpcMessageKind, LocalIpcProtocolVersion,
-        LocalIpcRequestId, LocalIpcRequestIdError, LocalIpcTransport, LocalPeerAuthorization,
+        LOCAL_IPC_FRAME_MAGIC, LOCAL_IPC_MAX_PAYLOAD_LENGTH, LocalIpcContract, LocalIpcFrameHeader,
+        LocalIpcFrameHeaderError, LocalIpcMessageKind, LocalIpcProtocolVersion, LocalIpcRequestId,
+        LocalIpcRequestIdError, LocalIpcTransport, LocalPeerAuthorization,
         LocalPeerCredentialSource,
     };
 
