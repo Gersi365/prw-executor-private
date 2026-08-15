@@ -1,6 +1,6 @@
 # Phase 091 — Linux One-Step Runtime Readiness
 
-Status: `CLIPPY_CORRECTED_INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -42,7 +42,7 @@ This directly addresses the full-capacity queued-listener spin identified by Pha
 
 ## Wake-first precedence
 
-A focused test makes both eventfd and listener readable before the wait. The result may expose listener readiness only after the wake has been drained. The test confirms the eventfd is empty afterward.
+A focused test makes both eventfd and listener readable before the wait. The result exposes listener readiness only after the wake has been drained. The test confirms the eventfd is empty afterward.
 
 ## Completion evidence
 
@@ -59,42 +59,51 @@ Phase 091 uses rustix 1.1.4:
 - `poll(&mut fds, None)`;
 - `PollFd::revents()`.
 
-## Validation and corrective state
+## Authoritative validation
 
-Initial integrated run `31900029359` passed exact Rust/Cargo 1.97.1 toolchain resolution and locked metadata, then failed safely only at `cargo fmt --all -- --check`.
+Validated source/trigger head:
 
-Temporary workflow `phase-091-rustfmt-fix.yml` applied `cargo fmt --all` with a guard that the only pre-self-delete source change was:
+`a07bb5f3fffebe0e4f9951fe21e9c3df5acd3781`
 
-`crates/prw-agent/src/linux_runtime_readiness.rs`
-
-The formatter corrective succeeded in run `31900068830` and produced commit:
-
-`3f3eb2b95b02a711584d8a4ab86910bfff53c8ee`
-
-The temporary formatter workflow removed itself in that same commit.
-
-Permanent validation run `31900113946` then passed toolchain resolution, locked metadata and rustfmt, and reached Clippy. Clippy reported exactly two compatibility/style findings under the repository `-D warnings` baseline:
-
-1. the named `'scope` lifetime on `wait_once_for_linux_runtime_readiness(...)` was elidable;
-2. the private `report(...)` constructor could be `const fn`.
-
-No readiness logic defect was reported.
-
-Temporary workflow `phase-091-clippy-fix.yml` applied only those exact text changes with occurrence-count guards, required `git diff --name-only` to contain exactly `crates/prw-agent/src/linux_runtime_readiness.rs`, ran `cargo fmt --all -- --check` and `git diff --check`, then self-deleted.
-
-The exact Clippy corrective succeeded in run `31900151699` and produced source commit:
+Semantic corrective source head incorporated by that validation:
 
 `b783686affc6889913a3221b9026af07c07bd0a0`
 
-That corrective changed only:
+Authoritative permanent GitHub Actions run:
 
-- lifetime elision on `wait_once_for_linux_runtime_readiness(...)`;
-- `LocalLinuxScopedWorkerRegistry<'scope>` to `LocalLinuxScopedWorkerRegistry<'_>` at that function boundary;
-- `fn report(...)` to `const fn report(...)`.
+`31900246130`
 
-No readiness branch, poll policy, wake ordering, capacity rule, completion handling or test behavior changed.
+The run passed under exact Rust/Cargo 1.97.1:
 
-Both temporary corrective workflows are absent from `main`. The formatter/Clippy-corrected source now requires one final permanent PRW Rust Validation run before Phase 091 may be classified `IMPLEMENTED_AND_VALIDATED`.
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+`Cargo.lock` remained byte-identical with blob SHA:
+
+`76af6bd831191309ac904dfe02ef76729de9a4fb`
+
+The net Phase 091 mutation surface from the Phase 090 authoritative report commit through the validated Phase 091 head contains only:
+
+- `crates/prw-agent/src/linux_identity.rs`;
+- `crates/prw-agent/src/linux_runtime_readiness.rs`;
+- `docs/architecture/PHASE_091_LINUX_ONE_STEP_RUNTIME_READINESS.md`.
+
+No temporary corrective workflow remains on `main`; only the permanent PRW Rust Validation workflow remains.
+
+## Corrective history
+
+Initial integrated run `31900029359` passed exact Rust/Cargo 1.97.1 toolchain resolution and locked metadata, then failed safely only at `cargo fmt --all -- --check`.
+
+Temporary workflow `phase-091-rustfmt-fix.yml` ran `cargo fmt --all` with a guard that the only pre-self-delete source change was `crates/prw-agent/src/linux_runtime_readiness.rs`. Corrective run `31900068830` succeeded and produced formatter commit `3f3eb2b95b02a711584d8a4ab86910bfff53c8ee`; the workflow self-deleted in that commit.
+
+Permanent validation run `31900113946` then passed toolchain, locked metadata and rustfmt and reached Clippy. Clippy reported only two compatibility/style findings: one elidable named lifetime and one private helper eligible for `const fn`.
+
+Temporary workflow `phase-091-clippy-fix.yml` used exact single-occurrence text guards, restricted source mutation to `crates/prw-agent/src/linux_runtime_readiness.rs`, and applied only those two mechanical changes. Corrective run `31900151699` succeeded and produced commit `b783686affc6889913a3221b9026af07c07bd0a0`; the workflow self-deleted.
+
+Final permanent run `31900246130` passed every required validation stage.
 
 ## Explicitly not implemented
 
@@ -109,3 +118,7 @@ Phase 091 does not add:
 - remote/public network listeners;
 - production runtime cadence/configuration;
 - unrelated auth, DNS, TUN, relay, database, key, or deployment changes.
+
+## Next bounded layer
+
+Phase 092 may now compose the Phase 091 finite readiness step with a runtime-specific finite scheduling transaction that preserves the Phase 090 completion wake. Phase 092 remains below the production bootstrap boundary and must not introduce an unbounded outer runtime loop.
