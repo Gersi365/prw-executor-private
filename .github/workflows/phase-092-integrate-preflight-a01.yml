@@ -35,13 +35,13 @@ jobs:
           loop_marker = "for old, new, expected in replacements:\n"
           if payload.count(loop_marker) != 1:
               raise SystemExit("Phase 092 replacement-loop marker mismatch")
-          cleanup_patch = '''replacements.append((
-    "            drop(self.instance_lock);\\n            drop(self.runtime_directory);\\n            fs::remove_dir_all(self.root_path).expect(\\\"temporary Phase 092 root removes\\\");",
-    "            fs::remove_dir_all(&self.root_path).expect(\\\"temporary Phase 092 root removes\\\");",
-    1,
-))
-
-'''
+          cleanup_patch = (
+              "replacements.append((\n"
+              "    \"            drop(self.instance_lock);\\n            drop(self.runtime_directory);\\n            fs::remove_dir_all(self.root_path).expect(\\\"temporary Phase 092 root removes\\\");\",\n"
+              "    \"            fs::remove_dir_all(&self.root_path).expect(\\\"temporary Phase 092 root removes\\\");\",\n"
+              "    1,\n"
+              "))\n\n"
+          )
           payload = payload.replace(loop_marker, cleanup_patch + loop_marker, 1)
           exec(compile(payload, "phase-092-integrate-preflight-payload", "exec"), {"__name__": "__main__"})
           PY
