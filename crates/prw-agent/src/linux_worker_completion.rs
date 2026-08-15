@@ -77,7 +77,9 @@ mod tests {
                 ),
             };
             let handle = Builder::new()
-                .spawn_scoped(scope, move || -> LocalLinuxScopedWorkerResult { Err(expected) })
+                .spawn_scoped(scope, move || -> LocalLinuxScopedWorkerResult {
+                    Err(expected)
+                })
                 .expect("test scoped worker spawns");
 
             assert_eq!(
