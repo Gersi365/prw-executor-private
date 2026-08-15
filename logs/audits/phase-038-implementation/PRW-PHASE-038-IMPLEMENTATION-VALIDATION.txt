@@ -1,0 +1,90 @@
+Private Remote Workspace
+Phase 038 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 038
+SCOPE: Pure policy-gated terminal response composition
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial implementation commit: 0155d92dce62cc0766ee70afcb88a2dae01508b3
+Rustfmt corrective: 1c5c7d9117afe0c0b602bd79f1a8db8bbeae863c
+Authoritative GitHub Actions run: 31883294807
+
+LOCKED COMPOSITION
+
+For one already-decoded read-only Request:
+1. map the exact Phase 037 capability;
+2. evaluate the caller-supplied policy context;
+3. Allow -> create LocalPolicyAdmittedRequest -> existing successful responder;
+4. Deny -> no admission token -> existing terminal builder with Unauthorized and empty command-specific body.
+
+DENIED WIRE SEMANTICS
+
+- original request ID is preserved;
+- status is LocalAgentResponseStatus::Unauthorized (code 2);
+- outer kind is Error, derived by the existing terminal builder;
+- payload is exactly the existing two-byte status prefix 00 02.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/policy_response.rs
+- contracts/LOCAL_POLICY_RESPONSE_CONTRACT.md
+- docs/architecture/PHASE_038_POLICY_GATED_RESPONSE.md
+
+VALIDATION HISTORY
+
+Run 76
+- Run ID: 31883254552
+- Commit: 0155d92dce62cc0766ee70afcb88a2dae01508b3
+- Result: FAILURE
+- Cause: rustfmt-only import ordering in policy_response.rs.
+
+Run 77
+- Run ID: 31883294807
+- Commit: 1c5c7d9117afe0c0b602bd79f1a8db8bbeae863c
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: allowed status request uses existing success response builder
+PASS: allowed private-DNS request uses existing success response builder
+PASS: deny-all produces correlated Unauthorized Error
+PASS: cross-capability grant does not authorize the other read command
+PASS: denied path never creates an admission token or calls the success responder
+PASS: existing terminal builder remains Response/Error kind authority
+
+AUTHENTICATION BOUNDARY
+
+Phase 038 is policy-gated, not authenticated. The supplied PolicyEvaluator must eventually be selected/bound by runtime code after peer/principal authentication. This phase neither proves nor discovers identity.
+
+RUNTIME MUTATION STATEMENT
+
+Phase 038 performs no stream/socket I/O, peer-credential lookup, host-state acquisition, DNS/network mutation, tracker mutation, policy persistence, database access, task/thread creation, systemd activation, deployment, or private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 038 implementation-validation report.
+GitHub Actions run 31883294807 is the authoritative executable validation evidence.
