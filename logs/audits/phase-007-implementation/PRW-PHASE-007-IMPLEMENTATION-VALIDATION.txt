@@ -1,0 +1,133 @@
+Private Remote Workspace
+Phase 007 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 007
+SCOPE: Ubuntu local IPC stream framing and versioning contract
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 007 base commit: 7ab6ea155caf5e685e1b2bb7b4e2f6f64e9c1da2
+Validated source commit: c0af5143f37a18e9ba7e5822b8c062fc05cc6397
+Validated GitHub Actions run: 31877479954
+
+LOCKED FRAMING BOUNDARY
+
+Local IPC version 1.0 uses:
+- fixed 24-byte frame header;
+- magic bytes PRW\0;
+- unsigned 16-bit major/minor version fields;
+- Request / Response / Error message kinds;
+- non-zero unsigned 64-bit request ID;
+- unsigned 32-bit payload length;
+- network byte order for multi-byte wire integers;
+- maximum opaque payload length 1,048,576 bytes (1 MiB);
+- exact version 1.0 support only until future compatibility rules are explicitly locked.
+
+Version-1.0 message-kind codes:
+- 1 Request
+- 2 Response
+- 3 Error
+
+Request IDs are correlation metadata only and are not authentication tokens, capabilities, secrets, or durable object identifiers.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/lib.rs
+- Added frame magic/header/max-payload constants.
+- Added LocalIpcProtocolVersion.
+- Added LocalIpcMessageKind.
+- Added non-zero LocalIpcRequestId and validation error.
+- Added LocalIpcFrameHeader and bounded version/payload validation.
+- Added focused tests for constants, version rejection, request-ID rejection, payload bound, and metadata preservation.
+- No wire encoder/decoder, socket read/write, or payload serializer was added.
+
+2. contracts/LOCAL_IPC_CONTRACT.md
+- Advanced local IPC contract to version 0.2.0.
+- Defined exact 24-byte version-1.0 header layout and big-endian integer encoding.
+- Defined fail-closed decoder requirements.
+- Defined request-ID rules and 1 MiB global payload ceiling.
+- Explicitly kept payload schema/serialization deferred.
+
+3. docs/architecture/PHASE_007_LOCAL_IPC_FRAMING.md
+- Recorded framing rationale, wire header, version policy, request-ID policy, payload-bound rationale, fail-closed requirements, and explicit deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 007 base: 3
+- modified: contracts/LOCAL_IPC_CONTRACT.md
+- modified: crates/prw-agent/src/lib.rs
+- added: docs/architecture/PHASE_007_LOCAL_IPC_FRAMING.md
+
+VALIDATION HISTORY
+
+Run 15
+- Run ID: 31877444217
+- Commit: acba1bcc2febf48e7968a6b01ad11c4f134ad7fc
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only changes in Display and test imports.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- c0af5143f37a18e9ba7e5822b8c062fc05cc6397
+- Change: exact rustfmt-only corrections in crates/prw-agent/src/lib.rs.
+- No framing semantics, bounds, version policy, dependency, or runtime behavior changed.
+
+Run 16
+- Run ID: 31877479954
+- Commit: c0af5143f37a18e9ba7e5822b8c062fc05cc6397
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 007 did not:
+- implement frame byte encoding or decoding;
+- read from or write to a socket;
+- bind or activate a local listener;
+- select JSON/CBOR/Protobuf or another payload serializer;
+- define command capability schemas;
+- add a dependency;
+- implement account authentication;
+- implement private-key operations;
+- activate systemd;
+- open a network listener;
+- configure DNS/TUN/WireGuard;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 007 is provider-neutral and added no cryptographic dependency.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- payload serialization and typed commands;
+- command-specific payload limits;
+- frame encoder/decoder implementation;
+- socket runtime implementation;
+- timeouts/cancellation;
+- unsolicited events;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 007 implementation-validation report.
+GitHub Actions run 31877479954 is the authoritative executable validation evidence for source commit c0af5143f37a18e9ba7e5822b8c062fc05cc6397.
