@@ -1,0 +1,99 @@
+Private Remote Workspace
+Phase 089 Linux Runtime Wake Primitive
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / NO_RUNTIME_ACTIVATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 decision report commit: 8a033fb86d65dfca5ef9ec9980cae0dd6e31d486
+Validated source head: 3ceca27e4ad69dc2574786004a596fd814101b5a
+Authoritative GitHub Actions run: 31899638635
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+IMPLEMENTED SCOPE
+
+- enabled only rustix 1.1.4 feature "event" in prw-agent;
+- added crates/prw-agent/src/linux_runtime_wake.rs;
+- exported the isolated runtime-wake module through linux_identity.rs;
+- retained non-activating Agent bootstrap.
+
+RUNTIME WAKE SEMANTICS
+
+- one LocalLinuxRuntimeWake owns single-consumer drain authority;
+- cloneable LocalLinuxRuntimeWakeNotifier values expose only notification API;
+- one shared Arc-backed eventfd lifetime supports multiple writers and one drainer;
+- eventfd is created with initial counter 0, CLOEXEC and NONBLOCK, without SEMAPHORE;
+- notify writes fixed native-endian 1_u64;
+- notify retries only EINTR for the same fixed write;
+- notify EAGAIN maps to AlreadyPending;
+- short writes and other write failures fail closed;
+- drain retries only EINTR for the same fixed read;
+- drain requires exactly eight bytes, nonzero value and non-u64::MAX value;
+- drain EAGAIN maps to WouldBlock;
+- numeric eventfd count is not exposed as semantic runtime event data.
+
+FOCUSED TEST PROOFS
+
+Tests validate:
+
+- descriptor CLOEXEC and NONBLOCK flags;
+- initial counter has no pending wake;
+- one notification drains exactly once;
+- multiple notifications coalesce and one drain clears the aggregate wake;
+- cloned notifiers share the same transport;
+- deterministic EINTR retry behavior for notify and drain;
+- deterministic EAGAIN handling;
+- short-I/O rejection;
+- zero/overflow counter rejection;
+- non-INTR failure does not retry;
+- wake/notifier Send + Sync properties.
+
+VALIDATION
+
+Authoritative run 31899638635 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+DEPENDENCY/LOCKFILE GUARD
+
+Cargo.lock remained byte-identical with blob SHA 76af6bd831191309ac904dfe02ef76729de9a4fb. Enabling rustix feature "event" changed only feature compilation surface and did not change the package dependency set.
+
+MUTATION SURFACE
+
+Comparison from Phase 088 decision head 8a033fb86d65dfca5ef9ec9980cae0dd6e31d486 to validated Phase 089 source head 3ceca27e4ad69dc2574786004a596fd814101b5a contains only:
+
+- crates/prw-agent/Cargo.toml;
+- crates/prw-agent/src/linux_identity.rs;
+- crates/prw-agent/src/linux_runtime_wake.rs.
+
+CORRECTIVE HISTORY
+
+Initial integrated validation run 31899599040 failed safely only at cargo fmt --check. The rustfmt diff was mechanical layout only. Commit 3ceca27e4ad69dc2574786004a596fd814101b5a applied exactly that formatting correction. No logic was changed by the corrective.
+
+SCOPE PRESERVED
+
+Phase 089 does NOT:
+
+- modify LocalLinuxWorkerPermit accounting;
+- integrate worker completion notification;
+- poll a listener;
+- add an outer runtime loop;
+- modify main.rs;
+- activate Agent/systemd/service state;
+- add remote/public networking;
+- change auth/enrollment/DNS/TUN/relay/database/private-key/deployment state.
+
+NEXT AUTHORIZED STEP
+
+Proceed with Phase 090 scoped worker completion wake under the locked Phase 088 decision. The completion wake must occur after worker-owned capacity state is released and must remain non-panicking during normal return or unwind.
+
+FINAL CLASSIFICATION
+
+PHASE_089_IMPLEMENTED_AND_VALIDATED / SHARED_NON_SEMAPHORE_EVENTFD / CLOEXEC / NONBLOCK / EINTR_ONLY_IO_RETRY / EAGAIN_ALREADY_PENDING_NOTIFY / SINGLE_DRAIN_AUTHORITY / CARGO_LOCK_UNCHANGED / NO_RUNTIME_ACTIVATION / PASS
+
+This is the single authoritative user-facing Phase 089 report.
