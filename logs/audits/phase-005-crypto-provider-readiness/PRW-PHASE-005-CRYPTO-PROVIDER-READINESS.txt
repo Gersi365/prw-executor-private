@@ -1,0 +1,88 @@
+Private Remote Workspace
+Phase 005 Cryptographic Provider Readiness Audit
+
+STATUS: NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK
+AUDIT TYPE: SECURITY DEPENDENCY READINESS REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Audit starting source baseline: Phase 004 IMPLEMENTED_AND_VALIDATED / PASS
+Phase 004 validated source commit: 6736cb17e8faa88a8475575c2e8308211afef4f0
+Phase 004 authoritative report:
+logs/audits/phase-004-implementation/PRW-PHASE-004-IMPLEMENTATION-VALIDATION.txt
+
+PURPOSE
+
+Determine whether a concrete Rust cryptographic provider/library can be responsibly locked immediately for the Phase 003/004 device-identity profile:
+- ECDSA P-256 with SHA-256;
+- DER SubjectPublicKeyInfo public keys;
+- DER ECDSA-Sig-Value signatures.
+
+REVIEW CRITERIA
+
+A provider lock must not be based only on API convenience. At minimum it must be reviewed for:
+- P-256 ECDSA verification/signing capability as required by the intended role;
+- strict import/validation support for the locked SPKI/DER representations or a safe composition with a reviewed parser;
+- maintenance status and supported Rust/toolchain targets;
+- supply-chain/runtime footprint;
+- security review/audit posture;
+- compatibility with the PRW separation between Android Keystore-backed private signing and Rust-side public verification;
+- no requirement to move Android device private keys out of Android Keystore.
+
+RUSTCRYPTO P256 CANDIDATE
+
+Primary-source findings from the RustCrypto elliptic-curves repository:
+- p256 is a pure-Rust implementation of NIST P-256.
+- Its current master Cargo manifest advertises ECDSA signing/verification support.
+- It exposes PKCS#8/SPKI encode/decode support through the pkcs8 feature family.
+- The reviewed master manifest identifies version 0.14.0-rc.8 and rust-version 1.85 at the time of this audit.
+- The project README explicitly warns that the elliptic-curve arithmetic has never been independently audited and says it has not been thoroughly assessed to ensure generated assembly is constant time on common CPU architectures.
+
+CLASSIFICATION
+
+RustCrypto p256 is NOT selected as the PRW security provider in this phase.
+
+Reason:
+Its technical fit is strong, but the project's own explicit independent-audit warning is material for a long-lived device-identity trust boundary. Selecting it immediately would weaken the audit-first standard of this project.
+
+This classification is not a claim that p256 is insecure. It is a decision that the current evidence is insufficient for PRW to lock it as the authoritative security provider without a broader provider comparison and explicit risk treatment.
+
+OTHER PROVIDERS
+
+OpenSSL, ring/AWS-LC-family providers, and other maintained candidates remain eligible for a later comparative review.
+
+They are not selected or rejected by this audit because a defensible decision requires a focused comparison of:
+- independent audit/security history;
+- exact P-256 DER/SPKI interoperability;
+- native-library/runtime implications;
+- static versus dynamic linking implications;
+- Ubuntu packaging and update model;
+- cross-compilation/build complexity;
+- licensing and maintenance constraints.
+
+ANDROID BOUNDARY
+
+This audit does not change the Android direction:
+- Android device identity private keys should remain compatible with Android Keystore-backed EC keys where platform policy permits.
+- A Rust provider does not need to own or export Android private keys.
+- Cross-platform interoperability is through the locked algorithm and encoding contracts, not through a shared private-key backend.
+
+SAFE CONTINUATION
+
+Provider-neutral work may continue without weakening this boundary, including:
+- local Agent lifecycle and authenticated same-user IPC contracts;
+- enrollment/control-plane typed state work that does not execute cryptography;
+- proof-of-possession requirements only after protocol semantics are separately reviewed;
+- network architecture contracts that do not reuse the device-identity key as a transport key.
+
+MUTATION STATEMENT
+
+This audit adds no Rust dependency, no crypto code, no private-key handling, no network listener, no authentication implementation, no database, no service activation, and no deployment.
+
+FINAL CLASSIFICATION
+
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 005 cryptographic-provider readiness report.
