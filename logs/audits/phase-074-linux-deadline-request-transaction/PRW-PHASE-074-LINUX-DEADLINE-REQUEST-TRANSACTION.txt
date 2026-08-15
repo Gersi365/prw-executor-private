@@ -1,0 +1,84 @@
+Private Remote Workspace
+Phase 074 Linux Deadline-Aware One-Request Transaction
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 98edaa3144f3f93cc5847ae2e43b6af143901c50
+Authoritative GitHub Actions run: 31895054730
+Phase 073 authoritative report commit: 5a7204eab5840b64b3ed4d7c240e329ef892e443
+
+PURPOSE
+
+Compose Phase 073 absolute-deadline blocking I/O with the existing authenticated Phase 060 session and Phase 051 aggregate Request-processing state without duplicating framing, policy, response, or poisoning logic.
+
+IMPLEMENTED
+
+- Phase 073 deadline module extended with LocalLinuxDeferredDeadlineWriter.
+- AuthenticatedLocalLinuxSession<UnixStream>::process_one_with_deadlines added.
+- architecture: docs/architecture/PHASE_074_LINUX_DEADLINE_REQUEST_TRANSACTION.md
+
+ORDERING
+
+For one authenticated Request attempt:
+
+1. start one absolute read deadline immediately before boundary frame acquisition;
+2. create a deferred write adapter without starting its deadline;
+3. reuse the existing Phase 051 boundary-aware aggregate state pipeline;
+4. read/decode the complete Request and build the policy-gated terminal response;
+5. start the independent absolute write deadline only on the first non-empty response write;
+6. preserve existing inbound-read and response-write poison transitions.
+
+Clean EOF never starts the deferred write deadline.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- valid authenticated Request produces the existing correlated response under independent read/write budgets;
+- idle authenticated peer reaches the read deadline;
+- read-deadline failure leaves aggregate state unusable for InboundRead reason and does not call policy;
+- clean EOF is a normal outcome;
+- clean EOF succeeds even when the supplied deferred write budget would be unrepresentable if it were actually started, proving no write deadline is created before response I/O;
+- prior Phase 060 generic bounded-session tests continue to pass.
+
+VALIDATION
+
+Authoritative run 31895054730 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE DURING VALIDATION
+
+- initial run 31894960772 stopped only at rustfmt;
+- one test-expression reflow was applied without production semantic change;
+- final run 31895054730 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 074:
+
+- does not accept a connection;
+- does not spawn a worker/thread/task;
+- processes at most one Request per call;
+- does not choose production timeout values;
+- does not create an accept/session scheduler;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Phase 075 may implement bounded active-worker capacity accounting with an RAII permit that can be moved into a future worker, while still spawning no worker threads and accepting no connections.
+
+FINAL CLASSIFICATION
+
+DEADLINE_AWARE_ONE_REQUEST_TRANSACTION_IMPLEMENTED / READ_AND_WRITE_DEADLINES_INDEPENDENT / EXISTING_POISONING_PRESERVED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 074 report.
