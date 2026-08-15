@@ -1,0 +1,82 @@
+Private Remote Workspace
+Phase 083 Bounded In-Memory Local Read Policy
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 69578117d9f8f85fd666933249122d1b0c362bbd
+Authoritative GitHub Actions run: 31896628249
+Phase 082 authoritative report commit: 6c9bd5c8f337245c2667aaa2f2c2a33d9bbdfa3b
+
+PURPOSE
+
+Provide the concrete bounded/non-blocking PolicyEvaluator required by Phase 081 before the first Agent accept-and-spawn scheduling transaction is authorized.
+
+IMPLEMENTED
+
+- prw-policy::BoundedLocalReadPolicy
+- architecture: docs/architecture/PHASE_083_BOUNDED_LOCAL_READ_POLICY.md
+
+MODEL
+
+BoundedLocalReadPolicy is a Copy value type holding exactly two decisions:
+
+- AgentStatusRead;
+- PrivateDnsConfigRead.
+
+Evaluation is a fixed in-memory match. The two implemented local read capabilities return their stored decision. Every other represented capability returns Deny fail-closed.
+
+The evaluator performs no allocation, filesystem/network I/O, synchronization, callbacks, external lookup, or mutable state access.
+
+SECURITY BOUNDARY
+
+BoundedLocalReadPolicy does not authenticate a principal. Runtime code must select/use it only after the relevant authentication boundary.
+
+For the initial local same-UID Agent worker path, this is the only concrete policy implementation authorized for scheduler binding. Arbitrary PolicyEvaluator implementations remain outside the initial runtime boundary because the generic synchronous trait does not guarantee bounded/non-blocking evaluation.
+
+VALIDATED BEHAVIOR
+
+Tests prove:
+
+- AgentStatusRead and PrivateDnsConfigRead are independently configurable;
+- every non-local-read capability is always Deny;
+- deny-all and allow-local-reads constructors are deterministic;
+- the evaluator is Copy + Send + Sync.
+
+VALIDATION
+
+Authoritative run 31896628249 passed on the first build-graph attempt:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+SCOPE PRESERVED
+
+Phase 083:
+
+- accepts no connection;
+- spawns no worker;
+- selects no default production Allow permissions;
+- changes no authentication/enrollment state;
+- activates no Agent bootstrap/systemd/service state;
+- changes no network/DNS/TUN/database/private-key/deployment state.
+
+NEXT SAFE STEP
+
+Phase 084 may implement one capacity-gated scheduling transaction using only BoundedLocalReadPolicy:
+
+capacity permit -> one-shot authenticated accept -> cancellation clone -> authenticated session -> scoped worker spawn -> registry registration.
+
+The transaction performs at most one accept attempt and is not an accept loop.
+
+FINAL CLASSIFICATION
+
+BOUNDED_IN_MEMORY_LOCAL_POLICY_IMPLEMENTED / NONLOCAL_CAPABILITIES_DENY_FAIL_CLOSED / INITIAL_RUNTIME_POLICY_BOUNDARY_READY / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 083 report.
