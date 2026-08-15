@@ -1,0 +1,76 @@
+Private Remote Workspace
+Phase 072 Linux Agent Connection Processing Bounds Decision
+
+STATUS: DECISION_LOCKED / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY RUNTIME-READINESS / WAIT-AND-CONCURRENCY SECURITY LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 071 authoritative report commit: ae3819fcb64704c520f225eac9a84609eeb4a376
+Phase 071 validated source head: dea50544441013902ff9ebd28b822d5215cce00c
+Phase 071 authoritative validation run: 31893736193
+Phase 072 contract commit: cff55163fd87600e3ad7d5afb9eb9772217eb49e
+
+PURPOSE
+
+Prevent a connected authenticated client from introducing unbounded application-I/O wait or unbounded worker creation before Phase 060 processing is wired into the long-running Agent lifecycle.
+
+FINDING
+
+Phase 052 bounds the number of Requests processed per invocation but not wall-clock time.
+
+The current generic frame reader uses read_exact and the writer uses write_all. Phase 070 intentionally leaves accepted application streams blocking.
+
+Rust 1.97.1 UnixStream exposes read and write timeout configuration. Linux SO_RCVTIMEO/SO_SNDTIMEO timeouts apply to socket I/O calls and may return partial progress when bytes moved before a timeout. Therefore repeating read/write calls can extend total elapsed time if only a fixed relative per-syscall timeout is used.
+
+DECISION 1 — BLOCKING STREAMS RETAINED
+
+Authenticated connected UnixStream objects remain blocking. Phase 072 does not migrate the application pipeline to O_NONBLOCK or an async runtime.
+
+DECISION 2 — ABSOLUTE PER-REQUEST DEADLINES
+
+Future runtime processing must receive caller-supplied strictly positive read and write wall-clock budgets.
+
+The implementation must enforce absolute monotonic deadlines for the complete Request-read phase and terminal-response-write phase. Before each underlying blocking I/O call, the remaining time is recomputed and becomes that call's maximum wait.
+
+Partial progress does not reset the deadline.
+
+Timeout/expiry or ambiguous partial I/O is terminal for that connection and flows into existing read/write poisoning plus discard semantics.
+
+DECISION 3 — FINITE CONNECTION WORK
+
+The existing Phase 052 non-zero Request budget is used as the maximum Request count for one runtime session-worker invocation.
+
+For production runtime orchestration, BudgetExhausted closes/discards the connection; the same connection is not resumed with a fresh budget.
+
+DECISION 4 — BOUNDED CONCURRENCY
+
+The accept/control path performs no application Request I/O.
+
+The initial worker model is one standard-library OS thread per active authenticated session, under a caller-supplied strictly positive active-worker capacity. No unbounded thread/task spawning is allowed.
+
+When capacity is full, the scheduler does not accept another connection merely to hold it; queued connections remain in the kernel listener queue until capacity becomes available or shutdown starts.
+
+DECISION 5 — NO HARDCODED RUNTIME POLICY VALUES YET
+
+Phase 072 does not choose concrete values for read timeout, write timeout, Request count, active workers, backlog, or shutdown grace period. These belong to a future validated runtime configuration boundary.
+
+NEXT SAFE IMPLEMENTATION
+
+Phase 073 may implement only an independently tested absolute-deadline blocking UnixStream I/O adapter. It must not spawn threads, accept connections, activate the Agent bootstrap, or change service state.
+
+After that, deadline-aware Request transaction composition and bounded worker-slot accounting may be implemented as separate phases before runtime scheduling and shutdown.
+
+MUTATION STATEMENT
+
+Phase 072 changes only repository contract/audit documentation.
+
+It does not alter Rust source, dependencies, socket flags, listeners, accepted streams, runtime paths, service state, authentication policy, DNS/network/TUN/database/private-key/deployment state.
+
+FINAL CLASSIFICATION
+
+ABSOLUTE_REQUEST_IO_DEADLINES_LOCKED / BLOCKING_APPLICATION_STREAM_RETAINED / FINITE_REQUEST_COUNT_LOCKED / BOUNDED_THREAD_WORKER_MODEL_LOCKED / READY_FOR_PHASE_073_DEADLINE_ADAPTER
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 072 decision report.
