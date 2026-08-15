@@ -1,0 +1,140 @@
+Private Remote Workspace
+Phase 009 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 009
+SCOPE: Pure Rust fixed local IPC frame-header codec
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 009 base commit: a726ad5c70710b848e86095990e6066e21acfd54
+Validated source commit: 3c381164556dfba30d7ff7c93419fb8acc9768fd
+Validated GitHub Actions run: 31877841122
+
+IMPLEMENTED BOUNDARY
+
+Phase 009 implements a pure in-memory codec for the fixed 24-byte local IPC header locked by Phase 007.
+
+Encoder:
+- accepts an already validated LocalIpcFrameHeader;
+- emits exactly 24 bytes;
+- emits PRW\0 magic;
+- uses big-endian encoding for version, request ID, and payload length;
+- emits zero version-1.0 flags and reserved bytes;
+- performs no socket I/O and no payload processing.
+
+Decoder:
+- accepts exactly one 24-byte header array;
+- validates magic;
+- rejects unknown message kind;
+- rejects non-zero version-1.0 flags;
+- rejects non-zero version-1.0 reserved bytes;
+- rejects request ID zero;
+- rejects unsupported protocol version;
+- rejects payload length above the Phase 007 1 MiB global bound;
+- routes reconstructed typed values through existing validators;
+- performs no payload allocation or parsing.
+
+FAIL-CLOSED ERROR TAXONOMY
+
+LocalIpcFrameDecodeError:
+- InvalidMagic
+- UnknownMessageKind
+- NonZeroFlags
+- NonZeroReserved
+- ZeroRequestId
+- UnsupportedVersion
+- PayloadTooLarge
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 009 base: 4
+- added: contracts/LOCAL_FRAME_CODEC_CONTRACT.md
+- added: crates/prw-agent/src/frame_codec.rs
+- modified: crates/prw-agent/src/lib.rs
+- added: docs/architecture/PHASE_009_LOCAL_FRAME_CODEC.md
+
+VALIDATION HISTORY
+
+Run 18
+- Run ID: 31877771755
+- Commit: 0cd9cfcc8662b5f0092d9884c17c748e9fc3d901
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required one formatting-only restructuring of the UnsupportedVersion match arm in frame_codec.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 3c381164556dfba30d7ff7c93419fb8acc9768fd
+- Change: exact rustfmt-only correction in crates/prw-agent/src/frame_codec.rs.
+- No wire layout, validation rule, dependency, allocation behavior, or runtime behavior changed.
+
+Run 19
+- Run ID: 31877841122
+- Commit: 3c381164556dfba30d7ff7c93419fb8acc9768fd
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: valid header encode/decode round trip
+PASS: exact locked big-endian byte layout
+PASS: reject invalid magic
+PASS: reject unknown message kind
+PASS: reject non-zero flags
+PASS: reject non-zero reserved field
+PASS: reject zero request ID
+PASS: reject unsupported protocol version
+PASS: reject payload above global bound
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 009 did not:
+- bind, listen, accept, connect, read, or write a socket;
+- allocate or parse a frame payload;
+- dispatch or execute a command;
+- select a payload serializer;
+- add a dependency;
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 009 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- stream reader and socket I/O;
+- truncated-header/truncated-payload runtime handling;
+- bounded payload acquisition;
+- command payload serialization;
+- runtime command dispatch;
+- timeout/cancellation semantics;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 009 implementation-validation report.
+GitHub Actions run 31877841122 is the authoritative executable validation evidence for source commit 3c381164556dfba30d7ff7c93419fb8acc9768fd.
