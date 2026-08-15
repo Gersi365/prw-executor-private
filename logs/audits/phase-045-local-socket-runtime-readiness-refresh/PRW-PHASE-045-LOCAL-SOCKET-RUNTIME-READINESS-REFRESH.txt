@@ -1,0 +1,91 @@
+Private Remote Workspace
+Phase 045 Local Unix Socket Runtime Readiness Refresh
+
+STATUS: NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK
+AUDIT TYPE: READ-ONLY REPOSITORY-STATE READINESS REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Baseline audit: Phase 014 Local Unix Socket Runtime Readiness
+Current validated protocol baseline: Phase 044 IMPLEMENTED_AND_VALIDATED / PASS
+
+PURPOSE
+
+Re-evaluate the Phase 014 runtime-activation blocker after the provider-neutral protocol and connection-state work completed through Phase 044, without selecting a syscall provider or activating a filesystem-backed Unix listener.
+
+WHAT HAS ADVANCED SINCE PHASE 014
+
+The repository now contains validated provider-neutral layers for:
+- bounded frame encode/decode and in-memory frame objects;
+- generic std::io::Read/std::io::Write frame acquisition and emission;
+- typed read-only local commands and correlated terminal responses;
+- request tracking and ambiguous-write disposition;
+- request-side and response-side write-poisoning state;
+- policy-gated read-only response construction;
+- inbound Request read/decode poisoning;
+- aggregate server-side connection usability state.
+
+The authoritative Phase 043/044 joint validation is GitHub Actions run 31886505862 at head 2bd5d63dc190b3bcc657bf77e825c2f6ea0a20fb, where formatting, Clippy with -D warnings, tests, and workspace build all passed.
+
+PHASE 014 BLOCKER STATUS
+
+The core Phase 014 runtime blocker remains unresolved.
+
+The locked LOCAL_IPC_CONTRACT still requires:
+- AF_UNIX SOCK_STREAM;
+- filesystem pathname $XDG_RUNTIME_DIR/private-remote-workspace/agent.sock;
+- runtime directory/subdirectory ownership and mode validation;
+- socket mode 0600 and post-bind validation;
+- kernel-reported Linux SO_PEERCRED;
+- same-UID authorization before application Request processing;
+- no TCP, /tmp, or abstract-socket fallback.
+
+The current prw-agent Cargo manifest still contains only internal workspace dependencies. No safe syscall wrapper/provider has been selected for SO_PEERCRED or race-aware pathname lifecycle operations.
+
+The Agent binary bootstrap still explicitly starts no listeners and performs no system mutation.
+
+REPOSITORY-TREE FINDING
+
+No dedicated UnixListener/socket-runtime source module is present in the current prw-agent source tree. This is consistent with the intended pre-runtime boundary and means no accidental runtime activation occurred while Phases 15-44 advanced the generic protocol layers.
+
+REMAINING HARD RUNTIME DECISIONS
+
+Before an actual listener bind is authorized, the Phase 014 requirements remain:
+1. lock a safe syscall wrapper/provider and exact minimal features;
+2. lock a race-aware stale-socket/single-instance algorithm;
+3. lock no-follow ownership/type validation and unlink authorization rules;
+4. lock bind/post-bind ownership/mode verification and failure cleanup;
+5. lock listener lifetime, orderly/ungraceful shutdown, and second-instance behavior;
+6. enforce SO_PEERCRED same-UID authorization before reading protocol bytes.
+
+NEWLY ISOLATED PROVIDER-NEUTRAL GAP
+
+Phase 011 read_frame() intentionally classifies EOF before all 24 header bytes as TruncatedHeader. That is correct for one requested frame, but a future multi-request connection loop needs a separate frame-boundary distinction:
+- EOF before any byte of the next frame: clean peer close / normal connection stop;
+- EOF after one or more bytes of the next header: truncated frame / protocol failure.
+
+The repository does not yet expose that boundary distinction. Implementing it over generic std::io::Read is safe provider-neutral work and does not require a Unix socket, timers, credentials, filesystem mutation, or a syscall dependency.
+
+SAFE NEXT STEP
+
+Proceed with a focused pure generic-I/O Phase 046 that classifies clean EOF at a frame boundary separately from partial-header truncation while preserving the existing Phase 011 read_frame() contract.
+
+MUTATION STATEMENT
+
+This audit:
+- binds no socket;
+- creates/removes no XDG runtime path;
+- retrieves no process credentials;
+- adds no dependency;
+- changes no Rust source;
+- activates no service;
+- changes no authentication/database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+NOT_READY_FOR_RUNTIME_ACTIVATION / READY_FOR_PHASE_046_PROVIDER_NEUTRAL_CLEAN_EOF_BOUNDARY
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 045 local socket runtime readiness refresh report.
