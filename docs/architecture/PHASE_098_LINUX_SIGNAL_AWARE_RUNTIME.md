@@ -1,12 +1,10 @@
 # Phase 098 — Linux Signal-Aware Production Runtime
 
-Status: `DEPENDENCY_BASELINE_INTEGRATED_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `DEPENDENCY_BASELINE_VALIDATED / SIGNAL_RUNTIME_SOURCE_IN_PROGRESS`
 
 ## Purpose
 
 Phase 098 adds the safe synchronous Linux termination-signal boundary authorized by Phase 094-A01, while preserving workspace `unsafe_code = "forbid"`, the validated Phase 091 capacity-aware semantics, and the Phase 097 callable runtime below `main.rs`.
-
-Signal runtime source is not yet integrated at this status point. This first checkpoint records the dependency precheck and exact Cargo graph baseline before signal-source implementation.
 
 ## Primary-source dependency precheck
 
@@ -48,27 +46,31 @@ Existing locked package records remained unchanged. `prw-agent` gained exactly o
 
 The resulting nix lock entry depends on the already-existing compatible `bitflags` and `libc` packages plus the newly locked `cfg-if` and `cfg_aliases` packages.
 
-After dependency resolution, the preflight passed:
+After dependency resolution, the preflight passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check`. Only after full PASS did the workflow commit `Cargo.lock` and `crates/prw-agent/Cargo.toml`, then self-delete.
 
-- `cargo metadata --locked --no-deps --format-version 1`;
-- `cargo fmt --all -- --check`;
-- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
-- `cargo test --locked --workspace --all-targets`;
-- `cargo build --locked --workspace --all-targets`;
-- `git diff --check`.
+## Authoritative dependency-baseline validation
 
-Only after full PASS did the workflow commit `Cargo.lock` and `crates/prw-agent/Cargo.toml`, then self-delete.
+Permanent PRW Rust Validation run:
 
-## Signal source requirements for the next Phase 098 step
+`31902304269`
 
-The source implementation may proceed only after permanent CI validates the dependency baseline.
+Validated dependency/documentation head:
 
-The source must:
+`a2b8343cd136d7a9eda9eb49c1339749bcb827ad`
+
+The permanent workflow passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, and all workspace/all-target builds.
+
+The dependency baseline is therefore authoritative and signal runtime source integration may proceed.
+
+## Signal source requirements
+
+The source implementation must:
 
 - synchronously block exactly SIGTERM and SIGINT on the runtime thread;
 - preserve the prior calling-thread signal mask;
 - create a CLOEXEC + NONBLOCK `SignalFd` for the same mask;
 - expose it through safe `AsFd`/`read_signal()` APIs only;
+- remain thread-affine so mask restoration cannot migrate to another thread;
 - establish the mask before the Phase 097 worker scope creates threads;
 - preserve signal > runtime-wake > listener precedence;
 - suppress listener interest at full worker capacity exactly as Phase 091 does;
@@ -79,6 +81,4 @@ The source must:
 
 ## Boundary preserved
 
-This dependency checkpoint does not yet implement signal masking, signalfd polling, signal-aware runtime iteration, `main.rs` bootstrap, process exit mapping, systemd activation, deployment, or public networking.
-
-Permanent PRW Rust Validation is required before signal runtime source integration proceeds.
+The dependency checkpoint itself does not wire `main.rs`, define process exit mapping, activate systemd, deploy anything, or expose public networking. Those boundaries remain excluded throughout Phase 098.
