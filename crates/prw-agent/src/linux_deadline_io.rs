@@ -156,7 +156,10 @@ fn normalize_timeout_error(error: io::Error) -> io::Error {
 }
 
 fn deadline_timeout_error() -> io::Error {
-    io::Error::new(ErrorKind::TimedOut, "PRW local IPC absolute I/O deadline expired")
+    io::Error::new(
+        ErrorKind::TimedOut,
+        "PRW local IPC absolute I/O deadline expired",
+    )
 }
 
 #[cfg(test)]
@@ -201,14 +204,16 @@ mod tests {
     #[test]
     fn read_and_write_round_trip_with_independent_absolute_deadlines() {
         let (left, right) = UnixStream::pair().expect("anonymous Unix pair creates");
-        let mut writer = LocalLinuxDeadlineWriter::start(&left, budget(500))
-            .expect("write deadline starts");
-        let mut reader = LocalLinuxDeadlineReader::start(&right, budget(500))
-            .expect("read deadline starts");
+        let mut writer =
+            LocalLinuxDeadlineWriter::start(&left, budget(500)).expect("write deadline starts");
+        let mut reader =
+            LocalLinuxDeadlineReader::start(&right, budget(500)).expect("read deadline starts");
         let expected = *b"phase-073";
         let mut received = [0_u8; 9];
 
-        writer.write_all(&expected).expect("deadline write succeeds");
+        writer
+            .write_all(&expected)
+            .expect("deadline write succeeds");
         reader
             .read_exact(&mut received)
             .expect("deadline read succeeds");
@@ -219,8 +224,8 @@ mod tests {
     #[test]
     fn partial_progress_does_not_replace_reader_deadline() {
         let (left, mut right) = UnixStream::pair().expect("anonymous Unix pair creates");
-        let mut reader = LocalLinuxDeadlineReader::start(&left, budget(500))
-            .expect("read deadline starts");
+        let mut reader =
+            LocalLinuxDeadlineReader::start(&left, budget(500)).expect("read deadline starts");
         let original_deadline = reader.deadline();
         right.write_all(&[7]).expect("peer byte writes");
         let mut byte = [0_u8; 1];
@@ -234,8 +239,8 @@ mod tests {
     #[test]
     fn partial_progress_does_not_replace_writer_deadline() {
         let (left, _right) = UnixStream::pair().expect("anonymous Unix pair creates");
-        let mut writer = LocalLinuxDeadlineWriter::start(&left, budget(500))
-            .expect("write deadline starts");
+        let mut writer =
+            LocalLinuxDeadlineWriter::start(&left, budget(500)).expect("write deadline starts");
         let original_deadline = writer.deadline();
 
         writer.write_all(&[9]).expect("single byte writes");
@@ -246,8 +251,8 @@ mod tests {
     #[test]
     fn empty_peer_read_expires_as_timed_out() {
         let (left, _right) = UnixStream::pair().expect("anonymous Unix pair creates");
-        let mut reader = LocalLinuxDeadlineReader::start(&left, budget(25))
-            .expect("read deadline starts");
+        let mut reader =
+            LocalLinuxDeadlineReader::start(&left, budget(25)).expect("read deadline starts");
         let mut byte = [0_u8; 1];
 
         let error = reader
