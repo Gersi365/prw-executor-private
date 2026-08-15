@@ -99,12 +99,9 @@ mod tests {
     fn malformed_private_dns_body_does_not_consume_request_state() {
         let mut tracker = LocalRequestTracker::new();
         tracker.register(id(122)).expect("request registered");
-        let frame = build_terminal_response_frame(
-            id(122),
-            LocalAgentResponseStatus::Ok,
-            &[0b100, 0, 0],
-        )
-        .expect("structurally valid terminal frame");
+        let frame =
+            build_terminal_response_frame(id(122), LocalAgentResponseStatus::Ok, &[0b100, 0, 0])
+                .expect("structurally valid terminal frame");
         let mut bytes = Vec::new();
         write_frame(&mut bytes, &frame).expect("memory frame write succeeds");
         let mut cursor = Cursor::new(bytes);
@@ -112,11 +109,9 @@ mod tests {
         assert_eq!(
             read_decode_and_complete_private_dns_response(&mut cursor, &mut tracker),
             Err(LocalPrivateDnsTrackedReadError::ReadDecode(
-                LocalPrivateDnsStreamReadError::Decode(
-                    LocalPrivateDnsFrameDecodeError::Body(
-                        LocalPrivateDnsDecodeError::ReservedFlagsSet
-                    )
-                )
+                LocalPrivateDnsStreamReadError::Decode(LocalPrivateDnsFrameDecodeError::Body(
+                    LocalPrivateDnsDecodeError::ReservedFlagsSet
+                ))
             ))
         );
         assert!(tracker.contains(id(122)));
