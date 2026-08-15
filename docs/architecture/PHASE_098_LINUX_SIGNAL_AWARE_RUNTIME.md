@@ -1,6 +1,6 @@
 # Phase 098 — Linux Signal-Aware Production Runtime
 
-Status: `SIGNAL_SOURCE_VALIDATED / SIGNAL_AWARE_READINESS_INTEGRATED_AWAITING_AUTHORITATIVE_CI`
+Status: `FULL_SIGNAL_AWARE_RUNTIME_INTEGRATED_AWAITING_AUTHORITATIVE_CI`
 
 ## Purpose
 
@@ -72,6 +72,10 @@ Integrated readiness commit:
 
 `300cea789300b9356202bb240ba3049164067267`
 
+Permanent readiness validation:
+
+`31902939571`
+
 The production-specific one-step readiness adapter preserves Phase 091 rather than replacing it.
 
 Its poll set is exactly:
@@ -98,20 +102,70 @@ Initial readiness integration run `31902826688` reached compile/Clippy and stopp
 
 A01 run `31902865634` applied exactly those mechanical changes and passed the complete locked metadata/fmt/Clippy/test/build/diff-check chain before committing integrated readiness and deleting both temporary readiness workflows.
 
-Permanent CI is now required on a commit containing `300cea789300b9356202bb240ba3049164067267` before the signal-aware long-running runtime wrapper is integrated.
+Permanent run `31902939571` independently passed locked metadata, rustfmt, Clippy, all workspace/all-target tests, and all workspace/all-target builds on a commit containing the integrated readiness source.
 
-## Remaining Phase 098 layer
+## Full signal-aware runtime composition
 
-After permanent readiness validation, Phase 098 may compose:
+Integrated runtime commit:
 
-- the Phase 098 termination signal source;
-- signal-aware one-step readiness;
-- Phase 092 runtime-specific bounded scheduling;
-- Phase 097 memory-bounded error/counter/teardown semantics;
-- Phase 096 lifecycle cleanup;
-- explicit signal-mask restoration after listener cleanup.
+`3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8`
 
-The resulting callable runtime must remain below `main.rs` and systemd.
+`run_signal_aware_linux_production_runtime_from_env(...)` establishes the SIGTERM/SIGINT mask and `SignalFd` before Phase 096 lifecycle assembly, ensuring every subsequently created Phase 097/092 worker thread inherits the blocked termination mask.
+
+The signal-aware long-running runtime owns one worker scope and repeatedly performs:
+
+1. exactly one signal-aware readiness invocation;
+2. if listener-ready, exactly one caller-bounded runtime-specific Phase 092 scheduling cycle;
+3. memory-bounded counter/evidence updates;
+4. connection-local continuation only for same-UID peer-authorization rejection;
+5. fail-stop on other readiness/scheduling failures.
+
+Terminal reasons distinguish:
+
+- programmatic shutdown;
+- SIGTERM/SIGINT termination;
+- signal-aware readiness fatal error;
+- Phase 095 runtime/scheduling fatal error.
+
+Terminal teardown remains bounded:
+
+1. no later readiness/scheduling iteration after terminal reason;
+2. cancel all retained workers;
+3. join/classify all retained workers;
+4. exit the worker scope;
+5. Phase 096 explicitly cleans the listener/socket;
+6. only after listener cleanup, close `SignalFd` and restore the exact prior calling-thread signal mask;
+7. return terminal reason, bounded counters, final worker evidence, listener cleanup evidence, and mask-restoration evidence independently.
+
+A lifecycle assembly failure after signal-source creation explicitly restores the prior signal mask and returns both the original lifecycle error and restoration evidence.
+
+### Signal-over-listener kernel proof
+
+The signal-aware runtime preflight uses an isolated child test. After lifecycle assembly but before the first wait, the runtime thread:
+
+1. queues a real local Unix client connection so listener readiness is true;
+2. posts SIGTERM to the same masked runtime thread with safe nix `raise(...)` so `SignalFd` readiness is also true.
+
+The first tri-source wait therefore sees simultaneous termination and listener readiness. The test proves the locked precedence by requiring:
+
+- terminal reason `TerminationSignal(SigTerm)`;
+- scheduling attempts exactly zero;
+- workers registered exactly zero;
+- empty final cancellation/completion vectors;
+- listener/socket cleanup `Clean`;
+- signal-mask restoration `Restored`;
+- exact original thread signal mask observed after return;
+- socket pathname absent after return.
+
+Full signal-aware runtime preflight run:
+
+`31903085623`
+
+The run passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests including the isolated precedence proof, all workspace/all-target builds, and `git diff --check` before committing `3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8` and deleting its temporary integration workflow.
+
+## Authoritative validation state
+
+The complete Phase 098 source is integrated. Permanent PRW Rust Validation is now required on a commit containing `3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8` before Phase 098 is classified `IMPLEMENTED_AND_VALIDATED`.
 
 ## Boundary preserved
 
