@@ -1,0 +1,109 @@
+Private Remote Workspace
+Phase 090 Linux Scoped Worker Completion Wake
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / NO_RUNTIME_ACTIVATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 decision report commit: 8a033fb86d65dfca5ef9ec9980cae0dd6e31d486
+Phase 089 authoritative PASS report commit: 3ed5c68b1a8087194e8f1644da8090f1955b1877
+Validated source head: 23edc36ad8c7f5522bad1667c783ef4d0c18966e
+Authoritative GitHub Actions run: 31899835937
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+IMPLEMENTED SCOPE
+
+Phase 090 modifies only crates/prw-agent/src/linux_session_worker_thread.rs.
+
+The existing Phase 078 `spawn_authenticated_session_worker(...)` API and behavior remain intact.
+
+A separate runtime-specific path was added:
+
+- `LocalLinuxCompletionWakeWorkerConfig` couples the existing finite worker config to one Phase 089 wake notifier;
+- `LocalLinuxWorkerCompletionWakeGuard` owns the notifier in the scoped wrapper frame;
+- `spawn_authenticated_session_worker_with_completion_wake(...)` spawns one worker and installs that wrapper guard;
+- guard Drop attempts notification and deliberately discards notifier errors so teardown/unwind cannot panic because wake posting failed.
+
+ORDERING SEMANTICS
+
+The guard is outside `run_authenticated_session_worker(...)`.
+
+Normal return:
+
+1. the worker body returns;
+2. worker-body-owned state, including `LocalLinuxWorkerPermit`, is released;
+3. wrapper guard drops and emits the completion wake;
+4. caller may drain wake and observe released capacity.
+
+Panic/unwind:
+
+1. panic originates inside the worker body;
+2. callee-owned state unwinds, releasing the capacity permit;
+3. wrapper-frame completion guard then drops during unwind and emits the wake;
+4. existing join semantics still classify the worker panic independently.
+
+The eventfd counter carries no worker-result semantics.
+
+FOCUSED TEST PROOFS
+
+`completion_wake_is_observable_after_normal_worker_releases_capacity` proves:
+
+- one finite worker completes normally;
+- capacity returns to zero;
+- exactly a drainable Phase 089 wake is present afterward;
+- the worker response remains valid.
+
+`completion_wake_survives_policy_panic_after_permit_unwinds` proves:
+
+- a deliberate policy panic propagates as a join panic;
+- capacity returns to zero during unwind;
+- completion wake remains drainable after the panic;
+- the wake guard itself does not convert unwind into an additional panic.
+
+Existing Phase 078 worker-spawn tests remain and continue to pass.
+
+VALIDATION
+
+Authoritative run 31899835937 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+MUTATION SURFACE
+
+Comparison from Phase 089 report head 3ed5c68b1a8087194e8f1644da8090f1955b1877 to validated Phase 090 source head 23edc36ad8c7f5522bad1667c783ef4d0c18966e modifies exactly:
+
+- crates/prw-agent/src/linux_session_worker_thread.rs
+
+No Cargo manifest, lockfile, scheduler, listener, bootstrap or workflow file changed.
+
+CORRECTIVE HISTORY
+
+Initial Phase 090 run 31899747708 failed safely only at cargo fmt --check. The diff wrapped two long test configuration lines. Commit 23edc36ad8c7f5522bad1667c783ef4d0c18966e applied only those formatter-required layout changes; no logic changed.
+
+SCOPE PRESERVED
+
+Phase 090 does NOT:
+
+- alter LocalLinuxWorkerPermit accounting;
+- force existing Phase 084/086 scheduling paths to use a wake notifier;
+- poll a listener;
+- add a readiness loop;
+- modify main.rs;
+- activate Agent/systemd/service state;
+- add remote/public networking;
+- change auth/enrollment/DNS/TUN/relay/database/private-key/deployment state.
+
+NEXT AUTHORIZED STEP
+
+Proceed with Phase 091 one-step capacity-aware readiness wait. It must keep runtime wake always armed, omit listener interest at full capacity, process wake before simultaneous listener readiness, immediately reap finished registered workers after wake, surface poll EINTR without internal retry, and remain finite with no outer loop or bootstrap activation.
+
+FINAL CLASSIFICATION
+
+PHASE_090_IMPLEMENTED_AND_VALIDATED / COMPLETION_WAKE_AFTER_PERMIT_RELEASE / PANIC_UNWIND_WAKE_PRESERVED / NON_PANICKING_WAKE_GUARD / EXISTING_PHASE_078_API_PRESERVED / CARGO_LOCK_UNCHANGED / NO_RUNTIME_ACTIVATION / PASS
+
+This is the single authoritative user-facing Phase 090 report.
