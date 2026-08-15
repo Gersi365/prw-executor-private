@@ -17,7 +17,7 @@ impl LocalLinuxIoBudget {
     /// # Errors
     ///
     /// Returns [`LocalLinuxIoBudgetError::ZeroDuration`] when `duration` is zero.
-    pub fn try_new(duration: Duration) -> Result<Self, LocalLinuxIoBudgetError> {
+    pub const fn try_new(duration: Duration) -> Result<Self, LocalLinuxIoBudgetError> {
         if duration.is_zero() {
             return Err(LocalLinuxIoBudgetError::ZeroDuration);
         }
@@ -70,7 +70,7 @@ impl<'a> LocalLinuxDeadlineReader<'a> {
     }
 
     #[cfg(test)]
-    fn deadline(&self) -> Instant {
+    const fn deadline(&self) -> Instant {
         self.deadline
     }
 }
@@ -114,7 +114,7 @@ impl<'a> LocalLinuxDeadlineWriter<'a> {
     }
 
     #[cfg(test)]
-    fn deadline(&self) -> Instant {
+    const fn deadline(&self) -> Instant {
         self.deadline
     }
 }
