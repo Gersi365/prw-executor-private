@@ -39,9 +39,8 @@ pub const fn decode_status_snapshot(
         return Err(LocalAgentStatusDecodeError::InvalidLength);
     }
 
-    let runtime_state = match LocalAgentRuntimeState::from_code(payload[0]) {
-        Some(state) => state,
-        None => return Err(LocalAgentStatusDecodeError::UnknownRuntimeState),
+    let Some(runtime_state) = LocalAgentRuntimeState::from_code(payload[0]) else {
+        return Err(LocalAgentStatusDecodeError::UnknownRuntimeState);
     };
     let version = LocalIpcProtocolVersion::from_parts(
         u16::from_be_bytes([payload[1], payload[2]]),
