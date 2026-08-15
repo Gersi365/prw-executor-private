@@ -3,6 +3,8 @@
 //! Phase 029 uses only `std::io::Read` and `std::io::Write`; it does not create
 //! or configure a socket.
 
+pub mod completion;
+
 use std::io::{Read, Write};
 
 use super::{
