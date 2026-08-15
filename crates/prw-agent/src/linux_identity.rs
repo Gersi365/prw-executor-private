@@ -12,9 +12,9 @@
 //! thread-safe worker-capacity accounting, Phase 076 adds a finite session worker
 //! body, Phase 078 adds one fallible scoped OS-thread spawn adapter, Phase 079
 //! adds explicit joined-worker completion classification, Phase 080 retains/reaps
-//! scoped worker handles, and Phase 082 pairs them with authenticated-stream
-//! cancellation authority. The Agent bootstrap remains inactive and no accept
-//! scheduler is enabled here.
+//! scoped worker handles, Phase 082 pairs them with authenticated-stream
+//! cancellation authority, and Phase 084 composes one capacity-gated scheduling
+//! transaction. The Agent bootstrap remains inactive and no accept loop is enabled.
 
 #[allow(
     dead_code,
@@ -58,6 +58,12 @@ pub mod deadline_io;
 )]
 #[path = "linux_agent_listening_socket.rs"]
 pub mod listening_socket;
+#[allow(
+    dead_code,
+    reason = "pre-runtime one-shot Linux worker scheduler is intentionally crate-internal"
+)]
+#[path = "linux_one_shot_scheduler.rs"]
+pub mod one_shot_scheduler;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
