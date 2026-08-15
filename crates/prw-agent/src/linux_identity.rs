@@ -4,8 +4,9 @@
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
 //! authorization, Phase 059 adds typed authenticated stream ownership, Phase 060
 //! composes authenticated application-session processing, Phase 062 adds
-//! read-only XDG runtime-root validation, and Phase 067 adds a bound-but-not-
-//! listening validated Agent socket object. The Agent bootstrap remains inactive.
+//! read-only XDG runtime-root validation, Phase 067 adds a bound validated Agent
+//! socket, and Phase 068 adds an explicit listening-state transition. The Agent
+//! bootstrap remains inactive and no accept operation is enabled here.
 
 #[allow(
     dead_code,
@@ -25,6 +26,12 @@ pub mod authenticated_session;
 )]
 #[path = "linux_agent_bound_socket.rs"]
 pub mod bound_socket;
+#[allow(
+    dead_code,
+    reason = "pre-accept listening Linux Agent socket is intentionally crate-internal"
+)]
+#[path = "linux_agent_listening_socket.rs"]
+pub mod listening_socket;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
