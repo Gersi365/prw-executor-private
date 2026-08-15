@@ -11,6 +11,11 @@
 pub(crate) mod admission;
 #[allow(
     dead_code,
+    reason = "pre-runtime boundary inbound guard is intentionally crate-internal"
+)]
+pub(crate) mod boundary_inbound_state;
+#[allow(
+    dead_code,
     reason = "pre-runtime boundary policy processor is intentionally crate-internal"
 )]
 pub(crate) mod boundary_policy_processor;
