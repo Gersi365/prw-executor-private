@@ -7,9 +7,10 @@
 //! read-only XDG runtime-root validation, Phase 067 adds a bound validated Agent
 //! socket, Phase 068 adds an explicit listening-state transition, Phase 070 adds
 //! a nonblocking accept-ready state plus one-shot authenticated accept, Phase 071
-//! adds pure composition into Phase 060 authenticated session state, and Phase
-//! 073 adds absolute-deadline blocking stream I/O primitives. The Agent bootstrap
-//! remains inactive and no accept/session loop is enabled here.
+//! adds pure composition into Phase 060 authenticated session state, Phase 073
+//! adds absolute-deadline blocking stream I/O primitives, and Phase 075 adds
+//! bounded thread-safe worker-capacity accounting. The Agent bootstrap remains
+//! inactive and no accept/session scheduler is enabled here.
 
 #[allow(
     dead_code,
@@ -59,6 +60,12 @@ pub mod listening_socket;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-runtime bounded Linux worker capacity is intentionally crate-internal"
+)]
+#[path = "linux_worker_capacity.rs"]
+pub mod worker_capacity;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux XDG runtime-root validation is intentionally crate-internal"
