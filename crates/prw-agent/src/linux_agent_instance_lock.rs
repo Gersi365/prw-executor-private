@@ -70,17 +70,12 @@ pub fn acquire_agent_instance_lock(
     let descriptor = openat(
         runtime_directory.as_fd(),
         AGENT_INSTANCE_LOCK_FILENAME,
-        OFlags::RDWR
-            | OFlags::CREATE
-            | OFlags::NOFOLLOW
-            | OFlags::CLOEXEC
-            | OFlags::NONBLOCK,
+        OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
         Mode::RUSR | Mode::WUSR,
     )
     .map_err(|_| AgentInstanceLockError::OpenFailed)?;
 
-    let metadata =
-        fstat(&descriptor).map_err(|_| AgentInstanceLockError::MetadataReadFailed)?;
+    let metadata = fstat(&descriptor).map_err(|_| AgentInstanceLockError::MetadataReadFailed)?;
     validate_lock_identity(&metadata, effective_agent_uid())?;
 
     if Mode::from_raw_mode(metadata.st_mode).bits() != AGENT_INSTANCE_LOCK_MODE {
@@ -100,7 +95,10 @@ pub fn acquire_agent_instance_lock(
     }
 }
 
-fn validate_lock_identity(metadata: &Stat, expected_uid: u32) -> Result<(), AgentInstanceLockError> {
+fn validate_lock_identity(
+    metadata: &Stat,
+    expected_uid: u32,
+) -> Result<(), AgentInstanceLockError> {
     if !FileType::from_raw_mode(metadata.st_mode).is_file() {
         return Err(AgentInstanceLockError::NotRegularFile);
     }
@@ -115,7 +113,10 @@ fn validate_lock_identity(metadata: &Stat, expected_uid: u32) -> Result<(), Agen
     Ok(())
 }
 
-fn validate_lock_complete(metadata: &Stat, expected_uid: u32) -> Result<(), AgentInstanceLockError> {
+fn validate_lock_complete(
+    metadata: &Stat,
+    expected_uid: u32,
+) -> Result<(), AgentInstanceLockError> {
     validate_lock_identity(metadata, expected_uid)?;
 
     let actual_mode = Mode::from_raw_mode(metadata.st_mode).bits();
@@ -174,7 +175,8 @@ mod tests {
     fn absent_lock_file_is_created_locked_and_validated_at_0600() {
         let (root_path, runtime_directory) = create_prepared_runtime_directory("create");
 
-        let guard = acquire_agent_instance_lock(&runtime_directory).expect("instance lock acquires");
+        let guard =
+            acquire_agent_instance_lock(&runtime_directory).expect("instance lock acquires");
         let lock_path = root_path
             .join(AGENT_RUNTIME_SUBDIRECTORY)
             .join(AGENT_INSTANCE_LOCK_FILENAME);
