@@ -72,10 +72,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
     use std::io::{Read, Write};
     use std::num::NonZeroUsize;
     use std::os::unix::net::UnixStream;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
@@ -129,14 +129,12 @@ mod tests {
     struct BlockingPolicy {
         entered: Arc<Barrier>,
         release: Arc<Barrier>,
-        calls: Cell<usize>,
+        calls: AtomicUsize,
     }
-
-    unsafe impl Sync for BlockingPolicy {}
 
     impl PolicyEvaluator for BlockingPolicy {
         fn evaluate(&self, _capability: Capability) -> Decision {
-            self.calls.set(self.calls.get() + 1);
+            self.calls.fetch_add(1, Ordering::AcqRel);
             self.entered.wait();
             self.release.wait();
             Decision::Allow
@@ -155,7 +153,7 @@ mod tests {
         let policy = BlockingPolicy {
             entered: Arc::clone(&entered),
             release: Arc::clone(&release),
-            calls: Cell::new(0),
+            calls: AtomicUsize::new(0),
         };
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
         let dns = dns_snapshot();
@@ -188,7 +186,7 @@ mod tests {
         });
 
         assert_eq!(capacity.active_workers(), 0);
-        assert_eq!(policy.calls.get(), 1);
+        assert_eq!(policy.calls.load(Ordering::Acquire), 1);
 
         let response = read_frame(&mut client).expect("worker response reads");
         let response = decode_success_status_frame(&response).expect("status response decodes");
