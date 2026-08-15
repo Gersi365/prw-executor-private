@@ -1,0 +1,156 @@
+Private Remote Workspace
+Phase 097 Linux Programmatic Production Runtime Loop
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+AUDIT TYPE: CALLABLE LONG-RUNNING PRODUCTION-LOCAL RUNTIME LOOP / PROGRAMMATIC SHUTDOWN
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Phase 096 authoritative PASS commit: f531bf578730bb783396f2d6824c0b01a2a2793d
+Integrated source commit: b9583c3757003d2cfbfb8e38db9d6e247faf29bf
+Authoritative validated source/trigger head: 469a5cfb0680687c49f7eec8151120b7c5b56365
+Final architecture-status commit: ea063911ce908e25ec17ebc2a908b511d05866bc
+Authoritative permanent CI run: 31902081956
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+IMPLEMENTED SOURCE
+
+- crates/prw-agent/src/linux_production_runtime_loop.rs
+- crates/prw-agent/src/linux_production_runtime_types.rs — bounded error/final-join evidence extension
+- crates/prw-agent/src/linux_production_lifecycle.rs — test-only root helper visibility
+- crates/prw-agent/src/linux_identity.rs — module export/documentation only
+- docs/architecture/PHASE_097_LINUX_PROGRAMMATIC_PRODUCTION_RUNTIME_LOOP.md
+
+RUNTIME INPUT BOUNDARY
+
+`LocalLinuxProductionRuntimeInputs<'a>` bundles:
+- validated `LocalLinuxProductionRuntimeConfig`;
+- copyable bounded local policy by value;
+- local status snapshot;
+- borrowed bounded private-DNS snapshot.
+
+This keeps the core long-running loop API below Clippy argument-count bounds and avoids suppressing `trivially_copy_pass_by_ref`.
+
+LONG-RUNNING LOOP SEMANTICS
+
+The loop owns one `std::thread::scope`, one scoped worker registry, and one fixed-size saturating counter aggregate for its lifetime.
+
+Every iteration performs exactly one already-validated Phase 092 finite orchestration invocation.
+
+Successful dispositions:
+- `ShutdownObserved` => terminal `ShutdownRequested`;
+- `RuntimeWake` => return to readiness;
+- `WaitInterrupted` => return to readiness without hidden syscall retry;
+- all successful `Scheduling(...)` outcomes => return to capacity-aware blocking readiness.
+
+Error dispositions:
+- same-UID peer-authorization rejection => record bounded rejection evidence and continue;
+- every other initial readiness/scheduling error => retain exact fatal classification and fail-stop.
+
+No sleep, periodic timeout, busy poll, retry cadence, or unbounded error backoff is introduced.
+
+PROCESS-LIFETIME EVIDENCE
+
+Phase 097 extends the fixed-size Phase 095 counters so scheduling-error paths retain:
+- the listener-ready readiness step;
+- scheduling attempts including the failed attempt;
+- workers registered earlier in the failed cycle;
+- worker completions reaped before the error.
+
+Final joined worker completions are also added to the saturating completion counter.
+
+Only terminal cancellation outcomes and terminal joined completions remain vectors; both are bounded by configured maximum worker capacity.
+
+TERMINAL TRANSACTION
+
+On shutdown or fatal failure:
+1. no later loop iteration is entered;
+2. `registry.cancel_all()` issues terminal socket shutdown to retained workers;
+3. `registry.join_all()` joins/classifies all remaining workers;
+4. final completions are added to bounded counters;
+5. the scoped worker lifetime exits;
+6. Phase 096 performs exact listener/socket cleanup;
+7. loop evidence and cleanup evidence are combined into `LocalLinuxProductionRuntimeTerminalReport`.
+
+Listener cleanup failure remains independent from and cannot overwrite the original shutdown/fatal reason.
+
+PROGRAMMATIC SHUTDOWN SEAM
+
+`run_local_linux_production_runtime_from_env(...)` remains callable below `main.rs`.
+
+After lifecycle assembly and before the blocking loop starts, its `on_started` callback receives a cloneable `LocalLinuxRuntimeShutdownHandle`. The handle commits monotonic shutdown state before posting Phase 089 runtime wake.
+
+This is intentionally the deterministic pre-signal control seam. OS signal integration remains Phase 098 work.
+
+VALIDATED RUNTIME PROOFS
+
+1. Programmatic shutdown before first wait:
+- shutdown state + wake posted from `on_started`;
+- exactly one readiness step observes terminal shutdown;
+- zero workers registered;
+- terminal reason `ShutdownRequested`;
+- cleanup `Clean`;
+- socket pathname absent after return.
+
+2. One-client round trip followed by shutdown:
+- local client connects to the lifecycle-owned Unix listener;
+- one `GetAgentStatus` request is written;
+- one correlated valid status response is decoded;
+- programmatic shutdown+wake is posted after response;
+- long-running loop exits through bounded teardown;
+- exactly one worker registration is counted;
+- worker completion is counted;
+- peer rejection count remains zero;
+- terminal reason `ShutdownRequested`;
+- listener cleanup `Clean`;
+- socket pathname absent after return.
+
+CORRECTIVE HISTORY
+
+Initial integration run `31901904093` stopped safely at Clippy before source integration. Reported issues were API ergonomics only:
+- core loop had eight arguments;
+- copyable bounded local policy was passed by reference.
+
+Rather than suppressing lints, commit `867ecb9fb8ae9cda1e2cb2db2537119f7a1bded7` introduced immutable `LocalLinuxProductionRuntimeInputs` and refactored the wrappers.
+
+Phase 097-A01 integration run `31901993038` then passed locked metadata, rustfmt, Clippy `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check`. Only after that full PASS did it commit source as `b9583c3757003d2cfbfb8e38db9d6e247faf29bf` and delete both temporary Phase 097 workflows.
+
+AUTHORITATIVE VALIDATION
+
+Permanent PRW Rust Validation run `31902081956` independently passed:
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+POST-VALIDATION GUARDS
+
+- `Cargo.lock` remains byte-identical at blob SHA `76af6bd831191309ac904dfe02ef76729de9a4fb`.
+- `.github/workflows/` contains only permanent `phase-001-rust-validation.yml`.
+- no temporary Phase 097 workflow remains.
+
+BOUNDARY PRESERVED
+
+Phase 097 did not:
+- add OS signal handling or a signal dependency;
+- wire or activate `crates/prw-agent/src/main.rs`;
+- define process exit mapping;
+- install, enable, or start systemd;
+- deploy anything;
+- expose remote/public networking;
+- expand auth/enrollment;
+- change TUN/relay/database/private-key behavior;
+- introduce Wake-on-LAN.
+
+NEXT AUTHORIZED STEP
+
+Phase 098 may perform the Phase 094-A01-authorized safe Linux signal dependency precheck and, only after a passing precheck, implement a signal-aware readiness/control adapter while preserving workspace `unsafe_code = "forbid"`. Real signal delivery tests must be subprocess-isolated. `main.rs`, systemd, and deployment remain excluded.
+
+FINAL CLASSIFICATION
+
+PROGRAMMATIC_LONG_RUNNING_RUNTIME_IMPLEMENTED / ONE_SCOPED_WORKER_LIFETIME / PHASE_092_PER_ITERATION / MEMORY_BOUNDED_EVIDENCE / CONNECTION_LOCAL_PEER_REJECTION_CONTINUES / OTHER_ERRORS_FAIL_STOP / PROGRAMMATIC_SHUTDOWN / BOUNDED_CANCEL_JOIN_CLEANUP / NO_SIGNAL_INTEGRATION / NO_BOOTSTRAP_ACTIVATION / PASS
+
+This file is the single authoritative user-facing Phase 097 audit report.
