@@ -1,0 +1,84 @@
+Private Remote Workspace
+Phase 061 Linux XDG Runtime Directory Security Algorithm Lock
+
+STATUS: DECISION_LOCKED / RUNTIME_MUTATION_NOT_YET_ACTIVATED
+AUDIT TYPE: PLATFORM PATH-SECURITY DESIGN REVIEW
+
+PURPOSE
+
+Resolve the XDG runtime-root and PRW subdirectory portion of the remaining Phase 053 local-socket runtime blocker before any filesystem-backed `agent.sock` lifecycle is allowed.
+
+PRIMARY EVIDENCE REVIEWED
+
+The design was checked against:
+- the current XDG Base Directory specification published by freedesktop.org;
+- rustix 1.1.4 filesystem API documentation for descriptor-relative directory operations, no-follow flags, descriptor metadata, mode operations, and close-on-exec support.
+
+The XDG specification requires the runtime directory to be a per-user runtime directory, owned by the user with mode `0700`; XDG base-directory values used as paths are required to be absolute. PRW's already locked Local IPC contract also explicitly forbids weaker fallback locations.
+
+LOCKED ROOT VALIDATION
+
+The future implementation must:
+- read only `XDG_RUNTIME_DIR`;
+- reject missing, empty, relative, or unusable values;
+- provide no `/tmp`, home-directory, abstract-socket, or TCP fallback;
+- open the supplied root with directory + no-follow + close-on-exec semantics;
+- validate the opened descriptor as a directory;
+- require owning UID == Agent effective UID;
+- require exact `0700` security-mode baseline;
+- never chmod/chown/replace the system/session-owned XDG root.
+
+LOCKED CHILD-DIRECTORY ALGORITHM
+
+After root validation, the fixed basename `private-remote-workspace` is handled relative to the retained validated root descriptor.
+
+The future adapter may:
+- `mkdirat` the child at requested mode `0700` if absent;
+- open the child relative to the validated root descriptor with directory/no-follow/close-on-exec semantics;
+- validate the opened child descriptor for directory type and effective-UID ownership;
+- normalize mode only on the verified same-UID PRW child to exact `0700`;
+- revalidate descriptor metadata after normalization.
+
+It must fail closed for symlinks, non-directories, wrong owners, permission failures, or failed mode normalization.
+
+RACE-RESISTANCE DECISION
+
+Pathname metadata by itself is not authoritative. Security decisions must be made from the opened descriptor and its metadata. Child operations remain anchored to the validated XDG-root descriptor rather than rebuilding and trusting a full ambient pathname.
+
+DEFERRED SOCKET LIFECYCLE
+
+This phase intentionally does not decide:
+- classification of an existing `agent.sock`;
+- live-Agent connect probing;
+- stale socket unlink conditions;
+- bind/listen;
+- post-bind mode/type/owner validation;
+- listener cleanup.
+
+Those remain a separate security algorithm lock.
+
+MUTATION STATEMENT
+
+Phase 061:
+- adds contracts/architecture/audit evidence only;
+- creates no runtime directory;
+- chmods/chowns no runtime object;
+- unlinks no pathname;
+- binds no socket;
+- accepts/connects no socket;
+- changes no peer-authentication or application-protocol source;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+AUTHORITATIVE CONTRACT
+
+`contracts/LINUX_XDG_RUNTIME_DIRECTORY_SECURITY_CONTRACT.md`
+
+FINAL CLASSIFICATION
+
+XDG_ROOT_VALIDATION_LOCKED / DESCRIPTOR_ANCHORED_PRW_SUBDIRECTORY_ALGORITHM_LOCKED / AGENT_SOCKET_LIFECYCLE_STILL_BLOCKED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 061 decision report.
