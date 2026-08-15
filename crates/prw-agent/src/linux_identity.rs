@@ -86,12 +86,11 @@ mod tests {
         let right_peer = peer_credentials(&right).expect("right peer credentials read");
         let process_pid = i32::try_from(std::process::id()).expect("Linux process id fits i32");
         let effective_uid = effective_agent_uid();
-        let effective_gid = getegid().as_raw();
 
         for credentials in [left_peer, right_peer] {
             assert_eq!(credentials.pid(), process_pid);
             assert_eq!(credentials.uid(), effective_uid);
-            assert_eq!(credentials.gid(), effective_gid);
+            assert_eq!(credentials.gid(), getegid().as_raw());
         }
     }
 }
