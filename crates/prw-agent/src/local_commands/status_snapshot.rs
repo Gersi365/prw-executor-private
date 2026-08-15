@@ -114,6 +114,9 @@ mod tests {
         let snapshot = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
 
         assert_eq!(snapshot.runtime_state(), LocalAgentRuntimeState::Ready);
-        assert_eq!(snapshot.protocol_version(), LocalIpcProtocolVersion::current());
+        assert_eq!(
+            snapshot.protocol_version(),
+            LocalIpcProtocolVersion::current()
+        );
     }
 }
