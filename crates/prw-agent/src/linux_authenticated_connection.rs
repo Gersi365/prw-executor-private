@@ -1,7 +1,7 @@
 //! Typed ownership of an already-connected, same-UID-authorized Linux stream.
 //!
 //! Phase 059 associates one owned stream with the Phase 058 authorization token
-//! before exposing mutable stream access inside the crate. It owns no listener.
+//! before exposing stream access inside the crate. It owns no listener.
 
 use rustix::fd::AsFd;
 
@@ -41,6 +41,12 @@ impl<S> AuthenticatedLocalLinuxConnection<S> {
     #[must_use]
     pub const fn peer_credentials(&self) -> LocalLinuxPeerCredentials {
         self.peer.credentials()
+    }
+
+    /// Returns shared access to the stream only after successful authorization.
+    #[must_use]
+    pub const fn stream(&self) -> &S {
+        &self.stream
     }
 
     /// Returns mutable access to the stream only after successful authorization.
