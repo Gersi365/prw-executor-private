@@ -29,7 +29,8 @@ pub fn read_frame<R: Read>(reader: &mut R) -> Result<LocalIpcFrame, LocalIpcFram
         .read_exact(&mut header_bytes)
         .map_err(classify_header_io_error)?;
 
-    let header = decode_frame_header(&header_bytes).map_err(LocalIpcFrameReadError::InvalidHeader)?;
+    let header =
+        decode_frame_header(&header_bytes).map_err(LocalIpcFrameReadError::InvalidHeader)?;
     let payload_length = usize::try_from(header.payload_length())
         .map_err(|_| LocalIpcFrameReadError::PayloadLengthUnsupported)?;
 
@@ -127,7 +128,9 @@ mod tests {
 
         let frame = read_frame(&mut cursor).expect("valid frame");
         let mut trailing = Vec::new();
-        cursor.read_to_end(&mut trailing).expect("read trailing bytes");
+        cursor
+            .read_to_end(&mut trailing)
+            .expect("read trailing bytes");
 
         assert_eq!(frame.payload().as_bytes(), &[1, 2, 3]);
         assert_eq!(trailing, vec![9, 8]);
@@ -177,7 +180,9 @@ mod tests {
 
         let frame = read_frame(&mut cursor).expect("zero-length frame");
         let mut trailing = Vec::new();
-        cursor.read_to_end(&mut trailing).expect("read trailing bytes");
+        cursor
+            .read_to_end(&mut trailing)
+            .expect("read trailing bytes");
 
         assert!(frame.payload().is_empty());
         assert_eq!(trailing, vec![7, 6]);
