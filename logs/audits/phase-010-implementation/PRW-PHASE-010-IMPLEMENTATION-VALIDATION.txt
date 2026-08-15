@@ -1,0 +1,137 @@
+Private Remote Workspace
+Phase 010 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 010
+SCOPE: Bounded in-memory local IPC frame object
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 010 base commit: 78fcf12b209997607bec8b17bf670b451583facd
+Validated source commit: 5e8999ae979d97eee1c0e7a1adb7428b25d2a101
+Validated GitHub Actions run: 31878036834
+
+IMPLEMENTED BOUNDARY
+
+Phase 010 introduces a pure in-memory relationship between a validated local IPC header and its opaque payload.
+
+LocalIpcPayload:
+- owns opaque bytes;
+- validates that the byte length can be represented by the protocol u32 length field;
+- validates that the length does not exceed the Phase 007 1 MiB global payload ceiling;
+- permits zero-length payloads;
+- exposes borrowed bytes and ownership recovery;
+- performs no deserialization.
+
+LocalIpcFrame:
+- couples one validated LocalIpcFrameHeader with one bounded LocalIpcPayload;
+- requires header.payload_length == payload.len;
+- rejects mismatch explicitly;
+- never truncates, pads, ignores trailing bytes, or silently rewrites header metadata.
+
+EXPLICIT ALLOCATION LIMITATION
+
+The Phase 010 payload constructor receives an already allocated Vec<u8>. Therefore the phase does not claim to prevent an upstream caller from allocating excessive storage before invoking the constructor.
+
+A future stream-reader boundary must validate the Phase 009 header and its 1 MiB bound before allocating or extending receive storage.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 010 base: 4
+- added: contracts/LOCAL_FRAME_OBJECT_CONTRACT.md
+- added: crates/prw-agent/src/frame_object.rs
+- modified: crates/prw-agent/src/lib.rs
+- added: docs/architecture/PHASE_010_LOCAL_FRAME_OBJECT.md
+
+VALIDATION HISTORY
+
+Run 20
+- Run ID: 31877972287
+- Commit: c2ce4a2119270c159433d981c3bdcf2b42a925f5
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only changes in frame_object.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit 1
+- 714bdd1b32a9111d882d612efb87d443360366b5
+- Change: exact rustfmt-only corrections.
+- No frame invariant, bound, dependency, or runtime behavior changed.
+
+Run 21
+- Run ID: 31878002394
+- Commit: 714bdd1b32a9111d882d612efb87d443360366b5
+- Result: FAILURE
+- Formatting: PASS
+- Clippy/compile failure: Rust E0493 because LocalIpcFrame::new was declared const fn while accepting an owned LocalIpcPayload containing Vec; a failing const branch can drop that value, which Rust 1.97 does not permit in const evaluation.
+- Tests and build were skipped after Clippy compilation failed.
+
+Corrective commit 2
+- 5e8999ae979d97eee1c0e7a1adb7428b25d2a101
+- Change: removed only the const qualifier from LocalIpcFrame::new.
+- The constructor inputs, validation condition, error, ownership behavior, and runtime semantics remain unchanged.
+
+Run 22
+- Run ID: 31878036834
+- Commit: 5e8999ae979d97eee1c0e7a1adb7428b25d2a101
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: payload at exactly 1 MiB accepted
+PASS: payload above 1 MiB rejected
+PASS: exact header/payload length accepted
+PASS: payload-length mismatch rejected
+PASS: zero-length payload valid when header declares zero
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 010 did not:
+- bind, listen, accept, connect, read, or write a socket;
+- deserialize or execute payload bytes;
+- dispatch a command;
+- add a dependency;
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 010 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- bounded stream payload acquisition before allocation;
+- truncated-header and truncated-payload I/O handling;
+- local socket runtime;
+- command payload serialization;
+- runtime command dispatch;
+- timeout/cancellation semantics;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 010 implementation-validation report.
+GitHub Actions run 31878036834 is the authoritative executable validation evidence for source commit 5e8999ae979d97eee1c0e7a1adb7428b25d2a101.
