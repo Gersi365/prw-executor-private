@@ -9,7 +9,9 @@
 use super::accept_ready::{
     AcceptReadyAgentSocket, AcceptReadyAgentSocketError, prepare_accept_ready_agent_socket,
 };
-use super::bound_socket::{BoundAgentSocketCleanupError, BoundAgentSocketError, bind_validated_agent_socket};
+use super::bound_socket::{
+    BoundAgentSocketCleanupError, BoundAgentSocketError, bind_validated_agent_socket,
+};
 use super::bounded_scheduler_cycle::LocalLinuxSchedulerControl;
 use super::listening_socket::{ListeningAgentSocketError, listen_bound_agent_socket};
 use super::production_runtime_types::{
@@ -17,14 +19,14 @@ use super::production_runtime_types::{
 };
 use super::runtime_wake::{LocalLinuxRuntimeWake, LocalLinuxRuntimeWakeCreateError};
 use super::worker_capacity::LocalLinuxWorkerCapacity;
-use super::xdg_runtime_root::{
-    ValidatedXdgRuntimeRoot, XdgRuntimeRootValidationError, validate_xdg_runtime_root_from_env,
+use super::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
+    AgentInstanceLockError, acquire_agent_instance_lock,
 };
 use super::xdg_runtime_root::prw_runtime_directory::{
     PrwRuntimeDirectoryPreparationError, prepare_prw_runtime_directory,
 };
-use super::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
-    AgentInstanceLockError, acquire_agent_instance_lock,
+use super::xdg_runtime_root::{
+    ValidatedXdgRuntimeRoot, XdgRuntimeRootValidationError, validate_xdg_runtime_root_from_env,
 };
 
 /// Failure while assembling the production-local lifecycle boundary.
@@ -93,7 +95,7 @@ impl<'owners> LocalLinuxListenerCleanupGuard<'owners> {
         }
     }
 
-    fn listener(&self) -> &AcceptReadyAgentSocket<'owners> {
+    const fn listener(&self) -> &AcceptReadyAgentSocket<'owners> {
         self.listener
             .as_ref()
             .expect("Phase 096 listener guard remains armed during callback")
@@ -240,8 +242,8 @@ mod tests {
     use std::num::{NonZeroU16, NonZeroUsize};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixStream;
-    use std::path::{Path, PathBuf};
     use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
 
@@ -249,7 +251,6 @@ mod tests {
         LocalLinuxProductionLifecycleAssemblyError,
         with_local_linux_production_lifecycle_in_root_path,
     };
-    use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
     use crate::linux_identity::production_runtime_types::{
         LocalLinuxProductionRuntimeCleanup, LocalLinuxProductionRuntimeConfig,
@@ -258,6 +259,7 @@ mod tests {
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
         AgentInstanceLockError, acquire_agent_instance_lock,
     };
+    use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -283,10 +285,8 @@ mod tests {
             NonZeroU16::new(8).expect("backlog nonzero"),
             NonZeroUsize::new(2).expect("attempt budget nonzero"),
             NonZeroUsize::new(4).expect("request budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_millis(250))
-                .expect("read budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_millis(250))
-                .expect("write budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(250)).expect("read budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(250)).expect("write budget nonzero"),
         )
     }
 
@@ -307,7 +307,10 @@ mod tests {
                 assert_eq!(capacity.max_workers(), 2);
                 assert_eq!(capacity.active_workers(), 0);
                 assert!(!control.is_shutdown_requested());
-                assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+                assert_eq!(
+                    wake.drain(),
+                    Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+                );
                 let client = UnixStream::connect(&path).expect("prepared listener accepts connect");
                 drop(client);
                 std::os::fd::AsFd::as_fd(listener);
@@ -316,7 +319,10 @@ mod tests {
         )
         .expect("Phase 096 lifecycle assembles");
 
-        assert_eq!(execution.cleanup(), LocalLinuxProductionRuntimeCleanup::Clean);
+        assert_eq!(
+            execution.cleanup(),
+            LocalLinuxProductionRuntimeCleanup::Clean
+        );
         assert_eq!(execution.into_value(), 41);
         assert!(!path.exists());
 
@@ -377,11 +383,13 @@ mod tests {
     #[test]
     fn preexisting_instance_lock_fails_before_socket_bind() {
         let root_path = create_root("already-running");
-        let root = crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
-            .expect("temporary root validates");
+        let root =
+            crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
+                .expect("temporary root validates");
         let runtime_directory = crate::linux_identity::xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(&root)
             .expect("runtime directory prepares");
-        let lock = acquire_agent_instance_lock(&runtime_directory).expect("first instance lock holds");
+        let lock =
+            acquire_agent_instance_lock(&runtime_directory).expect("first instance lock holds");
 
         let result = with_local_linux_production_lifecycle_in_root_path(
             &root_path,

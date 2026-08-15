@@ -20,8 +20,9 @@
 //! capacity-aware blocking readiness wait step, Phase 092 adds finite
 //! readiness-plus-completion-wake scheduling orchestration, and Phase 095 adds
 //! immutable production-runtime configuration plus bounded evidence/disposition
-//! types. The Agent bootstrap remains inactive and no long-running runtime loop
-//! is enabled.
+//! types, and Phase 096 adds scoped lifecycle resource assembly with explicit
+//! listener rollback/cleanup. The Agent bootstrap remains inactive and no
+//! long-running runtime loop is enabled.
 
 #[allow(
     dead_code,
@@ -83,6 +84,12 @@ pub mod one_shot_scheduler;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-bootstrap Linux production lifecycle assembly is intentionally crate-internal"
+)]
+#[path = "linux_production_lifecycle.rs"]
+pub mod production_lifecycle;
 #[allow(
     dead_code,
     reason = "pre-bootstrap Linux production runtime types are intentionally crate-internal"
