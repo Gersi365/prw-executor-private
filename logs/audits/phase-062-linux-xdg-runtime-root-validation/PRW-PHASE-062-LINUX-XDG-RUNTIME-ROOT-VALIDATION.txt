@@ -1,0 +1,68 @@
+Private Remote Workspace
+Phase 062 Linux XDG Runtime-Root Validation
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement the read-only XDG runtime-root validation portion of the Phase 061 security-algorithm lock while retaining the validated directory descriptor for later descriptor-relative PRW child work.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_xdg_runtime_root.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_XDG_RUNTIME_ROOT_VALIDATION_CONTRACT.md
+- architecture: docs/architecture/PHASE_062_LINUX_XDG_RUNTIME_ROOT_VALIDATION.md
+
+PRODUCTION ALGORITHM
+
+- reads only XDG_RUNTIME_DIR;
+- rejects missing, empty, and relative values;
+- opens the absolute root with RDONLY | DIRECTORY | NOFOLLOW | CLOEXEC;
+- reads authoritative metadata with fstat on the opened descriptor;
+- requires directory type;
+- requires owner UID equal to the effective Agent UID;
+- requires exact permission/special-mode bits 0700;
+- returns an owned descriptor wrapper on success;
+- performs no production filesystem mutation.
+
+VALIDATED BEHAVIOR
+
+Temporary runner filesystem tests prove:
+- valid same-UID 0700 directory is accepted;
+- missing/empty/relative values fail before open;
+- wrong mode fails closed and is not repaired;
+- final-component symlink fails closed;
+- regular-file root fails closed;
+- wrong-owner metadata classification fails closed.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31890773602
+Validated source head: 073934bd39cc967fb5fe376e45917e48ecef5854
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+SCOPE PRESERVED
+
+Phase 062:
+- creates/chmods/chowns/unlinks no runtime filesystem object in production;
+- creates no PRW runtime child in production;
+- touches no agent.sock pathname;
+- binds/listens/accepts/connects no socket;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+XDG_RUNTIME_ROOT_READ_ONLY_VALIDATION_IMPLEMENTED / DESCRIPTOR_RETAINED / FAIL_CLOSED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 062 report.
