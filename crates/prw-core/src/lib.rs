@@ -8,6 +8,10 @@ pub struct WorkspaceId(String);
 
 impl WorkspaceId {
     /// Creates a workspace identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         build_identifier(value).map(Self)
     }
@@ -25,6 +29,10 @@ pub struct UserId(String);
 
 impl UserId {
     /// Creates a user identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         build_identifier(value).map(Self)
     }
@@ -42,6 +50,10 @@ pub struct DeviceId(String);
 
 impl DeviceId {
     /// Creates a device identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         build_identifier(value).map(Self)
     }
@@ -59,6 +71,10 @@ pub struct TransferId(String);
 
 impl TransferId {
     /// Creates a transfer identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         build_identifier(value).map(Self)
     }
@@ -76,6 +92,10 @@ pub struct SessionId(String);
 
 impl SessionId {
     /// Creates a session identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         build_identifier(value).map(Self)
     }
