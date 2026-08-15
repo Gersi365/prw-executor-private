@@ -1,0 +1,149 @@
+Private Remote Workspace
+Phase 022 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 022
+SCOPE: Encode-side kind/status-consistent terminal response frame builder
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 022 base commit: 458b295bff27a8ca39b49bbf0f6a02b0c35dc589
+Validated source commit: ad590fcd94a70e457d85340480435a3ef7ee3801
+Validated GitHub Actions run: 31880073663
+
+LOCKED BUILDER BEHAVIOR
+
+Inputs:
+- typed non-zero LocalIpcRequestId
+- typed LocalAgentResponseStatus
+- opaque command-specific body bytes
+
+The caller does not supply an outer message kind.
+
+Kind derivation:
+- Ok -> Response
+- every current non-Ok status -> Error
+
+Payload composition:
+response_status_prefix || command_specific_body
+
+Global payload limit: 1,048,576 bytes
+Mandatory response-status prefix: 2 bytes
+Maximum command-specific body: 1,048,574 bytes
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/terminal_response.rs
+- Exported terminal_response::builder.
+- Existing Phase 020 validation semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/terminal_response/builder.rs
+- Added LOCAL_IPC_MAX_TERMINAL_BODY_LENGTH = 1,048,574.
+- Added build_terminal_response_frame().
+- Reused Phase 016 status encoding and Phase 020 status-to-kind mapping.
+- Reused LocalIpcPayload, LocalIpcFrameHeader, and LocalIpcFrame validated constructors.
+- Preserved lower-level construction failures as typed error variants.
+- Added builder->validator symmetry tests for success and every current non-success status.
+
+3. contracts/LOCAL_TERMINAL_RESPONSE_BUILDER_CONTRACT.md
+- Added normative encode-side construction contract and body bound.
+
+4. docs/architecture/PHASE_022_TERMINAL_RESPONSE_BUILDER.md
+- Recorded construction sequence, rationale for no kind argument, bound, and validation symmetry.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 022 base: 4
+- added: contracts/LOCAL_TERMINAL_RESPONSE_BUILDER_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/terminal_response.rs
+- added: crates/prw-agent/src/local_commands/terminal_response/builder.rs
+- added: docs/architecture/PHASE_022_TERMINAL_RESPONSE_BUILDER.md
+
+VALIDATION HISTORY
+
+Run 43
+- Run ID: 31880042415
+- Commit: 1f9df8015959ddc708b502b99196344677ec7cbd
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow in terminal_response/builder.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- ad590fcd94a70e457d85340480435a3ef7ee3801
+- Change: exact rustfmt-only correction in terminal_response/builder.rs.
+- Builder bounds, kind derivation, payload bytes, dependency set, and runtime behavior unchanged.
+
+Run 44
+- Run ID: 31880073663
+- Commit: ad590fcd94a70e457d85340480435a3ef7ee3801
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: command-body bound reserves exactly two bytes for status prefix
+PASS: success builder derives Response and prepends Ok status
+PASS: every current non-success status derives Error
+PASS: builder output validates through Phase 020 with same status
+PASS: maximum 1,048,574-byte command body produces exact 1 MiB payload
+PASS: above-maximum command body rejected before complete frame construction
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 022 did not:
+- bind/listen/accept/connect a socket;
+- write a frame to a stream;
+- dispatch or execute commands;
+- mutate outstanding-request state;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 022.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 022 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- complete GetAgentStatus frame composition using its fixed five-byte body;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- timeout/cancellation policy;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 022 implementation-validation report.
+GitHub Actions run 31880073663 is the authoritative executable validation evidence for source commit ad590fcd94a70e457d85340480435a3ef7ee3801.
