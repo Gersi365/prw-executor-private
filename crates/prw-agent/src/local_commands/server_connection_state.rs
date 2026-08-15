@@ -57,9 +57,9 @@ impl LocalServerConnectionState {
             self.response_write.is_write_poisoned(),
         ) {
             (false, false) => None,
-            (true, false) => Some(LocalServerConnectionUnusableReason::InboundReadPoisoned),
-            (false, true) => Some(LocalServerConnectionUnusableReason::ResponseWritePoisoned),
-            (true, true) => Some(LocalServerConnectionUnusableReason::BothPoisoned),
+            (true, false) => Some(LocalServerConnectionUnusableReason::InboundRead),
+            (false, true) => Some(LocalServerConnectionUnusableReason::ResponseWrite),
+            (true, true) => Some(LocalServerConnectionUnusableReason::Both),
         }
     }
 }
@@ -107,11 +107,11 @@ pub fn process_one_on_server_connection<R: Read, W: Write, E: PolicyEvaluator + 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalServerConnectionUnusableReason {
     /// Request framing/decoding failed previously.
-    InboundReadPoisoned,
+    InboundRead,
     /// Terminal-response writing failed previously.
-    ResponseWritePoisoned,
+    ResponseWrite,
     /// Both protocol directions are poisoned.
-    BothPoisoned,
+    Both,
 }
 
 /// Phase 044 aggregate server-connection processing failure.
@@ -251,7 +251,7 @@ mod tests {
         assert!(!state.is_usable());
         assert_eq!(
             state.unusable_reason(),
-            Some(LocalServerConnectionUnusableReason::InboundReadPoisoned)
+            Some(LocalServerConnectionUnusableReason::InboundRead)
         );
         assert_eq!(policy.calls(), 0);
         assert!(output.is_empty());
@@ -280,7 +280,7 @@ mod tests {
         assert!(!state.is_usable());
         assert_eq!(
             state.unusable_reason(),
-            Some(LocalServerConnectionUnusableReason::ResponseWritePoisoned)
+            Some(LocalServerConnectionUnusableReason::ResponseWrite)
         );
         assert_eq!(policy.calls(), 1);
     }
@@ -307,7 +307,7 @@ mod tests {
         );
         assert_eq!(
             state.unusable_reason(),
-            Some(LocalServerConnectionUnusableReason::ResponseWritePoisoned)
+            Some(LocalServerConnectionUnusableReason::ResponseWrite)
         );
 
         let policy_calls_before = policy.calls();
@@ -324,7 +324,7 @@ mod tests {
                 &dns,
             ),
             Err(LocalServerConnectionProcessError::ConnectionUnusable(
-                LocalServerConnectionUnusableReason::ResponseWritePoisoned
+                LocalServerConnectionUnusableReason::ResponseWrite
             ))
         );
         assert_eq!(later_reader.read_calls, 0);
