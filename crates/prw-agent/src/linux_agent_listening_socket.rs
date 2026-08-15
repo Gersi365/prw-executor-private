@@ -141,8 +141,9 @@ mod tests {
     ) -> (PathBuf, ValidatedPrwRuntimeDirectory, AgentInstanceLock) {
         let root_path = unique_temp_path(label);
         create_directory_with_mode(&root_path, 0o700);
-        let root = crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
-            .expect("temporary root satisfies Phase 062 validation");
+        let root =
+            crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
+                .expect("temporary root satisfies Phase 062 validation");
         let runtime_directory = crate::linux_identity::xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(&root)
             .expect("temporary PRW directory satisfies Phase 063 preparation");
         drop(root);
@@ -176,7 +177,9 @@ mod tests {
             .expect("local test client connects after listen transition");
         drop(client);
 
-        listening.cleanup().expect("listening socket cleanup succeeds");
+        listening
+            .cleanup()
+            .expect("listening socket cleanup succeeds");
         assert!(!socket_path.exists());
 
         drop(instance_lock);
@@ -198,7 +201,9 @@ mod tests {
             AgentInstanceLockError::AlreadyRunning
         );
 
-        listening.cleanup().expect("listening socket cleanup succeeds");
+        listening
+            .cleanup()
+            .expect("listening socket cleanup succeeds");
         drop(instance_lock);
         drop(runtime_directory);
         fs::remove_dir_all(&root_path).expect("temporary root removes");
