@@ -6,7 +6,7 @@
 use prw_core::DeviceId;
 
 /// Optional private-DNS configuration.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrivateDnsConfig {
     /// Whether PRW-managed private DNS integration is enabled.
     pub enabled: bool,
@@ -16,17 +16,6 @@ pub struct PrivateDnsConfig {
     pub resolvers: Vec<String>,
     /// Domain suffixes that should use private resolvers.
     pub split_domains: Vec<String>,
-}
-
-impl Default for PrivateDnsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            device_naming: false,
-            resolvers: Vec::new(),
-            split_domains: Vec::new(),
-        }
-    }
 }
 
 /// Abstract peer routing information.
