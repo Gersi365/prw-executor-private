@@ -1,0 +1,299 @@
+Private Remote Workspace
+Phase 088-A03 Runtime Wake / Readiness Testability Precheck
+
+STATUS: PRECHECK_COMPLETE / DETERMINISTIC_TEST_STRATEGY_PREPARED / NOT_APPROVED / NO_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: TESTABILITY / FAILURE-INJECTION BOUNDARY REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 decision-preparation commit: 182b1d99cb19a863b9925fd0bf9a851d8f530b8f
+Phase 087-A01 readiness corrective commit: aef90e7baf9f11228a9ec6a5eeaae5976fe31940
+Phase 088-A01 exact-toolchain corrective report commit: b2526508021e809f7258af98c6ee4ae582b09f63
+Phase 088-A02 runtime-wake I/O semantics precheck commit: 1f1582d998796de25aff02a522c6b419da1c1787
+
+PURPOSE
+
+Prepare a deterministic validation strategy for the proposed Phase 088 runtime-wake/readiness primitives before architecture approval or implementation.
+
+The test strategy must prove rare syscall-result handling such as EINTR, EAGAIN and short I/O without relying on probabilistic signals, real eventfd counter saturation, scheduler timing races or privileged/runtime activation.
+
+EXISTING REPOSITORY TESTING PRECEDENT
+
+The current PRW source already favors deterministic synthetic failure boundaries rather than nondeterministic environment manipulation.
+
+Examples:
+
+- `frame_object/writer.rs` implements a small test-only `FailAfter` writer to force exact write-failure positions;
+- `frame_object/boundary_reader.rs` implements `InterruptOnce` to return `ErrorKind::Interrupted` on the first read and then delegate to deterministic memory input;
+- the tests classify exact failure state while leaving production APIs generic and bounded;
+- Linux lifecycle/scheduler tests use controlled temporary directories, Unix socket pairs/listeners, barriers, explicit capacities and finite deadlines rather than long-running production loops.
+
+Phase 088 should preserve this style and should not add a mocking framework solely for low-level readiness work.
+
+TEST LAYERS — RECOMMENDED
+
+A future implementation should separate tests into three layers.
+
+LAYER 1 — PURE RESULT CLASSIFICATION
+
+Use small module-private functions/enums that classify already-observed syscall results and readiness flags.
+
+Examples of pure inputs:
+
+- `Result<usize, Errno>` for one fixed-size wake write/read attempt;
+- `PollFlags` revents for the wake descriptor;
+- `PollFlags` revents for the listener descriptor;
+- booleans/current counts for shutdown and capacity eligibility.
+
+Examples of pure outputs:
+
+- wake write: Queued / AlreadyPending / RetryInterrupted / Fatal;
+- wake drain: Drained / RetryInterrupted / InvalidShortIo / Fatal;
+- poll return: Ready / WaitInterrupted / WaitFailed / InvalidZeroReady;
+- dispatch decision: Shutdown / ReapAndRecompute / ListenerEligible / IgnoreListenerAtCapacity / DescriptorFailure.
+
+These classifiers make errno and readiness precedence exhaustively testable without invoking the kernel.
+
+The exact public API is not locked by this report; the recommendation is only that kernel-result interpretation remain independently testable.
+
+LAYER 2 — THIN SYSCALL OPERATION WITH MINIMAL INJECTABLE SEAM
+
+The production wake primitive may keep a direct rustix implementation while delegating retry mechanics to a tiny private operation boundary.
+
+Preferred candidate test seam:
+
+- one module-private generic/helper accepting a closure for "perform one read/write attempt";
+- production call site supplies `rustix::io::read` or `rustix::io::write`;
+- unit tests supply deterministic closures returning a finite scripted sequence such as `INTR -> Ok(8)`, `AGAIN`, short count or fatal errno;
+- the seam is private and is not a product/runtime dependency-injection framework.
+
+Alternative acceptable shape:
+
+- a private test-only wrapper around the classifier and retry state machine.
+
+Avoid:
+
+- public syscall traits added only for tests;
+- global hooks;
+- environment variables controlling failure behavior;
+- real signal delivery for every EINTR unit test;
+- attempting to saturate the 64-bit eventfd counter to provoke EAGAIN;
+- sleeping until a timing race happens.
+
+LAYER 3 — REAL KERNEL HAPPY-PATH / LIFECYCLE PROOFS
+
+Use real Linux eventfd/poll only where the kernel behavior itself is the property under test.
+
+Focused real-kernel tests should prove:
+
+- eventfd creation with intended flags succeeds;
+- initial counter zero is not readable;
+- one wake becomes POLLIN-readable;
+- multiple user-space wake writes coalesce;
+- one non-semaphore read returns a nonzero aggregate and clears ordinary POLLIN readiness;
+- a blocking poll on the wake fd returns after a controlled test-thread notification;
+- listener AsFd can be included without ownership transfer;
+- listener can be omitted from the wait set while capacity is full;
+- listener readiness is restored after a completion wake and released capacity;
+- simultaneous ready state is resolved by deterministic dispatch policy even if the kernel's returned array ordering is not relied upon.
+
+The tests should remain finite and include explicit synchronization primitives rather than arbitrary sleep-based assertions wherever practical.
+
+EINTR TEST STRATEGY
+
+Wake write/read EINTR:
+
+- do not use process signals as the primary unit test;
+- use the scripted private operation seam to return Errno::INTR one or more times and then success;
+- prove only INTR is retried;
+- prove another errno terminates immediately;
+- prove no scheduling/accept operation occurs inside this retry state machine.
+
+Poll EINTR:
+
+- classifier unit test supplies Errno::INTR and proves `WaitInterrupted` is returned;
+- no private automatic poll retry is performed;
+- a higher finite orchestration test may feed `WaitInterrupted` into state re-observation and prove shutdown is checked before any later wait.
+
+A real signal-induced poll interruption test is optional supplementary evidence and should not be required for correctness if it introduces platform/timing fragility.
+
+EAGAIN TEST STRATEGY
+
+Wake write EAGAIN:
+
+- do not saturate eventfd's near-u64 maximum counter in tests;
+- inject Errno::AGAIN at the one-attempt operation seam;
+- prove it maps only to the locked `WakeAlreadyPending` classification;
+- separately use a real eventfd happy-path test to prove pending wake produces readable state.
+
+Wake drain EAGAIN after reported POLLIN:
+
+- inject the state deterministically and prove it is classified as unexpected/fail-closed under the single-consumer invariant;
+- do not silently loop until a read succeeds.
+
+SHORT-I/O TEST STRATEGY
+
+Although Linux eventfd requires 8-byte transfers and ordinary valid operations should not produce a normal partial transfer, the PRW wrapper should still reject unexpected returned lengths.
+
+Inject:
+
+- Ok(0);
+- Ok(1);
+- Ok(7);
+- optionally Ok(9) at the classifier boundary if the type permits arbitrary count input.
+
+Only exactly Ok(8) is normal.
+
+This protects the application boundary from treating an impossible/unexpected syscall observation as valid wake state.
+
+POLL REVENTS TEST MATRIX
+
+Pure dispatch/classifier tests should cover at least:
+
+Wake descriptor:
+
+- empty flags;
+- POLLIN;
+- POLLERR;
+- POLLHUP;
+- POLLNVAL;
+- POLLIN | POLLERR;
+- other unexpected returned bits supported by the API.
+
+Listener descriptor:
+
+- empty flags;
+- POLLIN;
+- POLLERR;
+- POLLHUP;
+- POLLNVAL;
+- POLLIN plus an error bit.
+
+Combined descriptor state:
+
+- wake only;
+- listener only with capacity;
+- listener only at capacity (must not normally occur if wait set was constructed correctly; fail/recompute safely if observed);
+- wake + listener while running and capacity available;
+- wake + listener after shutdown flag is set;
+- wake + listener while capacity is full.
+
+The array iteration order returned by poll must not determine semantic precedence. The code should first aggregate/inspect descriptor revents, then apply explicit wake-first policy.
+
+CAPACITY-WAKE INTEGRATION TEST
+
+A critical finite test must reproduce the Phase 087-A01 failure state and prove it no longer spins.
+
+Controlled setup:
+
+1. worker capacity = 1;
+2. one scoped worker holds the permit and is blocked on a deterministic barrier or controlled read;
+3. one additional client is queued on the listener;
+4. outer one-step wait-set construction observes full capacity;
+5. assert listener is not armed; runtime wake is armed;
+6. release/finish the worker;
+7. completion guard releases/wakes in the locked order;
+8. poll returns from runtime wake;
+9. runtime drains wake, reaps completion, observes capacity = 0;
+10. next one-step wait arms listener;
+11. queued client readiness may then invoke one Phase 086 cycle;
+12. assert no repeated AtCapacity scheduling attempts occurred while the first worker was active.
+
+This test should use explicit counters for number of Phase 086 invocations or a bounded orchestration wrapper, not CPU/time sampling as proof of "no spin".
+
+WORKER COMPLETION ORDERING TEST
+
+The current `spawn_authenticated_session_worker` moves the authenticated session and `LocalLinuxWorkerPermit` into `run_authenticated_session_worker` inside a scoped closure.
+
+A future wake guard can be placed in the wrapper closure such that:
+
+- the guard exists outside the worker-body call;
+- the worker body's owned permit is dropped as the called function returns or unwinds;
+- the wrapper guard then emits the completion wake while the closure exits/unwinds.
+
+Tests must prove:
+
+- normal completion: wake consumer observes capacity already decremented;
+- worker panic: join classification remains Panicked and wake consumer still observes released capacity;
+- notifier failure during unwinding does not cause a second panic/abort;
+- spawn failure creates no registered worker and must not fake a worker-completion wake unless a separate initialization wake contract explicitly requires it.
+
+The exact guard implementation remains unapproved.
+
+SHUTDOWN ORDER TEST
+
+A deterministic shutdown test should use a runtime wake handle and control state with explicit barriers:
+
+1. outer wait is confirmed blocked on runtime wake;
+2. shutdown requester sets scheduler shutdown state;
+3. requester posts wake;
+4. wait returns;
+5. wake is processed first;
+6. shutdown is observed;
+7. queued listener connection remains unaccepted;
+8. registered worker cancellation occurs;
+9. all workers are joined/classified;
+10. listener cleanup succeeds.
+
+The test must specifically prove state-before-wake ordering; it should not merely prove eventual shutdown.
+
+NO LONG-RUNNING TEST REQUIREMENT
+
+The first implementation phases do not need a daemon-duration soak test.
+
+Correctness can be established with:
+
+- real one-step blocking waits awakened deterministically;
+- finite bounded orchestration iterations;
+- explicit counters and state assertions;
+- exact cleanup verification.
+
+A long-running/soak test belongs only after a long-running runtime loop is separately approved and implemented.
+
+MUTATION-BOUNDARY GUARDS FOR FUTURE IMPLEMENTATION
+
+Recommended guard per implementation phase:
+
+Phase A — wake primitive:
+
+- allowed: prw-agent Cargo rustix feature list, one new wake module, module registration, focused tests/docs/audit;
+- forbidden: worker spawn changes, listener orchestration, main.rs, systemd;
+- Cargo.lock must remain byte-identical because rustix 1.1.4 `event` is an empty feature mapping with no additional dependency activation.
+
+Phase B — completion wake:
+
+- allowed: scoped worker wrapper + focused wake tests, only after Phase A PASS;
+- forbidden: outer listener wait loop, main.rs/systemd;
+- capacity primitive itself should remain unchanged unless a new explicit decision supersedes the current recommendation.
+
+Phase C — one-step readiness:
+
+- allowed: new readiness-step module + integration tests using existing listener/capacity/wake primitives;
+- forbidden: unbounded loop/bootstrap activation.
+
+Each phase should run the permanent full locked validation in addition to focused tests.
+
+NO-MUTATION / NO-APPROVAL STATEMENT
+
+This A03 precheck writes evidence only.
+
+It does NOT:
+
+- approve Phase 088 architecture;
+- enable rustix `event`;
+- modify Cargo.toml/Cargo.lock;
+- modify Rust source;
+- introduce a mocking framework or public injection API;
+- add eventfd/poll code;
+- change worker spawning;
+- add a runtime loop;
+- modify main.rs/systemd;
+- activate any production listener/runtime/network state.
+
+FINAL CLASSIFICATION
+
+DETERMINISTIC_FAILURE_INJECTION_STRATEGY_PREPARED / EXISTING_SYNTHETIC_IO_TEST_STYLE_REUSED / PURE_CLASSIFICATION_RECOMMENDED / PRIVATE_MINIMAL_SYSCALL_SEAM_RECOMMENDED / REAL_KERNEL_HAPPY_PATH_SEPARATED / NO_TIMING_OR_COUNTER_SATURATION_REQUIRED / CAPACITY_NO_SPIN_PROOF_DEFINED / NOT_APPROVED / NO_RUNTIME_ACTIVATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the Phase 088-A03 testability precheck. It is implementation-preparation evidence only and does not authorize source changes.
