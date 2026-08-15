@@ -1,0 +1,108 @@
+Private Remote Workspace
+Phase 064 Linux Agent Socket Lifecycle Security Algorithm
+
+STATUS: DECISION_LOCKED / RUNTIME_NOT_ACTIVATED
+AUDIT TYPE: SECURITY AND FILESYSTEM-LIFECYCLE DECISION LOCK
+
+PURPOSE
+
+Close the single-instance, stale-agent.sock, bind/post-bind validation, accepted-peer ordering, and cleanup design blockers identified by the Phase 014 and Phase 053 runtime-readiness audits, after Phases 054-063 resolved the syscall provider, SO_PEERCRED ordering, XDG root validation, and PRW child-directory preparation.
+
+LOCKED DECISIONS
+
+1. SINGLE-INSTANCE AUTHORITY
+- fixed persistent lock file: agent.lock inside the validated PRW runtime directory;
+- required mode: 0600;
+- regular-file and same-effective-UID descriptor validation before any mode normalization;
+- nonblocking exclusive flock;
+- lock held across stale classification, bind, listener lifetime, and orderly cleanup;
+- lock contention means ALREADY_RUNNING and forbids any agent.sock inspection/mutation;
+- persistent lock inode is not unlinked during shutdown.
+
+2. CONNECT PROBE
+- no connect probe is used for stale classification;
+- every conforming Agent must hold the instance lock for its listener lifetime;
+- a successful lock acquisition therefore establishes lifecycle authority before stale-path handling;
+- this avoids creating an accepted probe connection during startup classification.
+
+3. STALE agent.sock
+- inspect only after exclusive lock acquisition;
+- descriptor-relative no-follow metadata under the validated PRW directory;
+- missing path proceeds to bind preparation;
+- stale-unlink eligibility requires Unix-socket type, effective-UID owner, exact 0600 mode;
+- capture device/inode identity;
+- re-stat immediately before unlink and require exact identity/type/owner/mode match;
+- unlink only the unchanged trusted-shape socket;
+- symlink, non-socket, wrong owner, wrong mode, metadata failure, or replacement fails closed without unlink.
+
+4. BIND ANCHOR
+- no process current-working-directory mutation;
+- Linux bind path is anchored through the retained PRW-directory descriptor using /proc/self/fd/<fd>/agent.sock;
+- failure to use this anchor fails closed; no ambient XDG-path fallback.
+
+5. POST-BIND SECURITY
+- AF_UNIX SOCK_STREAM with close-on-exec;
+- bind only while instance lock is held and socket path is proven absent;
+- normalize agent.sock to exact 0600 before listen;
+- descriptor-relative no-follow stat must prove socket type, effective-UID owner, exact 0600;
+- capture device/inode identity before listen;
+- global process umask is not changed as the primary permission strategy.
+
+6. ACCEPTED PEER ORDER
+- accept;
+- Phase 059 SO_PEERCRED same-UID authentication;
+- reject failure before application bytes;
+- construct Phase 060 authenticated session;
+- only then run bounded application processing.
+
+7. CLEANUP
+- keep instance lock held;
+- stop accepts and close listener first;
+- unlink agent.sock only if fresh metadata exactly matches the socket identity recorded for this listener;
+- release instance lock last;
+- unclean termination may leave a socket node, but descriptor closure releases the advisory lock and the next process applies the same locked stale classifier.
+
+PRIMARY PLATFORM/API EVIDENCE REVIEWED
+
+- Linux flock(2): advisory locks may be requested nonblocking, are associated with an open file description, and are released when all descriptors for that open file description are closed.
+- Linux unix(7): pathname Unix sockets are filesystem objects, their creation is affected by directory permissions/umask, and the application must unlink the pathname when no longer needed.
+- Linux bind(2): binding fails when an address is already in use.
+- Linux proc_pid_fd(5): /proc/self/fd/N exposes a symbolic reference to each open descriptor, enabling the locked Linux descriptor-anchored bind path strategy.
+- rustix 1.1.4 exposes the already-selected safe APIs required by the design, including flock/nonblocking exclusive operation, descriptor-relative filesystem operations/no-follow flags, Stat device/inode/owner/mode fields, and Unix socket creation/bind primitives under the existing fs/net feature set.
+
+REPOSITORY ALIGNMENT
+
+- Phase 014 forbade naive "exists => unlink" startup behavior.
+- Phase 053 required stale/single-instance, bind/post-bind, accepted-peer, and listener-lifetime decisions.
+- Phase 057-060 established SO_PEERCRED authentication before application processing.
+- Phase 061 locked XDG/PRW-child filesystem policy.
+- Phase 062 validated and retained the XDG root descriptor.
+- Phase 063 validated and retained the PRW child descriptor.
+
+MUTATION STATEMENT
+
+Phase 064 itself:
+- creates no agent.lock;
+- inspects/unlinks no agent.sock;
+- creates/binds/listens/accepts/connects no socket;
+- changes no Rust runtime source;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+SAFE IMPLEMENTATION ORDER
+
+The locked continuation is:
+- Phase 065 instance-lock adapter;
+- stale agent.sock classifier/unlink transaction;
+- bind/post-bind validation object;
+- accepted-stream composition;
+- separate runtime/listener activation review.
+
+FINAL CLASSIFICATION
+
+INSTANCE_LOCK_AUTHORITY_LOCKED / NO_CONNECT_PROBE / STALE_UNLINK_GUARDED_BY_TYPE_OWNER_MODE_AND_IDENTITY / DESCRIPTOR_ANCHORED_BIND_STRATEGY_LOCKED / RUNTIME_NOT_ACTIVATED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 064 report.
