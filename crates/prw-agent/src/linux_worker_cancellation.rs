@@ -73,10 +73,9 @@ mod tests {
         let connection = AuthenticatedLocalLinuxConnection::try_new(server)
             .expect("same-UID test stream authenticates");
 
-        let cancellation = LocalLinuxWorkerCancellation::try_from_authenticated_connection(
-            &connection,
-        )
-        .expect("authenticated stream cancellation clone creates");
+        let cancellation =
+            LocalLinuxWorkerCancellation::try_from_authenticated_connection(&connection)
+                .expect("authenticated stream cancellation clone creates");
 
         drop(cancellation);
         assert!(connection.stream().peer_addr().is_ok());
@@ -87,10 +86,9 @@ mod tests {
         let (server, mut client) = UnixStream::pair().expect("anonymous Unix pair creates");
         let connection = AuthenticatedLocalLinuxConnection::try_new(server)
             .expect("same-UID test stream authenticates");
-        let cancellation = LocalLinuxWorkerCancellation::try_from_authenticated_connection(
-            &connection,
-        )
-        .expect("authenticated stream cancellation clone creates");
+        let cancellation =
+            LocalLinuxWorkerCancellation::try_from_authenticated_connection(&connection)
+                .expect("authenticated stream cancellation clone creates");
 
         cancellation.cancel().expect("terminal shutdown succeeds");
 
