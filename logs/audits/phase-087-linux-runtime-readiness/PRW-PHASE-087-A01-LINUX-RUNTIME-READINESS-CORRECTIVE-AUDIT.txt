@@ -1,0 +1,307 @@
+Private Remote Workspace
+Phase 087-A01 Linux Outer Runtime Readiness Capacity-Wakeup Corrective Audit
+
+STATUS: CORRECTIVE_AUDIT_COMPLETE / INITIAL_TWO_FD_RECOMMENDATION_INCOMPLETE / ARCHITECTURE_APPROVAL_REQUIRED / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY CORRECTIVE / BUSY-LOOP PREVENTION / CAPACITY-WAKE REQUIREMENT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial Phase 087 audit commit: 19011293d2101f4ca2359cd2dd54b796c579866b
+Phase 086 authoritative PASS report commit: 62ac71a3df7d307b0c143890bdfa6ad2ed703812
+Phase 086 validated source head: 6f67a1be406a217f8079120345d8a1224b269110
+Phase 086 authoritative GitHub Actions run: 31897946657
+
+PURPOSE
+
+Correct an incompleteness in the initial Phase 087 recommendation before any architecture decision or source implementation is authorized.
+
+The initial Phase 087 audit recommended blocking poll over exactly:
+
+    [accept-ready listener, dedicated shutdown eventfd]
+
+Further audit of the validated Phase 075/084/086 behavior found that this exact two-purpose model is insufficient to guarantee the Phase 085 no-busy-loop requirement when worker capacity is full and an authenticated-client connection remains queued in the kernel listener backlog.
+
+This A01 report supersedes the initial Phase 087 candidate recommendation while preserving the original report as audit history.
+
+AUTHORITATIVE CODE FACTS
+
+1. AcceptReadyAgentSocket already implements AsFd, so a future poll adapter does not require an API change merely to borrow the listener descriptor.
+
+2. Phase 084 checks/acquires worker capacity before performing accept. When capacity is full, it returns AtCapacity without consuming the queued listener connection.
+
+3. Phase 086 terminates its current cycle immediately on AtCapacity, as required by Phase 085.
+
+4. LocalLinuxWorkerCapacity exposes max_workers() and active_workers(), but LocalLinuxWorkerPermit::drop() only decrements AtomicUsize accounting. It emits no completion/capacity-available wake notification.
+
+5. Worker handles are ScopedJoinHandle values retained in LocalLinuxScopedWorkerRegistry. The registry can nonblockingly reap already-finished workers, and shutdown requires cancel_all() followed by consuming join_all(). It does not currently expose an external waitable completion descriptor.
+
+6. The scoped worker lifetime is structurally bounded by std::thread::scope; worker handles must not detach beyond that scope.
+
+BUSY-LOOP FAILURE MODE IN THE INITIAL CANDIDATE
+
+Consider this valid state:
+
+- worker capacity max = N;
+- active workers = N;
+- at least one additional client connection is queued on the nonblocking listener;
+- shutdown has not been requested.
+
+The listener remains readable because a connection is queued.
+
+If the outer runtime always polls the listener, the sequence can become:
+
+1. poll returns listener-readable immediately;
+2. outer runtime invokes Phase 086;
+3. Phase 086 reaps no worker because all N are still running;
+4. Phase 084 observes full capacity and returns AtCapacity without accepting;
+5. Phase 086 returns AtCapacity immediately;
+6. outer runtime polls the same still-readable listener again;
+7. poll returns immediately because the queued connection was intentionally not consumed;
+8. steps 2-7 repeat until a worker happens to finish.
+
+This is an outer-runtime busy loop even though every individual Phase 084/086 primitive is behaving exactly as designed.
+
+Therefore, the initial recommendation of always polling [listener + shutdown-only eventfd] is incomplete and MUST NOT be promoted as the Phase 088 architecture.
+
+CORRECTED RUNTIME WAKE REQUIREMENT
+
+The outer runtime needs an independent wake condition for at least:
+
+- terminal shutdown request; and
+- worker completion / capacity becoming available.
+
+A single Linux eventfd may remain a candidate transport for both classes because the semantic state can remain elsewhere:
+
+- LocalLinuxSchedulerControl remains the semantic terminal-shutdown source of truth;
+- LocalLinuxWorkerCapacity remains the semantic capacity source of truth;
+- the eventfd is only a coalescing runtime wake notification channel.
+
+This is a corrected candidate, not an approved architecture.
+
+CORRECTED WAIT-SET RULE
+
+A future poll-based design should not unconditionally include the listener.
+
+Proposed candidate rule:
+
+- runtime wake eventfd: always in the wait set;
+- accept-ready listener: in the wait set only while active_workers() < max_workers();
+- while at capacity, block on the runtime wake eventfd instead of polling the still-readable listener;
+- worker completion must notify the runtime wake channel so capacity release cannot leave the outer runtime asleep indefinitely;
+- shutdown must request the monotonic scheduler stop state before notifying the same wake channel.
+
+This rule eliminates the specific queued-listener/full-capacity spin identified above, provided completion wake is reliable.
+
+WHY A WORKER-COMPLETION WAKE IS REQUIRED
+
+Simply suppressing listener interest while capacity is full is not sufficient by itself.
+
+Without a completion notification, after listener interest is removed the outer runtime would have no event that tells it a worker permit was released. It could then remain blocked indefinitely even though capacity has become available and a client is still queued.
+
+A timeout would solve that liveness problem but would reintroduce the periodic cadence and shutdown-latency tradeoff rejected as the preferred initial design in Phase 087.
+
+Therefore, a no-timeout poll candidate requires an explicit completion/capacity wake path.
+
+CANDIDATE EVENTFD ROLE — CORRECTED
+
+The eventfd should be considered a general local runtime wake channel, not a shutdown-only descriptor.
+
+Potential wake producers:
+
+1. terminal scheduler shutdown request;
+2. scoped worker termination/completion.
+
+Potential wake consumer:
+
+- exactly one outer runtime readiness owner.
+
+The eventfd does not carry authorization, policy, request data, worker result data, or a command identity. It only causes the runtime owner to re-observe authoritative in-memory state.
+
+COALESCING IS COMPATIBLE WITH THE CURRENT STATE MODEL
+
+Linux eventfd without semaphore mode uses a kernel-maintained 64-bit counter. Multiple wake writes may coalesce into one readable state.
+
+For the current candidate this is acceptable in principle because the outer runtime does not need one wake record per event:
+
+- shutdown is monotonic and checked from LocalLinuxSchedulerControl;
+- worker completions are discovered/classified from LocalLinuxScopedWorkerRegistry;
+- capacity is observed from LocalLinuxWorkerCapacity.
+
+A future decision must still lock the exact write/drain/error semantics before implementation.
+
+WORKER-COMPLETION NOTIFICATION PLACEMENT
+
+The current worker-capacity permit deliberately contains only accounting, and Phase 075 was validated as a small in-memory capacity primitive.
+
+A corrective design SHOULD NOT silently add runtime event I/O to LocalLinuxWorkerPermit::drop(), because doing so would broaden the Phase 075 primitive from accounting into orchestration.
+
+A narrower candidate is a runtime-specific completion notification guard owned by the scoped worker wrapper:
+
+- the existing LocalLinuxWorkerPermit continues to release capacity through its validated Drop behavior;
+- a separate runtime wake guard notifies the eventfd when the worker closure exits;
+- the wake guard must also execute during Rust unwinding so a panicking worker cannot release capacity without waking a runtime that suppressed listener interest;
+- wake notification itself must be non-panicking.
+
+This placement is a recommendation for a future decision, not implementation authorization.
+
+SCOPED-THREAD LIFETIME REQUIREMENT
+
+Because registered workers are ScopedJoinHandle values, a future long-running local Agent runtime must keep worker creation, registry ownership, cancellation and final joining inside one controlled std::thread::scope lifetime.
+
+The architecture must not:
+
+- detach these handles;
+- return them beyond the scope lifetime;
+- exit the scope before cancel_all() + join_all() has handled all remaining registry entries.
+
+This strengthens the Phase 085 shutdown ordering rather than replacing it.
+
+CORRECTED CANDIDATE EVENT LOOP — CONCEPTUAL ONLY
+
+A future approved architecture could have the following conceptual behavior:
+
+A. Before blocking:
+   - observe shutdown state;
+   - observe current active/max worker capacity;
+   - always arm runtime-wake readiness;
+   - arm listener readiness only if at least one worker slot is available.
+
+B. On runtime-wake readiness:
+   - consume/drain the wake notification according to a separately locked eventfd rule;
+   - check shutdown before any listener dispatch;
+   - observe/reap finished workers as required by the final evidence model;
+   - recompute whether listener readiness may be armed.
+
+C. On listener readiness while capacity is available:
+   - invoke the already-validated Phase 086 finite scheduling cycle;
+   - never bypass Phase 086 shutdown gating or Phase 084 capacity-before-accept ordering;
+   - after the cycle, recompute capacity before the next wait.
+
+D. If shutdown is observed:
+   - stop new scheduling;
+   - cancel all registered workers;
+   - join/classify all remaining workers;
+   - leave the scoped worker lifetime;
+   - clean the listener/path/instance-lock lifecycle.
+
+SIMULTANEOUS READINESS PRECEDENCE
+
+If both runtime-wake and listener readiness are reported in the same poll return, a future decision should require runtime-wake processing first.
+
+After processing the wake:
+
+- if shutdown is set, listener readiness is ignored and no Phase 086 cycle is invoked;
+- if capacity remains full, listener readiness is ignored for that iteration;
+- only if shutdown is false and capacity is available may listener readiness lead to Phase 086.
+
+Phase 086 then performs its own shutdown re-check before Phase 084, providing a second fail-closed gate.
+
+EVENTFD CREATION CANDIDATE
+
+If eventfd remains selected, the current narrow candidate is:
+
+- initial counter 0;
+- CLOEXEC;
+- NONBLOCK;
+- no SEMAPHORE mode.
+
+Reasons:
+
+- CLOEXEC matches the repository's descriptor-leak prevention direction;
+- NONBLOCK prevents a notifier thread from becoming indefinitely blocked on a saturated counter;
+- no SEMAPHORE mode allows wake writes to coalesce and one successful read to drain the current aggregate count.
+
+These flag choices are not yet locked.
+
+WAKE WRITE / DRAIN QUESTIONS STILL OPEN
+
+Linux eventfd read/write uses exact 8-byte unsigned integer values. A future contract must define at least:
+
+- the exact value written for a wake (candidate: native-endian u64 value 1);
+- treatment of a short write/read as failure;
+- treatment of EAGAIN on a NONBLOCK wake write when a wake is already pending;
+- treatment of EINTR without introducing an undocumented retry loop;
+- whether one read is sufficient to drain the current non-semaphore counter;
+- whether runtime shutdown exits without requiring a final drain;
+- how notifier failure is represented if it occurs during worker teardown.
+
+EINTR POLICY REMAINS UNLOCKED
+
+rustix exposes Errno::INTR and a retry_on_intr helper, but using an implicit unlimited retry helper would itself be an orchestration policy decision.
+
+This corrective audit does not authorize unlimited EINTR retries. Phase 088 must explicitly lock bounded/fail-closed behavior for poll and eventfd I/O.
+
+REVISED CANDIDATE COMPARISON
+
+Candidate A0 — poll(listener + shutdown-only eventfd), listener always armed
+
+Status: REJECT AS INCOMPLETE.
+Reason: can busy-loop on a persistently readable queued listener while worker capacity remains full.
+
+Candidate A1 — capacity-aware poll(listener conditionally + shared runtime-wake eventfd), with worker-completion notification
+
+Status: RECOMMENDED FOR PHASE 088 DECISION REVIEW, NOT APPROVED.
+Reason: preserves no-timeout blocking while providing a wake path when listener interest is suppressed at capacity.
+
+Candidate B — epoll with equivalent capacity-aware listener registration and shared runtime wake
+
+Status: VALID BUT STILL MORE COMPLEX THAN REQUIRED.
+Note: epoll alone does not solve the capacity-wakeup problem; it still needs interest management and a completion wake source.
+
+Candidate C — timeout-based poll
+
+Status: LIVENESS-CAPABLE BUT NOT PREFERRED.
+Reason: avoids a worker-completion notifier only by introducing periodic wake cadence and bounded shutdown/capacity-detection latency.
+
+Candidate D — async runtime / separate listener-orchestration thread
+
+Status: DEFER.
+Reason: significantly expands runtime/concurrency architecture and does not eliminate the need to model capacity and shutdown wake semantics.
+
+PHASE 088 DECISION QUESTIONS — REVISED
+
+Before any Rust/Cargo mutation, Phase 088 must now lock at least:
+
+1. whether Candidate A1 is accepted;
+2. whether one shared eventfd carries both shutdown and worker-completion wakeups;
+3. how a scoped worker reliably emits completion wake on normal return and panic/unwind;
+4. how listener interest is suppressed while capacity is full;
+5. how listener interest is restored after completion wake;
+6. whether wake handling itself reaps finished workers or merely lets Phase 086 reap before the next schedule;
+7. how completion evidence from wake-time reaping is accumulated if outer reaping is selected;
+8. simultaneous wake/listener precedence;
+9. eventfd flags and exact read/write semantics;
+10. EAGAIN/EINTR/short-I/O behavior;
+11. poll error/revents behavior;
+12. outer-loop stop/evidence type;
+13. production shutdown request source;
+14. whether bootstrap wiring remains a later separate phase;
+15. partial-initialization cleanup and rollback ordering.
+
+NO-MUTATION / NO-ACTIVATION STATEMENT
+
+Phase 087-A01 changes only audit evidence.
+
+It does NOT:
+
+- modify Rust source;
+- modify Cargo.toml, Cargo.lock or rustix features;
+- create eventfd/poll/epoll objects in production;
+- add worker completion notification code;
+- add an outer loop;
+- alter main.rs;
+- activate Agent bootstrap/systemd/service state;
+- change authentication, DNS, TUN, remote networking, relay, database, private-key, deployment or production state;
+- approve Candidate A1.
+
+NEXT SAFE STEP
+
+Phase 088 may be prepared as an explicit architecture decision package using Candidate A1 and the revised questions above. No source implementation should begin until that decision is explicitly approved.
+
+FINAL CLASSIFICATION
+
+INITIAL_PHASE_087_TWO_FD_CANDIDATE_INCOMPLETE / AT_CAPACITY_BUSY_LOOP_RISK_CONFIRMED / WORKER_COMPLETION_WAKE_REQUIRED / CAPACITY_AWARE_LISTENER_INTEREST_REQUIRED / SHARED_RUNTIME_EVENTFD_CANDIDATE / SCOPED_WORKER_LIFETIME_PRESERVED / NO_RUNTIME_ACTIVATION / EXPLICIT_ARCHITECTURE_APPROVAL_REQUIRED
+
+AUTHORITATIVE EVIDENCE
+
+This Phase 087-A01 corrective report is the current authoritative readiness recommendation. The initial Phase 087 audit remains preserved as superseded historical evidence.
