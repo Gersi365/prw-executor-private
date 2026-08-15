@@ -4,6 +4,8 @@
 //! records bounded stream framing and protocol-version metadata. This crate
 //! still performs no socket I/O and creates no filesystem objects.
 
+pub mod local_commands;
+
 use std::fmt;
 use std::path::{Path, PathBuf};
 
