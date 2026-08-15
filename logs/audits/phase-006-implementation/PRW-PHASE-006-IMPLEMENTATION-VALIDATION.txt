@@ -1,0 +1,136 @@
+Private Remote Workspace
+Phase 006 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 006
+SCOPE: Ubuntu same-user local Agent IPC contract
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 006 base commit: d58b356de4d7119f34227681b4d0a1b95f822a31
+Validated source commit: 37a9cd711c3f5a3cb410445438c1d55769db9c07
+Validated GitHub Actions run: 31877313643
+
+LOCKED BOUNDARY
+
+The future Ubuntu Desktop/CLI-to-Agent local IPC baseline is:
+- filesystem-backed AF_UNIX SOCK_STREAM socket;
+- endpoint $XDG_RUNTIME_DIR/private-remote-workspace/agent.sock;
+- PRW runtime subdirectory mode 0700;
+- socket filesystem mode 0600;
+- peer credentials obtained from Linux SO_PEERCRED;
+- baseline authorization requires the kernel-reported peer UID to match the Agent UID expected by local policy;
+- no TCP, loopback-TCP, /tmp, or Linux abstract-socket fallback.
+
+The contract requires fail-closed behavior if required XDG runtime-directory security properties cannot be established.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/lib.rs
+- Added provider-neutral LocalIpcTransport.
+- Added LocalPeerCredentialSource.
+- Added LocalPeerAuthorization.
+- Added LocalIpcContract baseline.
+- Added constants for application runtime subdirectory, socket filename, directory mode 0700, and socket mode 0600.
+- Added deterministic socket-path construction beneath a supplied XDG runtime directory.
+- Added focused tests for baseline values, permission modes, and path construction.
+- Performs no socket I/O and creates no filesystem objects.
+
+2. contracts/LOCAL_IPC_CONTRACT.md
+- Added normative Ubuntu local IPC contract.
+- Defined XDG runtime-directory validation and fail-closed requirements.
+- Defined filesystem namespace and same-UID SO_PEERCRED authorization boundary.
+- Explicitly separated privileged-helper IPC and deferred framing/versioning.
+
+3. docs/architecture/PHASE_006_LOCAL_IPC.md
+- Recorded rationale, future defense-in-depth sequence, references, lock boundary, and explicit deferrals.
+
+4. crates/prw-agent/src/main.rs
+- Updated bootstrap documentation only.
+- Runtime behavior remains unchanged: no listener and no system mutation.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 006 base: 4
+- added: contracts/LOCAL_IPC_CONTRACT.md
+- added: crates/prw-agent/src/lib.rs
+- modified: crates/prw-agent/src/main.rs
+- added: docs/architecture/PHASE_006_LOCAL_IPC.md
+
+VALIDATION HISTORY
+
+Run 13
+- Run ID: 31877294811
+- Commit: 879edaec2cd919528efd8457b9977da00acfe3cd
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only changes in the Phase 006 test module.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 37a9cd711c3f5a3cb410445438c1d55769db9c07
+- Change: exact rustfmt-only corrections in crates/prw-agent/src/lib.rs.
+- No IPC semantics, security policy, dependency, or runtime behavior changed.
+
+Run 14
+- Run ID: 31877313643
+- Commit: 37a9cd711c3f5a3cb410445438c1d55769db9c07
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+PRIMARY PLATFORM BASIS
+
+The contract is based on:
+- XDG Base Directory Specification requirements for $XDG_RUNTIME_DIR ownership, mode, locality, lifetime, and use for runtime communication objects;
+- Linux unix(7) AF_UNIX stream semantics and SO_PEERCRED peer credentials.
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 006 did not:
+- bind, listen on, connect to, unlink, chmod, or create a Unix socket;
+- create or mutate an XDG runtime directory;
+- add a Unix-socket platform dependency;
+- activate a systemd service;
+- add privileged-helper IPC;
+- implement protocol framing or serialization;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- open any network listener;
+- configure DNS/TUN/WireGuard;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative for provider selection:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+No cryptographic provider dependency was added by Phase 006.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- actual socket runtime implementation;
+- safe stale-socket and filesystem race handling;
+- frame format and serialization;
+- protocol versioning;
+- request IDs and maximum frame size;
+- timeouts/cancellation;
+- privileged-helper IPC;
+- systemd activation;
+- crypto-provider selection;
+- remote networking.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 006 implementation-validation report.
+GitHub Actions run 31877313643 is the authoritative executable validation evidence for source commit 37a9cd711c3f5a3cb410445438c1d55769db9c07.
