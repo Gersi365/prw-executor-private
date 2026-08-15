@@ -1,0 +1,92 @@
+Private Remote Workspace
+Phase 058 Linux Same-UID Peer Authorization
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Turn the Phase 057 read-only Linux identity adapter into an explicit fail-closed same-effective-UID authorization boundary for an already-connected Unix-domain socket descriptor, without reading application protocol bytes or owning listener/path lifecycle.
+
+IMPLEMENTED
+
+Source:
+`crates/prw-agent/src/linux_peer_auth.rs`
+
+Integrated as the crate-internal `linux_identity::peer_auth` submodule.
+
+The implementation provides:
+- `AuthorizedLocalLinuxPeer`, a typed authorization token with no public constructor;
+- kernel credential acquisition through the validated Phase 057 `SO_PEERCRED` adapter;
+- Agent effective UID acquisition through Phase 057;
+- exact peer-UID == effective-Agent-UID comparison;
+- bounded failure classes for identity lookup failure and UID mismatch;
+- immutable access to the kernel-reported authorized peer PID/UID/GID metadata.
+
+SECURITY ORDERING
+
+The implemented sequence is:
+
+1. kernel `SO_PEERCRED` lookup;
+2. Agent effective UID lookup;
+3. exact UID equality check;
+4. create `AuthorizedLocalLinuxPeer` only on match.
+
+No protocol field, caller-supplied UID, user name, or environment claim participates in the authorization decision.
+
+Phase 058 itself performs zero application frame/Request reads and writes.
+
+TEST EVIDENCE
+
+Tests validate:
+- the exact UID equality predicate for both match and mismatch inputs;
+- a real anonymous `UnixStream::pair()` same-process/same-UID kernel success path;
+- a read-only `/dev/null` non-socket descriptor fail-closed path mapping to bounded peer-credential lookup failure.
+
+No filesystem socket pathname, listener, bind, accept, or XDG runtime path is created.
+
+CORRECTIVE HISTORY
+
+Run `31888830004` stopped only at rustfmt in the Phase 058 integration comment. The exact reflow was applied.
+
+Run `31888873493` then stopped only at one remaining rustfmt reflow in a test import. The exact formatter correction was applied without changing authorization semantics.
+
+FINAL VALIDATION
+
+Authoritative GitHub Actions run:
+`31888972036`
+
+Validated head:
+`f95fe84daf4d67df1bc529030bc373b197e67006`
+
+Validated gates:
+- `cargo metadata --locked --no-deps --format-version 1` — PASS;
+- `cargo fmt --all -- --check` — PASS;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` — PASS;
+- `cargo test --locked --workspace --all-targets` — PASS;
+- `cargo build --locked --workspace --all-targets` — PASS.
+
+SCOPE PRESERVED
+
+Phase 058:
+- binds no filesystem socket;
+- creates no listener;
+- performs no accept/connect lifecycle;
+- creates/removes no XDG runtime path;
+- performs no application protocol I/O;
+- constructs no policy evaluator;
+- adds no unsafe PRW code;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+AUTHORITATIVE CONTRACT
+
+`contracts/LINUX_SAME_UID_PEER_AUTHORIZATION_CONTRACT.md`
+
+FINAL CLASSIFICATION
+
+SAME_EFFECTIVE_UID_AUTHORIZATION_TOKEN_VALIDATED / KERNEL_CREDENTIALS_ONLY / NO_PROTOCOL_IO_BEFORE_AUTH / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 058 report.
