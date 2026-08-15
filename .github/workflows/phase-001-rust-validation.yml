@@ -33,14 +33,17 @@ jobs:
           rustfmt --version
           cargo clippy --version
 
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
 
       - name: Build workspace
-        run: cargo build --workspace --all-targets
+        run: cargo build --locked --workspace --all-targets
