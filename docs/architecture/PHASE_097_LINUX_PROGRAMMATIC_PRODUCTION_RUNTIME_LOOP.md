@@ -1,6 +1,6 @@
 # Phase 097 — Linux Programmatic Production Runtime Loop
 
-Status: `INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -119,16 +119,25 @@ Initial Phase 097 integration run `31901904093` stopped safely at Clippy before 
 
 The source was refactored in commit `867ecb9fb8ae9cda1e2cb2db2537119f7a1bded7` to introduce `LocalLinuxProductionRuntimeInputs` rather than suppressing lints.
 
-Phase 097-A01 run `31901993038` then passed:
+Phase 097-A01 run `31901993038` then passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check`. Only after full PASS did A01 commit the integrated source and delete both temporary Phase 097 workflows.
+
+## Authoritative permanent validation
+
+Permanent PRW Rust Validation run:
+
+`31902081956`
+
+Validated commit containing the integrated source:
+
+`469a5cfb0680687c49f7eec8151120b7c5b56365`
+
+The permanent workflow passed:
 
 - `cargo metadata --locked --no-deps --format-version 1`;
 - `cargo fmt --all -- --check`;
 - `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
 - `cargo test --locked --workspace --all-targets`;
-- `cargo build --locked --workspace --all-targets`;
-- `git diff --check`.
-
-Only after full PASS did A01 commit the integrated source and delete both temporary Phase 097 workflows.
+- `cargo build --locked --workspace --all-targets`.
 
 ## Boundary preserved
 
@@ -145,4 +154,4 @@ Phase 097 does not implement or activate:
 - TUN/relay/database/private-key changes;
 - Wake-on-LAN.
 
-Permanent PRW Rust Validation is required on a commit containing the integrated source before Phase 097 is classified `IMPLEMENTED_AND_VALIDATED`.
+Phase 097 is therefore `IMPLEMENTED_AND_VALIDATED` below the production bootstrap boundary.
