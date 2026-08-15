@@ -145,7 +145,9 @@ pub enum EnrollmentTransitionError {
 impl fmt::Display for EnrollmentTransitionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AlreadyDecided => formatter.write_str("enrollment already has a terminal decision"),
+            Self::AlreadyDecided => {
+                formatter.write_str("enrollment already has a terminal decision")
+            }
         }
     }
 }
