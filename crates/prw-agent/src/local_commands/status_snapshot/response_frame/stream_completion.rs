@@ -49,11 +49,13 @@ mod tests {
     use crate::frame_object::writer::write_frame;
     use crate::local_commands::LocalAgentResponseStatus;
     use crate::local_commands::request_tracker::{LocalRequestTracker, LocalRequestTrackerError};
+    use crate::local_commands::status_snapshot::response_frame::LocalAgentStatusFrameDecodeError;
     use crate::local_commands::status_snapshot::response_frame::stream::{
         LocalAgentStatusStreamReadError, write_success_status_response,
     };
-    use crate::local_commands::status_snapshot::response_frame::LocalAgentStatusFrameDecodeError;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::local_commands::terminal_response::builder::build_terminal_response_frame;
 
     fn id(value: u64) -> LocalIpcRequestId {
