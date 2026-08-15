@@ -61,6 +61,7 @@ pub enum LocalPolicyResponseBuildError {
 #[cfg(test)]
 mod tests {
     use super::build_policy_gated_read_only_response;
+    use crate::LocalIpcMessageKind;
     use crate::LocalIpcRequestId;
     use crate::local_commands::private_dns_response::decode_success_private_dns_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
@@ -72,7 +73,6 @@ mod tests {
     use crate::local_commands::{
         LocalAgentCommand, LocalAgentRequestEnvelope, LocalAgentResponseStatus,
     };
-    use crate::LocalIpcMessageKind;
     use prw_network::PrivateDnsConfig;
     use prw_policy::{Capability, Decision, PolicyEvaluator};
 
