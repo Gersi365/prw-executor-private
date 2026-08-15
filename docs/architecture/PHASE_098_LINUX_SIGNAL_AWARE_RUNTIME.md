@@ -1,84 +1,85 @@
 # Phase 098 — Linux Signal-Aware Production Runtime
 
-Status: `DEPENDENCY_BASELINE_VALIDATED / SIGNAL_RUNTIME_SOURCE_IN_PROGRESS`
+Status: `SIGNAL_SOURCE_INTEGRATED_AWAITING_AUTHORITATIVE_CI_VALIDATION`
 
 ## Purpose
 
 Phase 098 adds the safe synchronous Linux termination-signal boundary authorized by Phase 094-A01, while preserving workspace `unsafe_code = "forbid"`, the validated Phase 091 capacity-aware semantics, and the Phase 097 callable runtime below `main.rs`.
 
-## Primary-source dependency precheck
+## Dependency baseline
 
-Phase 098-A00 audit:
-
-`logs/audits/phase-098-linux-signal-aware-runtime/PRW-PHASE-098-A00-LINUX-SIGNAL-DEPENDENCY-PRECHECK.txt`
-
-Audit commit:
-
-`11967246f1f332746cbce8de67806bacb82bee89`
-
-The selected exact candidate is:
+Exact dependency:
 
 ```toml
 nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
 ```
 
-Published nix 0.31.3 metadata documents Rust MSRV 1.69, MIT licensing, empty default features, and `signal` implying `process`. Its safe `SigSet`, `SignalFd`, `SfdFlags`, `read_signal()`, and `AsFd` APIs cover the Phase 094-A01 design without local unsafe code or direct libc FFI.
+Phase 098-A00 dependency audit commit:
 
-## Controlled Cargo preflight
+`11967246f1f332746cbce8de67806bacb82bee89`
 
-Temporary preflight run:
+Controlled Cargo preflight run:
 
 `31902253525`
 
-Integrated dependency baseline commit:
+Integrated dependency baseline:
 
 `fc71e9ded88f3963f8000a1a5ec05d6b299e8745`
 
-The preflight temporarily added the exact manifest dependency, resolved the graph with repository-pinned Cargo 1.97.1, and rejected any existing-package lockfile churn.
-
-The actual added locked packages were exactly:
-
-- `nix 0.31.3`;
-- `cfg-if 1.0.4`;
-- `cfg_aliases 0.2.2`.
-
-Existing locked package records remained unchanged. `prw-agent` gained exactly one dependency entry: `nix`.
-
-The resulting nix lock entry depends on the already-existing compatible `bitflags` and `libc` packages plus the newly locked `cfg-if` and `cfg_aliases` packages.
-
-After dependency resolution, the preflight passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check`. Only after full PASS did the workflow commit `Cargo.lock` and `crates/prw-agent/Cargo.toml`, then self-delete.
-
-## Authoritative dependency-baseline validation
-
-Permanent PRW Rust Validation run:
+Permanent dependency-baseline validation:
 
 `31902304269`
 
-Validated dependency/documentation head:
+The lockfile delta was restricted to `nix 0.31.3`, `cfg-if 1.0.4`, `cfg_aliases 0.2.2`, and the `prw-agent` dependency edge to `nix`; existing locked package records remained unchanged.
 
-`a2b8343cd136d7a9eda9eb49c1339749bcb827ad`
+## Safe termination signal source
 
-The permanent workflow passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, and all workspace/all-target builds.
+Integrated signal-source commit:
 
-The dependency baseline is therefore authoritative and signal runtime source integration may proceed.
+`ce5c429cb8f0147fd1db950c27be52d729a92cca`
 
-## Signal source requirements
+`LocalLinuxTerminationSignalSource`:
 
-The source implementation must:
+- synchronously blocks exactly SIGTERM and SIGINT on the creating thread;
+- preserves the exact previous calling-thread mask;
+- creates one CLOEXEC + NONBLOCK `SignalFd` for the same mask;
+- uses only safe nix APIs and preserves workspace `unsafe_code = "forbid"`;
+- is deliberately thread-affine (`!Send`/`!Sync`) so mask restoration cannot migrate to another thread;
+- classifies `SIGTERM` and `SIGINT` explicitly;
+- surfaces nonblocking no-data and EINTR without hidden retry loops;
+- explicitly closes `SignalFd` before restoring the previous mask;
+- performs best-effort same-thread restoration during unwind/Drop.
 
-- synchronously block exactly SIGTERM and SIGINT on the runtime thread;
-- preserve the prior calling-thread signal mask;
-- create a CLOEXEC + NONBLOCK `SignalFd` for the same mask;
-- expose it through safe `AsFd`/`read_signal()` APIs only;
-- remain thread-affine so mask restoration cannot migrate to another thread;
-- establish the mask before the Phase 097 worker scope creates threads;
-- preserve signal > runtime-wake > listener precedence;
-- suppress listener interest at full worker capacity exactly as Phase 091 does;
-- restore the prior thread mask after listener/socket cleanup;
-- best-effort restore on unwind;
-- preserve original runtime/lifecycle terminal evidence independently from mask-restoration failure;
-- validate real SIGTERM/SIGINT delivery only inside an isolated subprocess test boundary.
+## Signal-source preflight history
+
+Initial run `31902474463` compiled against nix successfully but stopped at Clippy-only style/documentation findings. No nix API mismatch was reported.
+
+A01 run `31902589850` corrected those mechanical findings and reached the real signal test. It exposed a test-isolation defect: process-directed `kill(Pid::this(), SIGTERM)` could be delivered to a pre-existing unblocked Rust test-harness thread before the test function had a chance to modify that thread's mask.
+
+The test strategy was corrected rather than weakening production semantics. The isolated child test now uses safe nix `raise(...)`, which targets the current test thread after its termination mask is installed. This avoids unrelated harness-thread delivery while still exercising the real kernel pending-signal -> `SignalFd` path.
+
+A02 run `31902660895` passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check` before committing the signal source and deleting all three temporary signal-source workflows.
+
+The real child-process proof validates:
+
+- the creating thread has SIGTERM/SIGINT blocked;
+- a subsequently created child thread inherits that blocked mask;
+- thread-directed SIGTERM becomes readable from `SignalFd` and decodes as `SigTerm`;
+- thread-directed SIGINT becomes readable and decodes as `SigInt`;
+- explicit restore returns the exact original mask;
+- Drop-based restoration also returns the exact original mask;
+- the parent parallel test harness is not left with mutated signal-mask state.
+
+## Next Phase 098 source layer
+
+After permanent CI validates this signal-source checkpoint, Phase 098 may implement tri-source readiness and the signal-aware callable runtime wrapper with semantic precedence:
+
+1. termination signal;
+2. Phase 089 runtime wake;
+3. listener readiness.
+
+Capacity-aware listener suppression from Phase 091 must remain unchanged.
 
 ## Boundary preserved
 
-The dependency checkpoint itself does not wire `main.rs`, define process exit mapping, activate systemd, deploy anything, or expose public networking. Those boundaries remain excluded throughout Phase 098.
+The signal-source checkpoint does not wire `main.rs`, define process exit mapping, activate systemd, deploy anything, or expose public networking. Those boundaries remain excluded throughout Phase 098.
