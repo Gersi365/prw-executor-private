@@ -37,16 +37,16 @@ pub mod authenticated_session;
 pub mod authenticated_session_bridge;
 #[allow(
     dead_code,
-    reason = "pre-runtime Linux absolute-deadline I/O adapter is intentionally crate-internal"
-)]
-#[path = "linux_deadline_io.rs"]
-pub mod deadline_io;
-#[allow(
-    dead_code,
     reason = "pre-listen bound Linux Agent socket is intentionally crate-internal"
 )]
 #[path = "linux_agent_bound_socket.rs"]
 pub mod bound_socket;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux absolute-deadline I/O adapter is intentionally crate-internal"
+)]
+#[path = "linux_deadline_io.rs"]
+pub mod deadline_io;
 #[allow(
     dead_code,
     reason = "pre-runtime listening Linux Agent socket is intentionally crate-internal"
