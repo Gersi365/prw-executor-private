@@ -14,9 +14,13 @@ use super::one_shot_scheduler::LocalLinuxOneShotScheduleError;
 use super::runtime_orchestration::{
     LocalLinuxRuntimeOrchestrationError, LocalLinuxRuntimeOrchestrationReport,
     LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulingCycleError,
+    LocalLinuxRuntimeSchedulingCycleReport,
 };
 use super::runtime_readiness::LocalLinuxRuntimeReadinessError;
 use super::session_worker::LocalLinuxSessionWorkerConfig;
+use super::signal_aware_readiness::{
+    LocalLinuxSignalAwareReadinessOutcome, LocalLinuxSignalAwareReadinessReport,
+};
 use super::worker_completion::LocalLinuxScopedWorkerCompletion;
 use super::worker_registry::LocalLinuxRegisteredWorkerCancellation;
 
@@ -138,6 +142,50 @@ impl LocalLinuxProductionRuntimeCounters {
             .add_usize(report.readiness_completions().len());
         self.worker_completions
             .add_usize(report.scheduling_completions().len());
+    }
+
+    /// Records one successful signal-aware readiness step.
+    pub fn record_signal_aware_readiness(&mut self, report: &LocalLinuxSignalAwareReadinessReport) {
+        self.readiness_steps.increment();
+        if report.listener_armed() {
+            self.listener_armed_steps.increment();
+        }
+        match report.outcome() {
+            LocalLinuxSignalAwareReadinessOutcome::RuntimeWake => self.runtime_wakes.increment(),
+            LocalLinuxSignalAwareReadinessOutcome::WaitInterrupted => {
+                self.wait_interruptions.increment();
+            }
+            LocalLinuxSignalAwareReadinessOutcome::ShutdownObserved
+            | LocalLinuxSignalAwareReadinessOutcome::TerminationSignal(_)
+            | LocalLinuxSignalAwareReadinessOutcome::ListenerReady => {}
+        }
+        self.worker_completions
+            .add_usize(report.completions().len());
+    }
+
+    /// Records one successful runtime-specific scheduling cycle after readiness.
+    pub fn record_runtime_scheduling_report(
+        &mut self,
+        report: &LocalLinuxRuntimeSchedulingCycleReport,
+    ) {
+        self.scheduling_attempts
+            .add_usize(report.scheduling_attempts());
+        self.workers_registered
+            .add_usize(report.workers_registered());
+        self.worker_completions
+            .add_usize(report.completions().len());
+    }
+
+    /// Records scheduling evidence after readiness was already counted separately.
+    pub fn record_runtime_scheduling_error(
+        &mut self,
+        error: &LocalLinuxRuntimeSchedulingCycleError,
+    ) {
+        self.scheduling_attempts
+            .add_usize(error.scheduling_attempts());
+        self.workers_registered
+            .add_usize(error.workers_registered());
+        self.worker_completions.add_usize(error.completions().len());
     }
 
     /// Records evidence accumulated before one scheduling failure.

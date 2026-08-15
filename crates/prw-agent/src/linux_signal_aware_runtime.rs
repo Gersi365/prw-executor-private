@@ -7,6 +7,7 @@
 
 use std::thread;
 
+use super::accept_ready::AcceptReadyAgentSocket;
 use super::bounded_scheduler_cycle::{LocalLinuxSchedulerControl, LocalLinuxSchedulingCycleStop};
 use super::production_lifecycle::{
     LocalLinuxProductionLifecycleAssemblyError, with_local_linux_production_lifecycle_from_env,
@@ -19,13 +20,12 @@ use super::production_runtime_types::{
 };
 use super::runtime_orchestration::{
     LocalLinuxRuntimeOrchestrationError, LocalLinuxRuntimeSchedulerContext,
-    LocalLinuxRuntimeShutdownHandle, LocalLinuxRuntimeSchedulingCycleError,
-    LocalLinuxRuntimeSchedulingCycleReport, run_bounded_runtime_scheduling_cycle,
+    LocalLinuxRuntimeShutdownHandle, run_bounded_runtime_scheduling_cycle,
 };
 use super::runtime_wake::LocalLinuxRuntimeWake;
 use super::signal_aware_readiness::{
     LocalLinuxSignalAwareReadinessError, LocalLinuxSignalAwareReadinessOutcome,
-    LocalLinuxSignalAwareReadinessReport, wait_once_for_signal_aware_linux_runtime_readiness,
+    wait_once_for_signal_aware_linux_runtime_readiness,
 };
 use super::termination_signal::{
     LocalLinuxTerminationSignal, LocalLinuxTerminationSignalMaskRestore,
@@ -36,7 +36,6 @@ use super::worker_completion::LocalLinuxScopedWorkerCompletion;
 use super::worker_registry::{
     LocalLinuxRegisteredWorkerCancellation, LocalLinuxScopedWorkerRegistry,
 };
-use super::accept_ready::AcceptReadyAgentSocket;
 
 /// Terminal reason for one signal-aware production-local runtime lifetime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,7 +114,7 @@ pub enum LocalLinuxSignalAwareRuntimeStartError {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct LocalLinuxSignalAwareRuntimeLoopExit {
+pub struct LocalLinuxSignalAwareRuntimeLoopExit {
     reason: LocalLinuxSignalAwareRuntimeTerminalReason,
     counters: LocalLinuxProductionRuntimeCounters,
     cancellations: Vec<LocalLinuxRegisteredWorkerCancellation>,
@@ -192,7 +191,7 @@ pub fn run_signal_aware_linux_production_runtime_loop(
                     }
                 }
                 Err(error) => {
-                    counters.record_scheduling_error(&error);
+                    counters.record_runtime_scheduling_error(&error);
                     let orchestration_error =
                         LocalLinuxRuntimeOrchestrationError::Scheduling(error);
                     match classify_production_runtime_error(&orchestration_error) {
@@ -200,10 +199,13 @@ pub fn run_signal_aware_linux_production_runtime_loop(
                             counters.record_peer_rejection();
                         }
                         LocalLinuxRuntimeErrorDisposition::FailStop => {
-                            let fatal = LocalLinuxProductionRuntimeFatalError::from_orchestration_error(
-                                &orchestration_error,
-                            )
-                            .expect("Phase 098 fail-stop scheduling error preserves fatal cause");
+                            let fatal =
+                                LocalLinuxProductionRuntimeFatalError::from_orchestration_error(
+                                    &orchestration_error,
+                                )
+                                .expect(
+                                    "Phase 098 fail-stop scheduling error preserves fatal cause",
+                                );
                             break LocalLinuxSignalAwareRuntimeTerminalReason::RuntimeFatal(fatal);
                         }
                     }
@@ -301,33 +303,34 @@ where
     let signal_source = LocalLinuxTerminationSignalSource::create()
         .map_err(LocalLinuxSignalAwareRuntimeStartError::SignalSource)?;
 
-    let execution = match super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
-        root_path,
-        inputs.config(),
-        |listener, wake, capacity, control| {
-            on_started(LocalLinuxRuntimeShutdownHandle::new(
-                control.clone(),
-                wake.notifier(),
-            ));
-            run_signal_aware_linux_production_runtime_loop(
-                listener,
-                &signal_source,
-                wake,
-                capacity,
-                control,
-                inputs,
-            )
-        },
-    ) {
-        Ok(execution) => execution,
-        Err(error) => {
-            let mask_restore = signal_source.restore();
-            return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
-                error,
-                mask_restore,
-            });
-        }
-    };
+    let execution =
+        match super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
+            root_path,
+            inputs.config(),
+            |listener, wake, capacity, control| {
+                on_started(LocalLinuxRuntimeShutdownHandle::new(
+                    control.clone(),
+                    wake.notifier(),
+                ));
+                run_signal_aware_linux_production_runtime_loop(
+                    listener,
+                    &signal_source,
+                    wake,
+                    capacity,
+                    control,
+                    inputs,
+                )
+            },
+        ) {
+            Ok(execution) => execution,
+            Err(error) => {
+                let mask_restore = signal_source.restore();
+                return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
+                    error,
+                    mask_restore,
+                });
+            }
+        };
 
     let cleanup = execution.cleanup();
     let exit = execution.into_value();
@@ -397,10 +400,8 @@ mod tests {
             NonZeroU16::new(8).expect("backlog nonzero"),
             NonZeroUsize::new(2).expect("attempt budget nonzero"),
             NonZeroUsize::new(1).expect("request budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("read budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("write budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("read budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("write budget nonzero"),
         )
     }
 

@@ -269,17 +269,18 @@ fn run_local_linux_production_runtime_in_root_path<F>(
 where
     F: FnOnce(LocalLinuxRuntimeShutdownHandle),
 {
-    let execution = super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
-        root_path,
-        inputs.config(),
-        |listener, wake, capacity, control| {
-            on_started(LocalLinuxRuntimeShutdownHandle::new(
-                control.clone(),
-                wake.notifier(),
-            ));
-            run_local_linux_production_runtime_loop(listener, wake, capacity, control, inputs)
-        },
-    )?;
+    let execution =
+        super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
+            root_path,
+            inputs.config(),
+            |listener, wake, capacity, control| {
+                on_started(LocalLinuxRuntimeShutdownHandle::new(
+                    control.clone(),
+                    wake.notifier(),
+                ));
+                run_local_linux_production_runtime_loop(listener, wake, capacity, control, inputs)
+            },
+        )?;
 
     let cleanup = execution.cleanup();
     Ok(execution.into_value().into_terminal_report(cleanup))
@@ -339,10 +340,8 @@ mod tests {
             NonZeroU16::new(8).expect("backlog nonzero"),
             NonZeroUsize::new(2).expect("attempt budget nonzero"),
             NonZeroUsize::new(1).expect("request budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("read budget nonzero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("write budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("read budget nonzero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("write budget nonzero"),
         )
     }
 
@@ -374,16 +373,13 @@ mod tests {
         let root = create_root("shutdown-first");
         let dns = dns_snapshot();
 
-        let report = run_local_linux_production_runtime_in_root_path(
-            &root,
-            inputs(&dns),
-            |shutdown| {
+        let report =
+            run_local_linux_production_runtime_in_root_path(&root, inputs(&dns), |shutdown| {
                 shutdown
                     .request_shutdown_and_wake()
                     .expect("programmatic shutdown wake posts");
-            },
-        )
-        .expect("Phase 097 runtime assembles");
+            })
+            .expect("Phase 097 runtime assembles");
 
         assert_eq!(
             report.reason(),
@@ -407,10 +403,8 @@ mod tests {
         let client_thread = Arc::new(Mutex::new(None));
         let client_thread_slot = Arc::clone(&client_thread);
 
-        let report = run_local_linux_production_runtime_in_root_path(
-            &root,
-            inputs(&dns),
-            move |shutdown| {
+        let report =
+            run_local_linux_production_runtime_in_root_path(&root, inputs(&dns), move |shutdown| {
                 let path = path.clone();
                 let handle = thread::spawn(move || {
                     let mut client = UnixStream::connect(path).expect("client connects");
@@ -429,9 +423,8 @@ mod tests {
                         .expect("shutdown after response posts");
                 });
                 *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
-            },
-        )
-        .expect("Phase 097 runtime assembles");
+            })
+            .expect("Phase 097 runtime assembles");
 
         client_thread
             .lock()
