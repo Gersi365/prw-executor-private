@@ -3,6 +3,13 @@
 //! Phase 062 implements only the root-validation portion of the Phase 061
 //! security algorithm. Production code performs no filesystem mutation.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime PRW runtime-directory preparation is intentionally crate-internal"
+)]
+#[path = "linux_prw_runtime_directory.rs"]
+pub mod prw_runtime_directory;
+
 use std::env;
 use std::ffi::OsStr;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
