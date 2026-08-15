@@ -7,9 +7,7 @@
 use std::thread::ScopedJoinHandle;
 
 use super::session_worker_thread::LocalLinuxScopedWorkerResult;
-use super::worker_cancellation::{
-    LocalLinuxWorkerCancellation, LocalLinuxWorkerCancellationError,
-};
+use super::worker_cancellation::{LocalLinuxWorkerCancellation, LocalLinuxWorkerCancellationError};
 use super::worker_completion::{
     LocalLinuxScopedWorkerCompletion, join_authenticated_session_worker,
 };
@@ -169,10 +167,9 @@ mod tests {
         let (server, client) = UnixStream::pair().expect("anonymous Unix pair creates");
         let connection = AuthenticatedLocalLinuxConnection::try_new(server)
             .expect("same-UID test stream authenticates");
-        let cancellation = LocalLinuxWorkerCancellation::try_from_authenticated_connection(
-            &connection,
-        )
-        .expect("cancellation clone creates");
+        let cancellation =
+            LocalLinuxWorkerCancellation::try_from_authenticated_connection(&connection)
+                .expect("cancellation clone creates");
         drop(connection);
         (cancellation, client)
     }
@@ -306,10 +303,9 @@ mod tests {
         let (server, _client) = UnixStream::pair().expect("anonymous Unix pair creates");
         let connection = AuthenticatedLocalLinuxConnection::try_new(server)
             .expect("same-UID test stream authenticates");
-        let cancellation = LocalLinuxWorkerCancellation::try_from_authenticated_connection(
-            &connection,
-        )
-        .expect("cancellation clone creates before session move");
+        let cancellation =
+            LocalLinuxWorkerCancellation::try_from_authenticated_connection(&connection)
+                .expect("cancellation clone creates before session move");
         let session = AuthenticatedLocalLinuxSession::new(connection);
         let capacity = LocalLinuxWorkerCapacity::new(
             NonZeroUsize::new(1).expect("test worker capacity is non-zero"),
@@ -329,13 +325,7 @@ mod tests {
 
         thread::scope(|scope| {
             let handle = spawn_authenticated_session_worker(
-                scope,
-                session,
-                permit,
-                &policy,
-                status,
-                &dns,
-                config,
+                scope, session, permit, &policy, status, &dns, config,
             )
             .expect("scoped worker spawns");
             let mut registry = LocalLinuxScopedWorkerRegistry::new();
@@ -354,11 +344,9 @@ mod tests {
             assert_eq!(completions.len(), 1);
             assert!(matches!(
                 completions[0],
-                LocalLinuxScopedWorkerCompletion::Stopped(
-                    LocalLinuxSessionWorkerStop::CleanEof {
-                        responses_written: 0
-                    }
-                ) | LocalLinuxScopedWorkerCompletion::WorkerError(_)
+                LocalLinuxScopedWorkerCompletion::Stopped(LocalLinuxSessionWorkerStop::CleanEof {
+                    responses_written: 0
+                }) | LocalLinuxScopedWorkerCompletion::WorkerError(_)
             ));
         });
     }
