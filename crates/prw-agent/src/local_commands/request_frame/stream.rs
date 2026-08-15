@@ -8,7 +8,6 @@ use std::io::{Read, Write};
 use crate::LocalIpcRequestId;
 use crate::frame_object::reader::{LocalIpcFrameReadError, read_frame};
 use crate::frame_object::writer::{LocalIpcFrameWriteError, write_frame};
-use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
 
 use super::{
     LocalAgentRequestFrameBuildError, LocalAgentRequestFrameDecodeError,
