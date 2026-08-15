@@ -1,7 +1,11 @@
 //! Encode-side builder for kind/status-consistent terminal response frames.
 
-use crate::frame_object::{LocalIpcFrame, LocalIpcFrameError, LocalIpcPayload, LocalIpcPayloadError};
-use crate::{LocalIpcFrameHeader, LocalIpcFrameHeaderError, LocalIpcProtocolVersion, LocalIpcRequestId};
+use crate::frame_object::{
+    LocalIpcFrame, LocalIpcFrameError, LocalIpcPayload, LocalIpcPayloadError,
+};
+use crate::{
+    LocalIpcFrameHeader, LocalIpcFrameHeaderError, LocalIpcProtocolVersion, LocalIpcRequestId,
+};
 
 use super::expected_terminal_kind;
 use crate::local_commands::LocalAgentResponseStatus;
@@ -106,8 +110,8 @@ mod tests {
             LocalAgentResponseStatus::Conflict,
             LocalAgentResponseStatus::InternalError,
         ] {
-            let frame = build_terminal_response_frame(id(), status, &[])
-                .expect("bounded error frame");
+            let frame =
+                build_terminal_response_frame(id(), status, &[]).expect("bounded error frame");
             assert_eq!(frame.header().kind(), LocalIpcMessageKind::Error);
             assert_eq!(frame.payload().as_bytes(), &status.code().to_be_bytes());
             assert_eq!(
@@ -125,7 +129,10 @@ mod tests {
         let frame = build_terminal_response_frame(id(), LocalAgentResponseStatus::Ok, &body)
             .expect("maximum terminal body is valid");
 
-        assert_eq!(frame.header().payload_length(), LOCAL_IPC_MAX_PAYLOAD_LENGTH);
+        assert_eq!(
+            frame.header().payload_length(),
+            LOCAL_IPC_MAX_PAYLOAD_LENGTH
+        );
         assert_eq!(frame.payload().as_bytes()[..2], [0, 0]);
         assert_eq!(frame.payload().as_bytes().len(), 1_048_576);
     }
