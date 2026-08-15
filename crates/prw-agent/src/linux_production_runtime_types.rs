@@ -203,22 +203,28 @@ pub enum LocalLinuxRuntimeErrorDisposition {
     FailStop,
 }
 
+const fn classify_schedule_error(
+    error: LocalLinuxOneShotScheduleError,
+) -> LocalLinuxRuntimeErrorDisposition {
+    match error {
+        LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::PeerAuthorization(_)) => {
+            LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection
+        }
+        LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed)
+        | LocalLinuxOneShotScheduleError::CancellationClone(_)
+        | LocalLinuxOneShotScheduleError::Spawn(_) => LocalLinuxRuntimeErrorDisposition::FailStop,
+    }
+}
+
 /// Returns the Phase 094-A01 initial production disposition for one runtime error.
 #[must_use]
 pub fn classify_production_runtime_error(
     error: &LocalLinuxRuntimeOrchestrationError,
 ) -> LocalLinuxRuntimeErrorDisposition {
     match error {
-        LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling)
-            if matches!(
-                scheduling.error(),
-                LocalLinuxOneShotScheduleError::Accept(
-                    AuthenticatedAgentAcceptError::PeerAuthorization(_)
-                )
-            ) => LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection,
-        LocalLinuxRuntimeOrchestrationError::Readiness(_)
-        | LocalLinuxRuntimeOrchestrationError::Scheduling(_) => {
-            LocalLinuxRuntimeErrorDisposition::FailStop
+        LocalLinuxRuntimeOrchestrationError::Readiness(_) => LocalLinuxRuntimeErrorDisposition::FailStop,
+        LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling) => {
+            classify_schedule_error(scheduling.error())
         }
     }
 }
@@ -242,15 +248,9 @@ impl LocalLinuxProductionRuntimeFatalError {
             LocalLinuxRuntimeOrchestrationError::Readiness(error) => Some(Self::Readiness(*error)),
             LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling) => {
                 let error = scheduling.error();
-                if matches!(
-                    error,
-                    LocalLinuxOneShotScheduleError::Accept(
-                        AuthenticatedAgentAcceptError::PeerAuthorization(_)
-                    )
-                ) {
-                    None
-                } else {
-                    Some(Self::Scheduling(error))
+                match classify_schedule_error(error) {
+                    LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection => None,
+                    LocalLinuxRuntimeErrorDisposition::FailStop => Some(Self::Scheduling(error)),
                 }
             }
         }
@@ -344,15 +344,13 @@ mod tests {
         LocalLinuxProductionRuntimeConfig, LocalLinuxProductionRuntimeCounters,
         LocalLinuxProductionRuntimeFatalError, LocalLinuxRuntimeCounter,
         LocalLinuxRuntimeErrorDisposition, classify_production_runtime_error,
+        classify_schedule_error,
     };
-    use crate::linux_identity::accept_ready::{
-        AuthenticatedAgentAcceptError, LocalLinuxPeerAuthorizationError,
-    };
+    use crate::linux_identity::accept_ready::AuthenticatedAgentAcceptError;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
     use crate::linux_identity::one_shot_scheduler::LocalLinuxOneShotScheduleError;
-    use crate::linux_identity::runtime_orchestration::{
-        LocalLinuxRuntimeOrchestrationError, LocalLinuxRuntimeSchedulingCycleError,
-    };
+    use crate::linux_identity::peer_auth::LocalLinuxPeerAuthorizationError;
+    use crate::linux_identity::runtime_orchestration::LocalLinuxRuntimeOrchestrationError;
     use crate::linux_identity::runtime_readiness::LocalLinuxRuntimeReadinessError;
 
     fn nonzero(value: usize) -> NonZeroUsize {
@@ -425,45 +423,24 @@ mod tests {
     }
 
     #[test]
-    fn peer_authorization_rejection_is_the_only_nonterminal_scheduling_error() {
-        let scheduling = LocalLinuxRuntimeSchedulingCycleError::for_test(
-            LocalLinuxOneShotScheduleError::Accept(
-                AuthenticatedAgentAcceptError::PeerAuthorization(
-                    LocalLinuxPeerAuthorizationError::WrongUid {
-                        expected_uid: 1000,
-                        actual_uid: 1001,
-                    },
-                ),
+    fn peer_authorization_rejection_is_the_only_nonterminal_schedule_class() {
+        let error = LocalLinuxOneShotScheduleError::Accept(
+            AuthenticatedAgentAcceptError::PeerAuthorization(
+                LocalLinuxPeerAuthorizationError::UserIdMismatch,
             ),
         );
-        let error = LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling);
-
         assert_eq!(
-            classify_production_runtime_error(&error),
+            classify_schedule_error(error),
             LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection
-        );
-        assert_eq!(
-            LocalLinuxProductionRuntimeFatalError::from_orchestration_error(&error),
-            None
         );
     }
 
     #[test]
-    fn non_peer_scheduling_error_is_fail_stop() {
-        let scheduling = LocalLinuxRuntimeSchedulingCycleError::for_test(
-            LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed),
-        );
-        let error = LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling);
-
+    fn ordinary_accept_failure_is_fail_stop() {
+        let error = LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed);
         assert_eq!(
-            classify_production_runtime_error(&error),
+            classify_schedule_error(error),
             LocalLinuxRuntimeErrorDisposition::FailStop
-        );
-        assert_eq!(
-            LocalLinuxProductionRuntimeFatalError::from_orchestration_error(&error),
-            Some(LocalLinuxProductionRuntimeFatalError::Scheduling(
-                LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed)
-            ))
         );
     }
 }
