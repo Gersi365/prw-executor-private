@@ -42,7 +42,7 @@ impl LocalConnectionSendState {
         matches!(self, Self::WritePoisoned)
     }
 
-    fn poison_after_write_failure(&mut self) {
+    const fn poison_after_write_failure(&mut self) {
         *self = Self::WritePoisoned;
     }
 }
