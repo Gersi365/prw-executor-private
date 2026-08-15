@@ -2,6 +2,8 @@
 //!
 //! Phase 073 preserves the Phase 070 blocking accepted-stream model while
 //! ensuring partial I/O cannot reset the caller-supplied wall-clock budget.
+//! Phase 074 adds a deferred writer whose absolute deadline begins only on the
+//! first non-empty response write.
 
 use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -138,6 +140,63 @@ impl Write for LocalLinuxDeadlineWriter<'_> {
     }
 }
 
+/// Blocking writer whose deadline starts only when response bytes are first written.
+#[derive(Debug)]
+pub struct LocalLinuxDeferredDeadlineWriter<'a> {
+    stream: &'a UnixStream,
+    budget: LocalLinuxIoBudget,
+    deadline: Option<Instant>,
+}
+
+impl<'a> LocalLinuxDeferredDeadlineWriter<'a> {
+    /// Creates a deferred writer without starting its absolute deadline.
+    #[must_use]
+    pub const fn new(stream: &'a UnixStream, budget: LocalLinuxIoBudget) -> Self {
+        Self {
+            stream,
+            budget,
+            deadline: None,
+        }
+    }
+
+    fn deadline_or_start(&mut self) -> io::Result<Instant> {
+        if let Some(deadline) = self.deadline {
+            return Ok(deadline);
+        }
+
+        let deadline = Instant::now()
+            .checked_add(self.budget.duration())
+            .ok_or_else(deadline_overflow_io_error)?;
+        self.deadline = Some(deadline);
+        Ok(deadline)
+    }
+
+    #[cfg(test)]
+    const fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+}
+
+impl Write for LocalLinuxDeferredDeadlineWriter<'_> {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+
+        let deadline = self.deadline_or_start()?;
+        let remaining = remaining_until(deadline)?;
+        self.stream.set_write_timeout(Some(remaining))?;
+
+        let mut stream = self.stream;
+        stream.write(buffer).map_err(normalize_timeout_error)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let mut stream = self.stream;
+        stream.flush()
+    }
+}
+
 fn remaining_until(deadline: Instant) -> io::Result<Duration> {
     let remaining = deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
@@ -162,6 +221,13 @@ fn deadline_timeout_error() -> io::Error {
     )
 }
 
+fn deadline_overflow_io_error() -> io::Error {
+    io::Error::new(
+        ErrorKind::InvalidInput,
+        "PRW local IPC absolute I/O deadline is not representable",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{ErrorKind, Read, Write};
@@ -170,7 +236,7 @@ mod tests {
 
     use super::{
         LocalLinuxDeadlineReader, LocalLinuxDeadlineStartError, LocalLinuxDeadlineWriter,
-        LocalLinuxIoBudget, LocalLinuxIoBudgetError,
+        LocalLinuxDeferredDeadlineWriter, LocalLinuxIoBudget, LocalLinuxIoBudgetError,
     };
 
     fn budget(milliseconds: u64) -> LocalLinuxIoBudget {
@@ -260,5 +326,36 @@ mod tests {
             .expect_err("idle peer must hit absolute read deadline");
 
         assert_eq!(error.kind(), ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn deferred_writer_starts_deadline_only_on_first_nonempty_write() {
+        let (left, _right) = UnixStream::pair().expect("anonymous Unix pair creates");
+        let mut writer = LocalLinuxDeferredDeadlineWriter::new(&left, budget(500));
+
+        assert_eq!(writer.deadline(), None);
+        assert_eq!(writer.write(&[]).expect("empty write succeeds"), 0);
+        assert_eq!(writer.deadline(), None);
+
+        writer.write_all(&[1]).expect("first byte writes");
+        let started = writer.deadline().expect("first write starts deadline");
+
+        writer.write_all(&[2]).expect("second byte writes");
+        assert_eq!(writer.deadline(), Some(started));
+    }
+
+    #[test]
+    fn deferred_writer_reports_deadline_overflow_only_when_write_begins() {
+        let (left, _right) = UnixStream::pair().expect("anonymous Unix pair creates");
+        let huge = LocalLinuxIoBudget::try_new(Duration::MAX).expect("huge budget is nonzero");
+        let mut writer = LocalLinuxDeferredDeadlineWriter::new(&left, huge);
+
+        assert_eq!(writer.deadline(), None);
+        let error = writer
+            .write(&[1])
+            .expect_err("first write cannot represent huge deadline");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidInput);
+        assert_eq!(writer.deadline(), None);
     }
 }
