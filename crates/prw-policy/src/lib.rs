@@ -67,7 +67,10 @@ mod tests {
 
     #[test]
     fn local_read_capabilities_are_distinct() {
-        assert_ne!(Capability::AgentStatusRead, Capability::PrivateDnsConfigRead);
+        assert_ne!(
+            Capability::AgentStatusRead,
+            Capability::PrivateDnsConfigRead
+        );
         assert_ne!(Capability::AgentStatusRead, Capability::FilesRead);
         assert_ne!(Capability::PrivateDnsConfigRead, Capability::FilesRead);
     }
