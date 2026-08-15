@@ -4,14 +4,26 @@
 //! response metadata. Later phases add pure request/response byte codecs and
 //! typed response bodies without activating runtime dispatch.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime admission pipeline is intentionally crate-internal"
+)]
 pub(crate) mod admission;
 pub mod codec;
+#[allow(
+    dead_code,
+    reason = "pre-runtime policy response pipeline is intentionally crate-internal"
+)]
 pub(crate) mod policy_response;
 pub mod private_dns_codec;
 pub mod private_dns_response;
 pub mod private_dns_snapshot;
 pub mod request_frame;
 pub mod request_tracker;
+#[allow(
+    dead_code,
+    reason = "pre-runtime successful responder is intentionally crate-internal"
+)]
 pub(crate) mod responder;
 pub mod response_codec;
 pub mod status_snapshot;
