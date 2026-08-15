@@ -1,0 +1,113 @@
+Private Remote Workspace
+Phase 076 Linux Finite Authenticated Session Worker Body
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 4c8c9997895a6eb867375ce8d24e51619a328b1a
+Authoritative GitHub Actions run: 31895555015
+Phase 075 authoritative report commit: 6f924255d108079a6d8ccb6fd7aa99a0f97641c8
+
+PURPOSE
+
+Implement the finite authenticated-session worker body required by the Phase 072 runtime-processing bounds while still spawning no OS thread and accepting no connection.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_session_worker.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_076_LINUX_FINITE_SESSION_WORKER.md
+
+OWNERSHIP AND LIFECYCLE
+
+run_authenticated_session_worker consumes:
+
+- one AuthenticatedLocalLinuxSession<UnixStream>;
+- one non-cloneable Phase 075 LocalLinuxWorkerPermit;
+- caller-supplied policy and snapshots;
+- one typed LocalLinuxSessionWorkerConfig containing the finite Request count and Phase 074 read/write I/O budgets.
+
+The session and permit are never returned to the caller.
+
+The permit remains live through the entire worker-body call and releases exactly one worker slot by RAII on every normal return and unwind.
+
+The session stream is dropped when the worker body returns. Runtime orchestration therefore cannot resume the same connection with a fresh Request budget.
+
+PROCESSING SEMANTICS
+
+For every permitted Request:
+
+1. invoke Phase 074 process_one_with_deadlines;
+2. create a fresh absolute Request-read deadline;
+3. use an independent deferred terminal-response-write deadline;
+4. increment the completed-response count only after ResponseWritten;
+5. clean EOF terminates normally;
+6. the first processing failure terminates with the count of previously completed responses;
+7. consuming the final permitted Request terminates with RequestBudgetExhausted.
+
+TYPED CONFIGURATION
+
+LocalLinuxSessionWorkerConfig groups:
+
+- maximum Request count;
+- per-Request read I/O budget;
+- per-Request response-write I/O budget.
+
+This keeps the worker entry point bounded without lint allowances and prepares the values to be supplied by a later runtime configuration boundary. No production values are selected by this phase.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- the Phase 075 worker permit remains active during policy evaluation;
+- Request-budget exhaustion writes the permitted terminal response, closes the session stream, and releases the permit;
+- the client can read the final response and then observes stream EOF;
+- clean peer EOF releases the permit without policy evaluation;
+- an idle peer reaches the Phase 074 Request-read deadline;
+- read-deadline failure releases the permit and reports zero prior responses when no Request completed.
+
+VALIDATION
+
+Authoritative run 31895555015 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- Run 31895316602 stopped only at rustfmt; test formatting was corrected.
+- Run 31895370892 passed formatting and Clippy rejected the eight-argument worker entry point.
+- A typed LocalLinuxSessionWorkerConfig replaced the separate Request/read/write bound arguments; no lint allowance was added.
+- Run 31895430449 stopped only at rustfmt after the API refactor; formatting was corrected.
+- Run 31895494969 passed formatting and Clippy requested removal of the repeated `budget` field postfix.
+- Internal config fields were renamed to `requests`, `read_io`, and `write_io` while the accessor API and semantics remained unchanged.
+- Final run 31895555015 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 076:
+
+- spawns no OS thread/task;
+- accepts no connection;
+- implements no accept scheduler;
+- implements no thread registry/join lifecycle;
+- implements no shutdown/cancellation mechanism;
+- chooses no production Request/deadline/capacity values;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Before the first production-side OS thread is spawned, the worker-thread ownership/registration/join/shutdown lifecycle must be locked so a JoinHandle cannot be silently detached and active-worker accounting remains consistent with Agent shutdown.
+
+FINAL CLASSIFICATION
+
+FINITE_AUTHENTICATED_SESSION_WORKER_IMPLEMENTED / PER_REQUEST_ABSOLUTE_DEADLINES / SESSION_CLOSED_ON_TERMINAL_PATH / RAII_WORKER_SLOT_RELEASE / NO_THREAD_SPAWN / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 076 report.
