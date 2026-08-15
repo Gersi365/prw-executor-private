@@ -64,9 +64,7 @@ mod tests {
     use std::fs::File;
     use std::os::unix::net::UnixStream;
 
-    use super::{
-        LocalLinuxPeerAuthorizationError, authorize_same_effective_uid, user_ids_match,
-    };
+    use super::{LocalLinuxPeerAuthorizationError, authorize_same_effective_uid, user_ids_match};
     use crate::linux_identity::{LocalLinuxIdentityError, effective_agent_uid};
 
     #[test]
