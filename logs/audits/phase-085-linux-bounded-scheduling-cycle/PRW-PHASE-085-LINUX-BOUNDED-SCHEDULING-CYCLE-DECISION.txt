@@ -1,0 +1,79 @@
+Private Remote Workspace
+Phase 085 Linux Bounded Scheduling Cycle Decision
+
+STATUS: DECISION_LOCKED / NO_LONG_RUNNING_LOOP_OR_BOOTSTRAP_ACTIVATION
+AUDIT TYPE: FINITE SCHEDULER ORCHESTRATION / SHUTDOWN GATING LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 084 authoritative report commit: e45a7d0f5c89f6502af7416b4a25f7b842736bf1
+Phase 084 validated source head: 9aba616b42a2bd6a8319bb573a792bb4c156949a
+Phase 084 authoritative validation run: 31896863014
+Phase 085 contract commit: f7a6781ec8277c3a0761d80697eff1561ff6ea3b
+
+PURPOSE
+
+Permit repeated use of the Phase 084 one-shot scheduling transaction only through a finite caller-bounded cycle with explicit shutdown gating and no internal busy-wait behavior.
+
+DECISION 1 — FINITE ATTEMPT BUDGET
+
+Each scheduling-cycle invocation receives caller-supplied NonZeroUsize attempt_budget and may call Phase 084 no more than that many times.
+
+No unbounded loop, recursive retry, sleep, polling, or internal timing cadence is authorized.
+
+DECISION 2 — REAP BEFORE SCHEDULE
+
+Before every potential Phase 084 attempt, the cycle calls the Phase 080 registry's nonblocking reap_finished(). Reaped worker completions are returned to the caller in observation order.
+
+This allows completed worker permits to release before capacity is checked for another connection.
+
+DECISION 3 — MONOTONIC SHUTDOWN FLAG
+
+The initial scheduler control has two states: Running and ShutdownRequested, backed by a shared atomic flag with a one-way transition and no reset.
+
+After reaping and immediately before every Phase 084 call, the cycle checks shutdown state.
+
+ShutdownRequested returns from the cycle without a new accept/spawn operation.
+
+The flag does not cancel existing workers; Phase 082 cancel_all + join_all remains the shutdown worker boundary.
+
+DECISION 4 — NO BUSY LOOP ON NO WORK
+
+AtCapacity and NoConnectionReady terminate the current cycle immediately even when attempt budget remains.
+
+A future outer readiness/wait mechanism decides when another cycle is called.
+
+DECISION 5 — SUCCESS MAY CONTINUE WITHIN BUDGET
+
+WorkerRegistered consumes one attempt. If budget remains, the next iteration again reaps finished workers and checks shutdown before another Phase 084 call.
+
+DECISION 6 — ERRORS TERMINATE WITHOUT RETRY
+
+The first Phase 084 error terminates the cycle immediately. Error evidence retains completions already reaped and the count of workers successfully registered earlier in the cycle.
+
+DECISION 7 — STRUCTURED CYCLE EVIDENCE
+
+Successful cycle output records reaped completions, number registered, number of actual Phase 084 attempts, and one stop reason:
+
+- AttemptBudgetExhausted;
+- AtCapacity;
+- NoConnectionReady;
+- ShutdownRequested.
+
+NEXT SAFE IMPLEMENTATION
+
+Phase 086 may implement the AtomicBool scheduler control and bounded cycle composition, with tests proving shutdown-before-accept, no internal retry on AtCapacity/NoConnectionReady, reap-before-capacity ordering, and exact attempt-budget enforcement.
+
+MUTATION STATEMENT
+
+Phase 085 changes only repository contract/audit documentation.
+
+It performs no accept/spawn/cancel/join in production, adds no long-running loop, activates no Agent bootstrap/systemd/service state, binds no new policy implementation, and changes no remote network/DNS/TUN/database/private-key/deployment state.
+
+FINAL CLASSIFICATION
+
+FINITE_SCHEDULING_CYCLE_LOCKED / REAP_BEFORE_SCHEDULE_LOCKED / MONOTONIC_SHUTDOWN_GATE_LOCKED / NO_BUSY_RETRY_LOCKED / READY_FOR_PHASE_086_IMPLEMENTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 085 decision report.
