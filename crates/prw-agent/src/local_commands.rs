@@ -182,7 +182,10 @@ mod tests {
         assert_eq!(LocalAgentResponseStatus::UnsupportedCommand.code(), 3);
         assert_eq!(LocalAgentResponseStatus::Conflict.code(), 4);
         assert_eq!(LocalAgentResponseStatus::InternalError.code(), 5);
-        assert_eq!(LocalAgentResponseStatus::from_code(0), Some(LocalAgentResponseStatus::Ok));
+        assert_eq!(
+            LocalAgentResponseStatus::from_code(0),
+            Some(LocalAgentResponseStatus::Ok)
+        );
         assert_eq!(
             LocalAgentResponseStatus::from_code(5),
             Some(LocalAgentResponseStatus::InternalError)

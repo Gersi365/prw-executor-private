@@ -35,7 +35,10 @@ pub fn decode_response_status_prefix(
     let code = u16::from_be_bytes([prefix[0], prefix[1]]);
     let status = LocalAgentResponseStatus::from_code(code)
         .ok_or(LocalAgentResponseDecodeError::UnknownStatus)?;
-    Ok((status, &payload[LOCAL_AGENT_RESPONSE_STATUS_PREFIX_LENGTH..]))
+    Ok((
+        status,
+        &payload[LOCAL_AGENT_RESPONSE_STATUS_PREFIX_LENGTH..],
+    ))
 }
 
 /// Fail-closed response status prefix decoding failure.
@@ -91,7 +94,10 @@ mod tests {
             LocalAgentResponseStatus::InternalError,
         ] {
             let encoded = encode_response_status(status);
-            assert_eq!(decode_response_status_prefix(&encoded), Ok((status, &[][..])));
+            assert_eq!(
+                decode_response_status_prefix(&encoded),
+                Ok((status, &[][..]))
+            );
         }
     }
 
