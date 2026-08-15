@@ -6,9 +6,10 @@
 //! composes authenticated application-session processing, Phase 062 adds
 //! read-only XDG runtime-root validation, Phase 067 adds a bound validated Agent
 //! socket, Phase 068 adds an explicit listening-state transition, Phase 070 adds
-//! a nonblocking accept-ready state plus one-shot authenticated accept, and Phase
-//! 071 adds pure composition into Phase 060 authenticated session state. The
-//! Agent bootstrap remains inactive and no accept/session loop is enabled here.
+//! a nonblocking accept-ready state plus one-shot authenticated accept, Phase 071
+//! adds pure composition into Phase 060 authenticated session state, and Phase
+//! 073 adds absolute-deadline blocking stream I/O primitives. The Agent bootstrap
+//! remains inactive and no accept/session loop is enabled here.
 
 #[allow(
     dead_code,
@@ -34,6 +35,12 @@ pub mod authenticated_session;
 )]
 #[path = "linux_agent_session_bridge.rs"]
 pub mod authenticated_session_bridge;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux absolute-deadline I/O adapter is intentionally crate-internal"
+)]
+#[path = "linux_deadline_io.rs"]
+pub mod deadline_io;
 #[allow(
     dead_code,
     reason = "pre-listen bound Linux Agent socket is intentionally crate-internal"
