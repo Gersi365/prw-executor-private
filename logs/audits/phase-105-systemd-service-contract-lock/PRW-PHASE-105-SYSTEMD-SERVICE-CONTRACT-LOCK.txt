@@ -1,0 +1,298 @@
+Private Remote Workspace
+Phase 105 systemd User-Service Contract Lock
+
+STATUS: PASS / APPROVED_AND_LOCKED / DECISION_ONLY / PHASES_106_TO_108_AUTHORIZED / NO_SYSTEMD_UNIT_SOURCE_YET / NO_INSTALL / NO_ENABLE / NO_START / NO_LINGER_MUTATION / NO_HOST_ACTIVATION
+AUDIT TYPE: APPROVED SERVICE PACKAGING CONTRACT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Approved predecessor: Phase 104 decision-preparation commit 9c7d2d69aeacf32a67ceae987b258e50fa32002d
+Standalone Agent completion-review commit: e9c31d7c5336d60a7a153deb44e39ff34f42dab3
+Standalone Agent authoritative CI: 31904953430
+
+USER AUTHORIZATION
+
+The user explicitly approved Phases 105-108 systemd packaging according to Phase 104, using the user-service architecture, while keeping real host activation and linger as a separate later gate.
+
+This authorization covers source-changing non-activating systemd packaging work through Phase 108 only.
+
+It does NOT authorize:
+
+- installing files on the user's host;
+- running systemctl --user daemon-reload;
+- enabling prw-agent.service;
+- starting, stopping, restarting, or reloading the real Agent service;
+- creating default.target.wants symlinks on the user's host;
+- loginctl enable-linger or disable-linger;
+- changing pre-existing linger state;
+- deployment;
+- public or remote listener activation;
+- privileged helper introduction;
+- socket activation.
+
+MINIMUM PACKAGING BASELINE
+
+The first systemd package contract targets:
+
+- Ubuntu 24.04 LTS or later explicitly validated Ubuntu release;
+- systemd 255.4 or later within that supported baseline;
+- a normal per-user systemd manager with a real XDG_RUNTIME_DIR;
+- the already-validated same-UID PRW Agent model.
+
+Ubuntu 24.04 is selected because it matches the current permanent CI operating-system family used to validate the standalone Agent and provides the required systemd directive surface without introducing a second operating-system baseline during packaging.
+
+SERVICE IDENTITY LOCK
+
+Service unit name:
+
+prw-agent.service
+
+Service scope:
+
+systemd user service
+
+Process identity:
+
+- existing invoking/user-manager UID;
+- no User= directive;
+- no DynamicUser=;
+- no root-owned runtime process;
+- no new service account;
+- no privileged helper.
+
+The service manager is not permitted to synthesize XDG_RUNTIME_DIR. The binary consumes the real user-manager runtime environment and retains its existing fail-closed XDG ownership/mode validation.
+
+SOCKET OWNERSHIP LOCK
+
+No .socket unit is permitted in Phases 105-108.
+
+The Agent continues to own:
+
+- instance locking;
+- stale-socket inspection/removal;
+- bind;
+- listen;
+- readiness;
+- accepted connections;
+- socket cleanup.
+
+Systemd socket activation would alter the validated listener ownership model and therefore requires a future architecture gate if ever introduced.
+
+EXECUTABLE / UNIT INSTALL MODEL LOCK
+
+Packaged executable destination:
+
+/usr/lib/private-remote-workspace/prw-agent
+
+Global user-unit destination:
+
+/usr/lib/systemd/user/prw-agent.service
+
+Repository unit source:
+
+packaging/systemd/prw-agent.service
+
+Rationale:
+
+- the executable is system-owned package content but runs unprivileged as the user-service process;
+- the unit is globally discoverable by user managers without depending on one user's home directory;
+- ExecStart is absolute and does not depend on PATH;
+- unit source and executable remain distinct from user-generated configuration/state;
+- package installation/upgrade/removal can be separately transaction-audited before activation.
+
+No per-user executable installation under $HOME is part of the initial contract.
+
+EXACT UNIT CONTRACT
+
+Phase 106 must produce a service unit semantically equivalent to exactly this directive set:
+
+[Unit]
+Description=Private Remote Workspace Agent
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/private-remote-workspace/prw-agent
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+
+No additional directive may be added in Phase 106 without being justified as a corrective required for the locked Ubuntu 24.04/systemd 255.4 baseline and recorded explicitly in the Phase 106 authoritative report.
+
+TYPE / READINESS LOCK
+
+Type=exec is selected.
+
+This provides service-manager visibility of successful executable invocation without pretending that the PRW application socket is already ready.
+
+The current Agent does not implement sd_notify and Phases 105-108 must not add Type=notify or a notification dependency.
+
+Application readiness remains proven through the actual Unix socket/protocol boundary, not inferred from systemd ActiveState alone.
+
+RESTART / RATE-LIMIT LOCK
+
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+Intent:
+
+- restart after unexpected failure;
+- do not use Restart=always;
+- do not create a tight deterministic crash loop;
+- a deliberate systemctl stop operation must not be converted into an automatic restart transaction;
+- the Agent's normal handled SIGTERM/SIGINT success path remains a successful terminal path.
+
+STOP LOCK
+
+TimeoutStopSec=15s
+
+No ExecStop= is permitted in the first service unit.
+No custom KillSignal= is required; normal service-manager SIGTERM stop behavior is retained.
+No second shutdown protocol is introduced.
+
+The timeout is a service-manager outer bound only; it does not replace the Agent's own cancel/join/socket-cleanup/signal-mask-restoration transaction.
+
+LOGGING LOCK
+
+StandardOutput=journal
+StandardError=journal
+
+No logging framework dependency, log file, log rotation subsystem, request dump, payload dump, private-key dump, or per-loop verbose logging is introduced.
+
+The standalone binary's existing bounded stderr startup/terminal record remains the service-facing application outcome record.
+
+INITIAL HARDENING LOCK
+
+UMask=0077
+NoNewPrivileges=yes
+
+No aggressive filesystem/home isolation is locked in Phases 105-108 because later PRW product scope includes explicit user-authorized workspace/file access.
+
+The following are intentionally deferred rather than silently enabled:
+
+- ProtectHome=;
+- ProtectSystem=;
+- PrivateTmp=;
+- InaccessiblePaths=;
+- ReadOnlyPaths=;
+- ReadWritePaths=;
+- RestrictAddressFamilies=;
+- SystemCallFilter=;
+- CapabilityBoundingSet=;
+- PrivateUsers=;
+- DynamicUser=.
+
+Any future hardening expansion must be validated against the actual file/network capability contract first.
+
+EXPLICIT OMISSIONS / NON-DEPENDENCIES
+
+The initial unit must not contain:
+
+- User=;
+- Group=;
+- Environment=XDG_RUNTIME_DIR=...;
+- EnvironmentFile=;
+- WorkingDirectory=;
+- RuntimeDirectory=;
+- PIDFile=;
+- ExecStartPre=;
+- ExecStartPost=;
+- ExecStop=;
+- ExecReload=;
+- Type=notify;
+- Type=forking;
+- socket activation directives;
+- network-online.target dependency;
+- shell wrappers;
+- sudo/pkexec invocation.
+
+No network-online ordering is required because the validated current Agent local runtime must be able to start independently of remote connectivity. Remote transport layers remain later product work.
+
+ENABLEMENT LOCK
+
+[Install]
+WantedBy=default.target
+
+This only defines the future enablement relationship. Phases 105-108 must not create the enablement symlink on a real host.
+
+Automatic start without login additionally depends on user lingering and remains explicitly outside this authorization.
+
+LINGER OWNERSHIP / ROLLBACK LOCK
+
+Linger is a separate activation transaction.
+
+Phases 105-108 must not call loginctl enable-linger or disable-linger.
+
+A future activation phase must:
+
+1. capture the exact pre-existing linger state;
+2. change linger only if explicitly authorized and necessary;
+3. record the resulting state;
+4. roll back only a PRW-created change;
+5. never disable linger that was already enabled before PRW activation.
+
+PHASE 106 AUTHORIZED BOUNDARY
+
+Phase 106 may:
+
+- create packaging/systemd/prw-agent.service;
+- update packaging/systemd/README.md to reflect the locked source boundary;
+- perform exact textual/static contract validation;
+- use systemd-analyze in isolated CI/static verification;
+- create one authoritative Phase 106 audit report;
+- use temporary self-deleting validation workflows.
+
+Phase 106 may not install, enable, start, reload, or mutate linger.
+
+PHASE 107 AUTHORIZED BOUNDARY
+
+Phase 107 may:
+
+- document the package install/upgrade/remove transaction;
+- validate the target filesystem layout inside a disposable temporary root;
+- use a dummy executable in the disposable root;
+- prove modes, exact paths, replacement/rollback ordering, and removal semantics in isolation;
+- prove that no enablement symlink, systemctl action, loginctl action, or host activation is needed for the packaging transaction itself;
+- create one authoritative Phase 107 audit report.
+
+Phase 107 may not perform a real host install or service-manager mutation.
+
+PHASE 108 AUTHORIZED BOUNDARY
+
+Phase 108 is completion-review/audit only.
+
+It must prove the Phase 105-107 net mutation surface, permanent repository cleanliness, and preservation of the activation/linger gate.
+
+PHASE 108 must not activate anything.
+
+SOURCE BASELINE PRESERVATION
+
+The following remain locked and unchanged by this decision:
+
+- exact Rust/Cargo 1.97.1 pin;
+- workspace unsafe_code = "forbid";
+- Cargo.lock blob 18db6137fc0f4f5bda22ad92425cff5edfb33c73;
+- narrow public linux_bootstrap facade;
+- linux_identity remains crate-private;
+- private DNS remains optional/default-disabled;
+- Wake-on-LAN remains out of scope;
+- no public listener;
+- no service activation.
+
+DECISION
+
+PASS.
+
+The systemd user-service packaging contract is approved and locked for Phases 106-108.
+
+Real-host installation/activation, service enable/start, daemon-reload on the user's host, and linger mutation remain a later explicit gate.
