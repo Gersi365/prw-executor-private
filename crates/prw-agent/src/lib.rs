@@ -5,6 +5,7 @@
 //! still performs no socket I/O and creates no filesystem objects.
 
 pub mod frame_codec;
+pub mod frame_object;
 pub mod local_commands;
 
 use std::fmt;
