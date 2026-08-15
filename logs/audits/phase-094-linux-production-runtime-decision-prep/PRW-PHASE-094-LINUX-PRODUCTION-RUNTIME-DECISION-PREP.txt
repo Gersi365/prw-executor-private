@@ -1,0 +1,481 @@
+Private Remote Workspace
+Phase 094 Linux Production Runtime Architecture Decision Preparation
+
+STATUS: DECISION_PACKAGE_PREPARED / NOT_APPROVED / NO_RUNTIME_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: ARCHITECTURE DECISION PREPARATION / SIGNAL-SOURCE RESEARCH / FAILURE-DISPOSITION / BOUNDED-EVIDENCE DESIGN
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 092 authoritative PASS report commit: 0c4538287558ba1155c6867cbdc2dbaed1cf23f6
+Phase 093 readiness audit commit: 0cb49db603aca4130ec93bf547e47e31af01335f
+Exact Rust/Cargo toolchain: 1.97.1
+
+PURPOSE
+
+Convert the Phase 093 production-runtime readiness gaps into a concrete, reviewable Phase 094 decision candidate without approving or implementing the production long-running runtime boundary.
+
+The package intentionally distinguishes:
+
+- decisions recommended for the first production-local-runtime baseline;
+- alternatives that remain viable;
+- source/dependency changes that would require explicit approval;
+- later `main.rs`/systemd/deployment boundaries that remain separate.
+
+SOURCE BASELINE
+
+The current workspace keeps:
+
+`unsafe_code = "forbid"`
+
+as a workspace Rust lint.
+
+This package recommends preserving that invariant. It does not authorize direct unsafe libc signal FFI or weakening the workspace lint.
+
+PRIMARY SIGNAL RESEARCH
+
+Linux man-pages documents two general synchronous signal-acceptance models relevant here:
+
+- `sigwait`/`sigwaitinfo` style synchronous waiting;
+- `signalfd`, which exposes selected blocked signals through a file descriptor that can be monitored by `poll`/`select`/`epoll`.
+
+Linux also documents that each thread has its own signal mask and that a newly created thread inherits a copy of the creating thread's signal mask.
+
+The normal signalfd model blocks the selected signals so they are consumed synchronously through the signalfd rather than handled by default asynchronous disposition.
+
+RUSTIX LIMITATION
+
+Rustix 1.1.4 does not provide the required libc-internal signal-mask/wait interfaces for this design.
+
+Its own `not_implemented::libc_internals` documentation lists `sigprocmask`, `sigwait`, `sigwaitinfo`, `sigtimedwait`, `pthread_sigmask`, and related libc-internal signal operations as intentionally out of scope. Its `not_implemented::yet` list also includes `signalfd`.
+
+Therefore the existing rustix dependency alone cannot provide a complete safe synchronous signal source.
+
+DIRECT LIBC FFI IS NOT THE RECOMMENDED BASELINE
+
+The `libc` crate exposes these functions as unsafe FFI. Using them directly inside the existing workspace would conflict with the current `unsafe_code = "forbid"` contract unless that security baseline were deliberately changed.
+
+Phase 094 should not relax the unsafe-forbid workspace policy merely to add shutdown signals.
+
+SIGNAL-SOURCE CANDIDATES
+
+Candidate S1 — safe signalfd wrapper dependency + signal-aware readiness
+
+Description:
+
+- add one narrowly configured safe Rust dependency providing signal-mask + signalfd ownership;
+- block the selected termination signals before any runtime/session worker thread is created;
+- create one nonblocking/CLOEXEC signal fd;
+- extend the production readiness set so signal fd is always armed alongside Phase 089 runtime wake;
+- keep listener dynamically armed only while worker capacity is available;
+- process termination-signal readiness before runtime wake and listener readiness;
+- set monotonic scheduler shutdown state in the readiness owner;
+- do not dispatch any later listener readiness after terminal signal observation.
+
+A safe wrapper such as the signal/signalfd surface offered by the `nix` project is a candidate dependency. Exact package version, feature set, dependency graph, MSRV compatibility, and lockfile impact require a separate dependency precheck before implementation.
+
+Status: RECOMMENDED CANDIDATE FOR PHASE 094 APPROVAL, DEPENDENCY NOT YET APPROVED.
+
+Candidate S2 — dedicated synchronous signal-waiting thread
+
+Description:
+
+- block termination signals before creating runtime threads;
+- create a dedicated thread that synchronously waits for them;
+- on signal, call the existing Phase 092 `LocalLinuxRuntimeShutdownHandle`, preserving state-before-eventfd-wake semantics.
+
+Benefit:
+
+- preserves the current Phase 091 wake+listener poll shape.
+
+Cost/risk:
+
+- introduces another long-lived thread whose own shutdown/join behavior must be solved when the runtime exits for a fatal reason unrelated to a signal;
+- avoiding a detached thread requires an additional wake/cancellation mechanism or other lifecycle contract;
+- adds more concurrency solely to adapt signals.
+
+Status: VALID ALTERNATIVE, NOT PREFERRED FOR THE INITIAL BASELINE.
+
+Candidate S3 — traditional asynchronous signal handler writing eventfd
+
+Benefit:
+
+- could preserve the existing eventfd wake architecture.
+
+Cost/risk:
+
+- requires signal-handler safety analysis;
+- likely requires unsafe/libc-facing setup or another signal library;
+- increases the chance that Rust code executes under asynchronous-signal constraints;
+- changes EINTR behavior of blocking interfaces depending on handler configuration.
+
+Status: DEFER / NOT RECOMMENDED FOR INITIAL BASELINE.
+
+RECOMMENDED SIGNAL DECISION
+
+The Phase 094 decision candidate is S1:
+
+- preserve workspace `unsafe_code = "forbid"`;
+- use a reviewed safe signal wrapper dependency rather than direct libc FFI;
+- use synchronous Linux signal delivery through a pollable signal descriptor;
+- integrate it into the single readiness-owner thread instead of creating a second long-lived signal thread.
+
+This is a recommendation only. No dependency is approved or added by this package.
+
+PROPOSED SIGNAL SET
+
+Initial termination candidate:
+
+- SIGTERM — terminal service shutdown;
+- SIGINT — terminal interactive/development shutdown.
+
+SIGHUP reload behavior should remain deferred until a real reloadable configuration model exists. SIGKILL/SIGSTOP are not catchable and are outside orderly-shutdown semantics.
+
+The exact selected signal set is not yet locked.
+
+PROPOSED SIGNAL-AWARE READINESS PRECEDENCE
+
+The production readiness candidate extends the Phase 088/091 precedence to:
+
+1. termination-signal readiness;
+2. Phase 089 runtime wake readiness;
+3. listener readiness.
+
+If multiple sources are ready in one poll return:
+
+- consume/classify the termination signal first;
+- commit terminal scheduler shutdown state;
+- suppress listener dispatch;
+- process/clear any already-reported runtime wake as required by the final implementation contract;
+- reap available worker completions;
+- enter cancellation/join cleanup.
+
+The array position returned by poll must not define semantic precedence.
+
+PHASE 091 COMPATIBILITY RECOMMENDATION
+
+Do not delete or rewrite the validated two-descriptor Phase 091 API merely because the production runtime needs a signal fd.
+
+Preferred refactor candidate:
+
+- extract/generalize a private readiness-classification core capable of an optional external shutdown-readiness descriptor;
+- preserve `wait_once_for_linux_runtime_readiness(...)` as the validated Phase 091 two-source wrapper for existing tests/finite callers;
+- add a production signal-aware wrapper using the same capacity/wake/listener classification rules plus signal-first precedence.
+
+This avoids duplicating capacity-aware poll policy while preserving Phase 091 compatibility.
+
+This refactor is not approved yet.
+
+SIGNAL-MASK TEST ISOLATION
+
+Signal masks are per-thread state and newly created threads inherit the creator's mask. A production signal source therefore needs the mask established before session worker threads are created.
+
+Ordinary parallel Rust unit tests are a poor place to mutate the test-runner thread's signal mask because that state can leak across tests/threads.
+
+Recommended validation strategy:
+
+- keep pure readiness/signal classification tests in normal unit tests;
+- use a dedicated subprocess/integration-test executable for real signal-mask + signalfd delivery proofs;
+- terminate that subprocess with controlled SIGTERM/SIGINT and validate clean runtime evidence/exit behavior;
+- do not rely on sleep races for signal delivery.
+
+No subprocess test harness is implemented by this package.
+
+PRODUCTION RUNTIME OWNER — RECOMMENDED SHAPE
+
+The first long-running local runtime should be one explicit owner/function below `main.rs`, with all session workers inside one `std::thread::scope`.
+
+Recommended logical ownership order:
+
+1. validated production runtime configuration;
+2. XDG runtime root validation;
+3. PRW runtime-directory preparation;
+4. Agent instance-lock acquisition;
+5. signal mask/source preparation if approved;
+6. scheduler control + Phase 089 runtime wake;
+7. worker capacity + policy/status/private-DNS state;
+8. bound -> listening -> accept-ready Agent socket;
+9. one controlled thread scope;
+10. one worker registry;
+11. one long-running orchestration loop;
+12. cancel/join cleanup;
+13. listener/socket cleanup;
+14. signal-mask/source restoration/cleanup where required for callable tests;
+15. release remaining lifecycle descriptors.
+
+Exact order still requires Phase 094 approval; in particular, signal mask/source and socket-bind ordering should be selected to minimize rollback while guaranteeing masks are installed before any worker thread creation.
+
+PRODUCTION CONFIGURATION — RECOMMENDED BASELINE
+
+Do not hard-code unexplained production numeric values inside the loop.
+
+Recommended first source layer:
+
+`LocalLinuxProductionRuntimeConfig`
+
+with validated non-zero fields for at least:
+
+- worker capacity;
+- listener backlog;
+- per-readiness scheduling attempt budget;
+- per-worker request budget;
+- worker read I/O budget;
+- worker write I/O budget.
+
+Recommendation:
+
+- the runtime function consumes/borrows an already-validated immutable config;
+- environment/config-file parsing is not mixed into the runtime loop;
+- exact default numeric values and user-configurable sources can be locked in a later bootstrap/config decision;
+- no remote dynamic runtime reconfiguration in the first local-runtime baseline.
+
+This keeps production orchestration deterministic and independently testable.
+
+STATUS / PRIVATE-DNS SNAPSHOT BASELINE
+
+Recommended initial runtime contract:
+
+- status/private-DNS state is supplied by an explicit bounded owner rather than reconstructed implicitly inside the loop;
+- private DNS remains optional and disabled/default operation must remain valid;
+- dynamic reload is deferred until a dedicated state-update contract exists.
+
+The exact snapshot-update API is not locked.
+
+OUTER LOOP SUCCESS-OUTCOME DISPOSITION — RECOMMENDED
+
+For an approved first long-running baseline, the candidate outcome table is:
+
+`ShutdownObserved`
+- terminal: enter shutdown transaction.
+
+`RuntimeWake`
+- continue after the already-required wake/state/completion re-observation.
+
+`WaitInterrupted`
+- re-observe terminal state and return to readiness wait; do not create a hidden internal retry loop in the syscall wrapper.
+
+`Scheduling(AttemptBudgetExhausted)`
+- return to readiness wait; immediate listener readability under actual queued work is workload-driven, not an internal scheduler retry.
+
+`Scheduling(AtCapacity)`
+- return to capacity-aware readiness; listener is suppressed until completion/shutdown/signal readiness.
+
+`Scheduling(NoConnectionReady)`
+- return to blocking readiness; do not busy retry accept.
+
+This table is recommended, not approved.
+
+ERROR DISPOSITION — RECOMMENDED FAIL-CLOSED BASELINE
+
+For the first production runtime, avoid complex retry/backoff policy until evidence requires it.
+
+Recommended disposition:
+
+Connection-local peer authorization rejection:
+- consume/reject that connection;
+- record bounded rejection evidence;
+- continue to readiness.
+
+All other Phase 091/092 runtime failures initially:
+- stop new scheduling;
+- classify as terminal runtime failure;
+- cancel/join workers;
+- cleanup listener/socket path;
+- return non-success runtime evidence to the bootstrap layer.
+
+Examples initially recommended as terminal rather than automatically retried:
+
+- listener accept syscall failure;
+- cancellation-descriptor clone failure;
+- scoped worker spawn failure;
+- poll descriptor/invariant failure;
+- runtime-wake drain failure.
+
+Rationale:
+
+- avoids a production busy failure loop under EMFILE/thread-resource/kernel-descriptor failure;
+- keeps initial runtime behavior deterministic;
+- lets a later service-manager restart policy handle process-level recovery rather than hiding unbounded retry inside the daemon.
+
+This disposition table is not yet approved.
+
+PEER-REJECTION TAXONOMY REQUIREMENT
+
+The current nested error path permits identifying peer-authorization rejection separately from other accept failures. A production outer runtime should perform an explicit match and must not accidentally terminate via blanket `?` propagation for this connection-local rejection.
+
+The rejection should not be represented as a successful authenticated session.
+
+WORKER-SPAWN FAILURE
+
+The initial recommendation is fail-stop rather than immediate retry.
+
+If future operational evidence shows that transient spawn/resource recovery is required, backoff/circuit-breaker behavior should be a later explicitly bounded policy rather than an unbounded sleep/retry loop added during initial bootstrap work.
+
+COMPLETION-WAKE NOTIFIER FAULT
+
+Phase 090 deliberately suppresses notifier errors in Drop to prevent double-panic/abort during worker unwind.
+
+Recommended Phase 094 interpretation:
+
+- keep Drop non-panicking;
+- preserve the invariant that `LocalLinuxRuntimeWakeNotifier` retains Arc ownership of the eventfd and therefore cannot normally observe EBADF from another owner closing the fd while notifier exists;
+- treat an unexpected non-EINTR/non-EAGAIN notifier failure as an internal liveness invariant fault requiring future observability design, not as a reason to panic inside Drop.
+
+Optional future hardening could add a non-panicking shared fault latch, but such a latch alone cannot wake a runtime if the wake fd itself has become unusable. Therefore it should not be added without a concrete terminal-observability design.
+
+Recommendation for first baseline: retain current Drop behavior and document the owned-fd liveness invariant; do not expand Phase 090 solely for a theoretically unreachable descriptor-close race.
+
+LONG-RUNNING EVIDENCE MUST REMAIN MEMORY-BOUNDED
+
+Phase 091/092 reports may contain completion Vec values because each invocation is finite.
+
+A production daemon must not append every per-session completion into an unbounded process-lifetime vector.
+
+Recommended aggregate runtime evidence model:
+
+- bounded counters by terminal/worker completion class;
+- bounded counters for peer rejections and scheduling cycles;
+- the current/last fatal error classification;
+- final shutdown-time cancellation outcomes, bounded by max worker capacity;
+- final join completions, bounded by max worker capacity;
+- listener cleanup outcome;
+- terminal runtime reason.
+
+Individual session detail can be emitted to the logging/telemetry sink rather than retained indefinitely in RAM.
+
+Counter overflow behavior must be explicit; a saturating bounded-counter design is a candidate but is not locked here.
+
+SHUTDOWN TRANSACTION — RECOMMENDED
+
+Candidate terminal sequence:
+
+1. terminal state is set/observed;
+2. no later listener dispatch is permitted;
+3. `registry.cancel_all()` and retain bounded cancellation evidence;
+4. `registry.join_all()` and retain bounded completion evidence;
+5. exit the worker thread scope;
+6. consume `AcceptReadyAgentSocket::cleanup()`;
+7. preserve cleanup failure alongside the original terminal reason;
+8. cleanup signal-source/mask state as required by the callable runtime boundary;
+9. release instance lock/runtime-directory/root descriptors;
+10. return one typed bounded runtime terminal report.
+
+A cleanup error must not erase whether shutdown was requested or which runtime failure triggered teardown.
+
+PROCESS EXIT MAPPING — KEEP OUTSIDE CORE RUNTIME
+
+Recommended separation:
+
+- long-running runtime returns typed terminal evidence;
+- a later `main.rs` bootstrap maps that evidence to process exit code and human/service logs;
+- systemd restart policy interprets process exit behavior only in its later packaging phase.
+
+This keeps the runtime testable without spawning the final executable.
+
+LOGGING BASELINE
+
+Recommendation:
+
+- do not add a logging framework as part of the first long-running-loop implementation unless required by the approved observability contract;
+- make runtime terminal/rejection/resource evidence explicit in types first;
+- a later bootstrap layer may initially emit stable structured-enough stderr/stdout messages suitable for journald capture;
+- a logging dependency can be evaluated separately if richer structured logs become necessary.
+
+This is not a final logging decision.
+
+SYSTEMD REMAINS A LATER BOUNDARY
+
+Phase 094 should authorize at most the callable production-local-runtime implementation below `main.rs` and its test-owned shutdown/signal adapters.
+
+Recommended staging after runtime validation:
+
+1. long-running runtime function validated without `main.rs` activation;
+2. real signal-source adapter validated in isolated subprocess tests;
+3. separate `main.rs` bootstrap/exit mapping decision;
+4. separate systemd packaging decision;
+5. separate user-impacting service installation/enable/start approval.
+
+No systemd mutation is included in this package.
+
+RECOMMENDED PHASED IMPLEMENTATION IF PHASE 094 IS APPROVED
+
+The exact numbering is a proposal, not authorization.
+
+Phase 095 — production runtime config + bounded terminal/evidence/error-disposition types.
+- no listener start;
+- no signal handling;
+- no outer loop.
+
+Phase 096 — production lifecycle owner + rollback assembly in temporary runtime directories.
+- construct/cleanup runtime resources under tests;
+- no `main.rs` wiring;
+- no service activation.
+
+Phase 097 — caller-controlled long-running loop using Phase 092.
+- test controller uses existing programmatic shutdown handle;
+- preserve one `std::thread::scope`;
+- validate bounded evidence and terminal cleanup;
+- no OS signal handling yet.
+
+Phase 098 — safe Linux signal-source dependency precheck + signal-aware readiness adapter.
+- preserve `unsafe_code = forbid`;
+- dependency graph/MSRV/license/features audited first;
+- real signal delivery tested in subprocess;
+- no `main.rs`/systemd activation.
+
+Phase 099 — production-local-runtime completion review below bootstrap.
+
+Only after those pass should a new explicit gate consider `main.rs` and systemd.
+
+PHASE 094 APPROVAL CHECKLIST
+
+An explicit approval should confirm or modify:
+
+1. preserve workspace `unsafe_code = forbid`;
+2. use synchronous pollable signal handling rather than traditional async handler;
+3. prefer safe signalfd wrapper dependency over a dedicated signal thread;
+4. add signal readiness ahead of runtime wake/listener precedence;
+5. initial terminal signals SIGTERM + SIGINT only;
+6. preserve Phase 091 compatibility through a shared/generalized readiness core rather than deleting the validated API;
+7. immutable validated production runtime config object;
+8. no dynamic remote config in first local runtime;
+9. success-outcome continuation table above;
+10. peer authorization rejection is connection-local and continues;
+11. all other initial readiness/scheduling errors fail-stop rather than hidden retry;
+12. bounded process-lifetime evidence, not unbounded Vec accumulation;
+13. cancel_all -> join_all -> scope exit -> listener cleanup terminal ordering;
+14. original terminal reason preserved alongside cleanup failure;
+15. runtime returns typed evidence; `main.rs` exit mapping remains separate;
+16. logging framework remains separate unless separately justified;
+17. callable long-running runtime implemented/tested before OS signal integration;
+18. signal integration validated in subprocess;
+19. systemd packaging/activation remains later and separately approved.
+
+NO-MUTATION / NO-ACTIVATION STATEMENT
+
+Phase 094 decision preparation changes only this audit evidence.
+
+It does NOT:
+
+- approve the decision package;
+- modify Rust source;
+- modify Cargo.toml/Cargo.lock;
+- add a signal dependency;
+- alter workspace unsafe policy;
+- implement signalfd/signal masks;
+- add a long-running loop;
+- modify `main.rs`;
+- modify/activate systemd;
+- activate listeners/services;
+- change auth/enrollment/DNS/TUN/relay/database/private-key/deployment state.
+
+NEXT GATE
+
+The repository is now prepared for an explicit Phase 094 production-runtime architecture approval/rejection/modification.
+
+No Phase 095+ source implementation should begin until that approval is explicit.
+
+FINAL CLASSIFICATION
+
+PHASE_094_DECISION_PACKAGE_PREPARED_NOT_APPROVED / SAFE_SIGNAL_WRAPPER_RECOMMENDED / PRESERVE_UNSAFE_FORBID / SIGNAL_FIRST_READINESS_CANDIDATE / FAIL_STOP_NON_PEER_RUNTIME_ERRORS / CONNECTION_LOCAL_PEER_REJECTION_CONTINUES / BOUNDED_LONG_RUN_EVIDENCE / CALLABLE_RUNTIME_BEFORE_MAIN / SYSTEMD_DEFERRED / NO_RUNTIME_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION
+
+This is the single authoritative user-facing Phase 094 decision-preparation report.
