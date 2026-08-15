@@ -1,0 +1,81 @@
+Private Remote Workspace
+Phase 036 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 036
+SCOPE: Pure in-memory read-only command responder
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source commit: cc294583d1d08a26eb9d4a8131cde8cbf55ebc28
+Authoritative GitHub Actions run: 31882926818
+
+COMPOSITION
+
+Input:
+- already-decoded LocalAgentRequestEnvelope;
+- caller-supplied LocalAgentStatusSnapshot;
+- caller-supplied bounded LocalPrivateDnsSnapshot.
+
+Mapping:
+- GetAgentStatus -> existing Phase 023 build_success_status_frame();
+- GetPrivateDnsConfig -> existing Phase 028 build_success_private_dns_frame().
+
+The responder performs no live host-state acquisition and no authorization.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/responder.rs
+- contracts/LOCAL_READ_ONLY_RESPONDER_CONTRACT.md
+- docs/architecture/PHASE_036_READ_ONLY_RESPONDER.md
+
+VALIDATION
+
+Run 73
+- Run ID: 31882926818
+- Commit: cc294583d1d08a26eb9d4a8131cde8cbf55ebc28
+- Result: SUCCESS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: status request preserves request ID and exact supplied status snapshot
+PASS: private-DNS request preserves request ID and exact supplied bounded DNS snapshot
+PASS: existing command-specific builders remain serialization authority
+PASS: no alternate command mapping or response codec was introduced
+
+ADMISSION BOUNDARY
+
+Phase 036 intentionally does not authenticate, authorize, or policy-check a request. A future admission layer must precede any runtime use of this successful responder.
+
+RUNTIME MUTATION STATEMENT
+
+Phase 036 performs no socket I/O, host reads, DNS/network mutation, tracker mutation, retry, task/thread creation, systemd activation, database work, deployment, or private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Define a typed command-admission boundary before any request-read -> response-write composition so the successful responder cannot become the implicit authorization policy.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 036 implementation-validation report.
+GitHub Actions run 31882926818 is the authoritative executable validation evidence.
