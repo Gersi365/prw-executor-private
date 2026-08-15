@@ -1,0 +1,93 @@
+Private Remote Workspace
+Phase 041 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 041
+SCOPE: Guarded generic terminal-response writer with response-side write poisoning
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial source/export commit: 15a2786138515d2c6627860f1c803a5a2fcb0563
+Rustfmt corrective: c046ddacf5b1145851146536e94fe7ea15d37b7e
+Authoritative GitHub Actions run: 31883760310
+
+LOCKED WRITE ORDERING
+
+1. reject an already-WritePoisoned response-write state before validation or I/O;
+2. validate the existing terminal Response/Error invariant;
+3. only after successful validation, delegate to the existing generic frame writer;
+4. on any generic frame-write failure, transition the response-write state to WritePoisoned before returning;
+5. never flush implicitly.
+
+STATE MODEL
+
+- Healthy
+- WritePoisoned
+- only transition: Healthy -> WritePoisoned
+- WritePoisoned is absorbing for the response-write state object
+
+This state is intentionally distinct from the Request-side Phase 034 send state.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/response_writer.rs
+- contracts/LOCAL_TERMINAL_RESPONSE_WRITE_CONTRACT.md
+- docs/architecture/PHASE_041_TERMINAL_RESPONSE_WRITE.md
+
+VALIDATION HISTORY
+
+Run 82
+- Run ID: 31883723183
+- Commit: 15a2786138515d2c6627860f1c803a5a2fcb0563
+- Result: FAILURE
+- Cause: rustfmt-only reflows/import ordering in response_writer.rs.
+- Clippy, tests, and build were skipped.
+
+Run 83
+- Run ID: 31883760310
+- Commit: c046ddacf5b1145851146536e94fe7ea15d37b7e
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: valid terminal response writes successfully and remains Healthy
+PASS: invalid Request-kind frame is rejected before writer I/O without poisoning
+PASS: header-write failure poisons response state
+PASS: payload-write failure after 24 bytes poisons response state
+PASS: later write on poisoned state is rejected before I/O
+PASS: no implicit flush is introduced
+
+RUNTIME MUTATION STATEMENT
+
+Phase 041 uses generic Write only. It owns/creates no socket, performs no authentication, policy evaluation, host-state acquisition, tracker/DNS/network mutation, task/thread creation, database work, systemd activation, deployment, or private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Compose Phase 040 one-request processing with the Phase 041 guarded writer. An already-poisoned response-write state must reject before consuming another request.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 041 implementation-validation report.
+GitHub Actions run 31883760310 is the authoritative executable validation evidence.
