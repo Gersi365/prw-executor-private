@@ -1,0 +1,117 @@
+Private Remote Workspace
+Phase 096 Linux Production Lifecycle Assembly
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+AUDIT TYPE: CALLABLE PRODUCTION-LOCAL LIFECYCLE RESOURCE ASSEMBLY / ROLLBACK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Phase 095 authoritative PASS commit: fc09a5c91e2385fe9ecf20dc4632f870ca2da087
+Integrated source commit: 39eeb946095ee400c0f2c5238a82e89dd6fc113b
+Authoritative validated source/trigger head: e431d171c6a16eff90728bb008430267c493d59f
+Final architecture-status commit: baab2897017d170426e5eed0d9578f27dc6edb29
+Authoritative permanent CI run: 31901711927
+Exact Rust/Cargo toolchain: 1.97.1
+
+IMPLEMENTED SOURCE
+
+- crates/prw-agent/src/linux_production_lifecycle.rs
+- crates/prw-agent/src/linux_identity.rs — module export/documentation only
+- docs/architecture/PHASE_096_LINUX_PRODUCTION_LIFECYCLE_ASSEMBLY.md
+
+OWNERSHIP DESIGN
+
+Phase 096 deliberately avoids a self-referential owner struct.
+
+The existing accept-ready listener ultimately borrows the validated PRW runtime directory and Agent instance lock. Phase 096 therefore uses a callable scoped assembly function that owns the root/directory/lock/listener stack locally and lends the live listener/wake/capacity/control references only for the callback lifetime.
+
+This preserves workspace `unsafe_code = "forbid"` and keeps owner/borrow ordering explicit.
+
+ASSEMBLY ORDER
+
+1. validate `$XDG_RUNTIME_DIR` with existing Phase 062 descriptor policy;
+2. prepare/validate the fixed PRW runtime child;
+3. acquire the nonblocking exclusive Agent instance lock;
+4. bind the exact validated Agent Unix socket;
+5. enter listening state using the explicit Phase 095 backlog;
+6. enter verified nonblocking accept-ready state;
+7. create the Phase 089 runtime wake eventfd;
+8. create configured Phase 075 worker-capacity accounting;
+9. create monotonic Phase 086 scheduler control;
+10. invoke the bounded callback while all lifecycle resources are live;
+11. explicitly clean the listener/socket path before descriptor owners unwind.
+
+ROLLBACK SEMANTICS
+
+- failures before bind unwind owned descriptors without a live listener;
+- listen transition failure recovers the bound socket through `into_parts()` and performs exact-identity cleanup;
+- accept-ready transition failure recovers the listening socket through `into_parts()` and performs exact-identity cleanup;
+- runtime-wake creation failure after listener setup performs explicit listener/socket cleanup before return;
+- stage error and cleanup evidence are preserved separately;
+- cleanup failure never replaces the original assembly-stage failure.
+
+UNWIND SEMANTICS
+
+A private listener cleanup guard owns the accept-ready listener while the callback runs.
+
+- normal callback return performs explicit cleanup and returns the cleanup classification;
+- callback panic unwinds through the guard, which performs best-effort listener/socket cleanup before instance-lock/runtime-directory ownership unwinds;
+- the guard does not swallow or transform the panic.
+
+VALIDATED PROOFS
+
+Focused tests prove:
+
+- listener is connectable while callback resources are live;
+- runtime wake starts empty;
+- worker capacity starts at zero with the configured maximum;
+- scheduler control begins without shutdown requested;
+- normal callback return removes the exact Agent socket pathname;
+- the lifecycle can be assembled again after clean return, proving socket-path and instance-lock release;
+- intentional callback panic removes the socket path and permits later successful lifecycle reassembly;
+- a pre-held conforming instance lock returns `AlreadyRunning` before socket bind and leaves no Agent socket path.
+
+CORRECTIVE HISTORY
+
+Initial integration run `31901635492` stopped safely at Clippy before source integration. The only reported defect was one private listener-guard getter eligible for `const fn`.
+
+Phase 096-A01 run `31901676173` changed only that private getter to `const fn`, then passed:
+
+- locked Cargo metadata;
+- rustfmt check;
+- Clippy `-D warnings`;
+- all workspace/all-target tests;
+- all workspace/all-target builds;
+- `git diff --check`.
+
+Only after full PASS did A01 commit the integrated source and delete both temporary Phase 096 workflows.
+
+AUTHORITATIVE VALIDATION
+
+Permanent PRW Rust Validation run `31901711927` independently passed the same locked metadata/fmt/Clippy/test/build chain on commit `e431d171c6a16eff90728bb008430267c493d59f`.
+
+BOUNDARY PRESERVED
+
+Phase 096 did not:
+
+- implement a long-running production readiness loop;
+- iterate runtime error-disposition policy;
+- add OS signal handling or a signal dependency;
+- edit/activate `crates/prw-agent/src/main.rs`;
+- define process exit mapping;
+- install, enable, or start systemd;
+- deploy anything;
+- expose remote/public networking;
+- change auth/enrollment, DNS/TUN/relay/database/private-key behavior;
+- introduce Wake-on-LAN.
+
+NEXT AUTHORIZED STEP
+
+Phase 097 may implement the Phase 094-A01-authorized caller-controlled long-running loop using Phase 092 finite orchestration and the existing programmatic shutdown handle. OS signal handling, `main.rs`, systemd, and deployment remain excluded.
+
+FINAL CLASSIFICATION
+
+CALLABLE_LIFECYCLE_ASSEMBLY_IMPLEMENTED / DESCRIPTOR_ANCHORED_INIT / EXCLUSIVE_INSTANCE_LOCK / EXPLICIT_SOCKET_ROLLBACK / UNWIND_CLEANUP_GUARD / REASSEMBLY_PROVEN / NO_OUTER_RUNTIME_LOOP / NO_BOOTSTRAP_ACTIVATION / PASS
+
+This file is the single authoritative user-facing Phase 096 audit report.
