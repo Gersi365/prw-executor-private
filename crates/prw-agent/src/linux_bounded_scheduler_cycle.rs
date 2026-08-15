@@ -355,7 +355,10 @@ mod tests {
             )
             .expect("shutdown-gated cycle succeeds");
 
-            assert_eq!(report.stop(), LocalLinuxSchedulingCycleStop::ShutdownRequested);
+            assert_eq!(
+                report.stop(),
+                LocalLinuxSchedulingCycleStop::ShutdownRequested
+            );
             assert_eq!(report.scheduling_attempts(), 0);
             assert_eq!(report.workers_registered(), 0);
             assert!(registry.is_empty());
@@ -411,7 +414,10 @@ mod tests {
             )
             .expect("empty-queue cycle succeeds");
 
-            assert_eq!(report.stop(), LocalLinuxSchedulingCycleStop::NoConnectionReady);
+            assert_eq!(
+                report.stop(),
+                LocalLinuxSchedulingCycleStop::NoConnectionReady
+            );
             assert_eq!(report.scheduling_attempts(), 1);
             assert_eq!(report.workers_registered(), 0);
             assert!(registry.is_empty());
@@ -516,7 +522,10 @@ mod tests {
             )
             .expect("bounded scheduling cycle succeeds");
 
-            assert_eq!(report.stop(), LocalLinuxSchedulingCycleStop::AttemptBudgetExhausted);
+            assert_eq!(
+                report.stop(),
+                LocalLinuxSchedulingCycleStop::AttemptBudgetExhausted
+            );
             assert_eq!(report.scheduling_attempts(), 2);
             assert_eq!(report.workers_registered(), 2);
             assert_eq!(registry.len(), 2);
@@ -539,11 +548,19 @@ mod tests {
         let listener = accept_ready(&runtime_directory, &instance_lock);
         let socket_path = socket_path(&root_path);
         let mut first_client = UnixStream::connect(&socket_path).expect("first client queues");
-        write_local_command_request(&mut first_client, id(702), LocalAgentCommand::GetAgentStatus)
-            .expect("first Request writes");
+        write_local_command_request(
+            &mut first_client,
+            id(702),
+            LocalAgentCommand::GetAgentStatus,
+        )
+        .expect("first Request writes");
         let mut second_client = UnixStream::connect(&socket_path).expect("second client queues");
-        write_local_command_request(&mut second_client, id(703), LocalAgentCommand::GetAgentStatus)
-            .expect("second Request writes");
+        write_local_command_request(
+            &mut second_client,
+            id(703),
+            LocalAgentCommand::GetAgentStatus,
+        )
+        .expect("second Request writes");
         let capacity =
             LocalLinuxWorkerCapacity::new(NonZeroUsize::new(1).expect("capacity non-zero"));
         let policy = BoundedLocalReadPolicy::allow_local_reads();
