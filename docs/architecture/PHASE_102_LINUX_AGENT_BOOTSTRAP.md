@@ -1,6 +1,6 @@
 # Phase 102 — Linux Agent Standalone Binary Bootstrap
 
-Status: `BOOTSTRAP_SURFACE_INTEGRATED / AWAITING_PERMANENT_CI_AND_BINARY_SUBPROCESS_PROOFS`
+Status: `BINARY_SUBPROCESS_PROOFS_INTEGRATED / AWAITING_AUTHORITATIVE_CI`
 
 ## Locked predecessor
 
@@ -84,33 +84,63 @@ A01 run `31904357017` corrected those compile-only findings, then stopped at two
 
 A02 run `31904396246` corrected those findings and stopped only because Clippy identified one mapper as eligible for `const fn`.
 
-A03 run `31904436866` applied the accumulated mechanical corrections and passed:
+A03 run `31904436866` applied the accumulated mechanical corrections and passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check`.
 
+Only after that full PASS did the workflow commit `937927fd2f6e6c9a71937769e061ee10734a1de8` and remove all four temporary surface-integration workflows.
+
+Permanent surface checkpoint `31904558606` independently passed the permanent PRW Rust Validation workflow.
+
+## Standalone binary subprocess proof
+
+Integrated proof commit:
+
+`a2dc8574b4df8e7df8e54312a0d5e6be50475594`
+
+Proof source:
+
+`crates/prw-agent/tests/phase_102_binary_bootstrap.rs`
+
+The proof runs the actual Cargo-built `prw-agent` executable in controlled child processes. It does not call the bootstrap facade directly as a substitute for the binary boundary.
+
+One sequential integration test proves six isolated scenarios with unique temporary XDG runtime roots:
+
+1. **SIGTERM** — the real Agent socket becomes connectable, SIGTERM is delivered to the child PID, the binary exits successfully, stderr reports `terminal=sigterm`, cleanup is clean, signal-mask restoration is restored, and the socket pathname is absent after exit.
+2. **SIGINT** — the same binary-level proof is repeated for SIGINT.
+3. **Real same-UID local request** — the test sends a real `GetAgentStatus` frame through the public request writer, reads the real status response through the public response decoder, proves request correlation and `Ready` runtime state, then terminates cleanly.
+4. **Second-instance exclusion** — a first Agent remains live; a second Agent against the same XDG runtime root exits failure with `kind=already_running`; the first Agent still answers a real status request and then shuts down cleanly.
+5. **Missing runtime root** — an Agent child with `XDG_RUNTIME_DIR` removed fails startup with `kind=runtime_root`, failure exit, and restored signal mask.
+6. **Wrong-mode runtime root** — a temporary root changed to mode `0755` fails before usable listener activation, reports `kind=runtime_root`, and leaves no Agent socket pathname.
+
+The test also enforces the Phase 101 bounded stderr contract: each child outcome emits exactly one stderr record and the validated terminal record excludes request payload output.
+
+### Proof-workflow corrective history
+
+Initial proof workflow run `31904663853` encountered runner toolchain-provisioning failures before Cargo/Clippy/test diagnostics when `cargo fmt` was the first Rust invocation. Two reruns reproduced the same infrastructure-only failure. The permanent workflow on the same source successfully provisioned exact Rust/Cargo 1.97.1 by recording tool versions first, proving the source/toolchain pin was not defective.
+
+A01 run `31904782482` adopted the proven toolchain-record order and reached proof generation. It then exposed a workflow mutation-guard defect: a newly generated integration test is untracked, while `git diff --name-only` lists tracked changes only. No Rust/test failure occurred on that run.
+
+A02 run `31904847101` corrected the guard to require zero tracked mutations and exactly one expected untracked test file. It reached real Clippy and stopped only because `AgentChild::child_mut` was eligible for `const fn`.
+
+A03 run `31904884041` applied only that mechanical Clippy correction and passed the complete chain:
+
+- exact pinned toolchain record;
 - locked metadata;
 - rustfmt;
-- Clippy with `-D warnings`;
+- workspace/all-target Clippy with `-D warnings`;
+- focused standalone binary subprocess proof with `--test-threads=1`;
 - all workspace/all-target tests;
 - all workspace/all-target builds;
 - `git diff --check`.
 
-Only after that full PASS did the workflow commit `937927fd2f6e6c9a71937769e061ee10734a1de8` and remove all four temporary surface-integration workflows.
+Only after that complete PASS did the workflow commit `a2dc8574b4df8e7df8e54312a0d5e6be50475594` and delete all four temporary binary-proof workflows.
 
-## Required remaining Phase 102 evidence
+The repository workflow directory now contains only the permanent `.github/workflows/phase-001-rust-validation.yml` workflow.
 
-The surface is not yet classified `IMPLEMENTED_AND_VALIDATED`.
+## Authoritative validation state
 
-Before Phase 102 closes, controlled standalone-binary tests must still prove:
+The bootstrap surface and binary subprocess proof are integrated. Phase 102 still requires one permanent PRW Rust Validation PASS on a commit containing `a2dc8574b4df8e7df8e54312a0d5e6be50475594` before classification as `IMPLEMENTED_AND_VALIDATED`.
 
-1. valid temporary XDG runtime-root startup;
-2. real SIGTERM -> success exit -> no stale socket;
-3. real SIGINT -> success exit -> no stale socket;
-4. one same-UID bounded local read request with correlated successful response;
-5. deterministic second-instance rejection while the first instance remains functional;
-6. invalid/missing runtime-root failure before usable listener activation;
-7. bounded stderr contract;
-8. no systemd/install dependency in any proof.
-
-A permanent PRW Rust Validation run on the integrated surface is also required before those binary-behavior proofs are treated as the next authoritative checkpoint.
+That permanent run must therefore execute the committed `phase_102_binary_bootstrap` integration test as part of normal `cargo test --locked --workspace --all-targets` coverage.
 
 ## Boundary preserved
 
