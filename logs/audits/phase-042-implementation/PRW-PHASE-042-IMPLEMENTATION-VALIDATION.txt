@@ -1,0 +1,109 @@
+Private Remote Workspace
+Phase 042 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 042
+SCOPE: One-request generic Read -> policy -> guarded terminal-response Write transaction
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial source/export commit: 1dbd2941aeed7d2e97d3a7650d31895f1751bdd2
+Rustfmt corrective: 6340d10df2d6000d7d17179609a2ba31ab7aa37c
+Authoritative GitHub Actions run: 31883913293
+
+LOCKED ORDERING
+
+1. reject an already-WritePoisoned response-write state before consuming input;
+2. read and fully decode exactly one current Request;
+3. evaluate the caller-supplied policy context only after successful Request decoding;
+4. build one correlated terminal response frame in memory;
+5. validate/write it through the Phase 041 guarded writer.
+
+PRE-POISONED POSTCONDITION
+
+When response-write state is already poisoned:
+- zero input reads;
+- zero policy calls;
+- zero output writes.
+
+INVALID REQUEST POSTCONDITION
+
+Malformed/unknown Request input:
+- stops before policy response construction;
+- performs zero policy calls for decode failures;
+- performs zero response writes;
+- leaves the response-write state Healthy.
+
+VALID REQUEST POSTCONDITION
+
+- Allow -> existing command-specific successful response is written;
+- Deny -> correlated Unauthorized terminal Error is written;
+- successful response write leaves response-write state Healthy;
+- response write failure poisons state before return.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/request_response_transaction.rs
+- contracts/LOCAL_REQUEST_RESPONSE_TRANSACTION_CONTRACT.md
+- docs/architecture/PHASE_042_REQUEST_RESPONSE_TRANSACTION.md
+
+VALIDATION HISTORY
+
+Run 84
+- Run ID: 31883868845
+- Commit: 1dbd2941aeed7d2e97d3a7650d31895f1751bdd2
+- Result: FAILURE
+- Cause: rustfmt-only reflows/import ordering in request_response_transaction.rs.
+- Clippy, tests, and build were skipped.
+
+Run 85
+- Run ID: 31883913293
+- Commit: 6340d10df2d6000d7d17179609a2ba31ab7aa37c
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: already-poisoned response state rejects before Read/policy/Write
+PASS: allowed valid Request writes correlated success
+PASS: denied valid Request writes correlated Unauthorized
+PASS: invalid command stops before policy and response write
+PASS: response payload-write failure poisons response state after valid processing
+
+AUTHENTICATION BOUNDARY
+
+The policy context remains assumed future-authenticated-context-bound. Phase 042 performs no authentication or peer-credential acquisition.
+
+RUNTIME MUTATION STATEMENT
+
+Phase 042 uses only caller-supplied generic Read/Write objects. It creates/owns no socket or file descriptor, performs no bind/listen/accept/connect/close, mutates no DNS/network/tracker state, starts no task/thread, accesses no database, activates no systemd unit, deploys nothing, and performs no private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Add a pure inbound-processing state that becomes unusable after Request read/decode failure so later transaction calls cannot continue on a potentially truncated or semantically invalid stream instance.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 042 implementation-validation report.
+GitHub Actions run 31883913293 is the authoritative executable validation evidence.
