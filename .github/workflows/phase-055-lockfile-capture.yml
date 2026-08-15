@@ -1,0 +1,33 @@
+name: PRW Phase 055 Lockfile Capture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase-055-lockfile-capture.yml"
+      - "Cargo.toml"
+      - "crates/**/Cargo.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Generate exact Cargo.lock
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Record toolchain
+        run: |
+          rustc --version
+          cargo --version
+      - name: Generate lockfile
+        run: cargo generate-lockfile
+      - name: Record lockfile checksum
+        run: sha256sum Cargo.lock
+      - name: Emit lockfile for controlled repository materialization
+        run: |
+          printf 'PHASE055_LOCK_BASE64='
+          base64 -w0 Cargo.lock
+          printf '\n'
