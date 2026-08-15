@@ -1,0 +1,79 @@
+Private Remote Workspace
+Phase 067 Linux Bound Agent Socket
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement a descriptor-anchored filesystem-backed Unix stream socket that is bound and post-bind validated while the Phase 065 lifecycle authority is held, but does not enter listen/accept state and is not invoked by the Agent bootstrap.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_bound_socket.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_AGENT_BOUND_SOCKET_CONTRACT.md
+- architecture: docs/architecture/PHASE_067_LINUX_BOUND_AGENT_SOCKET.md
+
+PRODUCTION ALGORITHM
+
+- requires &ValidatedPrwRuntimeDirectory and &AgentInstanceLock;
+- internally executes Phase 066 stale-path preparation first;
+- creates AF_UNIX SOCK_STREAM socket with CLOEXEC;
+- constructs the Linux bind path as /proc/self/fd/<validated-prw-dir-fd>/agent.sock;
+- binds without current-working-directory mutation or ambient-XDG-path fallback;
+- performs descriptor-relative no-follow post-bind metadata lookup;
+- requires Unix-socket type and effective-UID ownership before mode normalization;
+- captures device/inode identity;
+- normalizes agent.sock to exact 0600 relative to the validated PRW directory;
+- performs a second no-follow lookup and requires unchanged device/inode/type/owner plus exact 0600;
+- returns BoundAgentSocket borrowing the validated runtime directory and live AgentInstanceLock;
+- does not call listen, accept, or connect.
+
+CLEANUP
+
+BoundAgentSocket::cleanup closes the bound socket descriptor first and then unlinks agent.sock only when a fresh no-follow lookup exactly matches the recorded validated socket identity. A replacement object is not removed. Dropping without explicit cleanup may leave a stale pathname node, intentionally recoverable by Phase 066 on the next locked startup.
+
+VALIDATED BEHAVIOR
+
+Temporary runner tests prove:
+- absent path -> bound same-UID 0600 socket; explicit cleanup removes it;
+- trusted stale 0600 socket -> Phase 066 removes it before the new bind;
+- /proc/self/fd bind remains anchored to the validated PRW directory after its ambient pathname is renamed and replaced;
+- wrong-mode stale socket blocks before bind and remains untouched;
+- cleanup refuses to unlink a replacement socket with different filesystem identity.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31892370765
+Validated source head: 18ebbc2455f441f3e1cb327138adda0c3baf8bc4
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- rustfmt-only reflow corrections;
+- two construction error branches rewritten as idiomatic let-else without changing cleanup ordering;
+- Phase 062 path validator visibility widened only to the parent Linux module so sibling test scaffolding can reuse the same validated-root algorithm; no external crate API was opened.
+
+SCOPE PRESERVED
+
+Phase 067:
+- creates/binds a filesystem Unix socket only when this crate-internal adapter is explicitly invoked;
+- never calls listen, accept, or connect in production;
+- is not invoked by the Agent bootstrap;
+- activates no service;
+- changes no principal/policy binding;
+- changes no network/DNS/TUN/database/deployment state.
+
+FINAL CLASSIFICATION
+
+DESCRIPTOR_ANCHORED_BIND_IMPLEMENTED / POST_BIND_SOCKET_UID_MODE_IDENTITY_VALIDATED / IDENTITY_GUARDED_CLEANUP / NOT_LISTENING / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 067 report.
