@@ -75,13 +75,13 @@ impl LocalRequestTracker {
 
     /// Returns the number of outstanding request identifiers.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.outstanding.len()
     }
 
     /// Returns whether no request identifiers are outstanding.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.outstanding.is_empty()
     }
 }
