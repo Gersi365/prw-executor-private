@@ -85,9 +85,11 @@ pub fn process_one_with_inbound_guard<R: Read, W: Write, E: PolicyEvaluator + ?S
         private_dns_snapshot,
     ) {
         Ok(()) => Ok(()),
-        Err(error @ LocalRequestResponseTransactionError::RequestProcessing(
-            LocalRequestProcessorError::Request(_),
-        )) => {
+        Err(
+            error @ LocalRequestResponseTransactionError::RequestProcessing(
+                LocalRequestProcessorError::Request(_),
+            ),
+        ) => {
             inbound_state.poison();
             Err(LocalInboundTransactionError::Transaction(error))
         }
