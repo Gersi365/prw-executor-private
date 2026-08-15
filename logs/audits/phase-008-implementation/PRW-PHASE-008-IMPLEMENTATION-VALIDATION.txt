@@ -1,0 +1,121 @@
+Private Remote Workspace
+Phase 008 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 008
+SCOPE: Bounded read-only local Agent command namespace and response taxonomy
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 008 base commit: b0fa232f088670610ae3dfa3e188abc0c1d46436
+Validated source commit: 6b6576092a71ce0cddf7555259e93e8b12d87f93
+Validated GitHub Actions run: 31877641302
+
+LOCKED COMMAND BOUNDARY
+
+Phase 008 admits exactly two read-only local Agent commands:
+- code 1: GetAgentStatus
+- code 2: GetPrivateDnsConfig
+
+Terminal response-status identifiers:
+- 0 Ok
+- 1 InvalidRequest
+- 2 Unauthorized
+- 3 UnsupportedCommand
+- 4 Conflict
+- 5 InternalError
+
+A request envelope carries a non-zero Phase 007 request ID and one typed command.
+A response envelope carries the correlated request ID and one terminal response status.
+
+The command namespace deliberately contains no generic shell, execute, raw-command, file-mutation, DNS-mutation, service-control, policy-mutation, enrollment-mutation, or privileged-helper command.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/lib.rs
+- Exported the new local_commands module.
+- Existing Phase 006/007 IPC types and framing contract remain unchanged.
+
+2. crates/prw-agent/src/local_commands.rs
+- Added LocalAgentCommand.
+- Added stable command-code mapping.
+- Added LocalAgentResponseStatus.
+- Added stable response-status-code mapping.
+- Added LocalAgentRequestEnvelope.
+- Added LocalAgentResponseEnvelope.
+- Added focused tests for command/status identifiers and request/response correlation.
+- No runtime dispatch or payload serialization was added.
+
+3. contracts/LOCAL_COMMAND_CONTRACT.md
+- Added normative bounded read-only local command contract.
+- Preserved capability-oriented authorization direction.
+- Explicitly documented that same-UID peer authentication is not blanket authorization for future mutating commands.
+- Defined bounded generic InternalError disclosure behavior.
+
+4. docs/architecture/PHASE_008_LOCAL_COMMANDS.md
+- Recorded rationale, command namespace discipline, authorization direction, response discipline, serialization deferral, and validation requirements.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 008 base: 4
+- added: contracts/LOCAL_COMMAND_CONTRACT.md
+- modified: crates/prw-agent/src/lib.rs
+- added: crates/prw-agent/src/local_commands.rs
+- added: docs/architecture/PHASE_008_LOCAL_COMMANDS.md
+
+VALIDATION
+
+GitHub Actions run 31877641302
+Commit: 6b6576092a71ce0cddf7555259e93e8b12d87f93
+Result: SUCCESS on first validation attempt.
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 008 did not:
+- dispatch or execute a command;
+- implement arbitrary shell/command execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- bind/listen/connect a socket;
+- implement frame byte parsing;
+- select or add a serializer dependency;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 008 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- frame byte encoder/decoder;
+- command payload serialization;
+- concrete Agent status response schema;
+- concrete private-DNS response schema;
+- runtime command dispatch;
+- command-specific capabilities for future mutating operations;
+- socket runtime implementation;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 008 implementation-validation report.
+GitHub Actions run 31877641302 is the authoritative executable validation evidence for source commit 6b6576092a71ce0cddf7555259e93e8b12d87f93.
