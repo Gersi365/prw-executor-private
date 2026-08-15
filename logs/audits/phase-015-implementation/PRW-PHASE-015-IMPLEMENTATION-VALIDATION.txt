@@ -1,0 +1,147 @@
+Private Remote Workspace
+Phase 015 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 015
+SCOPE: Pure local read-only command request payload codec
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 015 base commit: 7141f94bc4f89938a4327d36ca36117631df2a26
+Validated source commit: b5d35bfc60829f319b34a444d79a7fad7014efdb
+Validated GitHub Actions run: 31878768972
+
+LOCKED REQUEST PAYLOAD
+
+The two current read-only local Agent commands use an exact two-byte request payload:
+- unsigned 16-bit command identifier;
+- big-endian/network byte order;
+- no request argument bytes.
+
+Mappings:
+- GetAgentStatus (code 1) -> 00 01
+- GetPrivateDnsConfig (code 2) -> 00 02
+
+Decode rules:
+- payload length must be exactly two bytes;
+- command code must map to the active typed command namespace;
+- short/trailing payloads are rejected as InvalidLength;
+- unknown identifiers are rejected as UnknownCommand;
+- no raw/generic command fallback is permitted.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported codec module.
+- Added LocalAgentCommand::from_code() as the inverse of the existing stable code() mapping.
+- Existing command, response-status, envelope, and request-tracker semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/codec.rs
+- Added LOCAL_AGENT_REQUEST_PAYLOAD_LENGTH = 2.
+- Added encode_request_command().
+- Added decode_request_command().
+- Added LocalAgentRequestDecodeError::InvalidLength and ::UnknownCommand.
+- Added focused tests for exact length, byte order, round trips, length rejection, and unknown-code rejection.
+
+3. contracts/LOCAL_COMMAND_REQUEST_CODEC_CONTRACT.md
+- Added normative request payload codec contract and explicit authorization/runtime deferrals.
+
+4. docs/architecture/PHASE_015_LOCAL_COMMAND_REQUEST_CODEC.md
+- Recorded rationale, deterministic representation, fail-closed decoding, authorization separation, and dependency boundary.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 015 base: 4
+- added: contracts/LOCAL_COMMAND_REQUEST_CODEC_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/codec.rs
+- added: docs/architecture/PHASE_015_LOCAL_COMMAND_REQUEST_CODEC.md
+
+VALIDATION HISTORY
+
+Run 30
+- Run ID: 31878712721
+- Commit: 72252ba1061af5629aabb530828151b919b3e1ac
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow in one codec test assertion and one LocalAgentCommand::from_code test assertion.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- b5d35bfc60829f319b34a444d79a7fad7014efdb
+- Change: exact rustfmt-only correction in the two Phase 015 source files.
+- Command identifiers, payload bytes, decoding rules, dependencies, and runtime behavior unchanged.
+
+Run 31
+- Run ID: 31878768972
+- Commit: b5d35bfc60829f319b34a444d79a7fad7014efdb
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: request payload length locked to two bytes
+PASS: GetAgentStatus encodes as 00 01
+PASS: GetPrivateDnsConfig encodes as 00 02
+PASS: both commands encode/decode round trip
+PASS: short and trailing payloads rejected
+PASS: unknown command code rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 015 did not:
+- dispatch or execute commands;
+- add command arguments or mutating commands;
+- bind/listen/accept/connect a socket;
+- add a serialization dependency;
+- implement response-body serialization;
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 015.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 015 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- response payload/status codec;
+- Agent status response schema;
+- private-DNS response schema;
+- frame-kind + request-payload combined protocol decoder;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 015 implementation-validation report.
+GitHub Actions run 31878768972 is the authoritative executable validation evidence for source commit b5d35bfc60829f319b34a444d79a7fad7014efdb.
