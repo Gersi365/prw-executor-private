@@ -1,6 +1,6 @@
 # Phase 086 — Linux Bounded Scheduling Cycle
 
-Status: implementation payload awaiting CI validation
+Status: integrated source awaiting authoritative CI validation
 
 ## Purpose
 
