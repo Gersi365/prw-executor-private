@@ -10,9 +10,10 @@
 //! adds pure composition into Phase 060 authenticated session state, Phase 073
 //! adds absolute-deadline blocking stream I/O primitives, Phase 075 adds bounded
 //! thread-safe worker-capacity accounting, Phase 076 adds a finite session worker
-//! body, Phase 078 adds one fallible scoped OS-thread spawn adapter, and Phase 079
-//! adds explicit joined-worker completion classification. The Agent bootstrap
-//! remains inactive and no accept/session scheduler is enabled here.
+//! body, Phase 078 adds one fallible scoped OS-thread spawn adapter, Phase 079
+//! adds explicit joined-worker completion classification, and Phase 080 retains
+//! and reaps scoped worker handles. The Agent bootstrap remains inactive and no
+//! accept/session scheduler is enabled here.
 
 #[allow(
     dead_code,
@@ -86,6 +87,12 @@ pub mod worker_capacity;
 )]
 #[path = "linux_worker_completion.rs"]
 pub mod worker_completion;
+#[allow(
+    dead_code,
+    reason = "pre-runtime scoped worker registry is intentionally crate-internal"
+)]
+#[path = "linux_worker_registry.rs"]
+pub mod worker_registry;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux XDG runtime-root validation is intentionally crate-internal"
