@@ -18,6 +18,48 @@ use crate::local_commands::boundary_request_response_transaction::LocalBoundaryR
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
+/// Immutable finite-worker processing bounds supplied by the future runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalLinuxSessionWorkerConfig {
+    request_budget: NonZeroUsize,
+    read_budget: LocalLinuxIoBudget,
+    write_budget: LocalLinuxIoBudget,
+}
+
+impl LocalLinuxSessionWorkerConfig {
+    /// Creates one finite-worker configuration from already-validated bounds.
+    #[must_use]
+    pub const fn new(
+        request_budget: NonZeroUsize,
+        read_budget: LocalLinuxIoBudget,
+        write_budget: LocalLinuxIoBudget,
+    ) -> Self {
+        Self {
+            request_budget,
+            read_budget,
+            write_budget,
+        }
+    }
+
+    /// Returns the maximum Request count for this worker invocation.
+    #[must_use]
+    pub const fn request_budget(self) -> NonZeroUsize {
+        self.request_budget
+    }
+
+    /// Returns the per-Request absolute read budget.
+    #[must_use]
+    pub const fn read_budget(self) -> LocalLinuxIoBudget {
+        self.read_budget
+    }
+
+    /// Returns the per-Request absolute response-write budget.
+    #[must_use]
+    pub const fn write_budget(self) -> LocalLinuxIoBudget {
+        self.write_budget
+    }
+}
+
 /// Successful terminal reason for one finite authenticated-session worker body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalLinuxSessionWorkerStop {
@@ -53,7 +95,7 @@ pub enum LocalLinuxSessionWorkerError {
 /// the entire function scope and is released by RAII on return/unwind.
 ///
 /// Each Request receives a fresh Phase 074 absolute read deadline and an
-/// independent deferred response-write deadline.
+/// independent deferred response-write deadline from `config`.
 ///
 /// # Errors
 ///
@@ -66,17 +108,15 @@ pub fn run_authenticated_session_worker<E: PolicyEvaluator + ?Sized>(
     evaluator: &E,
     status_snapshot: LocalAgentStatusSnapshot,
     private_dns_snapshot: &LocalPrivateDnsSnapshot,
-    request_budget: NonZeroUsize,
-    read_budget: LocalLinuxIoBudget,
-    write_budget: LocalLinuxIoBudget,
+    config: LocalLinuxSessionWorkerConfig,
 ) -> Result<LocalLinuxSessionWorkerStop, LocalLinuxSessionWorkerError> {
-    for responses_written in 0..request_budget.get() {
+    for responses_written in 0..config.request_budget().get() {
         match session.process_one_with_deadlines(
             evaluator,
             status_snapshot,
             private_dns_snapshot,
-            read_budget,
-            write_budget,
+            config.read_budget(),
+            config.write_budget(),
         ) {
             Ok(LocalBoundaryRequestResponseOutcome::ResponseWritten) => {}
             Ok(LocalBoundaryRequestResponseOutcome::CleanEof) => {
@@ -92,7 +132,7 @@ pub fn run_authenticated_session_worker<E: PolicyEvaluator + ?Sized>(
     }
 
     Ok(LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
-        responses_written: request_budget.get(),
+        responses_written: config.request_budget().get(),
     })
 }
 
@@ -109,7 +149,8 @@ mod tests {
     use prw_policy::{Capability, Decision, PolicyEvaluator};
 
     use super::{
-        LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop, run_authenticated_session_worker,
+        LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop,
+        run_authenticated_session_worker,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
@@ -135,13 +176,14 @@ mod tests {
         )
     }
 
-    fn request_budget(value: usize) -> NonZeroUsize {
-        NonZeroUsize::new(value).expect("test Request budget is non-zero")
-    }
-
-    fn io_budget(milliseconds: u64) -> LocalLinuxIoBudget {
-        LocalLinuxIoBudget::try_new(Duration::from_millis(milliseconds))
-            .expect("test I/O budget is non-zero")
+    fn worker_config(requests: usize, read_ms: u64, write_ms: u64) -> LocalLinuxSessionWorkerConfig {
+        LocalLinuxSessionWorkerConfig::new(
+            NonZeroUsize::new(requests).expect("test Request budget is non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(read_ms))
+                .expect("test read budget is non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(write_ms))
+                .expect("test write budget is non-zero"),
+        )
     }
 
     fn dns_snapshot() -> LocalPrivateDnsSnapshot {
@@ -190,9 +232,7 @@ mod tests {
                 &policy,
                 status,
                 &dns,
-                request_budget(1),
-                io_budget(500),
-                io_budget(500),
+                worker_config(1, 500, 500),
             ),
             Ok(LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
                 responses_written: 1
@@ -236,9 +276,7 @@ mod tests {
                 &policy,
                 status,
                 &dns,
-                request_budget(2),
-                io_budget(500),
-                io_budget(500),
+                worker_config(2, 500, 500),
             ),
             Ok(LocalLinuxSessionWorkerStop::CleanEof {
                 responses_written: 0
@@ -266,9 +304,7 @@ mod tests {
             &policy,
             status,
             &dns,
-            request_budget(2),
-            io_budget(25),
-            io_budget(500),
+            worker_config(2, 25, 500),
         )
         .expect_err("idle peer reaches Request read deadline");
 
