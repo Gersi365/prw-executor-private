@@ -23,7 +23,6 @@ pub struct LocalLinuxScopedWorkerRegistry<'scope> {
 
 impl<'scope> LocalLinuxScopedWorkerRegistry<'scope> {
     /// Creates an empty scoped worker registry.
-    #[must_use]
     pub const fn new() -> Self {
         Self {
             handles: Vec::new(),
@@ -37,13 +36,13 @@ impl<'scope> LocalLinuxScopedWorkerRegistry<'scope> {
 
     /// Returns the currently retained handle count.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.handles.len()
     }
 
     /// Returns whether no scoped worker handles remain registered.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.handles.is_empty()
     }
 
