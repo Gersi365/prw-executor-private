@@ -1,0 +1,78 @@
+Private Remote Workspace
+Phase 081 Linux Worker Cancellation / Shutdown Authority Decision
+
+STATUS: DECISION_LOCKED / NO_SCHEDULER_OR_BOOTSTRAP_ACTIVATION
+AUDIT TYPE: WORKER CANCELLATION / SHUTDOWN OWNERSHIP LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 080 authoritative report commit: a4c2028fdc8cf2518909261f2ac086d7770deec5
+Phase 080 validated source head: 72cf4864a6c524ef9f5b011900ebbbb233e47c6b
+Phase 080 authoritative validation run: 31896177860
+Phase 081 contract commit: df9497e03330c37295d3e5eb31ef0f90c9bc657e
+
+PURPOSE
+
+Ensure every future active session worker has a separately owned authority that can interrupt its blocking UnixStream I/O during Agent shutdown before the first accept-and-spawn scheduler is implemented.
+
+EVIDENCE
+
+Rust 1.97.1 UnixStream::try_clone creates an independently owned handle to the same underlying stream; both handles share the data stream and socket options.
+
+Rust 1.97.1 UnixStream::shutdown(Shutdown::Both) shuts down both halves and causes pending/future I/O on those portions to return with platform-appropriate EOF/error behavior.
+
+The existing PRW worker path uses blocking accepted UnixStream I/O with absolute Request deadlines. Phase 080 retains scoped join handles but currently has no independent descriptor authority for actively waking a blocked worker during shutdown.
+
+DECISION 1 — AUTHENTICATED CANCELLATION CLONE
+
+Immediately after same-UID authentication and before the authenticated connection is moved into a worker session, the future scheduler creates one UnixStream::try_clone handle dedicated only to cancellation.
+
+If cloning fails, the connection is not spawned; the accepted connection is closed/dropped and its already-acquired worker permit is released.
+
+DECISION 2 — REGISTRY ENTRY OWNS HANDLE + CANCELLATION
+
+Each future Phase 080 registry entry must pair exactly one ScopedJoinHandle with exactly one cancellation authority for the same underlying connection.
+
+Normal finished-worker reaping drops the matching cancellation authority after classification. No orphan handle or cancellation clone is allowed.
+
+DECISION 3 — SHUTDOWN ORDER
+
+Future runtime shutdown:
+
+1. stop accepting/scheduling new sessions;
+2. issue shutdown(Both) on every registered active-worker cancellation authority;
+3. join/classify all remaining workers;
+4. leave std::thread::scope only after the registry is empty;
+5. clean listener/path/instance-lock lifecycle only after worker completion.
+
+A shutdown syscall error does not waive the requirement to join/classify that worker.
+
+DECISION 4 — CANCELLATION IS TERMINAL
+
+A cancelled connection is never resumed or retried. Cancellation and Phase 073/074 deadlines are complementary: cancellation provides Agent shutdown responsiveness; deadlines bound slow peers during normal operation.
+
+DECISION 5 — POLICY EVALUATOR RUNTIME RESTRICTION
+
+The current PolicyEvaluator trait is synchronous and does not guarantee that evaluate() avoids arbitrary computation or external blocking I/O. Socket shutdown cannot interrupt a worker blocked outside socket I/O.
+
+Therefore the initial Agent runtime may bind only a separately validated local policy evaluator whose evaluation path is bounded and performs no external/network/filesystem blocking I/O.
+
+Arbitrary/dynamic potentially blocking evaluators are not authorized for the initial runtime and require a separate isolation/cancellation design.
+
+NEXT SAFE IMPLEMENTATION
+
+Phase 082 may implement the cancellation wrapper and extend the scoped worker registry to retain cancellation authority, expose cancel_all(), and prove that shutdown wakes a worker blocked in socket read substantially before a deliberately long normal read deadline.
+
+MUTATION STATEMENT
+
+Phase 081 changes only contract/audit documentation.
+
+It does not clone/shutdown a production stream, spawn a worker, accept a connection, implement a scheduler, bind a policy evaluator, activate Agent bootstrap/systemd/service state, or change network/DNS/TUN/database/private-key/deployment state.
+
+FINAL CLASSIFICATION
+
+AUTHENTICATED_STREAM_CANCELLATION_CLONE_LOCKED / REGISTRY_HANDLE_PLUS_CANCELLATION_LOCKED / SHUTDOWN_BOTH_BEFORE_JOIN_LOCKED / INITIAL_POLICY_EVALUATOR_MUST_BE_BOUNDED_IN_MEMORY / READY_FOR_PHASE_082_IMPLEMENTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 081 decision report.
