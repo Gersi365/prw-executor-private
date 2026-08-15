@@ -28,11 +28,7 @@ use super::status_snapshot::LocalAgentStatusSnapshot;
 /// Returns [`LocalBoundaryInboundError::ReadPoisoned`] when inbound state was
 /// already poisoned, or [`LocalBoundaryInboundError::Transaction`] for the
 /// delegated Phase 049 failure after any applicable state transition.
-pub fn process_one_with_boundary_inbound_guard<
-    R: Read,
-    W: Write,
-    E: PolicyEvaluator + ?Sized,
->(
+pub fn process_one_with_boundary_inbound_guard<R: Read, W: Write, E: PolicyEvaluator + ?Sized>(
     reader: &mut R,
     writer: &mut W,
     inbound_state: &mut LocalInboundRequestState,
@@ -218,11 +214,9 @@ mod tests {
                 &dns,
             ),
             Err(LocalBoundaryInboundError::Transaction(
-                LocalBoundaryRequestResponseError::Processing(
-                    LocalRequestProcessorError::Request(LocalAgentRequestStreamReadError::Read(
-                        LocalIpcFrameReadError::TruncatedHeader
-                    ))
-                )
+                LocalBoundaryRequestResponseError::Processing(LocalRequestProcessorError::Request(
+                    LocalAgentRequestStreamReadError::Read(LocalIpcFrameReadError::TruncatedHeader)
+                ))
             ))
         );
         assert!(inbound.is_read_poisoned());
