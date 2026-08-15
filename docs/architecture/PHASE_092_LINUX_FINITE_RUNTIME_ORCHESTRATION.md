@@ -1,6 +1,6 @@
 # Phase 092 — Linux Finite Runtime Orchestration
 
-Status: `PREFLIGHT_VALIDATED_INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -13,6 +13,10 @@ It remains below the production Agent bootstrap boundary. It does not introduce 
 Integrated source commit:
 
 `4162b1ceeba14dbab8ef33cecd036f2e93e8b4d2`
+
+Authoritative validation trigger/source head:
+
+`9700e9ec4343a0877104cacd5a40205aef84a4bf`
 
 The integration was committed only after the Phase 092 A02 preflight passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and the mutation-surface guard.
 
@@ -171,9 +175,36 @@ The repository remains pinned to exact Rust/Cargo `1.97.1`.
 
 Phase 092 adds no package dependency and no Cargo feature change.
 
-## Authoritative validation state
+## Authoritative validation
 
-The integrated source has passed the complete A02 preflight, but Phase 092 is not yet classified `IMPLEMENTED_AND_VALIDATED` until the permanent PRW Rust Validation workflow passes on a commit containing the integrated source.
+Permanent PRW Rust Validation run:
+
+`31900742402`
+
+Validated head:
+
+`9700e9ec4343a0877104cacd5a40205aef84a4bf`
+
+The run completed with `success` and passed:
+
+- exact Rust/Cargo 1.97.1 toolchain resolution;
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+The permanent run independently confirmed the deterministic Phase 086 reap-first test correction and all Phase 092 runtime-orchestration proofs outside the temporary preflight workflow.
+
+Net mutation from the Phase 091 authoritative report commit `0c9ac4348f19bff2171b6b6ded6991a2d365ed7d` through the validated Phase 092 head contains exactly:
+
+- `crates/prw-agent/src/linux_runtime_orchestration.rs`;
+- `crates/prw-agent/src/linux_identity.rs`;
+- `crates/prw-agent/src/linux_worker_registry.rs` — test-only observation helper;
+- `crates/prw-agent/src/linux_bounded_scheduler_cycle.rs` — test-only deterministic wait correction;
+- this Phase 092 architecture document.
+
+No temporary Phase 092 workflow remains in the net mutation surface.
 
 ## Explicitly deferred
 
