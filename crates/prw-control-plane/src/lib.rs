@@ -226,21 +226,16 @@ mod tests {
     #[test]
     fn public_identity_material_rejects_empty_bytes() {
         assert_eq!(
-            PublicIdentityMaterial::new(
-                DeviceIdentityAlgorithm::EcdsaP256Sha256,
-                Vec::<u8>::new()
-            ),
+            PublicIdentityMaterial::new(DeviceIdentityAlgorithm::EcdsaP256Sha256, Vec::<u8>::new()),
             Err(IdentityMaterialError::Empty)
         );
     }
 
     #[test]
     fn public_identity_material_preserves_algorithm() {
-        let identity = PublicIdentityMaterial::new(
-            DeviceIdentityAlgorithm::EcdsaP256Sha256,
-            vec![1, 2, 3],
-        )
-        .expect("non-empty public identity");
+        let identity =
+            PublicIdentityMaterial::new(DeviceIdentityAlgorithm::EcdsaP256Sha256, vec![1, 2, 3])
+                .expect("non-empty public identity");
 
         assert_eq!(
             identity.algorithm(),
