@@ -14,8 +14,9 @@
 //! adds explicit joined-worker completion classification, Phase 080 retains/reaps
 //! scoped worker handles, Phase 082 pairs them with authenticated-stream
 //! cancellation authority, Phase 084 composes one capacity-gated scheduling
-//! transaction, and Phase 086 adds a finite shutdown-gated scheduling cycle. The
-//! Agent bootstrap remains inactive and no long-running accept loop is enabled.
+//! transaction, Phase 086 adds a finite shutdown-gated scheduling cycle, and
+//! Phase 089 adds an isolated coalescing Linux runtime wake transport. The Agent
+//! bootstrap remains inactive and no long-running accept loop is enabled.
 
 #[allow(
     dead_code,
@@ -77,6 +78,12 @@ pub mod one_shot_scheduler;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux runtime wake transport is intentionally crate-internal"
+)]
+#[path = "linux_runtime_wake.rs"]
+pub mod runtime_wake;
 #[allow(
     dead_code,
     reason = "pre-runtime finite Linux session worker body is intentionally crate-internal"
