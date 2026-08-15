@@ -2,7 +2,8 @@
 //!
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
-//! authorization as a crate-internal submodule. This boundary owns no socket lifecycle.
+//! authorization as a crate-internal submodule. This boundary owns no socket
+//! lifecycle.
 
 #[allow(
     dead_code,
