@@ -1,7 +1,7 @@
 Private Remote Workspace
 Phase 069 Linux Agent Accept / Readiness Security Decision
 
-STATUS: DECISION_LOCKED / NO_RUNTIME_ACTIVATION
+STATUS: DECISION_LOCKED / CORRECTED_TYPE_STATE_STRATEGY / NO_RUNTIME_ACTIVATION
 AUDIT TYPE: READ-ONLY DESIGN / SECURITY ORDERING LOCK
 
 Repository: Gersi365/prw-executor-private
@@ -9,7 +9,8 @@ Branch: main
 Phase 068 authoritative report commit: 844c55f54ce751f1b979cbeae0177dcb49aa3b1e
 Phase 068 validated source head: 6416861d47dfa45d14cf0b6ea185077b26f0f82a
 Phase 068 authoritative validation run: 31892620041
-Phase 069 contract commit: 07a590d05a20ea113c69d1059a21d3c77afbfbe3
+Initial Phase 069 contract commit: 07a590d05a20ea113c69d1059a21d3c77afbfbe3
+Corrected Phase 069 contract commit: 7dc9009daaba1db1f34d09ee7843d01d872252f8
 
 PURPOSE
 
@@ -30,17 +31,34 @@ The review confirmed the current validated/runtime contracts already establish:
 - Phase 067 descriptor-anchored bound socket with post-bind identity/mode validation;
 - Phase 068 one-way bound-to-listening transition with explicit caller backlog and no accept/readiness policy.
 
-DECISION 1 — LISTENER READINESS MODE
+DECISION 1 — EXPLICIT ACCEPT-READY TYPE STATE
 
-The production listening socket must be nonblocking before accept is exposed.
+A production accept operation must not be callable on plain Phase 068 ListeningAgentSocket.
 
-The next implementation phase will make nonblocking status a listener-lifetime property at socket creation time, alongside close-on-exec, rather than introducing a later mutable fcntl transition.
+Phase 070 is authorized to introduce the one-way transition:
 
-Reason: a blocking accept could suspend indefinitely with no queued client and would introduce an unreviewed transport wait policy beneath the caller-bounded architecture.
+ListeningAgentSocket -> AcceptReadyAgentSocket
+
+The transition must read descriptor status flags, set O_NONBLOCK while preserving current flags, read them again, and return AcceptReadyAgentSocket only after O_NONBLOCK is verified.
+
+If readiness preparation fails, the original ListeningAgentSocket must be returned with a bounded transition error so the caller retains existing cleanup authority.
+
+CORRECTIVE TO INITIAL DRAFT
+
+The first Phase 069 draft proposed setting nonblocking at Phase 067 socket creation time. Pre-implementation review found a stronger type-state design: leave validated Phase 067/068 semantics unchanged and make nonblocking readiness an explicit post-listen transition.
+
+This corrective changes only the mechanism, not the required security property. Accept remains impossible until the listener is proven nonblocking.
+
+Benefits:
+
+- no retroactive semantic rewrite of the already validated Phase 067 construction baseline;
+- explicit type-level proof that readiness preparation happened;
+- failure can retain the valid listening object for safe cleanup;
+- accept policy remains isolated from bind/listen policy.
 
 DECISION 2 — ONE-SHOT ACCEPT ONLY
 
-The accept adapter performs at most one kernel accept attempt per invocation.
+The accept-ready adapter performs at most one kernel accept attempt per invocation.
 
 Outcomes are separated into:
 
@@ -53,11 +71,11 @@ The adapter performs no internal retry, spin, sleep, poll, timeout, thread/task 
 
 DECISION 3 — ACCEPTED STREAM REMAINS BLOCKING
 
-The listener is nonblocking, but the accepted connected stream remains blocking.
+The listener is verified nonblocking, but the accepted connected stream remains blocking.
 
 The accepted descriptor must be close-on-exec and must not request a nonblocking accepted-socket flag.
 
-This preserves the already validated Phase 059/060 std::io::Read/Write behavior. A future nonblocking/async application-stream model would require a separate reviewed change.
+This preserves the already validated Phase 059/060 std::io::Read/Write behavior. Phase 070 tests must verify the actual accepted-stream status flags on the Linux runner.
 
 DECISION 4 — AUTHENTICATION IS IMMEDIATE AND TYPE-GATED
 
@@ -79,7 +97,7 @@ Accepting, rejecting, or observing no-ready must not alter:
 - stale-path/bind/cleanup ownership;
 - listener backlog state beyond normal kernel queue behavior.
 
-The listening object remains usable for later one-shot accept calls until an explicit future runtime orchestration layer stops accepting and initiates existing cleanup.
+AcceptReadyAgentSocket owns the Phase 068 ListeningAgentSocket and delegates explicit cleanup through the already validated Phase 068/067 lifecycle.
 
 DEFERRED ORCHESTRATION
 
@@ -101,10 +119,10 @@ NEXT SAFE IMPLEMENTATION
 
 Phase 070 may implement only:
 
-1. nonblocking status on the Phase 067 listener socket creation;
-2. a crate-internal one-shot accept adapter over Phase 068 ListeningAgentSocket;
-3. close-on-exec accepted descriptor creation;
-4. conversion to the existing connected stream type;
+1. the explicit ListeningAgentSocket -> AcceptReadyAgentSocket O_NONBLOCK transition with post-write verification;
+2. a crate-internal one-shot accept operation exposed only by the accept-ready type;
+3. close-on-exec accepted descriptor creation without accepted-stream NONBLOCK;
+4. conversion to the existing connected Unix stream type;
 5. immediate Phase 059 same-UID authenticated wrapper construction;
 6. typed no-ready / accept-failure / authorization-failure outcomes;
 7. focused temporary Linux tests proving nonblocking listener + blocking authenticated accepted stream semantics.
@@ -125,7 +143,7 @@ It:
 
 FINAL CLASSIFICATION
 
-NONBLOCKING_LISTENER_LOCKED / ONE_SHOT_ACCEPT_LOCKED / BLOCKING_CLOEXEC_ACCEPTED_STREAM_LOCKED / SO_PEERCRED_BEFORE_APPLICATION_BYTES_LOCKED / READY_FOR_PHASE_070_IMPLEMENTATION
+ACCEPT_READY_TYPE_STATE_LOCKED / NONBLOCKING_BEFORE_ACCEPT_LOCKED / ONE_SHOT_ACCEPT_LOCKED / BLOCKING_CLOEXEC_ACCEPTED_STREAM_LOCKED / SO_PEERCRED_BEFORE_APPLICATION_BYTES_LOCKED / READY_FOR_PHASE_070_IMPLEMENTATION
 
 AUTHORITATIVE EVIDENCE
 
