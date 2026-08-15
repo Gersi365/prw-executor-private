@@ -1,0 +1,81 @@
+Private Remote Workspace
+Phase 039 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 039
+SCOPE: Admission pipeline Rust visibility hardening
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial visibility commit: c2a2ea897c98ce399cb91ff964a688939ac17c90
+Scoped allowance corrective: 9db90c67d9e6f7609568da83e5ce210077fb30be
+Authoritative GitHub Actions run: 31883444492
+
+LOCKED VISIBILITY
+
+The Agent admission/response orchestration modules are crate-internal:
+- local_commands::admission
+- local_commands::policy_response
+- local_commands::responder
+
+External crates cannot name these module paths through the public prw-agent library API.
+
+SCOPED DEAD-CODE ALLOWANCE
+
+Because the runtime is intentionally not yet activated, these crate-internal modules have no non-test production caller. The workspace denies warnings, so each of the three module declarations carries a narrowly scoped `dead_code` allowance with an explicit reason.
+
+The allowance applies only to the pre-runtime admission/response modules and does not weaken warning enforcement elsewhere.
+
+VALIDATION HISTORY
+
+Run 78
+- Run ID: 31883394363
+- Commit: c2a2ea897c98ce399cb91ff964a688939ac17c90
+- Result: FAILURE
+- fmt: PASS
+- Cause: dead_code after intentionally making the dormant pre-runtime modules crate-internal.
+
+Run 79
+- Run ID: 31883444492
+- Commit: 9db90c67d9e6f7609568da83e5ce210077fb30be
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+SECURITY EFFECT
+
+PASS: external crates no longer have a public module path to supply an arbitrary PolicyEvaluator directly into the Agent admission/success pipeline.
+PASS: wire/domain types and capability mapping remain unchanged.
+PASS: authentication is still explicitly deferred and is not fabricated by this visibility change.
+
+RUNTIME MUTATION STATEMENT
+
+Phase 039 performs no socket I/O, authentication, peer-credential lookup, host-state acquisition, DNS/network mutation, policy persistence, database access, task/thread creation, systemd activation, deployment, or private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Compose the existing generic Request reader with the crate-internal policy-gated response builder, returning an in-memory terminal response frame without writing it to a transport.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 039 implementation-validation report.
+GitHub Actions run 31883444492 is the authoritative executable validation evidence.
