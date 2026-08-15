@@ -107,6 +107,27 @@ impl SessionId {
     }
 }
 
+/// Strongly typed enrollment identifier.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EnrollmentId(String);
+
+impl EnrollmentId {
+    /// Creates an enrollment identifier from a non-empty value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentifierError::Empty`] if the supplied value is empty or whitespace.
+    pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
+        build_identifier(value).map(Self)
+    }
+
+    /// Returns the identifier as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Device enrollment lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceLifecycle {
@@ -116,6 +137,14 @@ pub enum DeviceLifecycle {
     Enrolled,
     /// Device has been revoked.
     Revoked,
+}
+
+impl DeviceLifecycle {
+    /// Returns whether this lifecycle state permits normal enrolled-device participation.
+    #[must_use]
+    pub const fn can_participate(self) -> bool {
+        matches!(self, Self::Enrolled)
+    }
 }
 
 /// Abstract connectivity path selected for a peer.
@@ -158,7 +187,7 @@ fn build_identifier(value: impl Into<String>) -> Result<String, IdentifierError>
 
 #[cfg(test)]
 mod tests {
-    use super::{DeviceId, IdentifierError};
+    use super::{DeviceId, DeviceLifecycle, EnrollmentId, IdentifierError};
 
     #[test]
     fn rejects_empty_identifier() {
@@ -169,5 +198,18 @@ mod tests {
     fn preserves_non_empty_identifier() {
         let id = DeviceId::new("device-1").expect("valid identifier");
         assert_eq!(id.as_str(), "device-1");
+    }
+
+    #[test]
+    fn enrollment_identifier_is_strongly_typed() {
+        let id = EnrollmentId::new("enrollment-1").expect("valid enrollment identifier");
+        assert_eq!(id.as_str(), "enrollment-1");
+    }
+
+    #[test]
+    fn only_enrolled_devices_can_participate() {
+        assert!(!DeviceLifecycle::PendingEnrollment.can_participate());
+        assert!(DeviceLifecycle::Enrolled.can_participate());
+        assert!(!DeviceLifecycle::Revoked.can_participate());
     }
 }

@@ -1,6 +1,6 @@
 # Private Remote Workspace Security Model
 
-Version: `0.1.0`
+Version: `0.2.0`
 
 ## Trust boundaries
 
@@ -28,11 +28,15 @@ Future implementations should use established and audited protocol/library build
 - NAT traversal;
 - relay transport.
 
+Phase 002 does not select the concrete device-identity or transport cryptographic primitive.
+
 ## Private keys
 
 Long-lived private device identity keys and transport private keys are generated and retained on the device whenever technically possible.
 
-Control-plane services receive only the public material required for coordination and authorization.
+Control-plane contracts receive only the public material required for coordination and authorization.
+
+Phase 002 models device public-identity material as opaque public bytes and has no type that carries a private identity key.
 
 ## Control plane
 
@@ -49,6 +53,26 @@ The control plane may coordinate metadata such as:
 - revocation state.
 
 It must not be designed as the plaintext intermediary for terminal or file payloads.
+
+Phase 002 locks only a transport-agnostic typed action boundary for enrollment decisions and device revocation. It does not select a network protocol, persistence layer, account-authentication mechanism, authorization credential, or deployment topology.
+
+## Enrollment
+
+Enrollment uses distinct WorkspaceId, UserId, DeviceId, and EnrollmentId values.
+
+A pending enrollment may receive one terminal typed decision: approved or rejected.
+
+The Phase 002 state model does not decide who is authorized to approve enrollment, how the approving actor authenticates, how trust bootstrap is transported, or how enrollment data is persisted.
+
+Those decisions remain security-sensitive future work.
+
+## Revocation
+
+Device revocation is a first-class security capability.
+
+A revoked device must be denied future authorized connectivity after revocation state has propagated according to the final protocol semantics.
+
+Phase 002 deliberately does not define propagation timing, stale-device behavior, acknowledgement, retry, or persistence semantics.
 
 ## Relay
 
@@ -97,8 +121,4 @@ Authorization should support scoped capabilities such as:
 
 Default file access should remain bounded by the effective local-user permissions unless an explicitly authorized privileged capability is introduced later.
 
-## Revocation
-
-Device revocation is a first-class security capability.
-
-A revoked device must be denied future authorized connectivity after revocation state has propagated according to the final protocol semantics.
+Phase 002 does not introduce a single administrator flag or bypass receiving-device enforcement.
