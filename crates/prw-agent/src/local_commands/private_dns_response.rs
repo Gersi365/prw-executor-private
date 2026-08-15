@@ -1,5 +1,7 @@
 //! Complete in-memory successful `GetPrivateDnsConfig` response frame.
 
+pub mod stream;
+
 use crate::LocalIpcRequestId;
 use crate::frame_object::LocalIpcFrame;
 
