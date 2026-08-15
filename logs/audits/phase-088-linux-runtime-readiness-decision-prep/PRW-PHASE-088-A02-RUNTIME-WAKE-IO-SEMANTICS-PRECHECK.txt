@@ -1,0 +1,257 @@
+Private Remote Workspace
+Phase 088-A02 Runtime Wake / Poll I/O Semantics Precheck
+
+STATUS: PRECHECK_COMPLETE / RECOMMENDED_IO_POLICY_PREPARED / NOT_APPROVED / NO_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: PRIMARY-SOURCE SEMANTICS REVIEW / MISSED-WAKE AND HIDDEN-RETRY PREVENTION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 decision-preparation commit: 182b1d99cb19a863b9925fd0bf9a851d8f530b8f
+Phase 087-A01 readiness corrective commit: aef90e7baf9f11228a9ec6a5eeaae5976fe31940
+Phase 088-A01 toolchain corrective report commit: b2526508021e809f7258af98c6ee4ae582b09f63
+
+PURPOSE
+
+Resolve the main syscall-semantics questions left open by the Phase 088 decision-preparation package, without locking architecture or implementing code.
+
+The goal is to prevent three failure classes before source work begins:
+
+- missed runtime wake;
+- hidden/unbounded orchestration retry behavior;
+- accepting invalid or partial eventfd/poll states as normal readiness.
+
+PRIMARY SEMANTICS — RUSTIX 1.1.4
+
+The pinned dependency rustix 1.1.4 exposes:
+
+- `eventfd(initval, flags) -> Result<OwnedFd>` under feature `event`;
+- `EventfdFlags::{CLOEXEC, NONBLOCK, SEMAPHORE}`;
+- `PollFd::new(&Fd, PollFlags)` for borrowed AsFd values;
+- `poll(&mut [PollFd], Option<&Timespec>) -> Result<usize>`;
+- `rustix::io::{read, write, retry_on_intr}` and explicit `Errno::{AGAIN, INTR, ...}`.
+
+`poll(..., None)` represents an indefinite wait in the current rustix API, so the initial runtime-wait candidate does not require a periodic timeout or a numeric cadence.
+
+PRIMARY SEMANTICS — LINUX EVENTFD
+
+Linux eventfd maintains a kernel unsigned 64-bit counter.
+
+For a non-semaphore eventfd:
+
+- every successful read transfers exactly an 8-byte native-endian integer containing the current nonzero counter;
+- that successful read resets the counter to zero;
+- a nonblocking read while the counter is zero fails with EAGAIN;
+- an 8-byte write adds its unsigned integer value to the counter;
+- writing all-ones is invalid;
+- if a nonblocking write would exceed the maximum representable eventfd counter, it fails with EAGAIN;
+- the fd is readable/POLLIN whenever the counter is greater than zero;
+- poll may also report POLLERR/POLLHUP/POLLNVAL conditions as descriptor-error state.
+
+This means notification count does not need to be semantic state: one non-semaphore read can drain all coalesced wake posts, after which the runtime re-observes authoritative shutdown/capacity/registry state.
+
+RECOMMENDED CREATION POLICY — NOT LOCKED
+
+Candidate:
+
+    eventfd(0, CLOEXEC | NONBLOCK)
+
+with no SEMAPHORE flag.
+
+Reasons:
+
+- initial zero = no wake pending;
+- CLOEXEC preserves descriptor non-leak expectations;
+- NONBLOCK prevents a notifier from blocking indefinitely if the counter is already saturated;
+- no SEMAPHORE mode permits wake coalescing and aggregate draining.
+
+RECOMMENDED WAKE-WRITE VALUE — NOT LOCKED
+
+Candidate wake write:
+
+    1_u64.to_ne_bytes()
+
+and exactly one 8-byte buffer passed to rustix::io::write.
+
+The numeric count is not interpreted as a number of semantic events. A successful write only means a wake is pending.
+
+RECOMMENDED WAKE-WRITE RESULT POLICY — NOT LOCKED
+
+For the fixed 8-byte value 1:
+
+- `Ok(8)` => `WakeQueued`;
+- `Ok(other)` => invariant failure / short-write error;
+- `Err(AGAIN)` => `WakeAlreadyPending`, treated as successful wake intent because eventfd can return EAGAIN here only when adding the value would exceed its maximum, which necessarily means a nonzero/readable counter is already pending;
+- `Err(INTR)` => retry only the same fixed 8-byte write through an explicitly documented EINTR-only retry policy;
+- any other errno => bounded notifier error.
+
+The EINTR retry must be explicit in code/tests; it must not be a generic retry-on-any-error loop.
+
+RATIONALE FOR EINTR RETRY ON NOTIFY
+
+A worker-completion notifier cannot safely treat the first EINTR as terminal failure: if listener interest is currently suppressed because capacity was full, losing the only completion wake can leave the outer runtime asleep indefinitely after capacity is released.
+
+Rustix exposes `retry_on_intr` specifically for retrying only Errno::INTR. Using that helper around one fixed nonblocking eventfd write is therefore the current recommended liveness policy.
+
+This is a syscall-completion retry, not a scheduling/accept retry: it performs no accept, no Phase 086 cycle, no sleep and no timing cadence.
+
+RECOMMENDED WAKE-DRAIN POLICY — NOT LOCKED
+
+After the single runtime consumer receives wake POLLIN:
+
+- perform exactly one successful non-semaphore eventfd read into an 8-byte buffer;
+- retry only EINTR for that same read;
+- require `Ok(8)`;
+- decode with `u64::from_ne_bytes`;
+- require the decoded value to be nonzero;
+- treat any short read as invariant failure;
+- with the single-consumer invariant, treat EAGAIN after wake POLLIN as an unexpected readiness/drain state rather than silently converting it to a normal wake;
+- after a successful read, re-observe shutdown, registry completions and capacity; do not attempt to map the numeric counter to individual events.
+
+A successful non-semaphore read resets the accumulated eventfd counter to zero, so an additional read-loop is unnecessary for ordinary user-space wake posts.
+
+EVENTFD OVERFLOW CONDITION
+
+Linux documents a special POLLERR/read-all-ones state for counter overflow caused by kernel AIO signal posts. User-space eventfd writes cannot create that overflow state.
+
+The PRW candidate does not use eventfd as a kernel-AIO completion sink. Therefore any POLLERR or decoded all-ones counter should be classified as unexpected/fatal runtime-wake state, not treated as a normal wake.
+
+RECOMMENDED POLL POLICY — NOT LOCKED
+
+Call:
+
+    rustix::event::poll(fds, None)
+
+for the normal wait path.
+
+Result handling candidate:
+
+- `Ok(n > 0)` => inspect every revents field and process wake precedence rules;
+- `Ok(0)` => invalid/unexpected for an indefinite wait and no timeout, return structured wait-state error;
+- `Err(INTR)` => return a structured `WaitInterrupted` outcome to the caller without an internal poll retry;
+- any other error => structured `WaitFailed(errno)`.
+
+WHY POLL EINTR IS DIFFERENT FROM EVENTFD READ/WRITE EINTR
+
+The outer one-step readiness primitive has useful authoritative state to re-observe after interruption, especially shutdown state. Returning `WaitInterrupted` preserves a finite one-step API and avoids hiding an indefinite poll retry loop inside the primitive.
+
+By contrast, the notifier write and the wake drain are atomic fixed-size operations whose successful completion is required to preserve/consume a known wake state; EINTR-only retry there prevents lost notification/drain without initiating application scheduling.
+
+A later outer-runtime loop, if separately approved, may decide how many successive `WaitInterrupted` outcomes it permits and must re-check shutdown before waiting again.
+
+RECOMMENDED REVENTS VALIDATION — NOT LOCKED
+
+For each PollFd, inspect the returned flags explicitly.
+
+Runtime wake descriptor:
+
+- POLLIN => drain wake first;
+- POLLERR, POLLHUP or POLLNVAL => structured runtime-wake descriptor failure;
+- unexpected returned flags => invalid readiness state.
+
+Listener descriptor:
+
+- POLLIN => candidate listener readiness only;
+- POLLERR, POLLHUP or POLLNVAL => structured listener readiness failure;
+- listener POLLIN MUST NOT be dispatched before runtime-wake processing when both descriptors are ready.
+
+After processing runtime wake, listener readiness may lead to Phase 086 only when:
+
+- shutdown remains false; and
+- `active_workers() < max_workers()`.
+
+Phase 086 then performs its own shutdown-before-Phase-084 check as the second fail-closed gate.
+
+RECOMMENDED SINGLE-CONSUMER / SHARED-WRITER OWNERSHIP
+
+Candidate ownership invariant:
+
+- exactly one outer runtime object owns/drains wake readiness;
+- multiple scoped worker completion guards and one shutdown handle may borrow/share wake-write access;
+- no worker may read/drain the eventfd;
+- the underlying eventfd lifetime must outlive every worker guard and shutdown notifier that can write it;
+- shutdown must join all scoped workers before the final wake descriptor is dropped.
+
+A future Rust type may use a shared owned descriptor handle, but this precheck does not lock the exact Arc/dup representation.
+
+WORKER COMPLETION ORDERING
+
+The completion wake must occur only after the worker's capacity permit has been released.
+
+The preferred wrapper shape remains:
+
+- runtime-specific wake guard lives in the scoped worker wrapper frame;
+- `run_authenticated_session_worker(...)` owns/uses the existing permit;
+- on normal return, the worker body releases permit-owned state before wrapper completion notification;
+- on panic/unwind, the worker body's owned state unwinds before the wrapper guard's final wake notification;
+- notifier itself must never panic during Drop/unwind.
+
+Focused tests must prove the observed capacity count is already decremented when wake handling resumes scheduling eligibility.
+
+NO COUNT-TO-EVENT CORRELATION
+
+The eventfd counter MUST NOT be interpreted as:
+
+- number of finished workers;
+- number of shutdown requests;
+- number of queued clients;
+- number of scheduling attempts;
+- request IDs or protocol data.
+
+Coalescing is intentional. After one drain the runtime discovers semantic state from:
+
+- LocalLinuxSchedulerControl;
+- LocalLinuxScopedWorkerRegistry;
+- LocalLinuxWorkerCapacity.
+
+TEST REQUIREMENTS ADDED BY THIS PRECHECK
+
+A future wake/readiness implementation should prove at least:
+
+1. eventfd starts not-readable at counter zero;
+2. one notify makes it POLLIN-readable;
+3. multiple notify writes coalesce and one non-semaphore read drains the aggregate counter;
+4. decoded normal wake count is nonzero and is not used as semantic event count;
+5. fixed write/read buffer length is exactly 8 bytes;
+6. write EAGAIN path is treated as already-pending wake, using a deterministic injected syscall abstraction if practical rather than attempting real counter saturation;
+7. EINTR-only write retry cannot retry other errno values;
+8. EINTR-only drain retry cannot retry other errno values;
+9. poll EINTR is surfaced as `WaitInterrupted`, not retried internally;
+10. indefinite poll never returns a normal timeout outcome;
+11. POLLERR/POLLHUP/POLLNVAL fail closed;
+12. wake readiness is processed before simultaneous listener readiness;
+13. capacity/shutdown are re-observed after wake drain;
+14. worker completion wake is observed only after capacity release;
+15. notifier Drop path remains non-panicking during a worker panic.
+
+NO-MUTATION / NO-APPROVAL STATEMENT
+
+This A02 precheck adds audit evidence only.
+
+It does NOT:
+
+- approve eventfd/poll architecture;
+- enable rustix `event`;
+- modify Cargo.toml or Cargo.lock;
+- modify Rust source;
+- change `main.rs`;
+- add a runtime loop, signal handler or systemd unit;
+- activate any listener/service;
+- change authentication, DNS, TUN, remote networking, relay, database, private-key, deployment or production state.
+
+DECISION IMPACT
+
+The Phase 088 architecture package is now technically narrower:
+
+- capacity-aware wait-set semantics are defined by Phase 087-A01;
+- exact Rust 1.97.1 is restored and validated by Phase 088-A01;
+- this A02 precheck supplies a concrete recommended eventfd/poll I/O policy.
+
+The remaining gate is explicit architecture approval before enabling rustix `event` or implementing runtime wake/readiness source.
+
+FINAL CLASSIFICATION
+
+EVENTFD_IO_POLICY_PREPARED / NONSEMAPHORE_COALESCING / EXACT_8_BYTE_NATIVE_ENDIAN_WAKE / EAGAIN_WRITE_IS_WAKE_PENDING_CANDIDATE / EINTR_ONLY_NOTIFY_DRAIN_RETRY_CANDIDATE / POLL_EINTR_SURFACED / NO_HIDDEN_POLL_RETRY / REVENTS_FAIL_CLOSED / NOT_APPROVED / NO_RUNTIME_ACTIVATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the authoritative Phase 088-A02 I/O semantics precheck. It is recommendation evidence, not an architecture decision lock.
