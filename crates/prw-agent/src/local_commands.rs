@@ -1,12 +1,13 @@
 //! Bounded provider-neutral local Agent command contracts.
 //!
 //! Phase 008 introduces only read-only command identifiers and correlated
-//! response metadata. Later phases add pure request/response byte codecs without
-//! activating runtime dispatch.
+//! response metadata. Later phases add pure request/response byte codecs and
+//! typed response bodies without activating runtime dispatch.
 
 pub mod codec;
 pub mod request_tracker;
 pub mod response_codec;
+pub mod status_snapshot;
 
 use crate::LocalIpcRequestId;
 
