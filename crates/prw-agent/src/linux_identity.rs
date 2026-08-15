@@ -11,9 +11,10 @@
 //! adds absolute-deadline blocking stream I/O primitives, Phase 075 adds bounded
 //! thread-safe worker-capacity accounting, Phase 076 adds a finite session worker
 //! body, Phase 078 adds one fallible scoped OS-thread spawn adapter, Phase 079
-//! adds explicit joined-worker completion classification, and Phase 080 retains
-//! and reaps scoped worker handles. The Agent bootstrap remains inactive and no
-//! accept/session scheduler is enabled here.
+//! adds explicit joined-worker completion classification, Phase 080 retains/reaps
+//! scoped worker handles, and Phase 082 pairs them with authenticated-stream
+//! cancellation authority. The Agent bootstrap remains inactive and no accept
+//! scheduler is enabled here.
 
 #[allow(
     dead_code,
@@ -75,6 +76,12 @@ pub mod session_worker;
 )]
 #[path = "linux_session_worker_thread.rs"]
 pub mod session_worker_thread;
+#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated worker cancellation is intentionally crate-internal"
+)]
+#[path = "linux_worker_cancellation.rs"]
+pub mod worker_cancellation;
 #[allow(
     dead_code,
     reason = "pre-runtime bounded Linux worker capacity is intentionally crate-internal"
