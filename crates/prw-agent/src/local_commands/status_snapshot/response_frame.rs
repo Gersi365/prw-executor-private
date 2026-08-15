@@ -1,6 +1,7 @@
 //! Complete in-memory `GetAgentStatus` response frame composition.
 
 pub mod stream;
+pub mod stream_completion;
 
 use super::LocalAgentStatusSnapshot;
 use super::codec::{LocalAgentStatusDecodeError, decode_status_snapshot, encode_status_snapshot};
