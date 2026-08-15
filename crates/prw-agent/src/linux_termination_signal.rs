@@ -189,8 +189,7 @@ mod tests {
     use std::process::Command;
     use std::thread;
 
-    use nix::sys::signal::{SigSet, Signal, kill};
-    use nix::unistd::Pid;
+    use nix::sys::signal::{SigSet, Signal, raise};
     use rustix::event::{PollFd, PollFlags, poll};
 
     use super::{
@@ -272,7 +271,7 @@ mod tests {
         assert!(inherited_mask.contains(Signal::SIGTERM));
         assert!(inherited_mask.contains(Signal::SIGINT));
 
-        kill(Pid::this(), Signal::SIGTERM).expect("SIGTERM posts to isolated subprocess");
+        raise(Signal::SIGTERM).expect("SIGTERM posts to the current isolated test thread");
         wait_until_signal_ready(&source);
         assert_eq!(
             source.read_signal(),
@@ -281,7 +280,7 @@ mod tests {
             ))
         );
 
-        kill(Pid::this(), Signal::SIGINT).expect("SIGINT posts to isolated subprocess");
+        raise(Signal::SIGINT).expect("SIGINT posts to the current isolated test thread");
         wait_until_signal_ready(&source);
         assert_eq!(
             source.read_signal(),
