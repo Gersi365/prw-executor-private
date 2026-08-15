@@ -4,6 +4,7 @@
 //! bounded payload. It performs no socket I/O and no payload deserialization.
 
 pub mod reader;
+pub mod writer;
 
 use std::fmt;
 
