@@ -1,0 +1,247 @@
+Private Remote Workspace
+Phase 099 Linux Production Runtime Completion Review
+
+STATUS: PASS / PHASE_094_A01_SEQUENCE_COMPLETE / PRODUCTION_LOCAL_RUNTIME_COMPLETE_BELOW_BOOTSTRAP / MAIN_RS_AND_SYSTEMD_NOT_APPROVED
+AUDIT TYPE: READ-ONLY COMPLETION / BOUNDARY / DEPENDENCY / RUNTIME-LIFECYCLE REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Phase 095 authoritative PASS commit: fc09a5c91e2385fe9ecf20dc4632f870ca2da087
+Phase 096 authoritative PASS commit: f531bf578730bb783396f2d6824c0b01a2a2793d
+Phase 097 authoritative PASS commit: 18c0c4b26c9b053fc2f58d68b1c17962966700de
+Phase 098 authoritative PASS commit: a501034ce965a7a9e70e83d9c4d66a352dfa8d72
+Phase 098 authoritative permanent CI run: 31903139121
+Exact Rust/Cargo toolchain: 1.97.1
+Final Cargo.lock blob SHA: 18db6137fc0f4f5bda22ad92425cff5edfb33c73
+Workspace unsafe policy: unsafe_code = "forbid"
+
+REVIEW SCOPE
+
+Phase 099 performs no runtime/source implementation. It verifies that the exact Phase 095-098 sequence approved by Phase 094-A01 is complete, internally consistent, permanently validated, and still below the explicitly deferred product bootstrap/service activation boundary.
+
+APPROVED SEQUENCE COMPLETION
+
+Phase 095 — PASS
+Production runtime configuration + bounded evidence/error-disposition types.
+
+Phase 096 — PASS
+Production lifecycle owner/rollback assembly beneath a callable scoped boundary.
+
+Phase 097 — PASS
+Programmatic-shutdown long-running production-local runtime loop.
+
+Phase 098 — PASS
+Safe SIGTERM/SIGINT source + tri-source signal-aware readiness + complete signal-aware production-local runtime.
+
+All four implementation phases have authoritative PASS reports and permanent PRW Rust Validation evidence.
+
+NET SOURCE MUTATION REVIEW
+
+Compared Phase 094-A01 decision commit `493cd9f8031ee8320d4d953eae7d4b392b83bad0` to Phase 098 authoritative report head `a501034ce965a7a9e70e83d9c4d66a352dfa8d72`.
+
+Net implementation/config mutations are limited to:
+
+- Cargo.lock;
+- crates/prw-agent/Cargo.toml;
+- crates/prw-agent/src/linux_identity.rs;
+- crates/prw-agent/src/linux_production_runtime_types.rs;
+- crates/prw-agent/src/linux_production_lifecycle.rs;
+- crates/prw-agent/src/linux_production_runtime_loop.rs;
+- crates/prw-agent/src/linux_termination_signal.rs;
+- crates/prw-agent/src/linux_signal_aware_readiness.rs;
+- crates/prw-agent/src/linux_signal_aware_runtime.rs;
+- Phase 095-098 architecture documentation;
+- Phase 095-098 audit evidence.
+
+`crates/prw-agent/src/main.rs` is absent from the net diff.
+
+No systemd packaging file is present in the Phase 094-A01 -> Phase 098 net diff.
+
+DEPENDENCY REVIEW
+
+Final `prw-agent` dependency additions are exactly:
+
+nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
+
+Existing exact rustix dependency remains:
+
+rustix = { version = "=1.1.4", default-features = false, features = ["std", "event", "fs", "net", "process"] }
+
+Controlled Cargo resolution added exactly the required new lock packages for the nix signal baseline while preserving existing package records:
+- nix 0.31.3;
+- cfg-if 1.0.4;
+- cfg_aliases 0.2.2.
+
+Final Cargo.lock blob SHA is `18db6137fc0f4f5bda22ad92425cff5edfb33c73`.
+
+UNSAFE POLICY REVIEW
+
+Workspace root continues to declare:
+
+unsafe_code = "forbid"
+
+Phase 098 uses safe nix signal/mask/SignalFd APIs. No direct libc signal FFI or local unsafe block was introduced by the Phase 095-098 implementation sequence.
+
+PRODUCTION-LOCAL RUNTIME OWNERSHIP REVIEW
+
+The completed below-bootstrap runtime now has explicit ownership/order for:
+
+1. validated XDG runtime root;
+2. validated PRW runtime child;
+3. exclusive Agent instance lock;
+4. exact validated Unix socket bind/listen/accept-ready state;
+5. shared Phase 089 runtime wake eventfd;
+6. configured worker capacity;
+7. monotonic shutdown control;
+8. thread-affine SIGTERM/SIGINT mask owner + SignalFd;
+9. one controlled scoped-worker lifetime;
+10. memory-bounded process-lifetime evidence;
+11. explicit listener/socket cleanup;
+12. exact prior thread-signal-mask restoration.
+
+The implementation deliberately avoids self-referential Rust ownership and preserves descriptor/type-state borrowing through scoped callable boundaries.
+
+READINESS / LIVENESS REVIEW
+
+Production signal-aware readiness is blocking and capacity-aware.
+
+Wait set:
+- termination SignalFd always armed;
+- runtime wake always armed;
+- listener armed only when worker capacity is available.
+
+Semantic precedence:
+1. termination signal;
+2. runtime wake;
+3. listener readiness.
+
+Validated liveness/safety properties:
+- full capacity excludes listener interest, preventing the earlier busy-loop candidate;
+- worker completion posts runtime wake after permit release;
+- wake handling reaps completions and re-observes shutdown/capacity;
+- poll EINTR is surfaced rather than hidden in an internal retry loop;
+- no periodic polling timeout or sleep cadence is used;
+- signal observation commits terminal shutdown before any simultaneous listener dispatch;
+- isolated kernel proof showed SIGTERM + queued listener => zero scheduling attempts / zero worker registrations.
+
+SIGNAL OWNERSHIP REVIEW
+
+SIGTERM and SIGINT are synchronously blocked on the runtime thread before lifecycle assembly/worker creation.
+
+The signal owner:
+- preserves the exact prior calling-thread mask;
+- is intentionally !Send/!Sync;
+- owns CLOEXEC + NONBLOCK SignalFd;
+- explicitly restores the mask after listener cleanup;
+- best-effort restores during unwind;
+- retains mask-restoration evidence independently from original runtime/lifecycle terminal reason.
+
+Worker threads are created after mask installation, so the validated design relies on inherited blocked termination masks for scoped workers.
+
+ERROR DISPOSITION REVIEW
+
+Initial production-local policy is explicit and bounded:
+- same-UID peer-authorization rejection => connection-local continuation + bounded counter;
+- other readiness/scheduling failures => fail-stop with exact typed terminal cause;
+- no hidden unbounded retry/backoff loop.
+
+Terminal reasons remain distinguishable:
+- programmatic shutdown;
+- SIGTERM/SIGINT termination;
+- signal-aware readiness fatal error;
+- runtime/scheduling fatal error.
+
+LIFETIME EVIDENCE REVIEW
+
+Process-lifetime evidence remains memory-bounded:
+- fixed-size saturating counters track readiness, wake, interruption, scheduling, registration, completion, and peer-rejection totals;
+- no unbounded process-lifetime completion vector exists;
+- final cancellation outcomes and final joined completions are bounded by configured worker capacity.
+
+TERMINAL ORDER REVIEW
+
+Validated terminal path:
+1. establish terminal reason;
+2. no later readiness/scheduling iteration;
+3. cancel all retained workers;
+4. join/classify all retained workers;
+5. exit worker scope;
+6. clean listener/socket pathname;
+7. close SignalFd;
+8. restore prior calling-thread signal mask;
+9. return original terminal reason plus independent cleanup/mask-restoration evidence.
+
+Cleanup/restoration failures do not overwrite the original terminal reason.
+
+VALIDATION REVIEW
+
+Authoritative permanent validation runs:
+- Phase 095: 31901455301 — PASS;
+- Phase 096: 31901711927 — PASS;
+- Phase 097: 31902081956 — PASS;
+- Phase 098 dependency checkpoint: 31902304269 — PASS;
+- Phase 098 signal source checkpoint: 31902722135 — PASS;
+- Phase 098 readiness checkpoint: 31902939571 — PASS;
+- Phase 098 final complete runtime: 31903139121 — PASS.
+
+Each permanent runtime validation uses the repository workflow with:
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+WORKFLOW CLEANUP REVIEW
+
+`.github/workflows/` currently contains only:
+- `phase-001-rust-validation.yml`.
+
+No temporary Phase 095-098 integration/corrective workflow remains.
+
+BOOTSTRAP BOUNDARY REVIEW
+
+`crates/prw-agent/src/main.rs` remains the inactive bootstrap and still starts no listener/runtime.
+
+Phase 095-099 did not:
+- wire the production-local runtime into `main.rs`;
+- define process exit-code mapping;
+- install/enable/start systemd;
+- change service-manager restart policy;
+- deploy anything;
+- expose remote/public network listeners;
+- expand auth/enrollment;
+- make private DNS mandatory;
+- add TUN/relay/database/private-key behavior;
+- introduce Wake-on-LAN / remote wake.
+
+PHASE 094-A01 AUTHORIZATION EXHAUSTION
+
+The exact implementation/review sequence authorized by Phase 094-A01 is now complete:
+
+Phase 095 PASS
+Phase 096 PASS
+Phase 097 PASS
+Phase 098 PASS
+Phase 099 PASS
+
+That authorization does not extend to further source activation work.
+
+NEXT EXPLICIT GATE
+
+The technically natural next phase is product bootstrap integration, but it is NOT APPROVED by Phase 094-A01 or Phase 099.
+
+A new explicit architecture/activation decision is required before any of:
+- editing `crates/prw-agent/src/main.rs` to instantiate/run the production-local runtime;
+- selecting production configuration values/source and startup-failure/exit-code mapping at the binary boundary;
+- deciding user-facing/service logging/observability behavior;
+- systemd packaging/install/enable/start/restart-policy work;
+- deployment or host activation.
+
+A read-only bootstrap decision-preparation audit may be prepared without crossing this gate.
+
+FINAL CLASSIFICATION
+
+PHASE_094_A01_SEQUENCE_COMPLETE / PHASE_095_PASS / PHASE_096_PASS / PHASE_097_PASS / PHASE_098_PASS / PHASE_099_PASS / PRODUCTION_LOCAL_RUNTIME_COMPLETE_BELOW_BOOTSTRAP / SAFE_SIGTERM_SIGINT / SIGNAL_GT_WAKE_GT_LISTENER / MEMORY_BOUNDED_EVIDENCE / BOUNDED_CANCEL_JOIN_CLEANUP / MASK_RESTORE_AFTER_SOCKET_CLEANUP / UNSAFE_FORBID_PRESERVED / MAIN_RS_UNCHANGED / TEMP_WORKFLOWS_REMOVED / NO_SYSTEMD_ACTIVATION / NO_DEPLOYMENT / NEW_BOOTSTRAP_APPROVAL_REQUIRED
+
+This file is the single authoritative user-facing Phase 099 completion review.
