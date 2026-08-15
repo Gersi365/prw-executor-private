@@ -1,0 +1,110 @@
+Private Remote Workspace
+Phase 031 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 031
+SCOPE: Complete in-memory local read-only Request frame builder/decoder
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 031 base commit: f71228feb61bd55fc8816e5ced532544213f9523
+Initial implementation sequence:
+- 3b8290e003376c5317638421eda98f537b45b271
+- c65067143a1ed0f05a5337dc8ed530a184139454
+- 2aed6b91f20652ef4166dd7c98dfdde9c2634a9c
+- 4e05dddea85cc6478c041143d945f04c8e53e089
+Phase 030 residual rustfmt corrective: fc9e7c1e1d86b440271cf41f915580136dacf010
+Phase 031 rustfmt corrective: 3df02f1125a6c2da59410bb06c34ca73e7fbc67f
+Authoritative GitHub Actions run: 31882111108
+
+LOCKED REQUEST SHAPE
+
+- outer message kind: Request
+- request ID: existing typed LocalIpcRequestId
+- protocol version: existing LocalIpcProtocolVersion::current()
+- payload: existing Phase 015 two-byte command code
+- current commands:
+  - GetAgentStatus => 00 01
+  - GetPrivateDnsConfig => 00 02
+- payload length: exactly 2 bytes
+- total encoded frame wire length when passed through the existing frame codec: 26 bytes (24-byte frame header + 2-byte payload)
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/request_frame.rs
+- Added build_local_command_request_frame().
+- Added decode_local_command_request_frame().
+- Reused the existing Phase 015 command codec rather than defining a second command mapping.
+- Reused LocalIpcPayload, LocalIpcFrameHeader, and LocalIpcFrame constructors.
+- Rejects Response/Error outer kinds before command decoding.
+- Preserves the typed request ID in LocalAgentRequestEnvelope.
+
+2. crates/prw-agent/src/local_commands.rs
+- Exported request_frame.
+
+3. contracts/LOCAL_REQUEST_FRAME_CONTRACT.md
+- Locked request framing and command-code reuse.
+
+4. docs/architecture/PHASE_031_LOCAL_REQUEST_FRAME.md
+- Recorded the composition boundary and runtime deferrals.
+
+VALIDATION HISTORY
+
+Run 61
+- Run ID: 31881812108
+- Commit: 4e05dddea85cc6478c041143d945f04c8e53e089
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Formatter also exposed one residual Phase 030 formatting defect.
+- Clippy, tests, and build were skipped.
+
+Correctives
+- fc9e7c1e1d86b440271cf41f915580136dacf010: exact residual Phase 030 rustfmt reflow only.
+- 3df02f1125a6c2da59410bb06c34ca73e7fbc67f: exact Phase 031 rustfmt reflow only.
+
+Run 62
+- Run ID: 31882111108
+- Commit: 3df02f1125a6c2da59410bb06c34ca73e7fbc67f
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: both read-only commands build with stable two-byte payloads
+PASS: Request kind and typed request ID are preserved
+PASS: Response/Error frames are rejected before command decode
+PASS: malformed request payloads are delegated to the locked Phase 015 decoder
+PASS: no alternate command mapping or serializer was introduced
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 031 did not create/bind/listen/connect a Unix socket, access peer credentials, dispatch live Agent commands, mutate DNS/network state, add a dependency, start an async runtime, activate systemd, add a database, deploy infrastructure, or implement private-key operations.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+The next narrow provider-neutral gap is generic std::io Read/Write composition for complete Request frames, still tested only with memory streams and without Unix socket runtime.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 031 implementation-validation report.
+GitHub Actions run 31882111108 is the authoritative executable validation evidence for corrected workspace commit 3df02f1125a6c2da59410bb06c34ca73e7fbc67f.
