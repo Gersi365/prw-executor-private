@@ -1,5 +1,7 @@
 //! Complete in-memory `GetAgentStatus` response frame composition.
 
+pub mod stream;
+
 use super::LocalAgentStatusSnapshot;
 use super::codec::{LocalAgentStatusDecodeError, decode_status_snapshot, encode_status_snapshot};
 use crate::LocalIpcRequestId;
