@@ -95,7 +95,9 @@ mod tests {
     #[test]
     fn duplicate_registration_prevents_all_io() {
         let mut tracker = LocalRequestTracker::new();
-        tracker.register(id(151)).expect("initial request registered");
+        tracker
+            .register(id(151))
+            .expect("initial request registered");
         let mut writer = CountingWriter::default();
 
         assert_eq!(
