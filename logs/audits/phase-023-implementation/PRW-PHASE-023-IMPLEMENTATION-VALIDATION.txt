@@ -1,0 +1,151 @@
+Private Remote Workspace
+Phase 023 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 023
+SCOPE: Complete successful GetAgentStatus in-memory response frame composition
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 023 base commit: 27ef01fc66e9cbf57e93411201a5b81cb464504c
+Validated source commit: 51764a98eac31ed277fb2e2d0927bfd2aa6c4b23
+Validated GitHub Actions run: 31880216224
+
+LOCKED COMPOSITION
+
+Build path:
+LocalAgentStatusSnapshot
+-> Phase 018 five-byte status body
+-> Phase 022 terminal frame builder with status Ok
+-> outer Response frame with supplied request ID and current IPC protocol version.
+
+Resulting payload length: 7 bytes.
+For Ready / protocol 1.0:
+00 00 02 00 01 00 00
+
+The complete frame builder does not accept caller-supplied kind/status/payload length/version metadata beyond the typed request ID and status snapshot.
+
+Decode path:
+1. validate complete frame through Phase 020 terminal-response invariant;
+2. reject a valid terminal non-success response;
+3. skip only the already validated two-byte common response-status prefix;
+4. decode the remaining body through Phase 018;
+5. return existing request ID + typed LocalAgentStatusSnapshot.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/status_snapshot.rs
+- Exported response_frame module.
+
+2. crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- Added LocalAgentStatusFrame.
+- Added build_success_status_frame().
+- Added decode_success_status_frame().
+- Reused Phase 018 status-body codec, Phase 020 terminal validator, and Phase 022 builder.
+- Preserved terminal-frame, non-success, and status-body failures as distinct typed categories.
+
+3. contracts/LOCAL_AGENT_STATUS_FRAME_CONTRACT.md
+- Added normative complete successful GetAgentStatus frame composition contract.
+
+4. docs/architecture/PHASE_023_LOCAL_AGENT_STATUS_FRAME.md
+- Recorded encode/decode composition, tracker separation, tests, and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 023 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_FRAME_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/status_snapshot.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- added: docs/architecture/PHASE_023_LOCAL_AGENT_STATUS_FRAME.md
+
+VALIDATION HISTORY
+
+Run 45
+- Run ID: 31880185904
+- Commit: 85367dca257bd03270dccfd8949aae342193aa7e
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only import/reflow changes in response_frame.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 51764a98eac31ed277fb2e2d0927bfd2aa6c4b23
+- Change: exact rustfmt-only correction in response_frame.rs.
+- Frame composition, payload bytes, failure taxonomy, dependency set, and runtime behavior unchanged.
+
+Run 46
+- Run ID: 31880216224
+- Commit: 51764a98eac31ed277fb2e2d0927bfd2aa6c4b23
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: built frame has outer Response kind
+PASS: supplied request ID preserved
+PASS: payload length exactly seven bytes
+PASS: payload byte-identical to Phase 019 success payload
+PASS: all four runtime states round trip through a complete frame
+PASS: valid terminal error rejected by success-specific decoder
+PASS: malformed status body rejected after terminal validation
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 023 did not:
+- read or write a byte stream;
+- bind/listen/accept/connect a socket;
+- dispatch or execute commands;
+- mutate outstanding-request state;
+- collect live Agent state;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 023.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 023 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- byte-level reader/writer round-trip of complete status frames;
+- composition with Phase 021 request-tracker completion;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- timeout/cancellation policy;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 023 implementation-validation report.
+GitHub Actions run 31880216224 is the authoritative executable validation evidence for source commit 51764a98eac31ed277fb2e2d0927bfd2aa6c4b23.
