@@ -1,0 +1,139 @@
+Private Remote Workspace
+Phase 026 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 026
+SCOPE: Bounded read-only private-DNS local IPC snapshot
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 026 base commit: d9a804f13089e97cf742702d71af5152535bec59
+Validated source commit: e272cf8f4f7a482d3276b56f55d21e575c53c2a3
+Validated GitHub Actions run: 31880680909
+
+LOCKED PRODUCT BOUNDS
+
+The existing prw-network::PrivateDnsConfig remains unchanged and flexible.
+The local IPC projection admits:
+- maximum resolver entries: 16
+- maximum split-domain entries: 64
+- resolver string length: 1..=128 UTF-8 bytes
+- split-domain string length: 1..=253 UTF-8 bytes
+
+These are PRW local-IPC product resource caps, not claims about normative DNS wire-protocol limits.
+
+SNAPSHOT PRESERVATION
+
+A valid LocalPrivateDnsSnapshot preserves exactly:
+- enabled
+- device_naming
+- resolver strings in source order
+- split-domain strings in source order
+
+It does not parse, normalize, sort, deduplicate, replace, or invent values. The borrowed source PrivateDnsConfig is never mutated.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported private_dns_snapshot module.
+
+2. crates/prw-agent/src/local_commands/private_dns_snapshot.rs
+- Added Phase 026 bound constants.
+- Added LocalPrivateDnsSnapshot.
+- Added try_from_config(&PrivateDnsConfig).
+- Added fail-closed count, empty-string, and byte-length errors.
+- Added focused projection and boundary tests.
+
+3. contracts/LOCAL_PRIVATE_DNS_SNAPSHOT_CONTRACT.md
+- Added normative source-domain separation, product caps, preservation requirements, and explicit non-goals.
+
+4. docs/architecture/PHASE_026_PRIVATE_DNS_SNAPSHOT.md
+- Recorded bounded-projection rationale and future codec boundary.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 026 base: 4
+- added: contracts/LOCAL_PRIVATE_DNS_SNAPSHOT_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/private_dns_snapshot.rs
+- added: docs/architecture/PHASE_026_PRIVATE_DNS_SNAPSHOT.md
+
+VALIDATION HISTORY
+
+Run 51
+- Run ID: 31880680909
+- Commit: e272cf8f4f7a482d3276b56f55d21e575c53c2a3
+- Result: SUCCESS
+- No corrective commit was required.
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: default disabled config projects without invented values
+PASS: flags/list content/order preserved exactly
+PASS: exact resolver/split-domain count bounds accepted
+PASS: above-count configurations rejected
+PASS: exact per-string UTF-8 byte bounds accepted
+PASS: empty resolver rejected
+PASS: overlong resolver rejected
+PASS: empty split domain rejected
+PASS: overlong split domain rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 026 did not:
+- define a byte serializer;
+- parse resolver addresses;
+- validate or normalize DNS/IDNA syntax;
+- enable/disable or reconfigure private DNS;
+- mutate resolver or routing state;
+- create/bind/listen/accept/connect a Unix socket;
+- access peer credentials;
+- dispatch or execute commands;
+- add a dependency;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- byte codec for the bounded private-DNS snapshot;
+- resolver-address semantic validation;
+- split-domain normalization/validation policy;
+- successful GetPrivateDnsConfig payload/frame composition;
+- command-specific error body schema;
+- timeout/cancellation policy;
+- live runtime command dispatch;
+- Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 026 implementation-validation report.
+GitHub Actions run 31880680909 is the authoritative executable validation evidence for source commit e272cf8f4f7a482d3276b56f55d21e575c53c2a3.
