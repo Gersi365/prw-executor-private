@@ -1,0 +1,82 @@
+Private Remote Workspace
+Phase 077 Linux Worker Thread Lifecycle Decision
+
+STATUS: DECISION_LOCKED / NO_PRODUCTION_THREAD_SPAWN
+AUDIT TYPE: THREAD OWNERSHIP / JOIN / SHUTDOWN STRUCTURE LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 076 authoritative report commit: 659f784d75f76ae5afabe72bd0b4150ce764408b
+Phase 076 validated source head: 4c8c9997895a6eb867375ce8d24e51619a328b1a
+Phase 076 authoritative validation run: 31895555015
+Phase 077 contract commit: 15657e7b330ecc6bed2ddf6bae02beb39fca74b0
+
+PURPOSE
+
+Prevent the first OS worker-thread implementation from creating detachable or unaccounted session workers.
+
+EVIDENCE
+
+Rust 1.97.1 standard-library behavior establishes:
+
+- dropping a normal JoinHandle detaches the associated thread and removes the ability to join it;
+- Builder::spawn reports OS thread-creation failure through io::Result;
+- std::thread::scope structurally prevents scoped threads from outliving the scope;
+- a dropped scoped join handle is still joined before scope exit;
+- Builder::spawn_scoped reports OS thread-creation failure through io::Result.
+
+DECISION 1 — SCOPED SESSION WORKERS
+
+Initial PRW Linux Agent session workers must be created only inside an enclosing std::thread::scope owned by the runtime orchestration call.
+
+Unscoped std::thread::spawn / Builder::spawn session workers are not allowed in the initial runtime.
+
+DECISION 2 — FALLIBLE SPAWN
+
+Worker creation uses Builder::spawn_scoped so OS thread creation failure is a bounded error rather than a panic caused by thread creation itself.
+
+DECISION 3 — CAPACITY BEFORE SPAWN
+
+A Phase 075 worker permit is acquired before spawn and moves into the successful worker closure.
+
+Spawn failure must release/recover the permit without leaving a half-registered worker or reusable ambiguous connection.
+
+DECISION 4 — WORKER RESULTS REMAIN ACCOUNTED
+
+Scoped lifetime prevents detached workers, but the final scheduler must also retain/reap scoped join handles so normal worker results, worker errors, and worker panics are explicitly classified.
+
+The final runtime must not intentionally discard worker results by relying only on implicit scope joining.
+
+DECISION 5 — STRUCTURAL SHUTDOWN ORDER
+
+The runtime thread scope is the outer worker lifetime boundary.
+
+Future shutdown ordering:
+
+1. stop new accept/scheduling;
+2. invoke a separately reviewed worker cancellation/connection-shutdown mechanism if required;
+3. join/reap all remaining workers;
+4. return from thread scope;
+5. then clean listener/path/instance-lock state.
+
+This phase does not implement the cancellation primitive.
+
+NEXT SAFE IMPLEMENTATION
+
+Phase 078 may implement one crate-internal scoped-worker spawn adapter that accepts an existing Scope, consumes one authenticated session and one worker permit, invokes the Phase 076 finite worker body exactly once, and returns the ScopedJoinHandle to the caller.
+
+Tests must explicitly join every returned handle.
+
+MUTATION STATEMENT
+
+Phase 077 changes only contract/audit documentation.
+
+It spawns no thread, accepts no connection, processes no Request, activates no Agent bootstrap/systemd/service state, and changes no authentication/network/DNS/TUN/database/private-key/deployment state.
+
+FINAL CLASSIFICATION
+
+SCOPED_WORKER_LIFETIME_LOCKED / DETACHED_SESSION_WORKERS_FORBIDDEN / FALLIBLE_SPAWN_LOCKED / EXPLICIT_RESULT_ACCOUNTING_REQUIRED / READY_FOR_PHASE_078_SINGLE_SCOPED_SPAWN
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 077 decision report.
