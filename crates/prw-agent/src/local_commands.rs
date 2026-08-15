@@ -10,6 +10,7 @@ pub mod private_dns_response;
 pub mod private_dns_snapshot;
 pub mod request_frame;
 pub mod request_tracker;
+pub mod responder;
 pub mod response_codec;
 pub mod status_snapshot;
 pub mod terminal_completion;
