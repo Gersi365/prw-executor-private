@@ -72,7 +72,9 @@ mod tests {
     fn healthy_discard_surfaces_outstanding_ids_in_registration_order() {
         let mut tracker = LocalRequestTracker::new();
         tracker.register(id(170)).expect("first request registered");
-        tracker.register(id(171)).expect("second request registered");
+        tracker
+            .register(id(171))
+            .expect("second request registered");
 
         let disposition =
             discard_local_connection_request_state(LocalConnectionSendState::Healthy, &mut tracker);
@@ -87,7 +89,9 @@ mod tests {
     #[test]
     fn poisoned_discard_reports_poison_and_preserves_ambiguous_id_for_caller() {
         let mut tracker = LocalRequestTracker::new();
-        tracker.register(id(172)).expect("ambiguous request registered");
+        tracker
+            .register(id(172))
+            .expect("ambiguous request registered");
 
         let disposition = discard_local_connection_request_state(
             LocalConnectionSendState::WritePoisoned,
