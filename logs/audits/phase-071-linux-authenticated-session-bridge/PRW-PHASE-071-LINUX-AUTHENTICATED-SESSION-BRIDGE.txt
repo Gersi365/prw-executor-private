@@ -1,0 +1,98 @@
+Private Remote Workspace
+Phase 071 Linux Authenticated Accept-to-Session Bridge
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: dea50544441013902ff9ebd28b822d5215cce00c
+Authoritative GitHub Actions run: 31893736193
+Phase 070 authoritative report commit: ef3770515d01f2c447ef85565af564bc5cf64e94
+
+PURPOSE
+
+Compose the already validated Phase 070 authenticated one-shot accept outcome into the already validated Phase 060 AuthenticatedLocalLinuxSession type without introducing a new accept operation, application I/O, policy binding, Request processing, loop, scheduler, or Agent bootstrap activation.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_session_bridge.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_AGENT_AUTHENTICATED_SESSION_BRIDGE_CONTRACT.md
+- architecture: docs/architecture/PHASE_071_LINUX_AUTHENTICATED_SESSION_BRIDGE.md
+
+EXACT MAPPING
+
+- Phase 070 NoConnectionReady -> Phase 071 NoConnectionReady.
+- Phase 070 Authenticated(connection) -> Phase 071 AuthenticatedSession(AuthenticatedLocalLinuxSession::new(connection)).
+
+The mapping is infallible and performs only Rust ownership/state composition.
+
+SECURITY ORDERING PRESERVED
+
+An authenticated connection input has already passed the Phase 070/059 ordering:
+
+accept -> Linux SO_PEERCRED -> exact same-effective-UID authorization -> authenticated wrapper.
+
+Phase 071 does not:
+
+- accept a descriptor;
+- retrieve credentials again;
+- read or write application bytes;
+- manufacture a principal or policy binding;
+- evaluate capabilities;
+- process a Request budget.
+
+The Phase 060 session starts with fresh aggregate connection state while retaining the same authenticated stream and peer credential metadata.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- no-ready maps to no-ready;
+- an already-authenticated same-UID connection maps to a Phase 060 session;
+- peer UID remains the Agent effective UID;
+- the new session state is usable/fresh;
+- sentinel bytes written before authentication/session composition remain unread through Phase 071 and are recoverable only after explicitly extracting/accessing the authenticated stream after bridge construction.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31893736193
+Validated source head: dea50544441013902ff9ebd28b822d5215cce00c
+
+Passed gates:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+No corrective commit was required after Phase 071 entered the build graph.
+
+SCOPE PRESERVED
+
+Phase 071:
+
+- adds no new socket syscall;
+- adds no application I/O in production;
+- adds no accept/session loop;
+- adds no readiness engine or concurrency model;
+- selects no Request budget;
+- binds no PolicyEvaluator or runtime snapshots;
+- is not invoked by the Agent bootstrap;
+- activates no service;
+- changes no network/DNS/TUN/database/private-key/deployment state.
+
+NEXT READINESS QUESTION
+
+Phase 060 processing uses blocking std::io::Read/Write semantics. A caller-supplied request-count budget bounds the number of processed Requests but does not itself bound wall-clock time waiting for a connected peer to provide a complete frame.
+
+Therefore the next runtime step must explicitly review connection-processing wait/readiness/concurrency semantics before wiring Phase 060 processing into a long-running Agent lifecycle.
+
+FINAL CLASSIFICATION
+
+AUTHENTICATED_ACCEPT_TO_SESSION_COMPOSITION_IMPLEMENTED / NO_APPLICATION_IO / AUTH_METADATA_PRESERVED / FRESH_SESSION_STATE / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 071 report.
