@@ -47,9 +47,60 @@ pub trait PolicyEvaluator {
     fn evaluate(&self, capability: Capability) -> Decision;
 }
 
+/// Fixed, bounded local policy for the initial read-only Agent command surface.
+///
+/// Evaluation is entirely in-memory and covers exactly the two currently
+/// implemented local read capabilities. Every other represented capability is
+/// denied fail-closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoundedLocalReadPolicy {
+    agent_status: Decision,
+    private_dns: Decision,
+}
+
+impl BoundedLocalReadPolicy {
+    /// Creates an explicit local read policy from independent decisions.
+    #[must_use]
+    pub const fn new(agent_status: Decision, private_dns: Decision) -> Self {
+        Self {
+            agent_status,
+            private_dns,
+        }
+    }
+
+    /// Creates the fail-closed local read policy.
+    #[must_use]
+    pub const fn deny_all() -> Self {
+        Self::new(Decision::Deny, Decision::Deny)
+    }
+
+    /// Creates a policy allowing both implemented local read capabilities.
+    #[must_use]
+    pub const fn allow_local_reads() -> Self {
+        Self::new(Decision::Allow, Decision::Allow)
+    }
+}
+
+impl PolicyEvaluator for BoundedLocalReadPolicy {
+    fn evaluate(&self, capability: Capability) -> Decision {
+        match capability {
+            Capability::AgentStatusRead => self.agent_status,
+            Capability::PrivateDnsConfigRead => self.private_dns,
+            Capability::TerminalOpen
+            | Capability::TerminalExec
+            | Capability::FilesRead
+            | Capability::FilesWrite
+            | Capability::FilesDelete
+            | Capability::ForwardingCreate
+            | Capability::DeviceManage
+            | Capability::PolicyManage => Decision::Deny,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Capability, Decision, PolicyEvaluator};
+    use super::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
 
     struct DenyAll;
 
@@ -73,5 +124,72 @@ mod tests {
         );
         assert_ne!(Capability::AgentStatusRead, Capability::FilesRead);
         assert_ne!(Capability::PrivateDnsConfigRead, Capability::FilesRead);
+    }
+
+    #[test]
+    fn bounded_local_policy_configures_local_reads_independently() {
+        let status_only = BoundedLocalReadPolicy::new(Decision::Allow, Decision::Deny);
+        let dns_only = BoundedLocalReadPolicy::new(Decision::Deny, Decision::Allow);
+
+        assert_eq!(
+            status_only.evaluate(Capability::AgentStatusRead),
+            Decision::Allow
+        );
+        assert_eq!(
+            status_only.evaluate(Capability::PrivateDnsConfigRead),
+            Decision::Deny
+        );
+        assert_eq!(
+            dns_only.evaluate(Capability::AgentStatusRead),
+            Decision::Deny
+        );
+        assert_eq!(
+            dns_only.evaluate(Capability::PrivateDnsConfigRead),
+            Decision::Allow
+        );
+    }
+
+    #[test]
+    fn bounded_local_policy_denies_every_nonlocal_capability() {
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
+
+        for capability in [
+            Capability::TerminalOpen,
+            Capability::TerminalExec,
+            Capability::FilesRead,
+            Capability::FilesWrite,
+            Capability::FilesDelete,
+            Capability::ForwardingCreate,
+            Capability::DeviceManage,
+            Capability::PolicyManage,
+        ] {
+            assert_eq!(policy.evaluate(capability), Decision::Deny);
+        }
+    }
+
+    #[test]
+    fn bounded_local_policy_constructors_are_deterministic() {
+        let deny_all = BoundedLocalReadPolicy::deny_all();
+        assert_eq!(
+            deny_all.evaluate(Capability::AgentStatusRead),
+            Decision::Deny
+        );
+        assert_eq!(
+            deny_all.evaluate(Capability::PrivateDnsConfigRead),
+            Decision::Deny
+        );
+
+        let allow = BoundedLocalReadPolicy::allow_local_reads();
+        assert_eq!(allow.evaluate(Capability::AgentStatusRead), Decision::Allow);
+        assert_eq!(
+            allow.evaluate(Capability::PrivateDnsConfigRead),
+            Decision::Allow
+        );
+    }
+
+    #[test]
+    fn bounded_local_policy_is_copy_send_sync() {
+        fn assert_copy_send_sync<T: Copy + Send + Sync>() {}
+        assert_copy_send_sync::<BoundedLocalReadPolicy>();
     }
 }
