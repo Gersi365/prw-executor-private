@@ -60,6 +60,7 @@ pub struct Transfer {
 impl Transfer {
     /// Returns progress as a floating-point ratio when total size is known.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn progress_ratio(&self) -> Option<f64> {
         let total = self.bytes_total?;
         if total == 0 {
