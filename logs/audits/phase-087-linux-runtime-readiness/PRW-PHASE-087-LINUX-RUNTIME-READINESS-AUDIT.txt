@@ -1,0 +1,212 @@
+Private Remote Workspace
+Phase 087 Linux Outer Runtime Readiness / Shutdown Wake Audit
+
+STATUS: READINESS_AUDIT_COMPLETE / ARCHITECTURE_APPROVAL_REQUIRED / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY RUNTIME ORCHESTRATION READINESS / CANDIDATE COMPARISON
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Audited repository head before this report: 62ac71a3df7d307b0c143890bdfa6ad2ed703812
+Phase 086 authoritative PASS report commit: 62ac71a3df7d307b0c143890bdfa6ad2ed703812
+Phase 086 validated source head: 6f67a1be406a217f8079120345d8a1224b269110
+Phase 086 authoritative GitHub Actions run: 31897946657
+
+PURPOSE
+
+Audit the missing outer Linux runtime readiness/wakeup boundary after Phase 086 without selecting or activating a production runtime architecture.
+
+This audit answers a narrower question: what mechanism could safely decide when the already-validated finite Phase 086 scheduling cycle is invoked again, while preserving immediate shutdown gating, no busy-loop behavior, and the existing non-activating Agent bootstrap?
+
+AUTHORITATIVE REPOSITORY BASELINE
+
+The current repository establishes all of the following:
+
+- Phase 069 deliberately deferred poll/ppoll/epoll, async runtime, listener thread, batching, concurrency timing, cancellation orchestration, and Agent bootstrap/service wiring;
+- Phase 070 made the listener explicitly nonblocking before one-shot accept and retained blocking authenticated accepted streams;
+- Phase 082 provides authenticated worker cancellation through cancel_all() while preserving mandatory join_all();
+- Phase 085 requires a future outer wait/readiness mechanism to decide when another finite scheduling cycle runs;
+- Phase 085 locks final shutdown ordering at the scheduling boundary as: request shutdown, stop invoking new cycles, cancel active workers, join/classify workers, leave scoped-thread lifetime, then clean listener/path/instance-lock lifecycle;
+- Phase 086 implements and validates the finite scheduling cycle, including reap-before-schedule, monotonic shutdown observation, exact caller attempt bounds, no retry on no-work conditions, and zero accept after shutdown is observed;
+- crates/prw-agent/src/main.rs remains a non-activating build-phase bootstrap and starts no listener;
+- crates/prw-agent/Cargo.toml pins rustix = 1.1.4 with features std, fs, net, and process only. The rustix event feature is not enabled.
+
+EXTERNAL API CAPABILITY CHECK
+
+The rustix 1.1.4 package documentation was checked only to establish available implementation primitives; this is capability evidence, not authorization to change dependencies.
+
+With rustix feature "event" enabled, the package exposes:
+
+- PollFd and PollFlags for poll-style readiness sets;
+- poll(fds, timeout) for waiting on a list of file descriptors;
+- eventfd(initval, flags) returning an owned event-notification file descriptor on Linux;
+- EventfdFlags including CLOEXEC and NONBLOCK;
+- Linux epoll create/add/wait primitives.
+
+The current PRW Cargo feature set does not expose these event operations because feature "event" is absent.
+
+CANDIDATE A — poll(listener + eventfd shutdown wakeup)
+
+Candidate structure:
+
+- exactly one already-validated accept-ready listener descriptor;
+- exactly one dedicated eventfd used only as an outer-runtime wakeup channel;
+- blocking poll with no periodic timeout cadence;
+- scheduler shutdown state remains LocalLinuxSchedulerControl; eventfd carries wakeup notification only and does not become policy state;
+- after wakeup, shutdown readiness is handled before listener readiness can lead to another scheduling cycle;
+- listener readiness may invoke one Phase 086 bounded cycle with a separately supplied finite attempt budget.
+
+Advantages for the current boundary:
+
+- smallest readiness set: two file descriptors;
+- no busy polling;
+- no arbitrary periodic wake cadence;
+- shutdown can wake an indefinitely blocked readiness wait immediately;
+- preserves the existing Phase 070 nonblocking one-shot accept primitive;
+- preserves the Phase 086 shutdown-before-accept check as a second fail-closed gate;
+- does not require an async runtime or long-lived listener thread abstraction.
+
+Risks / decisions still required:
+
+- adding rustix feature "event" changes the dependency feature surface and therefore requires explicit audited approval;
+- eventfd ownership, duplicate shutdown notifications, drain semantics, and terminal wake handling require a contract before implementation;
+- the exact readiness-result precedence when listener and shutdown wake are both ready must be locked explicitly;
+- EINTR/error handling for the wait primitive must be fail-closed and must not create an implicit retry loop without a bounded/approved rule;
+- production attempt budget is still intentionally unspecified.
+
+AUDIT ASSESSMENT: RECOMMENDED INITIAL CANDIDATE, NOT YET AUTHORIZED.
+
+CANDIDATE B — epoll(listener + eventfd shutdown wakeup)
+
+Candidate structure:
+
+- create one epoll object;
+- register the listener and shutdown eventfd;
+- block in epoll wait and dispatch readiness.
+
+Advantages:
+
+- scales naturally if the future runtime eventually waits on a larger set of descriptors;
+- supports a conventional Linux event-loop model.
+
+Current disadvantages:
+
+- introduces an additional owned epoll object and registration lifecycle;
+- adds registration/removal/error state not needed for the current two-descriptor wait set;
+- increases cleanup and audit surface before the product has demonstrated a need for multiplexing beyond listener + shutdown wake;
+- does not improve the currently required semantics over a two-entry poll set.
+
+AUDIT ASSESSMENT: VALID FUTURE OPTION, UNNECESSARY COMPLEXITY FOR THE INITIAL OUTER WAIT BOUNDARY.
+
+CANDIDATE C — poll(listener) with periodic timeout + AtomicBool shutdown check
+
+Candidate structure:
+
+- wait on the listener with a finite repeated timeout;
+- on each timeout, re-check LocalLinuxSchedulerControl.
+
+Advantages:
+
+- does not require a separate shutdown notification descriptor.
+
+Current disadvantages:
+
+- forces a production timing cadence decision before one is otherwise needed;
+- shutdown latency becomes coupled to the timeout value;
+- repeated timeout wakeups occur even with no work;
+- choosing a very short timeout trends toward polling behavior, while a long timeout weakens shutdown responsiveness;
+- duplicates a timing concern that a dedicated wakeup descriptor can avoid.
+
+AUDIT ASSESSMENT: NOT RECOMMENDED FOR THE INITIAL RUNTIME BOUNDARY.
+
+CANDIDATE D — async runtime or dedicated listener thread
+
+Candidate structure:
+
+- introduce an async executor or a separately managed blocking/readiness thread that owns listener orchestration.
+
+Current disadvantages:
+
+- materially broadens dependency, task/thread lifetime, cancellation, panic, join, and service-shutdown semantics;
+- would require a new concurrency architecture beyond the scoped worker model already validated;
+- is not necessary to bridge the current listener and shutdown state.
+
+AUDIT ASSESSMENT: DEFER UNTIL A CONCRETE REQUIREMENT JUSTIFIES THE EXTRA RUNTIME MODEL.
+
+RECOMMENDED PRE-IMPLEMENTATION ARCHITECTURE CANDIDATE
+
+Subject to explicit approval in a later decision phase, the narrowest candidate is:
+
+    blocking poll over [accept-ready listener, dedicated shutdown eventfd]
+
+with these proposed invariants:
+
+1. LocalLinuxSchedulerControl remains the semantic source of truth for shutdown.
+2. eventfd is wakeup transport only; it does not replace or reset the monotonic shutdown flag.
+3. the wait has no periodic timeout during normal operation.
+4. shutdown notification takes precedence over listener dispatch whenever both are observed ready.
+5. after any listener wake, Phase 086 remains the only scheduling-cycle composition and therefore checks shutdown again before Phase 084 accept/spawn.
+6. AtCapacity and NoConnectionReady still return control to the outer readiness layer; the outer layer does not spin or immediately retry them without a new readiness condition.
+7. worker shutdown remains Phase 082 cancel_all() followed by mandatory join_all().
+8. listener/path/instance-lock cleanup occurs only after new scheduling has stopped and workers have been joined.
+9. the initial outer runtime does not bind remote networking, TUN, DNS mutation, or privileged helper behavior.
+10. production numeric values such as scheduling attempt budget, listener backlog, worker capacity, I/O deadlines, and per-worker request budget remain separate explicit decisions.
+
+PROPOSED SHUTDOWN ORDER FOR A FUTURE DECISION LOCK
+
+The existing Phase 085 shutdown boundary can be extended with wakeup mechanics without changing its semantic ordering:
+
+1. request LocalLinuxSchedulerControl shutdown;
+2. publish a terminal wake notification to the dedicated shutdown descriptor;
+3. readiness wait returns;
+4. observe shutdown before dispatching listener readiness;
+5. stop invoking Phase 086 scheduling cycles;
+6. registry.cancel_all();
+7. registry.join_all() and retain/classify completion evidence;
+8. leave the scoped worker lifetime;
+9. explicitly clean the accept-ready/listening/bound socket lifecycle;
+10. release instance-lock/runtime-directory ownership according to already-validated lifecycle contracts.
+
+This audit does not lock how an operating-system signal, local command, desktop client, or service manager causes step 1. Signal/source integration remains a separate future decision.
+
+PRE-IMPLEMENTATION QUESTIONS THAT MUST BE LOCKED
+
+Before any Rust source or Cargo feature mutation, an explicit decision phase should lock at least:
+
+- poll + eventfd versus another mechanism;
+- eventfd flags and ownership type;
+- wake-write/drain representation and overflow/error handling;
+- simultaneous listener/shutdown readiness precedence;
+- EINTR and poll-error behavior;
+- whether one readiness wake may invoke exactly one Phase 086 cycle or another finite caller-controlled bound;
+- how outer-loop termination evidence is represented;
+- the source that requests production shutdown;
+- whether bootstrap wiring is implemented in the same phase or remains deferred;
+- rollback behavior if runtime initialization fails after some local lifecycle objects are created.
+
+NO-MUTATION / NO-ACTIVATION STATEMENT
+
+Phase 087 performs analysis and writes only this audit report.
+
+It does NOT:
+
+- change Cargo.toml, Cargo.lock, or rustix features;
+- change Rust source;
+- add poll, epoll, eventfd, signal handlers, threads, tasks, or runtime loops;
+- change crates/prw-agent/src/main.rs;
+- bind, listen, accept, or connect in production;
+- install, enable, start, stop, or modify a systemd unit;
+- activate the Agent bootstrap or a daemon;
+- change authentication, enrollment, DNS, TUN, remote networking, relay, database, private-key, deployment, or production state;
+- lock Candidate A as approved architecture.
+
+NEXT SAFE STEP
+
+An explicit Phase 088 architecture decision may accept, reject, or modify Candidate A. Only after such a decision is locked should a later implementation phase be permitted to add the rustix event feature and implement a testable outer readiness primitive.
+
+FINAL CLASSIFICATION
+
+OUTER_RUNTIME_GAP_CONFIRMED / POLL_PLUS_EVENTFD_RECOMMENDED_CANDIDATE / EPOLL_DEFERRED / PERIODIC_TIMEOUT_NOT_RECOMMENDED / BOOTSTRAP_UNCHANGED / NO_RUNTIME_ACTIVATION / EXPLICIT_ARCHITECTURE_APPROVAL_REQUIRED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 087 readiness audit.
