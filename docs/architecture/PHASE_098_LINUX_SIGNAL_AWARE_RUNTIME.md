@@ -1,6 +1,6 @@
 # Phase 098 — Linux Signal-Aware Production Runtime
 
-Status: `SIGNAL_SOURCE_INTEGRATED_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `SIGNAL_SOURCE_VALIDATED / SIGNAL_AWARE_READINESS_INTEGRATED_AWAITING_AUTHORITATIVE_CI`
 
 ## Purpose
 
@@ -38,6 +38,10 @@ Integrated signal-source commit:
 
 `ce5c429cb8f0147fd1db950c27be52d729a92cca`
 
+Permanent signal-source validation:
+
+`31902722135`
+
 `LocalLinuxTerminationSignalSource`:
 
 - synchronously blocks exactly SIGTERM and SIGINT on the creating thread;
@@ -50,36 +54,65 @@ Integrated signal-source commit:
 - explicitly closes `SignalFd` before restoring the previous mask;
 - performs best-effort same-thread restoration during unwind/Drop.
 
-## Signal-source preflight history
+### Signal-source preflight history
 
 Initial run `31902474463` compiled against nix successfully but stopped at Clippy-only style/documentation findings. No nix API mismatch was reported.
 
 A01 run `31902589850` corrected those mechanical findings and reached the real signal test. It exposed a test-isolation defect: process-directed `kill(Pid::this(), SIGTERM)` could be delivered to a pre-existing unblocked Rust test-harness thread before the test function had a chance to modify that thread's mask.
 
-The test strategy was corrected rather than weakening production semantics. The isolated child test now uses safe nix `raise(...)`, which targets the current test thread after its termination mask is installed. This avoids unrelated harness-thread delivery while still exercising the real kernel pending-signal -> `SignalFd` path.
+The test strategy was corrected rather than weakening production semantics. The isolated child test uses safe nix `raise(...)`, targeting the current test thread after its termination mask is installed. This avoids unrelated harness-thread delivery while still exercising the real kernel pending-signal -> `SignalFd` path.
 
 A02 run `31902660895` passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check` before committing the signal source and deleting all three temporary signal-source workflows.
 
-The real child-process proof validates:
+The child-process proof validates mask installation, worker-thread mask inheritance, SIGTERM/SIGINT SignalFd consumption, exact explicit mask restoration, and Drop restoration without contaminating the parent test harness.
 
-- the creating thread has SIGTERM/SIGINT blocked;
-- a subsequently created child thread inherits that blocked mask;
-- thread-directed SIGTERM becomes readable from `SignalFd` and decodes as `SigTerm`;
-- thread-directed SIGINT becomes readable and decodes as `SigInt`;
-- explicit restore returns the exact original mask;
-- Drop-based restoration also returns the exact original mask;
-- the parent parallel test harness is not left with mutated signal-mask state.
+## One-step signal-aware readiness
 
-## Next Phase 098 source layer
+Integrated readiness commit:
 
-After permanent CI validates this signal-source checkpoint, Phase 098 may implement tri-source readiness and the signal-aware callable runtime wrapper with semantic precedence:
+`300cea789300b9356202bb240ba3049164067267`
+
+The production-specific one-step readiness adapter preserves Phase 091 rather than replacing it.
+
+Its poll set is exactly:
+
+1. termination `SignalFd` — always armed;
+2. Phase 089 runtime wake — always armed;
+3. listener — armed only while worker capacity is available.
+
+Semantic precedence for one kernel result is exactly:
 
 1. termination signal;
-2. Phase 089 runtime wake;
+2. runtime wake;
 3. listener readiness.
 
-Capacity-aware listener suppression from Phase 091 must remain unchanged.
+A consumed termination signal commits monotonic scheduler shutdown before returning its typed readiness outcome, ensuring no simultaneous listener dispatch occurs after the signal wins precedence.
+
+The wake branch preserves Phase 091 behavior: drain wake, reap finished workers, re-observe shutdown, then allow simultaneous listener dispatch only if capacity remains available.
+
+The adapter contains no outer loop and surfaces poll EINTR as `WaitInterrupted` rather than hiding an internal syscall retry.
+
+### Readiness preflight history
+
+Initial readiness integration run `31902826688` reached compile/Clippy and stopped only on two mechanical findings: an elidable lifetime name and one helper eligible for `const fn`.
+
+A01 run `31902865634` applied exactly those mechanical changes and passed the complete locked metadata/fmt/Clippy/test/build/diff-check chain before committing integrated readiness and deleting both temporary readiness workflows.
+
+Permanent CI is now required on a commit containing `300cea789300b9356202bb240ba3049164067267` before the signal-aware long-running runtime wrapper is integrated.
+
+## Remaining Phase 098 layer
+
+After permanent readiness validation, Phase 098 may compose:
+
+- the Phase 098 termination signal source;
+- signal-aware one-step readiness;
+- Phase 092 runtime-specific bounded scheduling;
+- Phase 097 memory-bounded error/counter/teardown semantics;
+- Phase 096 lifecycle cleanup;
+- explicit signal-mask restoration after listener cleanup.
+
+The resulting callable runtime must remain below `main.rs` and systemd.
 
 ## Boundary preserved
 
-The signal-source checkpoint does not wire `main.rs`, define process exit mapping, activate systemd, deploy anything, or expose public networking. Those boundaries remain excluded throughout Phase 098.
+Phase 098 does not wire `main.rs`, define process exit mapping, activate systemd, deploy anything, or expose public networking. Those boundaries remain excluded throughout Phase 098.
