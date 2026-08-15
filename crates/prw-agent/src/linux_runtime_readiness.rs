@@ -112,11 +112,11 @@ enum LocalLinuxPollDescriptor {
 /// Returns a bounded error for poll failure, contradictory ready counts,
 /// descriptor error/unsupported readiness, invalid wake drain, or a capacity
 /// invariant violation.
-pub fn wait_once_for_linux_runtime_readiness<'scope>(
+pub fn wait_once_for_linux_runtime_readiness(
     listener: &AcceptReadyAgentSocket<'_>,
     wake: &LocalLinuxRuntimeWake,
     capacity: &LocalLinuxWorkerCapacity,
-    registry: &mut LocalLinuxScopedWorkerRegistry<'scope>,
+    registry: &mut LocalLinuxScopedWorkerRegistry<'_>,
     control: &LocalLinuxSchedulerControl,
 ) -> Result<LocalLinuxRuntimeReadinessReport, LocalLinuxRuntimeReadinessError> {
     if control.is_shutdown_requested() {
@@ -210,7 +210,7 @@ pub fn wait_once_for_linux_runtime_readiness<'scope>(
     Err(LocalLinuxRuntimeReadinessError::InvalidWaitReturn)
 }
 
-fn report(
+const fn report(
     completions: Vec<LocalLinuxScopedWorkerCompletion>,
     listener_armed: bool,
     outcome: LocalLinuxRuntimeReadinessOutcome,
