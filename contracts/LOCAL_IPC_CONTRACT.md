@@ -1,8 +1,8 @@
 # Private Remote Workspace Local IPC Contract
 
-Version: `0.1.0`
+Version: `0.2.0`
 
-Status: Phase 006 Ubuntu local IPC baseline
+Status: Phase 007 Ubuntu local IPC framing baseline
 
 ## Scope
 
@@ -10,7 +10,7 @@ This contract defines the future local IPC boundary between same-user Ubuntu PRW
 
 It does not define the separate privileged-helper IPC boundary.
 
-Phase 006 records contracts and typed constants only. It does not create, bind, listen on, connect to, chmod, unlink, or otherwise mutate any socket or filesystem object.
+Phase 006 locked the transport and local peer-authentication boundary. Phase 007 adds bounded stream framing and version metadata. Neither phase activates the socket runtime.
 
 ## Transport
 
@@ -73,7 +73,7 @@ Filesystem permissions alone are not sufficient as the entire peer-authenticatio
 
 After accepting a connected Unix-domain stream socket, the future Linux implementation must obtain kernel-reported peer credentials using `SO_PEERCRED`.
 
-The Phase 006 authorization baseline is:
+The authorization baseline is:
 
 - the peer kernel-reported UID must equal the Agent process UID expected by the local security policy;
 - otherwise the connection is rejected before processing an application request.
@@ -89,25 +89,108 @@ The local boundary combines:
 3. socket filesystem ownership/mode;
 4. kernel-backed peer credentials;
 5. same-UID authorization;
-6. a future bounded and versioned application protocol.
+6. bounded and versioned application framing;
+7. a future typed command/response payload protocol.
 
 No single filesystem permission bit is treated as a substitute for application protocol validation.
 
-## Protocol framing
+## Stream framing
 
-Phase 006 does not select:
+The Phase 007 local IPC stream is split into frames with a fixed 24-byte header followed by an opaque payload.
 
-- frame format;
-- serialization format;
-- request/response envelope;
-- protocol version negotiation;
-- request identifiers;
-- maximum message size;
-- timeout semantics;
-- cancellation semantics;
-- capability payload schemas.
+All multi-byte integer fields are unsigned and encoded in network byte order (big-endian).
 
-Those belong to a subsequent provider-neutral phase.
+Fixed header layout:
+
+| Offset | Size | Field |
+| --- | ---: | --- |
+| 0 | 4 | magic bytes `PRW\0` |
+| 4 | 2 | protocol major version |
+| 6 | 2 | protocol minor version |
+| 8 | 1 | message kind |
+| 9 | 1 | flags, must be zero in version 1.0 |
+| 10 | 2 | reserved, must be zero in version 1.0 |
+| 12 | 8 | non-zero request ID |
+| 20 | 4 | payload length in bytes |
+
+The fixed header is exactly 24 bytes.
+
+The payload begins immediately after the fixed header and contains exactly the declared number of bytes.
+
+The future decoder must reject a frame before payload processing if:
+
+- the magic bytes do not match;
+- the protocol version is unsupported;
+- the message-kind value is unknown;
+- flags or reserved fields are non-zero when not defined by the active protocol version;
+- request ID is zero;
+- payload length exceeds the configured protocol maximum;
+- EOF occurs before the full declared header or payload is received.
+
+Phase 007 records this wire layout but does not implement byte encoding/decoding or socket reads/writes.
+
+## Protocol version
+
+The initial local IPC protocol version is:
+
+- major: `1`;
+- minor: `0`.
+
+The current implementation contract accepts exactly version `1.0`.
+
+A later phase may define compatibility rules for newer minor versions. Until those rules are explicitly locked, clients and the Agent must fail closed on any other version rather than guessing compatibility.
+
+## Message kinds
+
+Version 1.0 reserves these message-kind codes:
+
+- `1` — Request;
+- `2` — Response;
+- `3` — Error.
+
+Every Response or Error must carry the same non-zero request ID as the Request to which it corresponds.
+
+Unsolicited event/notification messages are not part of the Phase 007 baseline.
+
+## Request identifiers
+
+Request ID is an unsigned 64-bit integer.
+
+Rules:
+
+- value `0` is reserved and invalid;
+- the client assigns request IDs;
+- a request ID correlates one Request with its Response or Error;
+- a client must not have two simultaneously outstanding requests with the same request ID on one connection;
+- request IDs are correlation values, not authentication tokens, capabilities, secrets, or persistent object identifiers.
+
+## Payload bound
+
+Maximum Phase 007 payload length:
+
+`1,048,576 bytes` (1 MiB)
+
+The limit applies to the opaque payload only; total maximum frame length is the fixed 24-byte header plus this payload.
+
+The local IPC channel is a bounded control channel. Large file contents and bulk transfer data must not be tunneled through this control frame merely to bypass the dedicated file/transfer architecture.
+
+A future phase may define smaller per-command limits beneath this global ceiling.
+
+## Payload serialization
+
+Phase 007 deliberately leaves payload bytes opaque.
+
+It does not select:
+
+- JSON;
+- CBOR;
+- MessagePack;
+- Protocol Buffers;
+- another schema/serialization format;
+- command IDs or schemas;
+- error-code schemas.
+
+The next typed protocol layer must fit within the framing contract and remain bounded.
 
 ## Privileged helper separation
 
@@ -117,7 +200,7 @@ This Desktop/CLI-to-Agent contract must not be interpreted as authorization to e
 
 ## Forbidden interpretation
 
-Phase 006 does not authorize or implement:
+Phase 007 does not authorize or implement:
 
 - arbitrary shell execution;
 - privileged host-management commands;
@@ -133,7 +216,9 @@ Phase 006 does not authorize or implement:
 
 ## Primary platform references
 
-The design boundary is based on:
+The transport/security boundary remains based on:
 
 - the XDG Base Directory Specification for `$XDG_RUNTIME_DIR` ownership, mode, lifetime, locality, and runtime-object use;
 - Linux `unix(7)` for Unix-domain stream sockets and `SO_PEERCRED` peer credentials.
+
+The Phase 007 frame format itself is a PRW application-protocol contract. It is not a cryptographic primitive and provides no authentication or confidentiality beyond the local transport/security boundary defined above.
