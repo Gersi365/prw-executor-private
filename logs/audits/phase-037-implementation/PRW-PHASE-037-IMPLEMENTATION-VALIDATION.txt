@@ -1,0 +1,101 @@
+Private Remote Workspace
+Phase 037 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 037
+SCOPE: Typed policy admission for local read-only commands
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Capability source commit: d1b962ef1f24ec4388a501469a7e7b6c8eff3995
+Initial admission/export commit: 2a561fca762c5e3358b7ad915247afe45e49c2cf
+Formatter correctives:
+- a73935cd0aa74056b79887a46291d511378c8a87
+- f27ef944844a9c24877dcdc0feea032dae1aa0c6
+- eac51f15d79b82745101270b1db8df21edd77e2d
+Authoritative GitHub Actions run: 31883170265
+
+LOCKED CAPABILITY MAPPING
+
+- GetAgentStatus -> Capability::AgentStatusRead
+- GetPrivateDnsConfig -> Capability::PrivateDnsConfigRead
+- Neither command is mapped to Capability::FilesRead.
+
+ADMISSION TOKEN
+
+- LocalPolicyAdmittedRequest has no public raw constructor.
+- policy_admit_local_request() evaluates the command's exact required capability.
+- Decision::Allow produces the typed admitted token.
+- Decision::Deny produces LocalRequestAdmissionError::Denied and no token.
+- The successful read-only responder now requires LocalPolicyAdmittedRequest rather than LocalAgentRequestEnvelope.
+
+AUTHENTICATION BOUNDARY
+
+Phase 037 policy admission is NOT authentication.
+The current PolicyEvaluator interface remains principal-agnostic. Future runtime code must authenticate the peer/principal first and then select or construct the evaluator bound to that authenticated context before invoking this admission function.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-policy/src/lib.rs
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/admission.rs
+- crates/prw-agent/src/local_commands/responder.rs
+- contracts/LOCAL_COMMAND_ADMISSION_CONTRACT.md
+- docs/architecture/PHASE_037_LOCAL_COMMAND_ADMISSION.md
+
+VALIDATION HISTORY
+
+Run 74
+- Run ID: 31883101422
+- Commit: 2a561fca762c5e3358b7ad915247afe45e49c2cf
+- Result: FAILURE
+- Cause: rustfmt-only reflows in admission.rs, responder.rs, and prw-policy/src/lib.rs.
+- Clippy, tests, and build were skipped.
+
+Run 75
+- Run ID: 31883170265
+- Commit: eac51f15d79b82745101270b1db8df21edd77e2d
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: status and private-DNS commands map to distinct exact capabilities
+PASS: allowing AgentStatusRead does not admit PrivateDnsConfigRead
+PASS: deny-all cannot produce an admission token
+PASS: admitted token preserves request correlation and command
+PASS: successful responder requires an admitted token
+PASS: local status/private-DNS capabilities remain distinct from FilesRead
+
+RUNTIME MUTATION STATEMENT
+
+Phase 037 performs no authentication, peer-credential lookup, socket I/O, host-state acquisition, DNS/network mutation, database lookup, systemd activation, retry, task/thread creation, deployment, or private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Compose policy admission with terminal response construction so Allow produces the existing successful response while Deny produces a correlated Unauthorized terminal error frame, still without transport or authentication implementation.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 037 implementation-validation report.
+GitHub Actions run 31883170265 is the authoritative executable validation evidence.
