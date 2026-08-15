@@ -13,20 +13,20 @@ use rustix::net::{
     AddressFamily, SocketAddrUnix, SocketFlags, SocketType, bind, socket_with,
 };
 
-use super::{
+use super::effective_agent_uid;
+use super::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
+use super::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLock;
+use super::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::{
     AgentSocketPathPreparationError, AgentSocketPathPreparationOutcome,
     prepare_agent_socket_path_for_bind,
 };
-use super::super::AgentInstanceLock;
-use super::super::super::ValidatedPrwRuntimeDirectory;
-use crate::linux_identity::effective_agent_uid;
 use crate::{AGENT_SOCKET_FILENAME, AGENT_SOCKET_MODE};
 
 /// Filesystem identity of the validated bound Agent socket node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AgentSocketFilesystemIdentity {
-    device: u64,
-    inode: u64,
+    device: u128,
+    inode: u128,
     uid: u32,
     mode: u32,
 }
@@ -34,16 +34,16 @@ pub struct AgentSocketFilesystemIdentity {
 impl AgentSocketFilesystemIdentity {
     fn from_metadata(metadata: &Stat) -> Self {
         Self {
-            device: u64::from(metadata.st_dev),
-            inode: u64::from(metadata.st_ino),
+            device: u128::from(metadata.st_dev),
+            inode: u128::from(metadata.st_ino),
             uid: metadata.st_uid,
             mode: Mode::from_raw_mode(metadata.st_mode).bits(),
         }
     }
 
     fn stable_matches(self, metadata: &Stat) -> bool {
-        self.device == u64::from(metadata.st_dev)
-            && self.inode == u64::from(metadata.st_ino)
+        self.device == u128::from(metadata.st_dev)
+            && self.inode == u128::from(metadata.st_ino)
             && self.uid == metadata.st_uid
             && FileType::from_raw_mode(metadata.st_mode).is_socket()
     }
@@ -330,6 +330,11 @@ mod tests {
         BoundAgentSocketCleanupError, BoundAgentSocketError, bind_validated_agent_socket,
     };
     use crate::linux_identity::effective_agent_uid;
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLock;
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::{
+        AgentSocketPathPreparationError, AgentSocketPathPreparationOutcome,
+    };
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -350,19 +355,18 @@ mod tests {
 
     fn create_authorized_runtime(
         label: &str,
-    ) -> (
-        PathBuf,
-        super::super::super::super::ValidatedPrwRuntimeDirectory,
-        super::super::super::AgentInstanceLock,
-    ) {
+    ) -> (PathBuf, ValidatedPrwRuntimeDirectory, AgentInstanceLock) {
         let root_path = unique_temp_path(label);
         create_directory_with_mode(&root_path, 0o700);
-        let root = super::super::super::super::super::validate_xdg_runtime_root_path(&root_path)
+        let root = super::super::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
             .expect("temporary root satisfies Phase 062 validation");
-        let runtime_directory = super::super::super::super::prepare_prw_runtime_directory(&root)
+        let runtime_directory =
+            super::super::xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(
+                &root,
+            )
             .expect("temporary PRW directory satisfies Phase 063 preparation");
         drop(root);
-        let instance_lock = super::super::super::acquire_agent_instance_lock(&runtime_directory)
+        let instance_lock = super::super::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::acquire_agent_instance_lock(&runtime_directory)
             .expect("temporary lifecycle authority satisfies Phase 065");
         (root_path, runtime_directory, instance_lock)
     }
@@ -389,7 +393,7 @@ mod tests {
             .expect("validated socket binds");
         assert_eq!(
             bound.path_preparation(),
-            super::super::AgentSocketPathPreparationOutcome::AlreadyAbsent
+            AgentSocketPathPreparationOutcome::AlreadyAbsent
         );
         let metadata = statat(
             runtime_directory.as_fd(),
@@ -420,12 +424,14 @@ mod tests {
             .expect("stale socket is replaced by validated bind");
         assert_eq!(
             bound.path_preparation(),
-            super::super::AgentSocketPathPreparationOutcome::StaleSocketRemoved
+            AgentSocketPathPreparationOutcome::StaleSocketRemoved
         );
-        assert!(fs::symlink_metadata(&socket_path)
-            .expect("replacement socket exists")
-            .file_type()
-            .is_socket());
+        assert!(
+            fs::symlink_metadata(&socket_path)
+                .expect("replacement socket exists")
+                .file_type()
+                .is_socket()
+        );
 
         bound.cleanup().expect("bound socket cleanup succeeds");
         drop(instance_lock);
@@ -445,12 +451,14 @@ mod tests {
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("descriptor-anchored socket binds");
 
-        assert!(renamed_runtime_path
-            .join(AGENT_SOCKET_FILENAME)
-            .symlink_metadata()
-            .expect("anchored socket exists in renamed directory")
-            .file_type()
-            .is_socket());
+        assert!(
+            renamed_runtime_path
+                .join(AGENT_SOCKET_FILENAME)
+                .symlink_metadata()
+                .expect("anchored socket exists in renamed directory")
+                .file_type()
+                .is_socket()
+        );
         assert!(!original_runtime_path.join(AGENT_SOCKET_FILENAME).exists());
 
         bound.cleanup().expect("anchored socket cleanup succeeds");
@@ -468,16 +476,16 @@ mod tests {
 
         assert_eq!(
             bind_validated_agent_socket(&runtime_directory, &instance_lock).unwrap_err(),
-            BoundAgentSocketError::PathPreparation(
-                super::super::AgentSocketPathPreparationError::WrongMode {
-                    actual_mode: 0o660
-                }
-            )
+            BoundAgentSocketError::PathPreparation(AgentSocketPathPreparationError::WrongMode {
+                actual_mode: 0o660
+            })
         );
-        assert!(fs::symlink_metadata(&socket_path)
-            .expect("wrong-mode stale socket remains")
-            .file_type()
-            .is_socket());
+        assert!(
+            fs::symlink_metadata(&socket_path)
+                .expect("wrong-mode stale socket remains")
+                .file_type()
+                .is_socket()
+        );
 
         drop(instance_lock);
         drop(runtime_directory);
@@ -499,10 +507,12 @@ mod tests {
             bound.cleanup().unwrap_err(),
             BoundAgentSocketCleanupError::IdentityChanged
         );
-        assert!(fs::symlink_metadata(&socket_path)
-            .expect("replacement remains")
-            .file_type()
-            .is_socket());
+        assert!(
+            fs::symlink_metadata(&socket_path)
+                .expect("replacement remains")
+                .file_type()
+                .is_socket()
+        );
 
         drop(replacement);
         drop(instance_lock);
