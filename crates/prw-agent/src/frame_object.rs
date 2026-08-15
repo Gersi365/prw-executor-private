@@ -3,6 +3,11 @@
 //! Phase 010 couples an already validated Phase 007 header with an owned,
 //! bounded payload. It performs no socket I/O and no payload deserialization.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime frame-boundary reader is intentionally crate-internal"
+)]
+pub(crate) mod boundary_reader;
 pub mod reader;
 pub mod writer;
 
