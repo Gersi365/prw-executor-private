@@ -44,8 +44,8 @@ pub enum LocalLinuxScopedWorkerSpawnError {
 ///
 /// Returns [`LocalLinuxScopedWorkerSpawnError::SpawnFailed`] when
 /// [`Builder::spawn_scoped`] cannot create the native thread.
-pub fn spawn_authenticated_session_worker<'scope, 'env, E>(
-    scope: &'scope Scope<'scope, 'env>,
+pub fn spawn_authenticated_session_worker<'scope, E>(
+    scope: &'scope Scope<'scope, '_>,
     session: AuthenticatedLocalLinuxSession<UnixStream>,
     permit: LocalLinuxWorkerPermit,
     evaluator: &'scope E,
@@ -72,7 +72,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
+    use std::io::Read;
     use std::num::NonZeroUsize;
     use std::os::unix::net::UnixStream;
     use std::sync::atomic::{AtomicUsize, Ordering};
