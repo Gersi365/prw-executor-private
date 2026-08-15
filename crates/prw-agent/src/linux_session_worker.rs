@@ -176,7 +176,11 @@ mod tests {
         )
     }
 
-    fn worker_config(requests: usize, read_ms: u64, write_ms: u64) -> LocalLinuxSessionWorkerConfig {
+    fn worker_config(
+        requests: usize,
+        read_ms: u64,
+        write_ms: u64,
+    ) -> LocalLinuxSessionWorkerConfig {
         LocalLinuxSessionWorkerConfig::new(
             NonZeroUsize::new(requests).expect("test Request budget is non-zero"),
             LocalLinuxIoBudget::try_new(Duration::from_millis(read_ms))
