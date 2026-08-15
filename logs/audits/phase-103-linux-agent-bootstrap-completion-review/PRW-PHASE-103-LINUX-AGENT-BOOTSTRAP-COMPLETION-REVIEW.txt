@@ -1,0 +1,191 @@
+Private Remote Workspace
+Phase 103 Linux Agent Standalone Binary Bootstrap Completion Review
+
+STATUS: PASS / PHASE_101_TO_103_SEQUENCE_COMPLETE / STANDALONE_AGENT_BINARY_READY_FOR_SEPARATE_SYSTEMD_DECISION / NO_SYSTEMD_ACTIVATION / NO_DEPLOYMENT
+AUDIT TYPE: READ-ONLY COMPLETION REVIEW / NET-DIFF / BOUNDARY VERIFICATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 101 contract lock: f6334af4618429390cf32fa91a789614c9ad7ad2
+Phase 102 authoritative report commit: 6e80c27a7f31948cd63a3bc7b135d5ae19a198aa
+Phase 102 authoritative permanent CI run: 31904953430
+Phase 102 integrated bootstrap surface: 937927fd2f6e6c9a71937769e061ee10734a1de8
+Phase 102 integrated binary proof: a2dc8574b4df8e7df8e54312a0d5e6be50475594
+Exact Rust/Cargo: 1.97.1
+Current Cargo.lock blob SHA: 18db6137fc0f4f5bda22ad92425cff5edfb33c73
+
+PURPOSE
+
+Phase 103 performs the audit-only completion review required by the Phase 101 lock after Phase 102 standalone binary implementation and permanent validation.
+
+Phase 103 changes no Rust source, Cargo metadata, workflow, systemd packaging, host state, process state, runtime directory, signal mask, or service-manager configuration.
+
+AUTHORITATIVE PHASE 102 RESULT
+
+Phase 102 is classified:
+
+PASS / IMPLEMENTED_AND_VALIDATED / REAL_STANDALONE_BINARY_PROVEN
+
+Permanent PRW Rust Validation run 31904953430 passed:
+
+- exact pinned Rust/Cargo toolchain record;
+- locked dependency graph;
+- rustfmt;
+- workspace/all-target Clippy with `-D warnings`;
+- all workspace/all-target tests, including the committed real standalone-binary subprocess integration test;
+- all workspace/all-target builds.
+
+NET-DIFF REVIEW
+
+Comparison:
+
+base: f6334af4618429390cf32fa91a789614c9ad7ad2
+head: 6e80c27a7f31948cd63a3bc7b135d5ae19a198aa
+
+The net source/evidence mutation set contains exactly these six paths:
+
+1. `crates/prw-agent/src/lib.rs`
+2. `crates/prw-agent/src/linux_bootstrap.rs`
+3. `crates/prw-agent/src/main.rs`
+4. `crates/prw-agent/tests/phase_102_binary_bootstrap.rs`
+5. `docs/architecture/PHASE_102_LINUX_AGENT_BOOTSTRAP.md`
+6. `logs/audits/phase-102-linux-agent-bootstrap/PRW-PHASE-102-LINUX-AGENT-BOOTSTRAP.txt`
+
+No Cargo manifest or Cargo.lock path appears in the net diff.
+
+No `.github/workflows/` path appears in the net diff.
+
+No `packaging/systemd/` path appears in the net diff.
+
+No networking, control-plane, file-system, Android, desktop, relay, TUN, database, or private-key implementation path appears in the net diff.
+
+PUBLIC SURFACE REVIEW
+
+Current library readback confirms:
+
+- `linux_bootstrap` is the intentionally public Linux-only binary facade;
+- `linux_identity` remains `pub(crate)`.
+
+Therefore Phase 102 did not accidentally promote the Phase 057-098 lifecycle/socket/readiness/signal/scheduling/worker implementation graph into public API.
+
+BOOTSTRAP RESPONSIBILITY REVIEW
+
+Current `main.rs` is a thin binary adapter only.
+
+It delegates runtime behavior to `prw_agent::linux_bootstrap::run()`, emits one bounded stderr outcome line, and maps to success/failure `ExitCode`.
+
+The binary does not duplicate socket, signal, worker, scheduler, lifecycle, or runtime-loop algorithms.
+
+INITIAL PROFILE REVIEW
+
+The locked conservative first profile remains:
+
+- workers: 2;
+- listener backlog: 8;
+- scheduling attempts: 2;
+- requests/session: 1;
+- read budget: 2 seconds;
+- write budget: 2 seconds;
+- local policy: only Agent status and private-DNS read capabilities;
+- status: immutable Ready snapshot;
+- private DNS: optional/default-disabled projection.
+
+No runtime configuration parser, mutable live reload, or environment-based capability expansion was added.
+
+BINARY EVIDENCE REVIEW
+
+The committed Phase 102 integration test launches the actual built executable and validates:
+
+- valid temporary XDG runtime-root startup;
+- real SIGTERM orderly success and socket cleanup;
+- real SIGINT orderly success and socket cleanup;
+- a real same-UID `GetAgentStatus` request/response with correlation and Ready status;
+- deterministic second-instance `AlreadyRunning` failure while the first Agent remains functional;
+- missing XDG runtime-root fail-closed behavior;
+- wrong-mode XDG runtime-root fail-closed behavior before usable listener activation;
+- bounded one-record stderr classification.
+
+DEPENDENCY REVIEW
+
+Current Cargo.lock blob SHA remains:
+
+18db6137fc0f4f5bda22ad92425cff5edfb33c73
+
+This is unchanged from the Phase 098 safe signal dependency baseline.
+
+Phase 102 introduced no dependency churn.
+
+UNSAFE REVIEW
+
+Workspace `unsafe_code = "forbid"` remains in force.
+
+Phase 102 does not add direct libc FFI, unsafe blocks, alternate signal handlers, or another signal implementation.
+
+WORKFLOW REVIEW
+
+Current `.github/workflows/` contains only:
+
+`.github/workflows/phase-001-rust-validation.yml`
+
+All temporary Phase 102 surface-integration and binary-proof workflows were removed after their successful integration runs.
+
+SYSTEMD REVIEW
+
+Current `packaging/systemd/` contains only:
+
+`packaging/systemd/README.md`
+
+No service unit has been added or modified by Phases 101-103.
+
+No systemd installation, enablement, start, stop, restart, linger/session mutation, or host activation occurred.
+
+DEPLOYMENT / REMOTE BOUNDARY
+
+The completed binary bootstrap sequence does not authorize or implement:
+
+- systemd service packaging/activation;
+- automatic startup;
+- host deployment;
+- public or remote listener exposure;
+- privileged helper;
+- TUN/relay connectivity;
+- enrollment/authentication expansion;
+- database/private-key persistence expansion;
+- mandatory private DNS;
+- Wake-on-LAN / remote wake.
+
+SEQUENCE COMPLETION
+
+The user-approved Phase 100 binary-bootstrap sequence is now complete:
+
+Phase 101 — PASS / APPROVED_AND_LOCKED
+Phase 102 — PASS / IMPLEMENTED_AND_VALIDATED
+Phase 103 — PASS / COMPLETION_REVIEW
+
+The standalone Agent binary is therefore ready for a **new, separately approved systemd architecture/packaging decision**, not automatic activation.
+
+NEXT GATE
+
+The Phase 101-103 authorization is exhausted.
+
+Before any Phase 104+ source-changing service work, a new explicit approval must lock at minimum:
+
+- user-service versus system-service identity;
+- executable/install path;
+- XDG runtime behavior under the chosen service model;
+- environment/config injection;
+- restart conditions and rate limits;
+- startup ordering;
+- stdout/stderr/journal policy;
+- filesystem permissions and sandboxing;
+- install/upgrade/remove paths;
+- enable/start/stop/restart rollback;
+- service-manager SIGTERM/timeout behavior;
+- controlled activation evidence on a test host;
+- whether activation is still deferred after packaging validation.
+
+A read-only Phase 104 systemd decision-preparation audit may proceed without crossing this activation gate. No service file or host state should be changed until that decision is explicitly approved.
+
+FINAL CLASSIFICATION
+
+PHASE_103_PASS / PHASE_101_TO_103_SEQUENCE_COMPLETE / STANDALONE_AGENT_BINARY_VALIDATED / NARROW_BOOTSTRAP_FACADE_PRESERVED / LINUX_INTERNALS_CRATE_PRIVATE / REAL_SIGTERM_PASS / REAL_SIGINT_PASS / REAL_LOCAL_REQUEST_PASS / SECOND_INSTANCE_PASS / INVALID_RUNTIME_ROOT_FAIL_CLOSED / BOUNDED_STDERR_PASS / NO_CARGO_CHURN / CARGO_LOCK_UNCHANGED / UNSAFE_FORBID_PRESERVED / TEMP_WORKFLOWS_REMOVED / SYSTEMD_UNCHANGED / NO_ACTIVATION / NO_DEPLOYMENT / NEW_SYSTEMD_DECISION_APPROVAL_REQUIRED
