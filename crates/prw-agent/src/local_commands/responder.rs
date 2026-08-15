@@ -1,11 +1,13 @@
-//! Pure in-memory responder for the currently admitted read-only local commands.
+//! Pure in-memory responder for policy-admitted read-only local commands.
 //!
-//! Phase 036 selects an existing successful response-frame builder from typed
-//! request metadata and caller-supplied snapshots. It performs no host reads,
-//! authorization, or transport I/O.
+//! Phase 036 selects existing successful response-frame builders from typed
+//! command metadata and caller-supplied snapshots. Phase 037 tightens this
+//! boundary so successful response construction requires a policy-admitted
+//! request token rather than an unchecked raw request envelope.
 
 use crate::frame_object::LocalIpcFrame;
 
+use super::admission::LocalPolicyAdmittedRequest;
 use super::private_dns_response::{
     LocalPrivateDnsFrameBuildError, build_success_private_dns_frame,
 };
@@ -13,13 +15,14 @@ use super::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use super::status_snapshot::LocalAgentStatusSnapshot;
 use super::status_snapshot::response_frame::build_success_status_frame;
 use super::terminal_response::builder::LocalTerminalResponseBuildError;
-use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
+use super::LocalAgentCommand;
 
-/// Builds one successful terminal response for a validated read-only request.
+/// Builds one successful terminal response for a policy-admitted read-only request.
 ///
 /// The caller supplies both current read-only snapshots. This function only
 /// selects the command-specific existing builder and preserves the request ID.
-/// It does not perform authorization or read live host state.
+/// Policy admission must already have produced `request`; this responder does
+/// not itself authenticate a principal or read live host state.
 ///
 /// # Errors
 ///
@@ -28,7 +31,7 @@ use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
 /// [`LocalReadOnlyResponseBuildError::PrivateDns`] if bounded private-DNS
 /// encoding/frame construction fails defensively.
 pub fn build_read_only_success_response(
-    request: LocalAgentRequestEnvelope,
+    request: LocalPolicyAdmittedRequest,
     status_snapshot: LocalAgentStatusSnapshot,
     private_dns_snapshot: &LocalPrivateDnsSnapshot,
 ) -> Result<LocalIpcFrame, LocalReadOnlyResponseBuildError> {
@@ -44,7 +47,7 @@ pub fn build_read_only_success_response(
     }
 }
 
-/// Defensive Phase 036 read-only response construction failure.
+/// Defensive read-only response construction failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalReadOnlyResponseBuildError {
     /// Existing `GetAgentStatus` successful-frame construction failed.
@@ -57,6 +60,7 @@ pub enum LocalReadOnlyResponseBuildError {
 mod tests {
     use super::build_read_only_success_response;
     use crate::LocalIpcRequestId;
+    use crate::local_commands::admission::policy_admit_local_request;
     use crate::local_commands::private_dns_response::decode_success_private_dns_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::status_snapshot::response_frame::decode_success_status_frame;
@@ -65,9 +69,18 @@ mod tests {
     };
     use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
     use prw_network::PrivateDnsConfig;
+    use prw_policy::{Capability, Decision, PolicyEvaluator};
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
+    }
+
+    struct AllowAll;
+
+    impl PolicyEvaluator for AllowAll {
+        fn evaluate(&self, _capability: Capability) -> Decision {
+            Decision::Allow
+        }
     }
 
     fn dns_snapshot() -> LocalPrivateDnsSnapshot {
@@ -81,10 +94,12 @@ mod tests {
     }
 
     #[test]
-    fn status_request_uses_existing_status_builder_and_preserves_correlation() {
+    fn admitted_status_request_uses_existing_builder_and_preserves_correlation() {
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
         let dns = dns_snapshot();
-        let request = LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
+        let raw_request = LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
+        let request =
+            policy_admit_local_request(raw_request, &AllowAll).expect("request is admitted");
 
         let frame = build_read_only_success_response(request, status, &dns)
             .expect("status response builds");
@@ -95,11 +110,13 @@ mod tests {
     }
 
     #[test]
-    fn private_dns_request_uses_existing_dns_builder_and_preserves_correlation() {
+    fn admitted_private_dns_request_uses_existing_builder_and_preserves_correlation() {
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Degraded);
         let dns = dns_snapshot();
-        let request =
+        let raw_request =
             LocalAgentRequestEnvelope::new(id(181), LocalAgentCommand::GetPrivateDnsConfig);
+        let request =
+            policy_admit_local_request(raw_request, &AllowAll).expect("request is admitted");
 
         let frame = build_read_only_success_response(request, status, &dns)
             .expect("private DNS response builds");
