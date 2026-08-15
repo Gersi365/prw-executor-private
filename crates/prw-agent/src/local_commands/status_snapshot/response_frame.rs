@@ -2,6 +2,7 @@
 
 use super::LocalAgentStatusSnapshot;
 use super::codec::{LocalAgentStatusDecodeError, decode_status_snapshot, encode_status_snapshot};
+use crate::LocalIpcRequestId;
 use crate::frame_object::LocalIpcFrame;
 use crate::local_commands::LocalAgentResponseStatus;
 use crate::local_commands::response_codec::LOCAL_AGENT_RESPONSE_STATUS_PREFIX_LENGTH;
@@ -11,7 +12,6 @@ use crate::local_commands::terminal_response::builder::{
 use crate::local_commands::terminal_response::{
     LocalTerminalResponseError, validate_terminal_response_frame,
 };
-use crate::LocalIpcRequestId;
 
 /// Typed successful `GetAgentStatus` frame result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,7 +93,9 @@ mod tests {
     };
     use crate::local_commands::LocalAgentResponseStatus;
     use crate::local_commands::status_snapshot::response_payload::encode_success_status_response;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::local_commands::terminal_response::builder::build_terminal_response_frame;
     use crate::{LocalIpcMessageKind, LocalIpcRequestId};
 
@@ -134,12 +136,8 @@ mod tests {
 
     #[test]
     fn valid_terminal_error_is_not_a_success_status_frame() {
-        let frame = build_terminal_response_frame(
-            id(72),
-            LocalAgentResponseStatus::Conflict,
-            &[],
-        )
-        .expect("valid terminal error");
+        let frame = build_terminal_response_frame(id(72), LocalAgentResponseStatus::Conflict, &[])
+            .expect("valid terminal error");
 
         assert_eq!(
             decode_success_status_frame(&frame),
