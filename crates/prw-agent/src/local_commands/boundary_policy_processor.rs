@@ -180,12 +180,8 @@ mod tests {
         let dns = dns_snapshot();
         let policy = CountingPolicy::deny_all();
         let mut bytes = Vec::new();
-        write_local_command_request(
-            &mut bytes,
-            id(281),
-            LocalAgentCommand::GetPrivateDnsConfig,
-        )
-        .expect("Request writes");
+        write_local_command_request(&mut bytes, id(281), LocalAgentCommand::GetPrivateDnsConfig)
+            .expect("Request writes");
 
         let outcome = read_and_build_policy_response_at_boundary(
             &mut Cursor::new(bytes),
@@ -197,7 +193,8 @@ mod tests {
         let LocalBoundaryPolicyResponse::Response(frame) = outcome else {
             panic!("expected response outcome");
         };
-        let terminal = validate_terminal_response_frame(&frame).expect("terminal response validates");
+        let terminal =
+            validate_terminal_response_frame(&frame).expect("terminal response validates");
 
         assert_eq!(terminal.request_id(), id(281));
         assert_eq!(terminal.status(), LocalAgentResponseStatus::Unauthorized);
