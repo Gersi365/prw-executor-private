@@ -1,0 +1,238 @@
+Private Remote Workspace
+Phase 098 Linux Signal-Aware Production Runtime
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+AUDIT TYPE: SAFE SYNCHRONOUS TERMINATION SIGNAL / TRI-SOURCE READINESS / SIGNAL-AWARE LONG-RUNNING RUNTIME
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Phase 097 authoritative PASS commit: 18c0c4b26c9b053fc2f58d68b1c17962966700de
+Phase 098-A00 dependency precheck commit: 11967246f1f332746cbce8de67806bacb82bee89
+Dependency baseline commit: fc71e9ded88f3963f8000a1a5ec05d6b299e8745
+Signal-source integrated commit: ce5c429cb8f0147fd1db950c27be52d729a92cca
+Signal-aware readiness integrated commit: 300cea789300b9356202bb240ba3049164067267
+Full signal-aware runtime integrated commit: 3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8
+Authoritative validated source/trigger head: e6ea68033dff556200dc61db46d6faab1264129f
+Final architecture-status commit: 4347d360b27b3ccd76cdf08d681f226531ddeeb4
+Authoritative permanent CI run: 31903139121
+Exact Rust/Cargo toolchain: 1.97.1
+Final Cargo.lock blob SHA: 18db6137fc0f4f5bda22ad92425cff5edfb33c73
+Workspace unsafe policy: unsafe_code = "forbid"
+
+DEPENDENCY BASELINE
+
+Exact Agent dependency:
+
+nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
+
+Controlled Cargo preflight run `31902253525` generated the lockfile delta under Cargo 1.97.1 and enforced:
+- no existing locked package removal;
+- no existing locked package record churn;
+- exact nix 0.31.3;
+- exactly one new `prw-agent` dependency edge to nix;
+- added package names exactly nix, cfg-if, cfg_aliases.
+
+Actual newly locked packages:
+- nix 0.31.3;
+- cfg-if 1.0.4;
+- cfg_aliases 0.2.2.
+
+Existing compatible bitflags/libc lock entries were reused.
+
+Permanent dependency-baseline run `31902304269` independently passed locked metadata, fmt, Clippy, tests, and build.
+
+SAFE TERMINATION SIGNAL SOURCE
+
+Implemented source:
+- crates/prw-agent/src/linux_termination_signal.rs
+
+`LocalLinuxTerminationSignalSource`:
+- blocks exactly SIGTERM + SIGINT synchronously on the creating thread;
+- preserves the exact prior calling-thread signal mask;
+- creates CLOEXEC + NONBLOCK SignalFd through safe nix APIs;
+- contains no local unsafe code or direct libc FFI;
+- is intentionally !Send/!Sync through thread-affinity marker state;
+- reads one nonblocking SignalFd event at a time;
+- classifies SIGTERM/SIGINT explicitly;
+- surfaces no-data and EINTR without hidden retry loops;
+- closes SignalFd before explicit signal-mask restoration;
+- performs best-effort same-thread restoration from Drop/unwind.
+
+Signal-source validation history:
+- initial run `31902474463`: stopped only on Clippy/documentation style findings;
+- A01 `31902589850`: reached real kernel test and exposed a test-isolation defect from process-directed SIGTERM delivery to pre-existing test-harness threads;
+- test strategy corrected to thread-directed safe `raise(...)` after the current test thread installed its mask;
+- A02 `31902660895`: PASS, including 341/341 prw-agent tests and real child-process signal/mask proof;
+- permanent signal-source run `31902722135`: PASS.
+
+Real signal-source proof validates:
+- creating thread has SIGTERM/SIGINT blocked;
+- a later child thread inherits the blocked mask;
+- thread-directed SIGTERM becomes readable as typed SigTerm;
+- thread-directed SIGINT becomes readable as typed SigInt;
+- explicit restore returns the exact original mask;
+- Drop restore returns the exact original mask;
+- parent test harness signal state is not mutated.
+
+TRI-SOURCE READINESS
+
+Implemented source:
+- crates/prw-agent/src/linux_signal_aware_readiness.rs
+
+Each invocation performs exactly one blocking poll over:
+1. termination SignalFd — always armed;
+2. Phase 089 runtime wake — always armed;
+3. listener — armed only when worker capacity is available.
+
+Semantic precedence is locked and implemented exactly:
+1. termination signal;
+2. runtime wake;
+3. listener readiness.
+
+If termination wins:
+- one SIGTERM/SIGINT event is consumed;
+- monotonic scheduler shutdown is committed before return;
+- simultaneous listener readiness is not dispatched.
+
+Wake handling preserves Phase 091 semantics:
+- drain runtime wake;
+- reap already-finished workers;
+- re-observe shutdown;
+- only then permit simultaneous listener readiness if capacity remains available.
+
+Other readiness invariants:
+- full capacity omits listener interest;
+- poll EINTR becomes typed WaitInterrupted;
+- descriptor ERR/HUP/NVAL fail closed by descriptor class;
+- unexpected readiness flags fail closed;
+- impossible ready-count combinations fail closed;
+- listener-capacity mismatch fails closed;
+- no internal outer loop, timeout, sleep, or hidden retry cadence.
+
+Readiness validation history:
+- initial run `31902826688`: stopped only on elidable lifetime + const helper Clippy findings;
+- A01 `31902865634`: PASS and committed readiness source;
+- permanent readiness run `31902939571`: PASS.
+
+FULL SIGNAL-AWARE RUNTIME
+
+Implemented source:
+- crates/prw-agent/src/linux_signal_aware_runtime.rs
+- crates/prw-agent/src/linux_production_runtime_types.rs — bounded signal-aware accounting helpers;
+- crates/prw-agent/src/linux_production_runtime_loop.rs — immutable read-only input accessors;
+- crates/prw-agent/src/linux_identity.rs — module export/documentation only.
+
+Startup/ownership order:
+1. create thread-affine termination signal source and install SIGTERM/SIGINT mask;
+2. enter Phase 096 lifecycle assembly;
+3. create listener/wake/capacity/control resources;
+4. enter one controlled worker thread scope;
+5. run signal-aware readiness/scheduling loop;
+6. establish typed terminal reason;
+7. cancel retained workers;
+8. join/classify retained workers;
+9. exit worker scope;
+10. Phase 096 cleans listener/socket pathname;
+11. close SignalFd and restore exact prior calling-thread signal mask;
+12. return independent terminal, counter, worker, cleanup, and mask-restoration evidence.
+
+Because the signal mask is installed before the worker scope exists, subsequently created session workers inherit the blocked SIGTERM/SIGINT mask.
+
+Runtime terminal reasons remain distinct:
+- ProgrammaticShutdown;
+- TerminationSignal(SigTerm/SigInt);
+- ReadinessFatal(exact signal-aware readiness error);
+- RuntimeFatal(exact Phase 095 scheduling/runtime fatal error).
+
+Startup errors remain distinct:
+- signal-source creation failure;
+- lifecycle assembly failure plus independent mask-restoration evidence.
+
+A lifecycle failure after mask installation explicitly restores the prior mask before return.
+
+RUNTIME ERROR DISPOSITION
+
+The Phase 094-A01/095 policy remains unchanged:
+- same-UID peer-authorization rejection is connection-local: count it and continue;
+- all other initial readiness/scheduling failures fail-stop with exact typed cause;
+- no internal unbounded retry/backoff policy.
+
+PROCESS-LIFETIME EVIDENCE
+
+The Phase 095 fixed-size saturating counter aggregate now records:
+- signal-aware readiness steps;
+- listener-armed steps;
+- runtime-wake steps;
+- wait-interruption steps;
+- scheduling attempts;
+- worker registrations;
+- worker completions;
+- peer rejections.
+
+Signal-aware scheduling success/error accounting does not double-count readiness that was already recorded separately.
+
+Only terminal cancellation outcomes and terminal joined completions remain vectors, and both are bounded by configured worker capacity.
+
+SIGNAL > LISTENER KERNEL PRECEDENCE PROOF
+
+The full-runtime preflight run `31903085623` includes an isolated subprocess proof.
+
+After lifecycle setup and before the first wait, the same runtime thread:
+- queues one real local Unix client so the listener is ready;
+- posts SIGTERM to itself after SIGTERM is blocked, making SignalFd ready.
+
+The first signal-aware wait therefore sees simultaneous signal and listener readiness.
+
+Validated outcome:
+- terminal reason = TerminationSignal(SigTerm);
+- scheduling attempts = 0;
+- workers registered = 0;
+- final cancellation vector empty;
+- final completion vector empty;
+- listener/socket cleanup = Clean;
+- signal-mask restore = Restored;
+- exact original thread signal mask observed after return;
+- Agent socket pathname absent after return.
+
+This proves termination signal precedence prevents post-signal listener dispatch in the same readiness result.
+
+AUTHORITATIVE VALIDATION
+
+Permanent PRW Rust Validation run `31903139121` passed:
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+POST-VALIDATION GUARDS
+
+- final Cargo.lock blob SHA is `18db6137fc0f4f5bda22ad92425cff5edfb33c73`;
+- workspace `unsafe_code = "forbid"` remains unchanged;
+- `.github/workflows/` contains only permanent `phase-001-rust-validation.yml`;
+- `crates/prw-agent/src/main.rs` remains the inactive bootstrap and starts no listener/runtime;
+- no temporary Phase 098 workflow remains.
+
+BOUNDARY PRESERVED
+
+Phase 098 did not:
+- wire/activate `crates/prw-agent/src/main.rs`;
+- define process exit-code mapping;
+- install, enable, start, stop, or modify systemd units;
+- deploy anything;
+- expose remote/public networking;
+- expand auth/enrollment;
+- change private-DNS policy from optional;
+- add TUN/relay/database/private-key behavior;
+- introduce Wake-on-LAN / remote wake.
+
+NEXT AUTHORIZED STEP
+
+Phase 099 is a completion review only. It may audit Phases 095-098, validate final dependency/mutation/runtime boundaries, and record the next explicit bootstrap gate. It does not authorize additional runtime source, `main.rs`, systemd, or deployment mutation.
+
+FINAL CLASSIFICATION
+
+SAFE_SIGNAL_SOURCE_IMPLEMENTED / SIGTERM_SIGINT_MASKED_BEFORE_WORKERS / SIGNALFD_NONBLOCK_CLOEXEC / THREAD_AFFINE_MASK_OWNER / SIGNAL_GT_WAKE_GT_LISTENER / CAPACITY_AWARE_LISTENER_INTEREST / PROGRAMMATIC_AND_SIGNAL_TERMINATION / MEMORY_BOUNDED_EVIDENCE / BOUNDED_CANCEL_JOIN_CLEANUP / MASK_RESTORE_AFTER_LISTENER_CLEANUP / UNSAFE_FORBID_PRESERVED / NO_MAIN_RS_ACTIVATION / NO_SYSTEMD_ACTIVATION / PASS
+
+This file is the single authoritative user-facing Phase 098 completion report. Phase 098-A00 remains preserved as the dependency-precheck sub-audit.
