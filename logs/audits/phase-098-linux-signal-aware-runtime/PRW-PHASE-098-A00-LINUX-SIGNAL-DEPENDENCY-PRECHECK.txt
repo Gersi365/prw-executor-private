@@ -1,0 +1,123 @@
+Private Remote Workspace
+Phase 098-A00 Linux Signal Dependency Precheck
+
+STATUS: PASS / CANDIDATE_DEPENDENCY_APPROVED_FOR_CONTROLLED_PREFLIGHT / NO_CARGO_MUTATION_IN_THIS_AUDIT
+AUDIT TYPE: SAFE SYNCHRONOUS LINUX SIGNAL WRAPPER DEPENDENCY PRECHECK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 094-A01 architecture decision commit: 493cd9f8031ee8320d4d953eae7d4b392b83bad0
+Phase 097 authoritative PASS commit: 18c0c4b26c9b053fc2f58d68b1c17962966700de
+Exact repository Rust/Cargo toolchain: 1.97.1
+Workspace unsafe policy: unsafe_code = "forbid"
+Current Cargo.lock blob SHA before dependency work: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+CANDIDATE
+
+Crate: nix
+Candidate version: 0.31.3
+Proposed dependency declaration:
+
+nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
+
+PRIMARY-SOURCE FINDINGS
+
+Official published nix 0.31.3 package metadata/docs establish:
+- crate version 0.31.3;
+- Rust edition 2021;
+- rust-version / MSRV 1.69;
+- MIT license;
+- default feature set is empty;
+- `signal` feature enables `process`;
+- normal package dependencies include bitflags, cfg-if, and libc; cfg_aliases is a build dependency.
+
+The PRW repository is pinned to Rust/Cargo 1.97.1, which is newer than nix 0.31.3's declared MSRV 1.69.
+
+SAFE API SURFACE REQUIRED BY PRW
+
+Official nix 0.31.3 API documentation provides the required safe surface under the `signal` feature:
+
+- `nix::sys::signal::SigSet::empty()`;
+- `SigSet::add(...)`;
+- `SigSet::thread_get_mask()` / `thread_set_mask()` / `thread_block()` / `thread_swap_mask(...)`;
+- `nix::sys::signal::Signal::{SIGTERM, SIGINT}`;
+- `nix::sys::signalfd::SignalFd::with_flags(...)`;
+- `nix::sys::signalfd::SfdFlags::{SFD_NONBLOCK, SFD_CLOEXEC}`;
+- `SignalFd::read_signal()`;
+- `AsFd` for `SignalFd`.
+
+The required PRW path does not need:
+- `SignalFd::from_owned_fd`, which is unsafe;
+- `signal(...)` or `sigaction(...)` signal-handler installation;
+- direct libc FFI;
+- any local unsafe block.
+
+Therefore the candidate is compatible with the repository's `unsafe_code = "forbid"` policy at the PRW source boundary.
+
+LINUX SEMANTIC FIT
+
+Linux `signalfd` is explicitly monitorable by `poll`/`epoll` and should be used with the selected signals blocked so default signal disposition cannot consume them asynchronously.
+
+POSIX/Linux thread semantics establish that a newly created thread inherits a copy of its creator's signal mask. Therefore the PRW production signal mask must be established on the runtime thread before the Phase 097 `std::thread::scope` creates session workers.
+
+The Phase 094-A01 signal candidates remain exactly:
+- SIGTERM;
+- SIGINT.
+
+SIGHUP reload remains deferred.
+
+PRW SIGNAL OWNERSHIP REQUIREMENT
+
+The future signal source must:
+1. create a mask containing SIGTERM and SIGINT;
+2. atomically/synchronously preserve the prior calling-thread mask while blocking the termination mask;
+3. create a CLOEXEC + NONBLOCK SignalFd for exactly that termination mask;
+4. ensure all Phase 097 worker threads are created after the mask is installed;
+5. expose the SignalFd only as a pollable/readable safe wrapper;
+6. explicitly restore the prior thread signal mask after listener/socket cleanup;
+7. best-effort restore the mask on unwind;
+8. preserve an original runtime/lifecycle terminal reason independently from mask-restoration failure.
+
+SIGNAL-AWARE READINESS REQUIREMENT
+
+A future Phase 098 adapter must implement semantic precedence:
+
+1. termination SignalFd readiness;
+2. Phase 089 runtime wake readiness;
+3. listener readiness.
+
+It must preserve Phase 091 capacity-aware listener suppression at full worker capacity.
+
+A termination signal observation must establish terminal shutdown before any simultaneous listener dispatch. No accepted connection may begin after a SIGTERM/SIGINT observation in the same readiness result.
+
+TEST ISOLATION REQUIREMENT
+
+Process-global/thread signal-mask tests must not mutate the ordinary parallel Rust test harness's signal state.
+
+Real SIGTERM/SIGINT delivery and mask/signalfd behavior must therefore be validated in a dedicated child-process/subprocess boundary. Pure readiness classifiers may remain ordinary deterministic unit tests.
+
+DEPENDENCY GRAPH EXPECTATION BEFORE CARGO PREFLIGHT
+
+Current PRW Cargo.lock already contains compatible bitflags 2.13.1 and libc 0.2.189.
+
+Based on nix 0.31.3 published metadata, the controlled Cargo preflight is expected to add nix plus any missing cfg-if/cfg_aliases packages while reusing compatible existing bitflags/libc versions. This is an expectation only; the actual lockfile delta must be generated and verified by Cargo 1.97.1 before commit.
+
+DECISION
+
+PASS for controlled dependency preflight.
+
+Authorize Phase 098-A01 to temporarily add exactly:
+
+nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
+
+to `crates/prw-agent/Cargo.toml`, generate/update Cargo.lock using the repository-pinned Cargo 1.97.1, verify the exact dependency delta, and run full locked metadata/fmt/Clippy/test/build validation before committing the dependency baseline.
+
+No signal runtime source is authorized to commit unless that dependency preflight succeeds.
+
+BOUNDARY PRESERVED
+
+This audit itself changes no Cargo manifest, Cargo.lock, Rust source, `main.rs`, signal mask, process signal disposition, systemd state, listener state, or deployment state.
+
+FINAL CLASSIFICATION
+
+NIX_0_31_3_PRECHECK_PASS / EXACT_PIN_RECOMMENDED / SIGNAL_FEATURE_ONLY / MSRV_1_69_BELOW_PRW_1_97_1 / MIT / SAFE_SIGSET_SIGNALFD_ASFD_SURFACE / UNSAFE_FORBID_PRESERVED / SUBPROCESS_SIGNAL_TEST_REQUIRED / CONTROLLED_CARGO_PREFLIGHT_AUTHORIZED / NO_RUNTIME_ACTIVATION
