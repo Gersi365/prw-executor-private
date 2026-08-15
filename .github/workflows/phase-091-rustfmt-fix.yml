@@ -1,0 +1,36 @@
+name: Phase 091 Rustfmt Corrective
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase-091-rustfmt-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply and constrain rustfmt
+        run: |
+          cargo fmt --all
+          changed="$(git diff --name-only)"
+          test "$changed" = "crates/prw-agent/src/linux_runtime_readiness.rs"
+          cargo fmt --all -- --check
+          git diff --check
+
+      - name: Commit formatter correction and self-delete
+        run: |
+          rm .github/workflows/phase-091-rustfmt-fix.yml
+          git add crates/prw-agent/src/linux_runtime_readiness.rs .github/workflows/phase-091-rustfmt-fix.yml
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git commit -m "Fix Phase 091 rustfmt baseline"
+          git push
