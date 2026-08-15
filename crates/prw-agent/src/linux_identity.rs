@@ -1,10 +1,11 @@
-//! Non-activating Linux local peer identity adapter.
+//! Non-activating Linux local platform boundary.
 //!
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
-//! authorization, Phase 059 adds typed authenticated stream ownership, and
-//! Phase 060 composes authenticated application-session processing. This
-//! boundary owns no listener or filesystem socket lifecycle.
+//! authorization, Phase 059 adds typed authenticated stream ownership, Phase 060
+//! composes authenticated application-session processing, and Phase 062 adds
+//! read-only XDG runtime-root validation. This boundary owns no listener or
+//! filesystem socket lifecycle.
 
 #[allow(
     dead_code,
@@ -24,6 +25,12 @@ pub mod authenticated_session;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux XDG runtime-root validation is intentionally crate-internal"
+)]
+#[path = "linux_xdg_runtime_root.rs"]
+pub mod xdg_runtime_root;
 
 use rustix::fd::AsFd;
 use rustix::net::sockopt::socket_peercred;
