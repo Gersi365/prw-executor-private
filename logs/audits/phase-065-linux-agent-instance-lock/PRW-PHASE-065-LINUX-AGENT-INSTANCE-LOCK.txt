@@ -1,0 +1,68 @@
+Private Remote Workspace
+Phase 065 Linux Agent Instance Lock
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement the Phase 064 persistent agent.lock single-instance authority as a descriptor-anchored, nonblocking, crate-internal adapter without touching agent.sock or activating a listener.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_instance_lock.rs
+- parent integration: crates/prw-agent/src/linux_prw_runtime_directory.rs
+- contract: contracts/LINUX_AGENT_INSTANCE_LOCK_CONTRACT.md
+- architecture: docs/architecture/PHASE_065_LINUX_AGENT_INSTANCE_LOCK.md
+
+PRODUCTION ALGORITHM
+
+- input is a ValidatedPrwRuntimeDirectory;
+- open/create fixed agent.lock relative to its descriptor;
+- RDWR | CREATE | NOFOLLOW | CLOEXEC | NONBLOCK;
+- creation mode 0600;
+- fstat requires regular-file type and effective-UID ownership before repair;
+- same-UID regular lock file may be fchmod-normalized to exact 0600 and revalidated;
+- nonblocking exclusive flock;
+- EWOULDBLOCK/EAGAIN becomes AlreadyRunning;
+- any other flock error fails closed;
+- success returns an AgentInstanceLock that owns the locked descriptor;
+- dropping the guard releases the advisory lock through descriptor closure but does not unlink agent.lock.
+
+VALIDATED BEHAVIOR
+
+Temporary runner tests prove:
+- absent lock file is created and validated at 0600;
+- a second conforming acquisition while the first guard is alive returns AlreadyRunning;
+- the persistent lock file can be locked again after the first guard is dropped;
+- pre-existing same-UID 0644 lock file is normalized to 0600;
+- a final-component symlink fails closed without changing its target;
+- wrong-owner metadata classification fails before mode policy.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31891439556
+Validated source head: 1f5ae61bd19e3d486771076b9fee6b9d30a2d80b
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+SCOPE PRESERVED
+
+Phase 065:
+- creates/validates/locks only agent.lock when the adapter is explicitly invoked;
+- does not inspect, unlink, bind, listen on, accept from, or connect to agent.sock;
+- is not called by the Agent bootstrap;
+- activates no service;
+- changes no network/DNS/TUN/database/deployment state.
+
+FINAL CLASSIFICATION
+
+INSTANCE_LOCK_IMPLEMENTED / NONBLOCKING_EXCLUSIVE_AUTHORITY / PERSISTENT_LOCK_INODE / AGENT_SOCKET_UNTOUCHED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 065 report.
