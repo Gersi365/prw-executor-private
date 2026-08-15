@@ -352,13 +352,7 @@ mod tests {
 
         assert!(
             session
-                .process_one_with_deadlines(
-                    &policy,
-                    status,
-                    &dns,
-                    io_budget(25),
-                    io_budget(500),
-                )
+                .process_one_with_deadlines(&policy, status, &dns, io_budget(25), io_budget(500),)
                 .is_err()
         );
         assert_eq!(
