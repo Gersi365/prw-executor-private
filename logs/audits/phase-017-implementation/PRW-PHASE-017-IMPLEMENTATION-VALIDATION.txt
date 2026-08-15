@@ -1,0 +1,136 @@
+Private Remote Workspace
+Phase 017 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 017
+SCOPE: Minimal typed local Agent status snapshot
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 017 base commit: 9f15b98c854e2147f122f6e7e4d6fc20498442fe
+Validated source commit: 48693a4115c02bed1769f106f66a54aa798b51f6
+Validated GitHub Actions run: 31879373196
+
+LOCKED STATUS MODEL
+
+Phase 017 defines a minimal read-only status snapshot for a future successful GetAgentStatus response.
+
+Runtime-state identifiers:
+- Starting -> 1
+- Ready -> 2
+- Degraded -> 3
+- Stopping -> 4
+
+The snapshot also carries the current LocalIpcProtocolVersion. No hostname, PID, timestamp, filesystem path, build metadata, DNS configuration, network addresses, or other host metadata is included.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported the status_snapshot module.
+- Existing command, response-status, request-tracker, request-codec, and response-prefix semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/status_snapshot.rs
+- Added LocalAgentRuntimeState with stable numeric identifiers and inverse mapping.
+- Added is_ready(), where Ready is the only state reporting normal request readiness.
+- Added LocalAgentStatusSnapshot carrying runtime state and current IPC protocol version.
+- Added focused tests for identifier stability, inverse mapping, readiness semantics, and current protocol-version use.
+
+3. contracts/LOCAL_AGENT_STATUS_CONTRACT.md
+- Added the normative minimal Agent status schema and explicit metadata exclusions.
+
+4. docs/architecture/PHASE_017_LOCAL_AGENT_STATUS.md
+- Recorded rationale for the intentionally narrow status schema and deferred byte serialization/runtime integration.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 017 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot.rs
+- added: docs/architecture/PHASE_017_LOCAL_AGENT_STATUS.md
+
+VALIDATION HISTORY
+
+Run 34
+- Run ID: 31879215319
+- Commit: b28439a1ef87f3dc56e94f72c35e04afb441b55c
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow of one assert_eq! invocation in status_snapshot.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 48693a4115c02bed1769f106f66a54aa798b51f6
+- Change: exact rustfmt-only correction in crates/prw-agent/src/local_commands/status_snapshot.rs.
+- Runtime-state identifiers, status schema, protocol-version semantics, dependencies, and runtime behavior unchanged.
+
+Run 35
+- Run ID: 31879373196
+- Commit: 48693a4115c02bed1769f106f66a54aa798b51f6
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: runtime-state identifiers stable and invertible
+PASS: unknown runtime-state identifiers rejected by typed inverse mapping
+PASS: Ready is the only state reporting normal readiness
+PASS: status snapshot uses current LocalIpcProtocolVersion
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 017 did not:
+- serialize the status snapshot onto the wire;
+- dispatch or execute commands;
+- bind/listen/accept/connect a socket;
+- add a serialization dependency;
+- expose hostname, PID, timestamp, filesystem paths, or network metadata;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 017.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 017 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- byte codec for the Agent status body;
+- bounded private-DNS response body;
+- outer Response/Error frame-kind + status invariant;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 017 implementation-validation report.
+GitHub Actions run 31879373196 is the authoritative executable validation evidence for source commit 48693a4115c02bed1769f106f66a54aa798b51f6.
