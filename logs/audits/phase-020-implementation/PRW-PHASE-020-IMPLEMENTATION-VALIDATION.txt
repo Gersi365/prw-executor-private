@@ -1,0 +1,133 @@
+Private Remote Workspace
+Phase 020 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 020
+SCOPE: Pure in-memory terminal-response frame kind/status invariant
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 020 base commit: 0d5616a23ab049f19d54eaf1e0b731252d7e9f63
+Validated source commit: df391ac77a6b96c322bba378c23f52490216acef
+Validated GitHub Actions run: 31879825158
+
+LOCKED INVARIANT
+
+Terminal response outer-kind mapping:
+- LocalAgentResponseStatus::Ok -> LocalIpcMessageKind::Response
+- every current non-Ok response status -> LocalIpcMessageKind::Error
+
+Therefore:
+- Response + non-Ok is invalid;
+- Error + Ok is invalid;
+- Request is never a terminal response.
+
+Phase 020 operates only on an already validated LocalIpcFrame. Existing frame constructors remain authoritative for supported protocol version, non-zero typed request ID, globally bounded payload, and exact declared-vs-actual payload length. Phase 020 does not duplicate those checks.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported terminal_response module.
+
+2. crates/prw-agent/src/local_commands/terminal_response.rs
+- Added LocalTerminalResponse carrying the existing frame request ID and decoded terminal status.
+- Added expected_terminal_kind().
+- Added validate_terminal_response_frame().
+- Reused the Phase 016 response-status prefix decoder.
+- Added fail-closed RequestKind, MissingStatus, UnknownStatus, and KindStatusMismatch errors.
+- Request frames are rejected before response-payload interpretation.
+- Command-specific bytes after the status prefix remain opaque.
+
+3. contracts/LOCAL_TERMINAL_RESPONSE_FRAME_CONTRACT.md
+- Added the normative terminal kind/status invariant and prerequisite frame guarantees.
+
+4. docs/architecture/PHASE_020_TERMINAL_RESPONSE_FRAME.md
+- Recorded invariant rationale, lower-level guarantee reuse, request-tracker separation, and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 020 base: 4
+- added: contracts/LOCAL_TERMINAL_RESPONSE_FRAME_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/terminal_response.rs
+- added: docs/architecture/PHASE_020_TERMINAL_RESPONSE_FRAME.md
+
+VALIDATION HISTORY
+
+Run 41
+- Run ID: 31879825158
+- Commit: df391ac77a6b96c322bba378c23f52490216acef
+- Result: SUCCESS
+- No corrective commit was required.
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: Ok maps only to Response
+PASS: every current non-Ok status maps to Error
+PASS: Response + Ok accepted
+PASS: Error + every current non-Ok status accepted
+PASS: Response + non-Ok rejected
+PASS: Error + Ok rejected
+PASS: Request rejected before response interpretation
+PASS: missing status prefix rejected
+PASS: unknown status identifier rejected
+PASS: existing frame request ID preserved unchanged
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 020 did not:
+- bind/listen/accept/connect a socket;
+- dispatch or execute commands;
+- mutate outstanding-request state;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 020.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 020 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- combining terminal-frame validation with the Phase 013 outstanding-request tracker;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 020 implementation-validation report.
+GitHub Actions run 31879825158 is the authoritative executable validation evidence for source commit df391ac77a6b96c322bba378c23f52490216acef.
