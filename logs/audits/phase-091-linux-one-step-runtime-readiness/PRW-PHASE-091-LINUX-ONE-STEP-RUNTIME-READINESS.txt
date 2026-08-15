@@ -1,0 +1,139 @@
+Private Remote Workspace
+Phase 091 Linux One-Step Runtime Readiness
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / NO_RUNTIME_ACTIVATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 088 decision report commit: 8a033fb86d65dfca5ef9ec9980cae0dd6e31d486
+Phase 090 authoritative report commit: b88250614aa2ac1bc63e91057de3327acf793fb6
+Validated source/trigger head: a07bb5f3fffebe0e4f9951fe21e9c3df5acd3781
+Mechanical Clippy-corrected source head incorporated by validation: b783686affc6889913a3221b9026af07c07bd0a0
+Validated architecture-status commit: d4435f7468c04d99a577c5b7e94c3e2a79896c8c
+Authoritative GitHub Actions run: 31900246130
+Exact Rust/Cargo toolchain: 1.97.1
+Cargo.lock blob SHA: 76af6bd831191309ac904dfe02ef76729de9a4fb
+
+IMPLEMENTED SCOPE
+
+Phase 091 adds one finite capacity-aware Linux readiness primitive:
+
+- crates/prw-agent/src/linux_runtime_readiness.rs
+- module export/documentation update in crates/prw-agent/src/linux_identity.rs
+- architecture status in docs/architecture/PHASE_091_LINUX_ONE_STEP_RUNTIME_READINESS.md
+
+The primitive performs at most one blocking poll call per invocation and returns structured outcome/evidence. It contains no outer loop.
+
+LOCKED/VALIDATED READINESS SEMANTICS
+
+- terminal shutdown is checked before blocking;
+- Phase 089 runtime wake is always armed for PollFlags::IN;
+- listener readiness is armed only while active_workers() < max_workers();
+- normal wait uses poll(..., None), with no periodic timeout;
+- poll EINTR is surfaced as WaitInterrupted and is not retried internally;
+- zero or contradictory ready-count results fail closed;
+- ERR, HUP and NVAL fail closed for either descriptor;
+- unsupported revents bits fail closed;
+- runtime wake is processed before simultaneous listener readiness;
+- wake is drained before listener dispatch eligibility is returned;
+- wake processing calls registry.reap_finished() and returns observed completion evidence;
+- shutdown is re-observed after wake processing;
+- capacity is re-observed before simultaneous listener readiness can be returned;
+- listener-only readiness rechecks shutdown and capacity before returning ListenerReady.
+
+BUSY-LOOP PREVENTION PROOF
+
+A focused real-kernel test recreates the Phase 087-A01 risk state:
+
+- worker capacity max = 1;
+- the sole capacity permit is held;
+- an additional client is queued on the nonblocking Unix listener.
+
+With full capacity, Phase 091 omits the listener from the poll set. A controlled runtime wake returns RuntimeWake with listener_armed=false rather than being immediately driven by the still-readable queued listener.
+
+After the permit is released, a second finite invocation arms the listener and observes the still-queued client as ListenerReady.
+
+This proves the Phase 087-A01 queued-listener/full-capacity spin is structurally excluded by the Phase 091 wait-set rule.
+
+WAKE-FIRST PRECEDENCE PROOF
+
+A focused test makes both wake and listener readable before the wait. Phase 091 drains the runtime wake first, re-observes runtime state, and only then returns ListenerReady while capacity/shutdown permit it. A subsequent wake drain returns WouldBlock, proving the wake was consumed before listener outcome exposure.
+
+COMPLETION-EVIDENCE PROOF
+
+A focused test registers an already-finished scoped worker, posts a completion-style runtime wake, and proves wake handling reaps/classifies that worker into LocalLinuxScopedWorkerCompletion evidence and empties the registry entry.
+
+Phase 091 intentionally treats wake-time reaping as an observation attempt: a completion wake can race the final transition of ScopedJoinHandle::is_finished(). Therefore a wake does not claim its causal worker is immediately joinable. Final ownership remains bounded by later reap points or shutdown join_all().
+
+POLL CLASSIFICATION PROOFS
+
+Deterministic tests prove:
+
+- Errno::INTR => WaitInterrupted;
+- other poll errno => WaitFailed;
+- Ok(0) => InvalidWaitReturn;
+- impossible ready count => InvalidWaitReturn;
+- wake ERR => WakeDescriptorFailed;
+- listener HUP => ListenerDescriptorFailed;
+- unsupported wake OUT => InvalidWakeReadiness;
+- IN readiness => valid;
+- empty revents => not-ready.
+
+VALIDATION
+
+Authoritative run 31900246130 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+DEPENDENCY/LOCKFILE GUARD
+
+Cargo.lock remained byte-identical with blob SHA 76af6bd831191309ac904dfe02ef76729de9a4fb.
+
+MUTATION SURFACE
+
+Net comparison from Phase 090 authoritative report commit b88250614aa2ac1bc63e91057de3327acf793fb6 through validated Phase 091 source/trigger head a07bb5f3fffebe0e4f9951fe21e9c3df5acd3781 contains exactly:
+
+- crates/prw-agent/src/linux_identity.rs
+- crates/prw-agent/src/linux_runtime_readiness.rs
+- docs/architecture/PHASE_091_LINUX_ONE_STEP_RUNTIME_READINESS.md
+
+Temporary formatter/Clippy workflow files are net-absent.
+
+CORRECTIVE HISTORY
+
+1. Initial integrated run 31900029359 failed safely only at cargo fmt --check after locked metadata passed.
+2. Temporary rustfmt corrective run 31900068830 succeeded with a one-source-file guard and produced formatter commit 3f3eb2b95b02a711584d8a4ab86910bfff53c8ee; workflow self-deleted.
+3. Permanent run 31900113946 passed metadata/fmt and failed only two Clippy style/compatibility findings: an elidable named lifetime and a private helper eligible for const fn.
+4. Temporary exact Clippy corrective run 31900151699 succeeded with occurrence-count and one-source-file guards and produced b783686affc6889913a3221b9026af07c07bd0a0; workflow self-deleted.
+5. Final permanent run 31900246130 passed all validation stages.
+
+WORKFLOW CLEANUP
+
+After corrections, `.github/workflows/` contains only the permanent `phase-001-rust-validation.yml` workflow.
+
+SCOPE PRESERVED
+
+Phase 091 does NOT:
+
+- implement a readiness loop;
+- implement a scheduler loop;
+- invoke Phase 086 from the readiness primitive;
+- modify main.rs;
+- add OS signal handling;
+- activate Agent/systemd/service state;
+- add remote/public networking;
+- change auth/enrollment/DNS/TUN/relay/database/private-key/deployment state.
+
+NEXT AUTHORIZED STEP
+
+Proceed with Phase 092 finite readiness + scheduling orchestration proof below the bootstrap boundary. Runtime-specific scheduling must preserve the Phase 090 completion wake instead of silently reverting to the older Phase 084/086 spawn path. Phase 092 must remain caller-bounded/finite and must not introduce a production long-running loop.
+
+FINAL CLASSIFICATION
+
+PHASE_091_IMPLEMENTED_AND_VALIDATED / ONE_BLOCKING_POLL_PER_INVOCATION / CAPACITY_AWARE_LISTENER_INTEREST / FULL_CAPACITY_QUEUED_LISTENER_NO_SPIN / WAKE_FIRST_PRECEDENCE / STRUCTURED_POLL_EINTR / WAKE_TIME_COMPLETION_REAP / CARGO_LOCK_UNCHANGED / NO_RUNTIME_ACTIVATION / PASS
+
+This is the single authoritative user-facing Phase 091 report.
