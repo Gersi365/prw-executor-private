@@ -1,0 +1,161 @@
+name: Phase 106 systemd static validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-106-systemd-static-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Record and gate systemd baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          systemd-analyze --version
+          major="$(systemd-analyze --version | awk 'NR==1 {print $2}')"
+          test "$major" -ge 255
+          test ! -e packaging/systemd/prw-agent.service
+
+      - name: Generate locked Phase 106 service source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > packaging/systemd/prw-agent.service <<'UNIT'
+          [Unit]
+          Description=Private Remote Workspace Agent
+          StartLimitIntervalSec=60s
+          StartLimitBurst=5
+
+          [Service]
+          Type=exec
+          ExecStart=/usr/lib/private-remote-workspace/prw-agent
+          Restart=on-failure
+          RestartSec=5s
+          TimeoutStopSec=15s
+          UMask=0077
+          NoNewPrivileges=yes
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=default.target
+          UNIT
+
+          cat > packaging/systemd/README.md <<'README'
+          # systemd Packaging Boundary
+
+          The Ubuntu PRW Agent is packaged as an unprivileged **systemd user service**. The service source is `prw-agent.service`; no socket-activation unit is part of the initial package contract.
+
+          ## Locked Phase 105 paths
+
+          - packaged executable: `/usr/lib/private-remote-workspace/prw-agent`
+          - global user unit: `/usr/lib/systemd/user/prw-agent.service`
+          - repository unit source: `packaging/systemd/prw-agent.service`
+
+          The unit runs as the existing user-manager UID. It does not set `User=`, synthesize `XDG_RUNTIME_DIR`, create a working directory, or delegate PRW socket lifecycle to systemd. The Agent retains ownership of XDG validation, instance locking, bind/listen/readiness, and socket cleanup.
+
+          ## Locked service policy
+
+          - `Type=exec`
+          - `Restart=on-failure`
+          - `RestartSec=5s`
+          - `StartLimitIntervalSec=60s`
+          - `StartLimitBurst=5`
+          - `TimeoutStopSec=15s`
+          - `UMask=0077`
+          - `NoNewPrivileges=yes`
+          - stdout/stderr captured by the journal
+          - future enablement relationship: `WantedBy=default.target`
+
+          No `ExecStop=`, shell wrapper, `.socket` unit, `Type=notify`, `RuntimeDirectory=`, `Environment=XDG_RUNTIME_DIR=...`, or `network-online.target` dependency is introduced.
+
+          ## Activation gate
+
+          This repository source does **not** install, enable, start, restart, or reload the real service and does not mutate user lingering. Real-host installation/activation and any `loginctl` linger change remain separately gated after the Phase 108 completion review.
+          README
+
+      - name: Verify exact unit contract and forbidden surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('packaging/systemd/prw-agent.service')
+          actual = path.read_text()
+          expected = '''[Unit]
+          Description=Private Remote Workspace Agent
+          StartLimitIntervalSec=60s
+          StartLimitBurst=5
+
+          [Service]
+          Type=exec
+          ExecStart=/usr/lib/private-remote-workspace/prw-agent
+          Restart=on-failure
+          RestartSec=5s
+          TimeoutStopSec=15s
+          UMask=0077
+          NoNewPrivileges=yes
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=default.target
+          '''
+          assert actual == expected, (actual, expected)
+
+          forbidden = [
+              '[Socket]', 'User=', 'Group=', 'DynamicUser=', 'Environment=',
+              'EnvironmentFile=', 'WorkingDirectory=', 'RuntimeDirectory=',
+              'PIDFile=', 'ExecStartPre=', 'ExecStartPost=', 'ExecStop=',
+              'ExecReload=', 'Type=notify', 'Type=forking', 'network-online.target',
+              'sudo ', 'pkexec ', '/bin/sh', '/bin/bash'
+          ]
+          for token in forbidden:
+              assert token not in actual, token
+          PY
+
+      - name: Verify with systemd-analyze in disposable root
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          mkdir -p "$root/usr/lib/systemd/user" "$root/usr/lib/private-remote-workspace"
+          cp packaging/systemd/prw-agent.service "$root/usr/lib/systemd/user/prw-agent.service"
+          printf '#!/bin/sh\nexit 0\n' > "$root/usr/lib/private-remote-workspace/prw-agent"
+          chmod 0755 "$root/usr/lib/private-remote-workspace/prw-agent"
+          systemd-analyze --user --root="$root" verify prw-agent.service
+
+      - name: Guard mutation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked="$(git diff --name-only | sort)"
+          expected=$'packaging/systemd/README.md\npackaging/systemd/prw-agent.service'
+          test "$tracked" = "$expected"
+          test -z "$(git ls-files --others --exclude-standard)"
+          git diff --check
+
+      - name: Commit validated service source and self-delete workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add packaging/systemd/README.md packaging/systemd/prw-agent.service
+          git commit -m 'Add Phase 106 systemd user-service source'
+          git rm .github/workflows/phase-106-systemd-static-validation.yml
+          git commit -m 'Remove temporary Phase 106 systemd validation workflow [skip ci]'
+          git push origin HEAD:main
