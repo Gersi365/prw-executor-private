@@ -3,6 +3,11 @@
 //! Phase 031 reuses the Phase 015 two-byte command codec and the existing
 //! validated frame constructors. It performs no stream or socket I/O.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime Request boundary stream is intentionally crate-internal"
+)]
+pub(crate) mod boundary_stream;
 pub mod discard;
 pub mod send_state;
 pub mod stream;
