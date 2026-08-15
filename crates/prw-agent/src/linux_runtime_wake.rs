@@ -122,9 +122,7 @@ impl LocalLinuxRuntimeWakeNotifier {
     ///
     /// Returns a bounded error for unexpected short I/O or another kernel write
     /// failure. The method itself does not panic.
-    pub fn notify(
-        &self,
-    ) -> Result<LocalLinuxRuntimeWakeNotify, LocalLinuxRuntimeWakeNotifyError> {
+    pub fn notify(&self) -> Result<LocalLinuxRuntimeWakeNotify, LocalLinuxRuntimeWakeNotifyError> {
         notify_with(|| write(self.fd.as_ref(), &WAKE_VALUE_BYTES))
     }
 }
@@ -197,7 +195,10 @@ mod tests {
 
         assert!(descriptor_flags.contains(FdFlags::CLOEXEC));
         assert!(status_flags.contains(OFlags::NONBLOCK));
-        assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+        assert_eq!(
+            wake.drain(),
+            Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+        );
     }
 
     #[test]
@@ -205,12 +206,12 @@ mod tests {
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 eventfd creates");
         let notifier = wake.notifier();
 
-        assert_eq!(
-            notifier.notify(),
-            Ok(LocalLinuxRuntimeWakeNotify::Queued)
-        );
+        assert_eq!(notifier.notify(), Ok(LocalLinuxRuntimeWakeNotify::Queued));
         assert_eq!(wake.drain(), Ok(()));
-        assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+        assert_eq!(
+            wake.drain(),
+            Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+        );
     }
 
     #[test]
@@ -218,17 +219,14 @@ mod tests {
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 eventfd creates");
         let notifier = wake.notifier();
 
-        assert_eq!(
-            notifier.notify(),
-            Ok(LocalLinuxRuntimeWakeNotify::Queued)
-        );
-        assert_eq!(
-            notifier.notify(),
-            Ok(LocalLinuxRuntimeWakeNotify::Queued)
-        );
+        assert_eq!(notifier.notify(), Ok(LocalLinuxRuntimeWakeNotify::Queued));
+        assert_eq!(notifier.notify(), Ok(LocalLinuxRuntimeWakeNotify::Queued));
 
         assert_eq!(wake.drain(), Ok(()));
-        assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+        assert_eq!(
+            wake.drain(),
+            Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+        );
     }
 
     #[test]
@@ -247,11 +245,7 @@ mod tests {
         let mut calls = 0_usize;
         let outcome = notify_with(|| {
             calls += 1;
-            if calls == 1 {
-                Err(Errno::INTR)
-            } else {
-                Ok(8)
-            }
+            if calls == 1 { Err(Errno::INTR) } else { Ok(8) }
         });
 
         assert_eq!(outcome, Ok(LocalLinuxRuntimeWakeNotify::Queued));
