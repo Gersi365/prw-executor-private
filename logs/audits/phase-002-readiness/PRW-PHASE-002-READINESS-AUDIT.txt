@@ -1,0 +1,162 @@
+Private Remote Workspace
+Phase 002 Readiness Audit
+
+STATUS: READY_FOR_EXPLICIT_PHASE_002_SCOPE_LOCK
+AUDIT TYPE: READ-ONLY ARCHITECTURE READINESS REVIEW
+
+Repository: Gersi365/prw-executor-private
+Repository visibility: private
+Audited branch: main
+Audit starting HEAD: 5f654b05e6d765745275bc792f97c777973c3435
+Phase 001 status: IMPLEMENTED_AND_VALIDATED / PASS
+Phase 001 authoritative validation report:
+logs/audits/phase-001-bootstrap/PRW-PHASE-001-IMPLEMENTATION-VALIDATION.txt
+
+PURPOSE
+
+Determine whether the repository can advance beyond Phase 001 without inventing or silently locking architecture decisions that are not already authorized by the current contracts.
+
+CURRENT LOCKED BASELINE
+
+The following directions are already explicit in the authoritative repository contracts and architecture baseline:
+
+1. Product identity
+- Private Remote Workspace is a standalone remote-administration and private-mesh networking product.
+- Runtime use must not require Tailscale, Termius, or another separately installed VPN/SSH/file-management product.
+- Audited open-source protocols and libraries may be embedded as implementation building blocks.
+
+2. Ubuntu host architecture
+- The PRW Agent is headless, persistent, intended for automatic startup, and independent of the desktop UI lifecycle.
+- The desktop UI is a separate client/admin process.
+
+3. Android
+- Android is an initial mobile client and private-network endpoint.
+
+4. Connectivity hierarchy
+- Prefer direct local connectivity when appropriate.
+- Prefer direct Internet peer-to-peer connectivity when possible.
+- Use encrypted relay fallback otherwise.
+- Manual router port forwarding, static public IP addresses, and external mesh VPN products must not be baseline requirements.
+
+5. Security boundaries
+- User/account identity, device identity, and transport identity are separate concepts.
+- Control plane and data plane are separate trust boundaries.
+- Relay infrastructure must not gain application plaintext merely because traffic transits it.
+- Private device/transport keys remain on-device whenever technically possible.
+- No proprietary cryptographic primitives may be invented.
+
+6. Authorization
+- Authorization is capability-oriented.
+- Receiving devices remain enforcement points for remote operations.
+- Default file access remains bounded by the effective local-user permissions unless a later privileged capability is explicitly authorized.
+
+7. File management
+- File operations are typed application-level operations rather than an unrestricted shell filesystem API.
+- Cross-device move must not delete the source before destination verification and finalization succeed.
+- Future transfers must be architecture-ready for resumability, integrity verification, temporary destination files, atomic finalization, and retry/recovery.
+
+8. Private DNS
+- Private DNS is optional and configurable.
+- Future design must support PRW device naming, custom resolvers, split DNS, and recovery from DNS misconfiguration.
+- Basic connectivity must not become unrecoverable because private DNS fails.
+
+9. Wake behavior
+- Wake-on-LAN / remote wake is outside current scope.
+
+10. Privilege direction
+- Preferred direction is an unprivileged long-running PRW Agent with narrowly scoped authenticated IPC to a privileged helper only where required.
+
+PHASE 001 VERIFIED CAPABILITIES
+
+The repository currently provides and has validated:
+- strongly typed WorkspaceId, UserId, DeviceId, TransferId, SessionId;
+- device lifecycle model: PendingEnrollment, Enrolled, Revoked;
+- connectivity-path model: LocalDirect, InternetDirect, Relay, Offline;
+- capability-oriented policy types;
+- typed file-operation intents;
+- transfer lifecycle and bounded progress ratio;
+- optional private-DNS configuration model;
+- abstract peer-route type;
+- headless PRW Agent bootstrap that starts no listeners and performs no system mutation;
+- GitHub Actions validation for fmt, Clippy, tests, and build.
+
+UNRESOLVED ARCHITECTURE DECISIONS
+
+The current repository deliberately does not lock the following implementation choices. These must not be silently inferred from candidate names in BASELINE.md:
+
+A. Device identity implementation
+- exact standard key/signature primitive and library;
+- secure on-device key storage strategy;
+- device identity serialization and rotation/recovery semantics.
+
+B. User/account authentication
+- concrete authentication mechanism and credential lifecycle;
+- relationship between account authentication and device enrollment.
+
+C. Enrollment and revocation protocol
+- enrollment handshake and trust bootstrap;
+- approval model;
+- revocation propagation and stale/offline-device behavior.
+
+D. Encrypted private-network transport
+- concrete WireGuard-compatible or other audited transport implementation;
+- userspace versus kernel/TUN boundary;
+- transport-key rotation semantics;
+- private address allocation rules.
+
+E. NAT traversal and relay
+- endpoint-candidate representation;
+- STUN/ICE/TURN or equivalent concrete implementation strategy;
+- relay authentication, routing metadata, and failure semantics.
+
+F. Control plane
+- concrete API protocol and service boundary;
+- persistence model;
+- authorization metadata model;
+- device status and endpoint-candidate update semantics.
+
+G. Local Agent IPC and privilege helper
+- concrete IPC transport;
+- local authentication/authorization mechanism;
+- privileged helper command boundary;
+- systemd unit and restart behavior.
+
+H. Terminal / SSH compatibility
+- whether terminal transport is implemented through embedded SSH-compatible components, a PRW-native session protocol with SSH interoperability, or another audited approach;
+- PTY lifecycle and command authorization semantics.
+
+I. Production file-transfer protocol
+- chunking/resume protocol;
+- hash/integrity algorithm selection from standard audited primitives;
+- temporary-file and atomic-finalization wire semantics;
+- safe cross-device move acknowledgement sequence.
+
+J. Persistent local state
+- storage format/location for enrollment, peer metadata, policy, transfer checkpoints, and revocation state.
+
+READINESS CLASSIFICATION
+
+Hard blockers for additional architecture-neutral audit/validation work: 0.
+
+Hard blockers for architecture-changing Phase 002 implementation: unresolved items A-J above must be explicitly scoped or intentionally deferred before implementation begins.
+
+RECOMMENDED NEXT PHASE BOUNDARY
+
+Recommended Phase 002 should begin with a narrow contract/architecture decision lock, not production networking.
+
+Suggested Phase 002 scope:
+
+1. Lock the minimum identity/enrollment/control-plane boundaries needed for typed contracts.
+2. Expand repository contracts and core types only after those choices are explicitly approved.
+3. Add focused tests for the approved lifecycle and authorization invariants.
+4. Keep all network listeners, DNS mutation, TUN configuration, systemd activation, authentication cutover, databases, deployment, Android runtime code, and desktop runtime code out of scope until later explicit phases.
+
+This sequence minimizes irreversible choices and preserves the Phase 001 safety boundary.
+
+AUDIT MUTATION STATEMENT
+
+This readiness audit made no source-code, contract, architecture, workflow, networking, service, authentication, database, deployment, or runtime changes. The only repository mutation is this audit evidence file.
+
+FINAL CLASSIFICATION
+
+READY_FOR_EXPLICIT_PHASE_002_SCOPE_LOCK
