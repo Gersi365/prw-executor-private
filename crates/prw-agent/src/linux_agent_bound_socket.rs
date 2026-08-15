@@ -9,9 +9,7 @@ use std::path::PathBuf;
 
 use rustix::fs::{AtFlags, FileType, Mode, Stat, chmodat, statat, unlinkat};
 use rustix::io::Errno;
-use rustix::net::{
-    AddressFamily, SocketAddrUnix, SocketFlags, SocketType, bind, socket_with,
-};
+use rustix::net::{AddressFamily, SocketAddrUnix, SocketFlags, SocketType, bind, socket_with};
 
 use super::effective_agent_uid;
 use super::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
@@ -173,8 +171,8 @@ pub fn bind_validated_agent_socket<'a>(
     .map_err(|_| BoundAgentSocketError::SocketCreateFailed)?;
 
     let bind_path = descriptor_anchored_socket_path(runtime_directory);
-    let address = SocketAddrUnix::new(&bind_path)
-        .map_err(|_| BoundAgentSocketError::AddressBuildFailed)?;
+    let address =
+        SocketAddrUnix::new(&bind_path).map_err(|_| BoundAgentSocketError::AddressBuildFailed)?;
     if bind(&socket, &address).is_err() {
         return Err(BoundAgentSocketError::BindFailed);
     }
@@ -330,11 +328,11 @@ mod tests {
         BoundAgentSocketCleanupError, BoundAgentSocketError, bind_validated_agent_socket,
     };
     use crate::linux_identity::effective_agent_uid;
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLock;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::{
         AgentSocketPathPreparationError, AgentSocketPathPreparationOutcome,
     };
-    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::ValidatedPrwRuntimeDirectory;
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -495,12 +493,14 @@ mod tests {
 
     #[test]
     fn cleanup_refuses_to_unlink_replacement_socket_identity() {
-        let (root_path, runtime_directory, instance_lock) = create_authorized_runtime("cleanup-race");
+        let (root_path, runtime_directory, instance_lock) =
+            create_authorized_runtime("cleanup-race");
         let socket_path = agent_socket_path(&root_path);
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("validated socket binds");
 
-        fs::remove_file(&socket_path).expect("original bound pathname unlinks for replacement test");
+        fs::remove_file(&socket_path)
+            .expect("original bound pathname unlinks for replacement test");
         let replacement = bind_test_socket(&socket_path, 0o600);
 
         assert_eq!(
