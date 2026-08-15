@@ -1,0 +1,150 @@
+Private Remote Workspace
+Phase 028 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 028
+SCOPE: Complete successful GetPrivateDnsConfig in-memory response frame
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 028 base commit: 78a596775d4737f31016e581125b1c23264d9844
+Validated source commit: 3d165479b59fba4546b8da605f7dbe5735f7fb83
+Validated GitHub Actions run: 31881134653
+
+LOCKED COMPOSITION
+
+Build path:
+LocalPrivateDnsSnapshot
+-> Phase 027 fallible bounded binary codec
+-> Phase 022 terminal-response builder with status Ok
+-> outer Response frame with supplied request ID and current IPC version.
+
+Maximum Phase 027 body: 18,403 bytes
+Maximum successful payload including two-byte Ok prefix: 18,405 bytes
+Maximum complete wire length with 24-byte header: 18,429 bytes
+
+Default disabled snapshot payload:
+00 00 00 00 00
+
+Decode path:
+1. validate frame through Phase 020 terminal-response invariant;
+2. reject a valid terminal non-success frame;
+3. skip only the validated two-byte common status prefix;
+4. decode the remaining body through Phase 027;
+5. return original request ID + bounded LocalPrivateDnsSnapshot.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported private_dns_response module.
+
+2. crates/prw-agent/src/local_commands/private_dns_response.rs
+- Added max success payload/wire length constants.
+- Added LocalPrivateDnsFrame.
+- Added build_success_private_dns_frame().
+- Added decode_success_private_dns_frame().
+- Preserved encode/build and terminal/non-success/body failures as typed categories.
+- Reused Phase 027 codec, Phase 020 validator, and Phase 022 builder.
+
+3. contracts/LOCAL_PRIVATE_DNS_RESPONSE_FRAME_CONTRACT.md
+- Added normative complete successful response-frame composition and size limits.
+
+4. docs/architecture/PHASE_028_PRIVATE_DNS_RESPONSE_FRAME.md
+- Recorded composition, maximum sizes, default bytes, error layering, and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 028 base: 4
+- added: contracts/LOCAL_PRIVATE_DNS_RESPONSE_FRAME_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/private_dns_response.rs
+- added: docs/architecture/PHASE_028_PRIVATE_DNS_RESPONSE_FRAME.md
+
+VALIDATION HISTORY
+
+Run 56
+- Run ID: 31881104286
+- Commit: fd7dfa7e273cf8cc9c3679c9aaf067809e4cc9e2
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt-only reflow/import-order differences in private_dns_response.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 3d165479b59fba4546b8da605f7dbe5735f7fb83
+- Applied exact rustfmt output only.
+- Payload/wire bounds, frame composition, error taxonomy, and runtime behavior unchanged.
+
+Run 57
+- Run ID: 31881134653
+- Commit: 3d165479b59fba4546b8da605f7dbe5735f7fb83
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: body/payload/wire maximums are 18,403 / 18,405 / 18,429 bytes
+PASS: default snapshot builds stable 00 00 00 00 00 payload
+PASS: outer Response kind and request ID preserved
+PASS: bounded UTF-8/list/flag snapshot round trips through complete frame
+PASS: maximum snapshot fits locked success payload
+PASS: valid terminal non-success frame rejected by success decoder
+PASS: malformed private-DNS body rejected after terminal validation
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 028 did not:
+- perform stream I/O;
+- parse or mutate operating-system DNS state;
+- resolve names or mutate routing;
+- create/bind/listen/accept/connect a socket;
+- access peer credentials;
+- dispatch or execute commands;
+- mutate outstanding-request state;
+- add a dependency;
+- invoke a privileged helper;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- generic stream read/write composition for GetPrivateDnsConfig;
+- decode-before-outstanding-request completion for GetPrivateDnsConfig;
+- resolver-address semantic validation;
+- split-domain normalization/validation policy;
+- command-specific error body schema;
+- timeout/cancellation policy;
+- live runtime command dispatch;
+- Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 028 implementation-validation report.
+GitHub Actions run 31881134653 is the authoritative executable validation evidence for source commit 3d165479b59fba4546b8da605f7dbe5735f7fb83.
