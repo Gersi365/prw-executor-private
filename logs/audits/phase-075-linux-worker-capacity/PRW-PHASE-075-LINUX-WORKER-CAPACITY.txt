@@ -1,0 +1,85 @@
+Private Remote Workspace
+Phase 075 Linux Bounded Worker Capacity
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 52940dbeba5040b1d0fa3af5e706ea505e9fcb83
+Authoritative GitHub Actions run: 31895195792
+Phase 074 authoritative report commit: 5e76013f9673a6e9087dd7263e2144e4d64593eb
+
+PURPOSE
+
+Implement the Phase 072 active-worker concurrency bound as thread-safe RAII accounting without spawning any worker thread or accepting a connection.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_worker_capacity.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_075_LINUX_WORKER_CAPACITY.md
+
+MODEL
+
+- caller supplies NonZeroUsize max_workers;
+- LocalLinuxWorkerCapacity stores shared state in Arc;
+- active count is atomic;
+- try_acquire performs a nonblocking compare-exchange acquisition;
+- below the bound it returns one non-cloneable LocalLinuxWorkerPermit;
+- at capacity it returns typed AtCapacity without blocking;
+- permit Drop releases exactly one slot;
+- no public release/reset operation exists;
+- cloned capacity handles observe one shared accounting state;
+- capacity handle is Send + Sync and permit is Send so a later phase can move an already-accounted permit into a worker thread without an accounting gap.
+
+VALIDATED BEHAVIOR
+
+Tests prove:
+
+- configured bound is preserved and active count starts at zero;
+- acquisition stops exactly at capacity;
+- dropping one permit releases exactly one slot;
+- a released slot can be reacquired;
+- cloned handles share accounting;
+- capacity is Send + Sync;
+- permit is Send.
+
+VALIDATION
+
+Authoritative run 31895195792 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE DURING VALIDATION
+
+- initial run 31895153905 stopped only at rustfmt;
+- one test import reflow was applied without semantic change;
+- final run 31895195792 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 075:
+
+- spawns no thread/task;
+- accepts no connection;
+- processes no Request;
+- chooses no production worker-capacity value;
+- implements no scheduler or shutdown lifecycle;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Phase 076 may implement a finite authenticated-session worker body that consumes one permit, applies Phase 074 per-Request deadlines, and permanently closes/discards the session on clean EOF, processing failure, or request-budget exhaustion, while still spawning no OS thread.
+
+FINAL CLASSIFICATION
+
+BOUNDED_WORKER_CAPACITY_IMPLEMENTED / RAII_PERMIT_ACCOUNTING / THREAD_TRANSFER_COMPATIBLE / NO_THREAD_SPAWN / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 075 report.
