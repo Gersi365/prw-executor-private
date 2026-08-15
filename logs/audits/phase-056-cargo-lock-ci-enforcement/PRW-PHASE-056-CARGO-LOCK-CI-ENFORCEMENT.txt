@@ -1,0 +1,64 @@
+Private Remote Workspace
+Phase 056 Cargo.lock CI Enforcement
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Make committed dependency resolution fail-closed in the standard Rust validation workflow after Phase 055 established the repository's first Cargo.lock.
+
+CHANGES
+
+The standard workflow `.github/workflows/phase-001-rust-validation.yml` now performs:
+
+1. `cargo metadata --locked --no-deps --format-version 1 > /dev/null`
+2. `cargo fmt --all -- --check`
+3. `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`
+4. `cargo test --locked --workspace --all-targets`
+5. `cargo build --locked --workspace --all-targets`
+
+`cargo fmt` does not resolve dependencies and therefore remains unchanged.
+
+POLICY
+
+A future manifest change that would require dependency re-resolution must include the corresponding Cargo.lock update. CI is no longer permitted to silently repair a stale or missing dependency graph during Clippy/test/build validation.
+
+VALIDATION
+
+Authoritative GitHub Actions run:
+`31888467778`
+
+Validated head:
+`70a44b3c6fad4fe912b6bd2b729c9c8613fab47f`
+
+Validated steps:
+- locked dependency graph verification — PASS;
+- formatting — PASS;
+- Clippy under `--locked` and `-D warnings` — PASS;
+- tests under `--locked` — PASS;
+- workspace build under `--locked` — PASS.
+
+SCOPE PRESERVED
+
+Phase 056:
+- changes only CI/dependency-resolution policy;
+- adds no runtime source;
+- binds no socket;
+- creates/removes no XDG runtime path;
+- performs no peer-credential lookup;
+- adds no dependency beyond the already locked Phase 055 graph;
+- activates no service;
+- changes no authentication/database/network/DNS/TUN state;
+- performs no deployment.
+
+AUTHORITATIVE POLICY
+
+`contracts/CARGO_LOCK_CI_POLICY.md`
+
+FINAL CLASSIFICATION
+
+CARGO_LOCK_REQUIRED_BY_STANDARD_CI / LOCKED_GRAPH_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 056 report.
