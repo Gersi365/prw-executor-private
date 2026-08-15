@@ -4,6 +4,13 @@
 //! already-validated Phase 062 XDG runtime-root descriptor. It never touches
 //! the future `agent.sock` pathname.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime Agent instance lock is intentionally crate-internal"
+)]
+#[path = "linux_agent_instance_lock.rs"]
+pub mod agent_instance_lock;
+
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
 use rustix::fs::{FileType, Mode, OFlags, Stat, fchmod, fstat, mkdirat, openat};
