@@ -1,0 +1,76 @@
+Private Remote Workspace
+Phase 060 Linux Authenticated Application Session
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Compose the Phase 059 same-UID-authenticated Linux connection wrapper with the Phase 052 bounded provider-neutral application loop and one owned LocalServerConnectionState, without creating a listener or filesystem socket lifecycle.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_authenticated_session.rs
+- authenticated shared stream accessor: crates/prw-agent/src/linux_authenticated_connection.rs
+- platform module integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_AUTHENTICATED_APPLICATION_SESSION_CONTRACT.md
+- architecture: docs/architecture/PHASE_060_LINUX_AUTHENTICATED_APPLICATION_SESSION.md
+
+TYPE-LEVEL ORDERING
+
+Raw connected stream -> Phase 059 wrapper constructor -> Phase 058 kernel SO_PEERCRED same-effective-UID authorization -> AuthenticatedLocalLinuxConnection -> AuthenticatedLocalLinuxSession -> Phase 052 bounded application processing.
+
+The Phase 060 session constructor does not accept a raw stream. Its processing method operates only on the already-authenticated connection it owns.
+
+The session also owns the aggregate LocalServerConnectionState, so inbound/read poisoning and response-write poisoning persist across bounded processing invocations exactly as defined by Phases 044-052.
+
+POLICY BOUNDARY
+
+The PolicyEvaluator remains caller-supplied. Same-UID transport authentication does not claim or manufacture principal-to-capability binding. Phase 060 preserves that separation explicitly.
+
+VALIDATED BEHAVIOR
+
+Linux anonymous UnixStream::pair tests validate:
+- bounded processing of authenticated Requests and correlated responses;
+- clean EOF remains a normal stop;
+- malformed/truncated authenticated input updates the session-owned aggregate state to InboundRead;
+- peer credentials retained by the session match the effective Agent UID.
+
+No filesystem Unix socket pathname or listener is created by these tests.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31890557256
+Validated source head: c7ed1a0c6cc369763f1b1ad979dfc33f04a4f885
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+RECOVERY NOTE
+
+Two temporary Phase 060 integration/finalizer workflows created before the connection interruption failed before performing repository integration and remained in the repository. They were removed before the authoritative validation. The actual module integration and required authenticated shared stream accessor were then applied directly through the repository connector, and the normal repository CI was used as the authoritative validation surface.
+
+SCOPE PRESERVED
+
+Phase 060:
+- binds no filesystem socket;
+- creates no listener;
+- performs no accept/connect lifecycle;
+- creates/removes no XDG runtime path;
+- performs no stale-socket cleanup;
+- creates no automatic principal-bound policy evaluator;
+- adds no unsafe PRW code;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+AUTHENTICATED_STREAM_TO_BOUNDED_APPLICATION_LOOP_COMPOSED / AGGREGATE_STATE_OWNED / POLICY_BINDING_STILL_SEPARATE / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 060 report.
