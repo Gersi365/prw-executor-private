@@ -1,8 +1,10 @@
 //! Typed read-only Agent status snapshot.
 //!
 //! Phase 017 defines the minimal body model for a successful
-//! `GetAgentStatus` response. It does not read live process state or serialize
-//! the snapshot onto the wire.
+//! `GetAgentStatus` response. Phase 018 adds its fixed-width byte codec while
+//! keeping runtime command dispatch and socket I/O out of scope.
+
+pub mod codec;
 
 use crate::LocalIpcProtocolVersion;
 
