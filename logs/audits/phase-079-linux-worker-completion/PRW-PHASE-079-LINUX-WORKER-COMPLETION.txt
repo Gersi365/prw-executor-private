@@ -1,0 +1,77 @@
+Private Remote Workspace
+Phase 079 Linux Scoped Worker Completion Classification
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 677a3d0de0b83aea707eb9102ee23bd2a69a59ac
+Authoritative GitHub Actions run: 31896007943
+Phase 078 authoritative report commit: ba5b934c906e778fdb831477c54540684eaf5450
+
+PURPOSE
+
+Ensure every explicitly joined Phase 078 scoped session worker has one bounded terminal classification before a multi-worker registry or accept scheduler is introduced.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_worker_completion.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_079_LINUX_WORKER_COMPLETION.md
+
+CLASSIFICATION
+
+join_authenticated_session_worker consumes one ScopedJoinHandle and returns exactly one of:
+
+- Stopped(LocalLinuxSessionWorkerStop): normal finite Phase 076 worker stop;
+- WorkerError(LocalLinuxSessionWorkerError): bounded Phase 076 processing failure;
+- Panicked: the scoped OS thread panicked before producing a worker result.
+
+Panic payload contents are intentionally excluded from the bounded local runtime contract.
+
+VALIDATED BEHAVIOR
+
+Scoped Linux runner tests prove:
+
+- a normal worker stop is preserved exactly;
+- a bounded worker error is preserved exactly;
+- a deliberate scoped-thread panic is joined and reduced to Panicked rather than remaining an unexamined join error.
+
+VALIDATION
+
+Authoritative run 31896007943 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE DURING VALIDATION
+
+- initial run 31895946437 stopped only at rustfmt;
+- module ordering and one test closure were reformatted without semantic change;
+- final run 31896007943 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 079:
+
+- spawns no production worker;
+- accepts no connection;
+- owns no handle registry;
+- implements no accept scheduler or shutdown signal;
+- activates no Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Phase 080 may implement a crate-internal registry that retains scoped join handles, reaps only finished handles during runtime, and explicitly joins all remaining handles at the registry's shutdown boundary using the Phase 079 completion classifier.
+
+FINAL CLASSIFICATION
+
+SCOPED_WORKER_COMPLETION_CLASSIFIED / NORMAL_ERROR_PANIC_DISTINGUISHED / EXPLICIT_JOIN_RESULT_BOUNDARY / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 079 report.
