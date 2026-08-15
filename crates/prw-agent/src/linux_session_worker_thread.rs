@@ -335,7 +335,8 @@ mod tests {
 
         thread::scope(|scope| {
             let permit = capacity.try_acquire().expect("worker slot acquires");
-            let config = LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
+            let config =
+                LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
             let handle = spawn_authenticated_session_worker_with_completion_wake(
                 scope,
                 session(server),
@@ -376,7 +377,8 @@ mod tests {
 
         thread::scope(|scope| {
             let permit = capacity.try_acquire().expect("worker slot acquires");
-            let config = LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
+            let config =
+                LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
             let handle = spawn_authenticated_session_worker_with_completion_wake(
                 scope,
                 session(server),
