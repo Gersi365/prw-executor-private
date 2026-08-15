@@ -3,6 +3,8 @@
 //! Phase 010 couples an already validated Phase 007 header with an owned,
 //! bounded payload. It performs no socket I/O and no payload deserialization.
 
+pub mod reader;
+
 use std::fmt;
 
 use crate::{LOCAL_IPC_MAX_PAYLOAD_LENGTH, LocalIpcFrameHeader};
