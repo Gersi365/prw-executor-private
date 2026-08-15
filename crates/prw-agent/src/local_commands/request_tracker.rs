@@ -67,6 +67,16 @@ impl LocalRequestTracker {
         Ok(())
     }
 
+    /// Removes and returns all still-outstanding request IDs in registration order.
+    ///
+    /// This is an abandonment operation for connection discard, not terminal
+    /// completion. The returned IDs remain available to an upper layer for a
+    /// later explicit failure/disposition decision.
+    #[must_use]
+    pub fn abandon_all(&mut self) -> Vec<LocalIpcRequestId> {
+        std::mem::take(&mut self.outstanding)
+    }
+
     /// Returns whether the request identifier is currently outstanding.
     #[must_use]
     pub fn contains(&self, request_id: LocalIpcRequestId) -> bool {
@@ -168,6 +178,26 @@ mod tests {
             .register(id(9))
             .expect("id may be reused after completion");
         assert!(tracker.contains(id(9)));
+    }
+
+    #[test]
+    fn abandon_all_returns_registration_order_and_empties_tracker() {
+        let mut tracker = LocalRequestTracker::new();
+        tracker.register(id(10)).expect("first request accepted");
+        tracker.register(id(11)).expect("second request accepted");
+        tracker.register(id(12)).expect("third request accepted");
+
+        assert_eq!(tracker.abandon_all(), vec![id(10), id(11), id(12)]);
+        assert!(tracker.is_empty());
+        assert_eq!(tracker.len(), 0);
+    }
+
+    #[test]
+    fn abandon_all_on_empty_tracker_is_stable() {
+        let mut tracker = LocalRequestTracker::new();
+
+        assert!(tracker.abandon_all().is_empty());
+        assert!(tracker.is_empty());
     }
 
     #[test]
