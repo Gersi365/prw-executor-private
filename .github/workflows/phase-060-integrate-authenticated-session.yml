@@ -1,0 +1,88 @@
+name: PRW Phase 060 Authenticated Session Integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase-060-integrate-authenticated-session.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    name: Integrate authenticated session module
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact module integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/prw-agent/src/linux_identity.rs")
+          text = path.read_text()
+
+          old_doc = '''//! from an already-existing socket file descriptor. Phase 058 adds same-UID
+//! authorization, and Phase 059 adds typed authenticated stream ownership. This
+//! boundary owns no listener or filesystem socket lifecycle.
+'''
+          new_doc = '''//! from an already-existing socket file descriptor. Phase 058 adds same-UID
+//! authorization, Phase 059 adds typed authenticated stream ownership, and
+//! Phase 060 composes authenticated application-session processing. This
+//! boundary owns no listener or filesystem socket lifecycle.
+'''
+
+          old_modules = '''#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated Linux connection wrapper is intentionally crate-internal"
+)]
+#[path = "linux_authenticated_connection.rs"]
+pub mod authenticated_connection;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
+)]
+'''
+          new_modules = '''#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated Linux connection wrapper is intentionally crate-internal"
+)]
+#[path = "linux_authenticated_connection.rs"]
+pub mod authenticated_connection;
+#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated Linux application session is intentionally crate-internal"
+)]
+#[path = "linux_authenticated_session.rs"]
+pub mod authenticated_session;
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
+)]
+'''
+
+          if text.count(old_doc) != 1:
+              raise SystemExit("Phase 060 integration refused: expected doc baseline not found exactly once")
+          if text.count(old_modules) != 1:
+              raise SystemExit("Phase 060 integration refused: expected module baseline not found exactly once")
+
+          text = text.replace(old_doc, new_doc, 1).replace(old_modules, new_modules, 1)
+          path.write_text(text)
+          PY
+
+      - name: Remove temporary integration workflow
+        run: git rm .github/workflows/phase-060-integrate-authenticated-session.yml
+
+      - name: Commit and push exact integration
+        run: |
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git add crates/prw-agent/src/linux_identity.rs
+          git diff --cached --check
+          git commit -m "Integrate Phase 060 authenticated application session"
+          git push origin HEAD:main
