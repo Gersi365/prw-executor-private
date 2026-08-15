@@ -164,7 +164,9 @@ mod tests {
         tracker.complete(id(9)).expect("known request completes");
 
         assert!(tracker.is_empty());
-        tracker.register(id(9)).expect("id may be reused after completion");
+        tracker
+            .register(id(9))
+            .expect("id may be reused after completion");
         assert!(tracker.contains(id(9)));
     }
 
