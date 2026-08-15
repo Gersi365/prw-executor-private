@@ -207,9 +207,9 @@ const fn classify_schedule_error(
     error: LocalLinuxOneShotScheduleError,
 ) -> LocalLinuxRuntimeErrorDisposition {
     match error {
-        LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::PeerAuthorization(_)) => {
-            LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection
-        }
+        LocalLinuxOneShotScheduleError::Accept(
+            AuthenticatedAgentAcceptError::PeerAuthorization(_),
+        ) => LocalLinuxRuntimeErrorDisposition::ContinueAfterPeerRejection,
         LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed)
         | LocalLinuxOneShotScheduleError::CancellationClone(_)
         | LocalLinuxOneShotScheduleError::Spawn(_) => LocalLinuxRuntimeErrorDisposition::FailStop,
@@ -218,11 +218,13 @@ const fn classify_schedule_error(
 
 /// Returns the Phase 094-A01 initial production disposition for one runtime error.
 #[must_use]
-pub fn classify_production_runtime_error(
+pub const fn classify_production_runtime_error(
     error: &LocalLinuxRuntimeOrchestrationError,
 ) -> LocalLinuxRuntimeErrorDisposition {
     match error {
-        LocalLinuxRuntimeOrchestrationError::Readiness(_) => LocalLinuxRuntimeErrorDisposition::FailStop,
+        LocalLinuxRuntimeOrchestrationError::Readiness(_) => {
+            LocalLinuxRuntimeErrorDisposition::FailStop
+        }
         LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling) => {
             classify_schedule_error(scheduling.error())
         }
@@ -243,7 +245,9 @@ impl LocalLinuxProductionRuntimeFatalError {
     ///
     /// Returns `None` only for the explicitly non-terminal peer-rejection case.
     #[must_use]
-    pub fn from_orchestration_error(error: &LocalLinuxRuntimeOrchestrationError) -> Option<Self> {
+    pub const fn from_orchestration_error(
+        error: &LocalLinuxRuntimeOrchestrationError,
+    ) -> Option<Self> {
         match error {
             LocalLinuxRuntimeOrchestrationError::Readiness(error) => Some(Self::Readiness(*error)),
             LocalLinuxRuntimeOrchestrationError::Scheduling(scheduling) => {
@@ -288,7 +292,7 @@ pub struct LocalLinuxProductionRuntimeTerminalReport {
 impl LocalLinuxProductionRuntimeTerminalReport {
     /// Creates terminal evidence after cancellation/join/listener cleanup completes.
     #[must_use]
-    pub fn new(
+    pub const fn new(
         reason: LocalLinuxProductionRuntimeTerminalReason,
         counters: LocalLinuxProductionRuntimeCounters,
         cancellations: Vec<LocalLinuxRegisteredWorkerCancellation>,
@@ -402,7 +406,10 @@ mod tests {
         counters.record_peer_rejection();
         counters.record_peer_rejection();
         assert_eq!(counters.peer_rejections(), 2);
-        assert_eq!(std::mem::size_of_val(&counters), 8 * std::mem::size_of::<u64>());
+        assert_eq!(
+            std::mem::size_of_val(&counters),
+            8 * std::mem::size_of::<u64>()
+        );
     }
 
     #[test]
@@ -437,7 +444,8 @@ mod tests {
 
     #[test]
     fn ordinary_accept_failure_is_fail_stop() {
-        let error = LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed);
+        let error =
+            LocalLinuxOneShotScheduleError::Accept(AuthenticatedAgentAcceptError::AcceptFailed);
         assert_eq!(
             classify_schedule_error(error),
             LocalLinuxRuntimeErrorDisposition::FailStop
