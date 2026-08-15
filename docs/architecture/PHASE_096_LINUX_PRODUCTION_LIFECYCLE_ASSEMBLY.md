@@ -1,6 +1,6 @@
 # Phase 096 — Linux Production Lifecycle Assembly
 
-Status: `INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -74,6 +74,18 @@ Initial integration run `31901635492` stopped safely at Clippy because the priva
 
 Phase 096-A01 run `31901676173` changed only that private getter to `const fn`, then passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check` before committing integrated source and deleting both temporary Phase 096 workflows.
 
+## Authoritative permanent validation
+
+Permanent PRW Rust Validation run:
+
+`31901711927`
+
+Validated commit containing the integrated source:
+
+`e431d171c6a16eff90728bb008430267c493d59f`
+
+The permanent workflow passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, and all workspace/all-target builds.
+
 ## Boundary preserved
 
 Phase 096 does not implement:
@@ -86,4 +98,4 @@ Phase 096 does not implement:
 - systemd installation/enable/start;
 - deployment or public networking.
 
-Permanent PRW Rust Validation is required on a commit containing the integrated source before Phase 096 is classified `IMPLEMENTED_AND_VALIDATED`.
+Phase 096 is therefore `IMPLEMENTED_AND_VALIDATED` below the production bootstrap boundary.
