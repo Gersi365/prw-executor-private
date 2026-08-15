@@ -177,12 +177,9 @@ pub fn bind_validated_agent_socket<'a>(
         return Err(BoundAgentSocketError::BindFailed);
     }
 
-    let initial = match socket_metadata(runtime_directory) {
-        Ok(metadata) => metadata,
-        Err(_) => {
-            drop(socket);
-            return Err(BoundAgentSocketError::PostBindMetadataReadFailed);
-        }
+    let Ok(initial) = socket_metadata(runtime_directory) else {
+        drop(socket);
+        return Err(BoundAgentSocketError::PostBindMetadataReadFailed);
     };
     validate_initial_bound_socket_identity(&initial, effective_agent_uid())?;
     let created_identity = AgentSocketFilesystemIdentity::from_metadata(&initial);
@@ -200,13 +197,10 @@ pub fn bind_validated_agent_socket<'a>(
         return Err(BoundAgentSocketError::ModeNormalizeFailed);
     }
 
-    let normalized = match socket_metadata(runtime_directory) {
-        Ok(metadata) => metadata,
-        Err(_) => {
-            drop(socket);
-            best_effort_remove_created_socket(runtime_directory, created_identity);
-            return Err(BoundAgentSocketError::PostNormalizeMetadataReadFailed);
-        }
+    let Ok(normalized) = socket_metadata(runtime_directory) else {
+        drop(socket);
+        best_effort_remove_created_socket(runtime_directory, created_identity);
+        return Err(BoundAgentSocketError::PostNormalizeMetadataReadFailed);
     };
 
     if !created_identity.stable_matches(&normalized) {
