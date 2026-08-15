@@ -1,0 +1,157 @@
+Private Remote Workspace
+Phase 014 Local Unix Socket Runtime Readiness Audit
+
+STATUS: NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK
+AUDIT TYPE: READ-ONLY PLATFORM/API AND FILESYSTEM-LIFECYCLE READINESS REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Pre-audit implementation status: Phase 013 IMPLEMENTED_AND_VALIDATED / PASS
+
+PURPOSE
+
+Determine whether the project can safely move from the provider-neutral local IPC contracts and generic in-memory/generic-I/O components to the first real filesystem-backed Unix-domain Agent listener on Ubuntu.
+
+CURRENT LOCKED SECURITY BOUNDARY
+
+Phase 006 already requires:
+- AF_UNIX SOCK_STREAM;
+- $XDG_RUNTIME_DIR/private-remote-workspace/agent.sock;
+- PRW runtime subdirectory mode 0700;
+- socket filesystem mode 0600;
+- fail-closed XDG runtime-directory validation;
+- Linux SO_PEERCRED peer credentials;
+- same-kernel-reported-UID authorization;
+- no TCP, loopback-TCP, /tmp, or abstract-socket fallback.
+
+Phases 007-013 have validated the bounded framing, generic reader/writer, read-only command namespace, and bounded request-correlation state without activating a socket.
+
+RUST STANDARD LIBRARY FINDINGS
+
+Primary Rust 1.97 documentation confirms:
+- std::os::unix::net::UnixListener is stable and can bind/accept Unix-domain stream sockets;
+- std::os::unix::net::UnixStream exists as the stable connected stream type;
+- UnixStream::peer_cred() and std::os::linux::net::UCred are still exposed under the experimental peer_credentials_unix_socket feature and are nightly-only.
+
+CLASSIFICATION
+
+The Rust standard library alone is insufficient for the locked Phase 006 runtime boundary on the current stable Rust toolchain because stable std does not currently expose the required SO_PEERCRED operation.
+
+The workspace also has unsafe_code = "forbid". Therefore PRW must not bypass the missing stable API by adding project-owned raw libc getsockopt/SO_PEERCRED FFI with unsafe blocks.
+
+SAFE SYSTEM-CALL WRAPPER CANDIDATES
+
+Two maintained safe-wrapper directions remain viable for a later dependency lock:
+
+1. rustix
+- Current published documentation reviewed at version 1.1.4.
+- Provides rustix::net::sockopt::socket_peercred(fd) on Linux and returns UCred.
+- Also exposes filesystem operations including lstat/statat/statx/unlinkat and AT_SYMLINK_NOFOLLOW-style functionality that can participate in stale-path validation.
+
+2. nix
+- Current published documentation reviewed at version 0.31.3.
+- Describes itself as safe Rust bindings to POSIX APIs.
+- Its socket feature exposes peer-credential sockopts, including platform peer-credential support.
+
+Neither crate is locked by this audit. A dependency decision should review the exact feature subset, transitive dependency graph, maintenance/security posture, API fit, and filesystem operations needed by the final stale-socket algorithm rather than selecting a crate only because it can call SO_PEERCRED.
+
+LINUX PATHNAME SOCKET FINDINGS
+
+Linux unix(7) and bind(2) establish that a pathname Unix socket is a filesystem object and bind fails with EADDRINUSE when the address/filesystem socket object already exists.
+
+Linux unlink(2)/unlinkat(2) can remove a socket pathname while already-open references may continue to exist until their descriptors are closed.
+
+Linux stat/lstat/fstatat semantics allow inspection without following a final symbolic link, including AT_SYMLINK_NOFOLLOW behavior.
+
+SECURITY CONSEQUENCE
+
+A future startup implementation must not use a naive algorithm such as:
+
+"if agent.sock exists, unlink it, then bind"
+
+That would be insufficiently defensive because the existing pathname could be:
+- a symbolic link;
+- a non-socket filesystem object;
+- a socket not owned by the expected user;
+- an active listener owned by another live PRW Agent instance;
+- replaced between separate pathname checks and mutation steps.
+
+The final implementation needs an explicitly reviewed stale-socket and race-handling algorithm before it is authorized to remove any pre-existing pathname.
+
+REQUIRED PRE-BIND DECISIONS
+
+Before the first real listener bind, PRW must lock:
+
+1. Safe syscall wrapper/provider
+- exact crate/version policy;
+- minimal features;
+- SO_PEERCRED retrieval API;
+- filesystem no-follow/stat/unlink primitives used by socket lifecycle handling.
+
+2. Single-instance/stale-socket determination
+- how a pre-existing socket path is distinguished between a live Agent and a stale artifact;
+- whether a probe/connect step is used;
+- how connection-refused/not-a-socket/permission cases are classified;
+- what must be proven before unlink is permitted.
+
+3. Path race resistance
+- no-follow final-component validation;
+- ownership/type validation;
+- directory ownership/mode validation;
+- strategy for minimizing or closing check/use races around stale-path removal and bind.
+
+4. Bind/post-bind validation
+- umask/explicit permission strategy;
+- post-bind socket type/ownership/mode verification;
+- failure cleanup rules.
+
+5. Listener lifecycle
+- foreground service lifetime;
+- shutdown signal policy;
+- listener/socket-path cleanup on orderly shutdown;
+- behavior after unclean process termination;
+- behavior when a second Agent starts while the first is live.
+
+6. Accepted-connection order
+- accept;
+- retrieve kernel peer credentials;
+- enforce same-UID rule;
+- only then process Phase 007+ protocol bytes.
+
+DEPENDENCY DECISION STATUS
+
+No dependency is added by this audit.
+
+No choice between rustix and nix is silently locked.
+
+The project should perform one focused dependency-and-stale-socket design phase before actual runtime activation. That phase may select one safe wrapper if its reviewed feature footprint satisfies both SO_PEERCRED and the pathname-lifecycle implementation.
+
+SAFE CONTINUATION
+
+Provider-neutral work can continue safely while this blocker remains, including:
+- command request/response payload schemas and pure codecs;
+- connection lifecycle state models;
+- bounded timeout/cancellation contracts without real timers;
+- Agent status snapshot contracts;
+- private-DNS read-only response schemas;
+- audit/logging contracts.
+
+MUTATION STATEMENT
+
+This audit:
+- binds no socket;
+- creates/removes no XDG runtime path;
+- retrieves no process credentials;
+- adds no dependency;
+- changes no Rust source;
+- activates no service;
+- changes no authentication/database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 014 local socket runtime readiness report.
