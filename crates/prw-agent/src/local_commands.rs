@@ -46,6 +46,11 @@ pub mod response_codec;
     reason = "pre-runtime terminal response writer is intentionally crate-internal"
 )]
 pub(crate) mod response_writer;
+#[allow(
+    dead_code,
+    reason = "pre-runtime server connection state is intentionally crate-internal"
+)]
+pub(crate) mod server_connection_state;
 pub mod status_snapshot;
 pub mod terminal_completion;
 pub mod terminal_response;
