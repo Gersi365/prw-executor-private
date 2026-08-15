@@ -90,7 +90,7 @@ impl LocalIpcFrame {
     ///
     /// Returns [`LocalIpcFrameError::PayloadLengthMismatch`] when the header's
     /// declared payload length differs from the bounded payload's actual length.
-    pub const fn new(
+    pub fn new(
         header: LocalIpcFrameHeader,
         payload: LocalIpcPayload,
     ) -> Result<Self, LocalIpcFrameError> {
