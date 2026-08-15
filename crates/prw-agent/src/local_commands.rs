@@ -24,6 +24,11 @@ pub mod request_frame;
     reason = "pre-runtime request processor is intentionally crate-internal"
 )]
 pub(crate) mod request_processor;
+#[allow(
+    dead_code,
+    reason = "pre-runtime request-response transaction is intentionally crate-internal"
+)]
+pub(crate) mod request_response_transaction;
 pub mod request_tracker;
 #[allow(
     dead_code,
