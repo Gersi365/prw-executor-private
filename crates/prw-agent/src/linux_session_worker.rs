@@ -109,8 +109,7 @@ mod tests {
     use prw_policy::{Capability, Decision, PolicyEvaluator};
 
     use super::{
-        LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop,
-        run_authenticated_session_worker,
+        LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop, run_authenticated_session_worker,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
@@ -207,7 +206,12 @@ mod tests {
         assert_eq!(response.request_id(), id(400));
 
         let mut trailing = [0_u8; 1];
-        assert_eq!(client.read(&mut trailing).expect("worker stream reached EOF"), 0);
+        assert_eq!(
+            client
+                .read(&mut trailing)
+                .expect("worker stream reached EOF"),
+            0
+        );
     }
 
     #[test]
