@@ -1,0 +1,99 @@
+name: Phase 092 Integration Preflight A02
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase-092-integrate-preflight-a02.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply Phase 092 payload and deterministic Phase 086 test correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          a01_path = Path(".github/workflows/phase-092-integrate-preflight-a01.yml")
+          workflow = a01_path.read_text()
+          start_marker = "          python3 - <<'PY'\n"
+          end_marker = "\n          PY\n"
+          if workflow.count(start_marker) != 1:
+              raise SystemExit("expected exactly one A01 Python payload start")
+          payload = workflow.split(start_marker, 1)[1].split(end_marker, 1)[0]
+          payload = textwrap.dedent(payload)
+          exec(compile(payload, "phase-092-integrate-preflight-a01-payload", "exec"), {"__name__": "__main__"})
+
+          registry_path = Path("crates/prw-agent/src/linux_worker_registry.rs")
+          registry = registry_path.read_text()
+          registry_anchor = (
+              "    /// Returns whether no scoped worker entries remain registered.\n"
+              "    #[must_use]\n"
+              "    pub const fn is_empty(&self) -> bool {\n"
+              "        self.entries.is_empty()\n"
+              "    }\n"
+          )
+          registry_insert = registry_anchor + (
+              "\n"
+              "    /// Returns whether any retained scoped handle is kernel/thread-finished.\n"
+              "    #[cfg(test)]\n"
+              "    #[must_use]\n"
+              "    pub(crate) fn has_finished_worker_for_test(&self) -> bool {\n"
+              "        self.entries.iter().any(|entry| entry.handle.is_finished())\n"
+              "    }\n"
+          )
+          if registry.count(registry_anchor) != 1:
+              raise SystemExit("worker registry test-observation anchor mismatch")
+          registry_path.write_text(registry.replace(registry_anchor, registry_insert, 1))
+
+          cycle_path = Path("crates/prw-agent/src/linux_bounded_scheduler_cycle.rs")
+          cycle = cycle_path.read_text()
+          old_wait = (
+              "            while capacity.active_workers() != 0 {\n"
+              "                thread::yield_now();\n"
+              "            }\n"
+              "            assert_eq!(registry.len(), 1);\n"
+          )
+          new_wait = (
+              "            while !registry.has_finished_worker_for_test() {\n"
+              "                thread::yield_now();\n"
+              "            }\n"
+              "            assert_eq!(capacity.active_workers(), 0);\n"
+              "            assert_eq!(registry.len(), 1);\n"
+          )
+          if cycle.count(old_wait) != 1:
+              raise SystemExit("Phase 086 reap-first test anchor mismatch")
+          cycle_path.write_text(cycle.replace(old_wait, new_wait, 1))
+          PY
+
+          cargo fmt --all
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' crates/prw-agent/src/linux_bounded_scheduler_cycle.rs crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_runtime_orchestration.rs crates/prw-agent/src/linux_worker_registry.rs | sort)"
+          test "$changed" = "$expected"
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          git diff --check
+
+      - name: Commit integrated source and remove all temporary Phase 092 workflows
+        run: |
+          rm .github/workflows/phase-092-integrate-preflight.yml
+          rm .github/workflows/phase-092-integrate-preflight-a01.yml
+          rm .github/workflows/phase-092-integrate-preflight-a02.yml
+          git add crates/prw-agent/src/linux_bounded_scheduler_cycle.rs crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_runtime_orchestration.rs crates/prw-agent/src/linux_worker_registry.rs .github/workflows/phase-092-integrate-preflight.yml .github/workflows/phase-092-integrate-preflight-a01.yml .github/workflows/phase-092-integrate-preflight-a02.yml
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git commit -m "Integrate Phase 092 finite runtime orchestration"
+          git push
