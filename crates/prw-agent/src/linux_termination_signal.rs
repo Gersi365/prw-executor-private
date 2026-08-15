@@ -120,8 +120,9 @@ impl LocalLinuxTerminationSignalSource {
             .expect("Phase 098 signal source is readable only before restoration");
 
         match descriptor.read_signal() {
-            Ok(Some(info)) => classify_signal_number(info.ssi_signo)
-                .map(LocalLinuxTerminationSignalRead::Signal),
+            Ok(Some(info)) => {
+                classify_signal_number(info.ssi_signo).map(LocalLinuxTerminationSignalRead::Signal)
+            }
             Ok(None) => Ok(LocalLinuxTerminationSignalRead::WouldBlock),
             Err(Errno::EINTR) => Ok(LocalLinuxTerminationSignalRead::Interrupted),
             Err(_) => Err(LocalLinuxTerminationSignalReadError::ReadFailed),
@@ -263,11 +264,10 @@ mod tests {
         assert!(blocked_mask.contains(Signal::SIGTERM));
         assert!(blocked_mask.contains(Signal::SIGINT));
 
-        let inherited_mask = thread::spawn(|| {
-            SigSet::thread_get_mask().expect("child thread inherited mask reads")
-        })
-        .join()
-        .expect("mask-observer child thread joins");
+        let inherited_mask =
+            thread::spawn(|| SigSet::thread_get_mask().expect("child thread inherited mask reads"))
+                .join()
+                .expect("mask-observer child thread joins");
         assert!(inherited_mask.contains(Signal::SIGTERM));
         assert!(inherited_mask.contains(Signal::SIGINT));
 

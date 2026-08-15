@@ -22,8 +22,10 @@
 //! immutable production-runtime configuration plus bounded evidence/disposition
 //! types, Phase 096 adds scoped lifecycle resource assembly with explicit
 //! listener rollback/cleanup, and Phase 097 adds the callable programmatic-
-//! shutdown long-running runtime loop. The Agent bootstrap remains inactive;
-//! `main.rs`, OS signals, and systemd still do not start this loop.
+//! shutdown long-running runtime loop. Phase 098 adds a safe thread-affine
+//! SIGTERM/SIGINT `SignalFd` source while preserving `unsafe_code = forbid`. The
+//! Agent bootstrap remains inactive; `main.rs` and systemd still do not start
+//! this runtime.
 
 #[allow(
     dead_code,
@@ -133,6 +135,12 @@ pub mod session_worker;
 )]
 #[path = "linux_session_worker_thread.rs"]
 pub mod session_worker_thread;
+#[allow(
+    dead_code,
+    reason = "pre-bootstrap safe Linux termination signal source is intentionally crate-internal"
+)]
+#[path = "linux_termination_signal.rs"]
+pub mod termination_signal;
 #[allow(
     dead_code,
     reason = "pre-runtime authenticated worker cancellation is intentionally crate-internal"
