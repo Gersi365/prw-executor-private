@@ -74,7 +74,10 @@ mod tests {
 
     #[test]
     fn commands_encode_as_big_endian_u16_codes() {
-        assert_eq!(encode_request_command(LocalAgentCommand::GetAgentStatus), [0, 1]);
+        assert_eq!(
+            encode_request_command(LocalAgentCommand::GetAgentStatus),
+            [0, 1]
+        );
         assert_eq!(
             encode_request_command(LocalAgentCommand::GetPrivateDnsConfig),
             [0, 2]

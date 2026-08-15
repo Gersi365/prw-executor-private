@@ -142,7 +142,10 @@ mod tests {
     fn read_only_command_codes_are_stable() {
         assert_eq!(LocalAgentCommand::GetAgentStatus.code(), 1);
         assert_eq!(LocalAgentCommand::GetPrivateDnsConfig.code(), 2);
-        assert_eq!(LocalAgentCommand::from_code(1), Some(LocalAgentCommand::GetAgentStatus));
+        assert_eq!(
+            LocalAgentCommand::from_code(1),
+            Some(LocalAgentCommand::GetAgentStatus)
+        );
         assert_eq!(
             LocalAgentCommand::from_code(2),
             Some(LocalAgentCommand::GetPrivateDnsConfig)
