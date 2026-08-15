@@ -1,0 +1,101 @@
+Private Remote Workspace
+Phase 086 Linux Bounded Scheduling Cycle
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 6f67a1be406a217f8079120345d8a1224b269110
+Authoritative GitHub Actions run: 31897946657
+Phase 085 authoritative decision report commit: e74a92011c90aeb943751e87bef99b3bf88cb8fc
+Phase 086 validated architecture-status commit: bc1449d2b9ad91135c65c525ee9b87729b9ac15a
+
+PURPOSE
+
+Implement the Phase 085 finite scheduling-cycle contract on top of the validated Phase 084 one-shot scheduler without introducing an unbounded wait/accept loop or activating the Agent bootstrap.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_bounded_scheduler_cycle.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_086_LINUX_BOUNDED_SCHEDULING_CYCLE.md
+
+LOCKED SCHEDULING SEMANTICS
+
+One bounded cycle:
+
+1. receives a caller-supplied NonZeroUsize attempt budget;
+2. calls registry.reap_finished() before every potential scheduling attempt;
+3. checks the shared monotonic shutdown flag after reaping and before Phase 084;
+4. performs no accept/spawn when shutdown is already requested;
+5. performs at most one Phase 084 transaction per consumed attempt;
+6. terminates immediately on AtCapacity or NoConnectionReady instead of busy-retrying;
+7. continues after WorkerRegistered only while caller budget remains;
+8. terminates on the first bounded Phase 084 error without retry;
+9. returns structured completion, registration, attempt-count, and stop-reason evidence.
+
+SCHEDULER CONTROL
+
+LocalLinuxSchedulerControl is backed by Arc<AtomicBool>.
+
+- new/default begins with shutdown not requested;
+- request_shutdown() is a monotonic one-way transition;
+- is_shutdown_requested() is observation only;
+- no reset/resume operation exists;
+- active worker cancellation remains the separate Phase 082 boundary.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- shutdown requested before cycle execution performs zero scheduling attempts and leaves a queued client unconsumed;
+- NoConnectionReady terminates after exactly one attempt even when a larger budget is available;
+- AtCapacity terminates after one attempt without consuming a queued connection;
+- the exact caller attempt budget limits multiple queued worker registrations;
+- a finished worker is reaped before the next scheduling attempt and its completion is returned as cycle evidence;
+- existing worker capacity, cancellation, join, listener cleanup, and request/response behavior remain compatible with the bounded cycle.
+
+VALIDATION
+
+Authoritative run 31897946657 completed successfully for source head 6f67a1be406a217f8079120345d8a1224b269110 and passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE HISTORY DURING PHASE 086 INTEGRATION VALIDATION
+
+- commit a41faff8703a790c35113a8964848d86dd9791f3 added the first temporary Phase 086 integration workflow;
+- workflow run 31897292090 failed before creating any job because the embedded Python multiline text made the YAML invalid; that failed workflow did not integrate or mutate Phase 086 source;
+- commit 365e90ecc70eadd910056dc3d4be853a5689905d corrected only the temporary workflow YAML representation;
+- successful temporary integration workflow produced commit 812bc08b5fa96213edba869fbbf82dc627936fc6, which integrated the Phase 086 module into linux_identity.rs and self-deleted the temporary integration workflow;
+- integrated-source validation run 31897856421 passed locked metadata and stopped only at rustfmt differences in linux_bounded_scheduler_cycle.rs;
+- commit 399044716bd77205719038ab2f9f8e210dcd68b3 added a bounded temporary rustfmt corrective workflow that required the formatter mutation set to contain exactly linux_bounded_scheduler_cycle.rs;
+- the rustfmt corrective workflow passed and produced commit fa54ebe0e7d3d398ce45f9496237b6f4ae0e1cef, changing only formatter layout in the Phase 086 source while self-deleting its temporary workflow;
+- commit 6f67a1be406a217f8079120345d8a1224b269110 triggered authoritative validation on the formatter-corrected integrated source;
+- authoritative run 31897946657 then passed the complete locked Rust validation suite.
+
+SCOPE PRESERVED
+
+Phase 086:
+
+- contains no unbounded loop, recursive retry, sleep, poll, epoll, or internal readiness wait;
+- chooses no production scheduling cadence, attempt budget, worker capacity, backlog, I/O deadline, or request budget;
+- does not automatically cancel or join active workers when shutdown is requested;
+- does not activate the Agent bootstrap, systemd unit, daemon, or service lifecycle;
+- opens no new remote/public network listener;
+- changes no authentication, enrollment, DNS, TUN, relay, database, private-key, deployment, or production networking state.
+
+NEXT SAFE STEP
+
+A future outer readiness/wait mechanism may decide when to invoke the validated finite scheduling cycle. That work must first lock its runtime lifecycle, readiness primitive, shutdown ordering, and bootstrap boundary. Phase 086 itself does not authorize a long-running scheduler or Agent activation.
+
+FINAL CLASSIFICATION
+
+BOUNDED_SCHEDULING_CYCLE_IMPLEMENTED / FINITE_ATTEMPT_BUDGET / REAP_BEFORE_SCHEDULE / MONOTONIC_SHUTDOWN_GATE / NO_BUSY_RETRY / STRUCTURED_CYCLE_EVIDENCE / NO_RUNTIME_ACTIVATION / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 086 report.
