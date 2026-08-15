@@ -138,14 +138,11 @@ impl<'a> AcceptReadyAgentSocketTransitionFailure<'a> {
 pub fn prepare_accept_ready_agent_socket(
     listening_socket: ListeningAgentSocket<'_>,
 ) -> Result<AcceptReadyAgentSocket<'_>, AcceptReadyAgentSocketTransitionFailure<'_>> {
-    let current_flags = match fcntl_getfl(&listening_socket) {
-        Ok(flags) => flags,
-        Err(_) => {
-            return Err(AcceptReadyAgentSocketTransitionFailure {
-                listening_socket,
-                error: AcceptReadyAgentSocketError::StatusReadFailed,
-            });
-        }
+    let Ok(current_flags) = fcntl_getfl(&listening_socket) else {
+        return Err(AcceptReadyAgentSocketTransitionFailure {
+            listening_socket,
+            error: AcceptReadyAgentSocketError::StatusReadFailed,
+        });
     };
 
     if !current_flags.contains(OFlags::NONBLOCK)
@@ -157,14 +154,11 @@ pub fn prepare_accept_ready_agent_socket(
         });
     }
 
-    let revalidated_flags = match fcntl_getfl(&listening_socket) {
-        Ok(flags) => flags,
-        Err(_) => {
-            return Err(AcceptReadyAgentSocketTransitionFailure {
-                listening_socket,
-                error: AcceptReadyAgentSocketError::StatusRevalidationFailed,
-            });
-        }
+    let Ok(revalidated_flags) = fcntl_getfl(&listening_socket) else {
+        return Err(AcceptReadyAgentSocketTransitionFailure {
+            listening_socket,
+            error: AcceptReadyAgentSocketError::StatusRevalidationFailed,
+        });
     };
 
     if !revalidated_flags.contains(OFlags::NONBLOCK) {
@@ -191,8 +185,7 @@ mod tests {
     use rustix::io::{FdFlags, fcntl_getfd};
 
     use super::{
-        AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome,
-        prepare_accept_ready_agent_socket,
+        AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome, prepare_accept_ready_agent_socket,
     };
     use crate::linux_identity::bound_socket::bind_validated_agent_socket;
     use crate::linux_identity::effective_agent_uid;
@@ -219,40 +212,14 @@ mod tests {
             .expect("temporary Phase 070 directory mode sets");
     }
 
-    fn create_accept_ready_runtime(
-        label: &str,
-    ) -> (
-        PathBuf,
-        ValidatedPrwRuntimeDirectory,
-        AgentInstanceLock,
-        AcceptReadyAgentSocket<'static>,
-    ) {
-        let root_path = unique_temp_path(label);
-        create_directory_with_mode(&root_path, 0o700);
-        let root = crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
-            .expect("temporary root satisfies Phase 062 validation");
-        let runtime_directory = crate::linux_identity::xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(&root)
-            .expect("temporary PRW directory satisfies Phase 063 preparation");
-        drop(root);
-        let instance_lock = acquire_agent_instance_lock(&runtime_directory)
-            .expect("temporary lifecycle authority satisfies Phase 065");
-
-        // Tests need the same ownership graph as production. The returned listener
-        // borrows the runtime directory and lock, so the test bodies construct the
-        // listener after receiving these owners instead of using this helper.
-        drop(instance_lock);
-        drop(runtime_directory);
-        fs::remove_dir_all(&root_path).expect("temporary scaffold root removes");
-        unreachable!("ownership-graph helper is not invoked")
-    }
-
     fn create_runtime_owners(
         label: &str,
     ) -> (PathBuf, ValidatedPrwRuntimeDirectory, AgentInstanceLock) {
         let root_path = unique_temp_path(label);
         create_directory_with_mode(&root_path, 0o700);
-        let root = crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
-            .expect("temporary root satisfies Phase 062 validation");
+        let root =
+            crate::linux_identity::xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
+                .expect("temporary root satisfies Phase 062 validation");
         let runtime_directory = crate::linux_identity::xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(&root)
             .expect("temporary PRW directory satisfies Phase 063 preparation");
         drop(root);
@@ -273,12 +240,11 @@ mod tests {
     ) -> AcceptReadyAgentSocket<'a> {
         let bound = bind_validated_agent_socket(runtime_directory, instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(8).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
-        prepare_accept_ready_agent_socket(listening).expect("Phase 070 readiness transition succeeds")
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(8).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
+        prepare_accept_ready_agent_socket(listening)
+            .expect("Phase 070 readiness transition succeeds")
     }
 
     #[test]
@@ -353,7 +319,7 @@ mod tests {
             .try_accept_authenticated()
             .expect("first accept succeeds");
         assert!(matches!(
-            first,
+            &first,
             AuthenticatedAgentAcceptOutcome::Authenticated(_)
         ));
         drop(first);
@@ -364,7 +330,7 @@ mod tests {
             .try_accept_authenticated()
             .expect("second accept succeeds");
         assert!(matches!(
-            second,
+            &second,
             AuthenticatedAgentAcceptOutcome::Authenticated(_)
         ));
         drop(second);
