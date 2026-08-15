@@ -1,0 +1,148 @@
+Private Remote Workspace
+Phase 024 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 024
+SCOPE: Generic stream composition for successful GetAgentStatus response frames
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 024 base commit: a5e06ecffb47d7789b1755f439dff12a38ba0598
+Validated source commit: 72dbb4594f07103c2953fe0e35f7e3f7f4394c23
+Validated GitHub Actions run: 31880387064
+
+LOCKED STREAM COMPOSITION
+
+Successful GetAgentStatus wire size:
+- 24-byte local IPC frame header
+- 7-byte successful status payload
+- total: exactly 31 bytes
+
+Write path:
+1. Phase 023 builds a complete validated status frame.
+2. Phase 012 write_frame() writes exact header then payload.
+3. No implicit flush is performed.
+
+Read path:
+1. Phase 011 read_frame() acquires and validates the 24-byte header first.
+2. Payload storage is allocated only after bounded header validation.
+3. Exactly the declared payload is read.
+4. Phase 023 decodes the acquired frame as a successful GetAgentStatus response.
+5. Bytes following the first complete frame remain unread.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- Exported response_frame::stream.
+
+2. crates/prw-agent/src/local_commands/status_snapshot/response_frame/stream.rs
+- Added write_success_status_response<W: Write>().
+- Added read_success_status_response<R: Read>().
+- Preserved build vs generic frame-write failures separately.
+- Preserved generic frame-read vs command-specific decode failures separately.
+- Added memory-only tests using Vec<u8> and Cursor.
+
+3. contracts/LOCAL_AGENT_STATUS_STREAM_CONTRACT.md
+- Added normative 31-byte stream composition, ordering, one-frame consumption, error preservation, and runtime exclusions.
+
+4. docs/architecture/PHASE_024_LOCAL_AGENT_STATUS_STREAM.md
+- Recorded read/write composition, exact wire size, in-memory validation scope, and next safe ordering question.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 024 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_STREAM_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot/response_frame/stream.rs
+- added: docs/architecture/PHASE_024_LOCAL_AGENT_STATUS_STREAM.md
+
+VALIDATION HISTORY
+
+Run 47
+- Run ID: 31880360914
+- Commit: b6750f4b9b117a6039217e04964b59e6d426dce3
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow of one import in response_frame/stream.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 72dbb4594f07103c2953fe0e35f7e3f7f4394c23
+- Change: exact rustfmt-only correction in response_frame/stream.rs.
+- Wire bytes, read/write ordering, error taxonomy, dependency set, and runtime behavior unchanged.
+
+Run 48
+- Run ID: 31880387064
+- Commit: 72dbb4594f07103c2953fe0e35f7e3f7f4394c23
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: successful status response wire length exactly 31 bytes
+PASS: all four runtime states round trip through generic Write/Read composition
+PASS: reader consumes exactly one frame and leaves trailing bytes unread
+PASS: truncated header preserved as LocalIpcFrameReadError::TruncatedHeader
+PASS: truncated payload preserved as LocalIpcFrameReadError::TruncatedPayload
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 024 did not:
+- create/bind/listen/accept/connect a Unix socket;
+- access peer credentials;
+- choose or start an async runtime, task, or thread;
+- schedule timeout/cancellation work;
+- dispatch or execute Agent commands;
+- mutate outstanding-request state;
+- collect live Agent state;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 024.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 024 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- command-specific decode-before-outstanding-request completion composition;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- timeout/cancellation policy;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 024 implementation-validation report.
+GitHub Actions run 31880387064 is the authoritative executable validation evidence for source commit 72dbb4594f07103c2953fe0e35f7e3f7f4394c23.
