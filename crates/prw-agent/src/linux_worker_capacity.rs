@@ -98,9 +98,7 @@ pub enum LocalLinuxWorkerCapacityError {
 mod tests {
     use std::num::NonZeroUsize;
 
-    use super::{
-        LocalLinuxWorkerCapacity, LocalLinuxWorkerCapacityError, LocalLinuxWorkerPermit,
-    };
+    use super::{LocalLinuxWorkerCapacity, LocalLinuxWorkerCapacityError, LocalLinuxWorkerPermit};
 
     fn capacity(value: usize) -> LocalLinuxWorkerCapacity {
         LocalLinuxWorkerCapacity::new(
