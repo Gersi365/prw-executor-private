@@ -8,7 +8,9 @@ pub const LOCAL_AGENT_STATUS_BODY_LENGTH: usize = 5;
 
 /// Encodes one minimal Agent status snapshot into the locked Phase 018 body.
 #[must_use]
-pub const fn encode_status_snapshot(snapshot: LocalAgentStatusSnapshot) -> [u8; LOCAL_AGENT_STATUS_BODY_LENGTH] {
+pub const fn encode_status_snapshot(
+    snapshot: LocalAgentStatusSnapshot,
+) -> [u8; LOCAL_AGENT_STATUS_BODY_LENGTH] {
     let major = snapshot.protocol_version().major().to_be_bytes();
     let minor = snapshot.protocol_version().minor().to_be_bytes();
 
@@ -69,7 +71,9 @@ mod tests {
         LOCAL_AGENT_STATUS_BODY_LENGTH, LocalAgentStatusDecodeError, decode_status_snapshot,
         encode_status_snapshot,
     };
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
 
     #[test]
     fn body_length_is_locked_to_five_bytes() {
