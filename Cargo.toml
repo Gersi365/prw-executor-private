@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/prw-core",
+    "crates/prw-policy",
+    "crates/prw-files",
+    "crates/prw-network",
+    "crates/prw-agent",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Proprietary"
+authors = ["Private Remote Workspace"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
