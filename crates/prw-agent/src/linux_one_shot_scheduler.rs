@@ -148,7 +148,6 @@ pub fn schedule_one_authenticated_worker<'scope>(
 #[cfg(test)]
 mod tests {
     use std::fs::{self, Permissions};
-    use std::io::Read;
     use std::num::{NonZeroU16, NonZeroUsize};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixStream;
@@ -211,9 +210,7 @@ mod tests {
             .expect("temporary Phase 084 directory mode sets");
     }
 
-    fn runtime_owners(
-        label: &str,
-    ) -> (PathBuf, ValidatedPrwRuntimeDirectory, AgentInstanceLock) {
+    fn runtime_owners(label: &str) -> (PathBuf, ValidatedPrwRuntimeDirectory, AgentInstanceLock) {
         let root_path = unique_temp_path(label);
         create_directory_with_mode(&root_path, 0o700);
         let root =
@@ -247,10 +244,8 @@ mod tests {
     fn worker_config() -> LocalLinuxSessionWorkerConfig {
         LocalLinuxSessionWorkerConfig::new(
             NonZeroUsize::new(1).expect("Request budget non-zero"),
-            LocalLinuxIoBudget::try_new(Duration::from_millis(500))
-                .expect("read budget non-zero"),
-            LocalLinuxIoBudget::try_new(Duration::from_millis(500))
-                .expect("write budget non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(500)).expect("read budget non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_millis(500)).expect("write budget non-zero"),
         )
     }
 
@@ -267,9 +262,8 @@ mod tests {
         let mut client = UnixStream::connect(&socket_path).expect("client queues");
         write_local_command_request(&mut client, id(600), LocalAgentCommand::GetAgentStatus)
             .expect("Request writes");
-        let capacity = LocalLinuxWorkerCapacity::new(
-            NonZeroUsize::new(1).expect("capacity non-zero"),
-        );
+        let capacity =
+            LocalLinuxWorkerCapacity::new(NonZeroUsize::new(1).expect("capacity non-zero"));
         let held = capacity.try_acquire().expect("capacity held");
         let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
@@ -324,9 +318,8 @@ mod tests {
     fn no_ready_releases_capacity_without_registry_entry() {
         let (root_path, runtime_directory, instance_lock) = runtime_owners("no-ready");
         let listener = accept_ready(&runtime_directory, &instance_lock);
-        let capacity = LocalLinuxWorkerCapacity::new(
-            NonZeroUsize::new(1).expect("capacity non-zero"),
-        );
+        let capacity =
+            LocalLinuxWorkerCapacity::new(NonZeroUsize::new(1).expect("capacity non-zero"));
         let policy = BoundedLocalReadPolicy::deny_all();
         let dns = dns_snapshot();
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
@@ -360,9 +353,8 @@ mod tests {
         let listener = accept_ready(&runtime_directory, &instance_lock);
         let socket_path = socket_path(&root_path);
         let _client = UnixStream::connect(&socket_path).expect("idle client queues");
-        let capacity = LocalLinuxWorkerCapacity::new(
-            NonZeroUsize::new(1).expect("capacity non-zero"),
-        );
+        let capacity =
+            LocalLinuxWorkerCapacity::new(NonZeroUsize::new(1).expect("capacity non-zero"));
         let policy = BoundedLocalReadPolicy::allow_local_reads();
         let dns = dns_snapshot();
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
