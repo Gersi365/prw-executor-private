@@ -85,10 +85,10 @@ impl<'a> ListeningAgentSocketTransitionFailure<'a> {
 ///
 /// Returns [`ListeningAgentSocketTransitionFailure`] with the original bound
 /// socket when the kernel rejects `listen`.
-pub fn listen_bound_agent_socket<'a>(
-    bound_socket: BoundAgentSocket<'a>,
+pub fn listen_bound_agent_socket(
+    bound_socket: BoundAgentSocket<'_>,
     backlog: NonZeroU16,
-) -> Result<ListeningAgentSocket<'a>, ListeningAgentSocketTransitionFailure<'a>> {
+) -> Result<ListeningAgentSocket<'_>, ListeningAgentSocketTransitionFailure<'_>> {
     if listen(&bound_socket, i32::from(backlog.get())).is_err() {
         return Err(ListeningAgentSocketTransitionFailure {
             bound_socket,
