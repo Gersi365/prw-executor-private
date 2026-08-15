@@ -1,8 +1,10 @@
 //! Terminal-response frame invariant validation.
 //!
 //! Phase 020 couples an already validated in-memory frame with the common
-//! response-status prefix. It performs no socket I/O and does not dispatch a
-//! command.
+//! response-status prefix. Phase 022 adds an encode-side builder that can only
+//! construct kind/status-consistent terminal frames. No socket I/O occurs.
+
+pub mod builder;
 
 use crate::frame_object::LocalIpcFrame;
 use crate::{LocalIpcMessageKind, LocalIpcRequestId};
