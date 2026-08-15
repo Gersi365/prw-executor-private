@@ -154,7 +154,7 @@ fn same_stale_socket_identity(first: &Stat, second: &Stat) -> bool {
 mod tests {
     use std::fs::{self, File, Permissions};
     use std::os::fd::AsFd;
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt, symlink};
     use std::os::unix::net::UnixListener;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -189,7 +189,7 @@ mod tests {
     ) -> (
         PathBuf,
         super::super::super::ValidatedPrwRuntimeDirectory,
-        super::AgentInstanceLock,
+        super::super::AgentInstanceLock,
     ) {
         let root_path = unique_temp_path(label);
         create_directory_with_mode(&root_path, 0o700);
@@ -198,7 +198,7 @@ mod tests {
         let runtime_directory = super::super::super::prepare_prw_runtime_directory(&root)
             .expect("temporary PRW directory satisfies Phase 063 preparation");
         drop(root);
-        let instance_lock = super::acquire_agent_instance_lock(&runtime_directory)
+        let instance_lock = super::super::acquire_agent_instance_lock(&runtime_directory)
             .expect("temporary lifecycle authority satisfies Phase 065");
         (root_path, runtime_directory, instance_lock)
     }
@@ -390,8 +390,8 @@ mod tests {
         let (root_path, runtime_directory, instance_lock) = create_authorized_runtime("authority");
 
         assert_eq!(
-            super::acquire_agent_instance_lock(&runtime_directory).unwrap_err(),
-            super::AgentInstanceLockError::AlreadyRunning
+            super::super::acquire_agent_instance_lock(&runtime_directory).unwrap_err(),
+            super::super::AgentInstanceLockError::AlreadyRunning
         );
 
         drop(instance_lock);
