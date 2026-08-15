@@ -21,9 +21,9 @@ use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 /// Immutable finite-worker processing bounds supplied by the future runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalLinuxSessionWorkerConfig {
-    request_budget: NonZeroUsize,
-    read_budget: LocalLinuxIoBudget,
-    write_budget: LocalLinuxIoBudget,
+    requests: NonZeroUsize,
+    read_io: LocalLinuxIoBudget,
+    write_io: LocalLinuxIoBudget,
 }
 
 impl LocalLinuxSessionWorkerConfig {
@@ -35,28 +35,28 @@ impl LocalLinuxSessionWorkerConfig {
         write_budget: LocalLinuxIoBudget,
     ) -> Self {
         Self {
-            request_budget,
-            read_budget,
-            write_budget,
+            requests: request_budget,
+            read_io: read_budget,
+            write_io: write_budget,
         }
     }
 
     /// Returns the maximum Request count for this worker invocation.
     #[must_use]
     pub const fn request_budget(self) -> NonZeroUsize {
-        self.request_budget
+        self.requests
     }
 
     /// Returns the per-Request absolute read budget.
     #[must_use]
     pub const fn read_budget(self) -> LocalLinuxIoBudget {
-        self.read_budget
+        self.read_io
     }
 
     /// Returns the per-Request absolute response-write budget.
     #[must_use]
     pub const fn write_budget(self) -> LocalLinuxIoBudget {
-        self.write_budget
+        self.write_io
     }
 }
 
