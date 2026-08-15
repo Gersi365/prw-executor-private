@@ -1,0 +1,160 @@
+Private Remote Workspace
+Phase 013 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 013
+SCOPE: Bounded per-connection outstanding-request state
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 013 base commit: 90f86a14d6345a532934afb3ea657ca8bc8b9bcf
+Validated source commit: 153c049182093af3a94ecc183386902bbff9c3fc
+Validated GitHub Actions run: 31878516709
+
+LOCKED STATE BOUNDARY
+
+Each future local IPC connection may have at most 64 simultaneously outstanding request IDs.
+
+Registration rules:
+- duplicate currently outstanding ID -> DuplicateRequestId;
+- tracker already at 64 outstanding IDs -> TooManyOutstandingRequests;
+- duplicate detection is evaluated before capacity failure.
+
+Completion rules:
+- known outstanding ID is removed after one terminal Response or Error;
+- unknown/stale/unsolicited ID -> UnknownRequestId;
+- an ID may be reused only after its previous exchange is completed and removed.
+
+Request IDs remain ephemeral correlation metadata, not secrets, authentication tokens, capabilities, cryptographic nonces, or durable object identifiers.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported request_tracker as a nested module.
+- Phase 008 command/status/envelope semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/request_tracker.rs
+- Added LOCAL_IPC_MAX_OUTSTANDING_REQUESTS = 64.
+- Added LocalRequestTracker backed by bounded in-memory state.
+- Added register, complete, contains, len, and is_empty operations.
+- Added LocalRequestTrackerError with DuplicateRequestId, TooManyOutstandingRequests, and UnknownRequestId.
+- Added focused tests for empty state, registration, duplicate rejection, bound enforcement, completion/reuse, and unknown completion rejection.
+
+3. contracts/LOCAL_REQUEST_TRACKER_CONTRACT.md
+- Added normative per-connection correlation-state contract.
+- Explicitly deferred timeout, cancellation, retry, idempotency, scheduling, persistence, and connection-close semantics.
+
+4. docs/architecture/PHASE_013_REQUEST_TRACKER.md
+- Recorded rationale, state transitions, resource-bound reasoning, ephemeral scope, and explicit deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 013 base: 4
+- added: contracts/LOCAL_REQUEST_TRACKER_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/request_tracker.rs
+- added: docs/architecture/PHASE_013_REQUEST_TRACKER.md
+
+VALIDATION HISTORY
+
+Run 27
+- Run ID: 31878447590
+- Commit: 7c79a86cfb69110fd7fbb28d010515ae7241b303
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required one formatting-only reflow in the request-ID reuse test.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit 1
+- ad60195964dcd997a54068c2240e10b93ca42d92
+- Change: exact rustfmt-only correction.
+- Bound and state-transition semantics unchanged.
+
+Run 28
+- Run ID: 31878479840
+- Commit: ad60195964dcd997a54068c2240e10b93ca42d92
+- Result: FAILURE
+- Formatting: PASS
+- Clippy: missing_const_for_fn on read-only len() and is_empty() accessors.
+- Tests and build were skipped after Clippy failed.
+
+Corrective commit 2
+- 153c049182093af3a94ecc183386902bbff9c3fc
+- Change: marked only len() and is_empty() as const fn.
+- Runtime behavior, state storage, limit, and transition rules unchanged.
+
+Run 29
+- Run ID: 31878516709
+- Commit: 153c049182093af3a94ecc183386902bbff9c3fc
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: tracker starts empty and registration is observable
+PASS: duplicate active request ID rejected
+PASS: 64-request outstanding bound enforced
+PASS: completion removes ID and permits later reuse
+PASS: unknown terminal response rejected
+
+RUNTIME BOUNDARY
+
+Phase 013 is pure in-memory state only.
+
+It did not:
+- create a connection loop;
+- bind/listen/accept/connect a socket;
+- start a thread/task;
+- implement timeout or cancellation;
+- persist request state;
+- serialize or dispatch commands;
+- add any dependency.
+
+SECURITY / MUTATION STATEMENT
+
+Phase 013 did not:
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 013 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- actual local IPC connection lifecycle/loop;
+- Unix socket runtime and SO_PEERCRED enforcement;
+- scheduling/concurrency policy;
+- timeout/cancellation semantics;
+- connection-close cleanup API;
+- retry/idempotency semantics;
+- command payload serialization;
+- runtime command dispatch;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 013 implementation-validation report.
+GitHub Actions run 31878516709 is the authoritative executable validation evidence for source commit 153c049182093af3a94ecc183386902bbff9c3fc.
