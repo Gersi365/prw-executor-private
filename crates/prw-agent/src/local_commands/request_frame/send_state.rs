@@ -133,7 +133,9 @@ mod tests {
     fn registration_failure_does_not_poison_or_write() {
         let mut state = LocalConnectionSendState::new();
         let mut tracker = LocalRequestTracker::new();
-        tracker.register(id(161)).expect("initial request registered");
+        tracker
+            .register(id(161))
+            .expect("initial request registered");
         let mut writer = CountingWriter::default();
 
         assert_eq!(
@@ -184,14 +186,16 @@ mod tests {
         let mut tracker = LocalRequestTracker::new();
         let mut failing_writer = FailAfter::new(0);
 
-        assert!(send_tracked_local_command_request(
-            &mut state,
-            &mut failing_writer,
-            &mut tracker,
-            id(163),
-            LocalAgentCommand::GetAgentStatus,
-        )
-        .is_err());
+        assert!(
+            send_tracked_local_command_request(
+                &mut state,
+                &mut failing_writer,
+                &mut tracker,
+                id(163),
+                LocalAgentCommand::GetAgentStatus,
+            )
+            .is_err()
+        );
         assert!(state.is_write_poisoned());
         assert!(tracker.contains(id(163)));
 
