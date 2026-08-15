@@ -2,7 +2,8 @@
 //!
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
-//! authorization, and Phase 059 adds typed authenticated stream ownership. This
+//! authorization, Phase 059 adds typed authenticated stream ownership, and
+//! Phase 060 composes authenticated application-session processing. This
 //! boundary owns no listener or filesystem socket lifecycle.
 
 #[allow(
@@ -11,6 +12,12 @@
 )]
 #[path = "linux_authenticated_connection.rs"]
 pub mod authenticated_connection;
+#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated Linux application session is intentionally crate-internal"
+)]
+#[path = "linux_authenticated_session.rs"]
+pub mod authenticated_session;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
