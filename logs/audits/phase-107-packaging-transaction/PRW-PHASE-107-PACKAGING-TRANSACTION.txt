@@ -1,0 +1,192 @@
+Private Remote Workspace
+Phase 107 Non-Activating Package File Transaction
+
+STATUS: PASS / TRANSACTION_CONTRACT_IMPLEMENTED_AND_VALIDATED / DISPOSABLE_ROOT_ONLY / NO_REAL_INSTALL / NO_ENABLE / NO_START / NO_LINGER_MUTATION / NO_HOST_ACTIVATION
+AUDIT TYPE: PACKAGE FILE TRANSACTION DESIGN / ISOLATED INSTALL-UPGRADE-REMOVE-ROLLBACK PROOF
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 105 contract-lock commit: a2884334f3e7dbca1eb5e0b7448ead66f550c6fe
+Phase 106 authoritative report commit: 9273d53d6729f1d0d10c10fa259ad23f0bd74d85
+Phase 106 permanent CI: 31906345773 PASS
+Phase 107 validation workflow run: 31906446409 PASS
+Transaction-contract source commit: e7fafa641194f7503a72c83083ecb9b2fe0a39d6
+Temporary-workflow cleanup commit: aa47f96c90e3da5abca45780e8838a6f074b9418
+
+AUTHORIZED SCOPE
+
+Phase 107 was authorized to design and validate install/upgrade/remove transaction semantics only inside a disposable filesystem root.
+
+No real-host install or service-manager mutation was authorized.
+
+IMPLEMENTED CONTRACT
+
+Source:
+
+packaging/systemd/INSTALL_TRANSACTION.md
+
+Locked managed destinations:
+
+/usr/lib/private-remote-workspace/prw-agent
+/usr/lib/systemd/user/prw-agent.service
+
+Expected future package metadata:
+
+- executable mode 0755;
+- unit mode 0644;
+- package-owned executable directory mode 0755;
+- root-owned package files on a future real privileged install;
+- runtime service process remains unprivileged under the user manager's UID.
+
+Phase 107 intentionally does not claim or perform real root ownership because its validation is non-privileged/disposable-root only.
+
+PREFLIGHT CONTRACT
+
+A future installer must fail before replacement unless the target is absent or can be established as a PRW-managed prior package payload.
+
+Unknown/foreign files at the locked destinations must not be silently overwritten.
+
+Package-manager database integration, signed payload identity, release signatures, and reproducible release artifact verification remain later release-packaging work.
+
+FRESH INSTALL CONTRACT
+
+1. validate complete binary and exact unit payload before destination mutation;
+2. stage both payloads privately on the destination filesystem;
+3. set final modes;
+4. set final ownership in the future privileged installer;
+5. validate staged hashes/metadata;
+6. atomically replace executable destination;
+7. atomically replace unit destination;
+8. validate final bytes/modes/paths and absence of activation artifacts;
+9. remove staging/rollback material only after postconditions pass.
+
+A failure after partial replacement must remove transaction-created files for a fresh install.
+
+UPGRADE CONTRACT
+
+Before replacement, preserve exact prior PRW-managed bytes and relevant metadata for both destinations.
+
+Both new payloads must be staged and validated before either destination replacement.
+
+A failure after only one destination is replaced must restore both destinations to the exact pre-upgrade payload/mode state.
+
+Live-service upgrade behavior is not part of Phase 107. Stop/reload/restart of an activated service remains a later activation/upgrade gate.
+
+REMOVE CONTRACT
+
+For the non-activated package case:
+
+- preserve exact managed payloads until postconditions pass;
+- remove the service unit;
+- remove the executable;
+- remove the package-owned executable directory only if empty;
+- restore exact prior payloads on intermediate failure;
+- do not alter unrelated content.
+
+Activation-aware uninstall is deferred. Any future enablement/start artifacts must be owned and rolled back by the later activation transaction that creates them.
+
+DISPOSABLE-ROOT PROOF
+
+Workflow:
+
+31906446409
+
+Result:
+
+PASS.
+
+The workflow used:
+
+- the exact repository `packaging/systemd/prw-agent.service`;
+- dummy executable V1 bytes;
+- dummy executable V2 bytes;
+- one disposable temporary filesystem root;
+- no real `/usr` target;
+- no user home mutation;
+- no service-manager command.
+
+PROVEN SCENARIOS
+
+1. FRESH INSTALL
+
+- exact executable destination created under disposable root;
+- exact unit destination created under disposable root;
+- executable mode 0755;
+- unit mode 0644;
+- exact unit bytes preserved;
+- no default.target.wants directory/link created.
+
+2. INJECTED UPGRADE FAILURE
+
+Failure was injected after executable replacement but before unit replacement.
+
+Proof:
+
+- exact prior executable bytes restored;
+- exact prior unit bytes restored;
+- exact prior modes restored;
+- V1 layout remained valid after rollback.
+
+3. SUCCESSFUL UPGRADE
+
+- executable changed from dummy V1 to dummy V2;
+- exact service unit remained unchanged;
+- modes remained 0755/0644;
+- no activation artifact appeared.
+
+4. INJECTED REMOVE FAILURE
+
+Failure was injected after unit removal but before executable removal.
+
+Proof:
+
+- exact prior executable payload restored;
+- exact prior unit payload restored;
+- exact prior modes restored;
+- V2 installed layout remained valid after rollback.
+
+5. SUCCESSFUL REMOVE
+
+- executable absent;
+- service unit absent;
+- no default.target.wants artifact;
+- disposable root removed after proof.
+
+HARD PROHIBITIONS CONFIRMED
+
+The Phase 107 transaction contract prohibits:
+
+- systemctl;
+- loginctl;
+- daemon-reload;
+- enable/start/restart/stop;
+- default.target.wants link creation;
+- linger mutation;
+- synthetic XDG_RUNTIME_DIR;
+- .socket unit creation;
+- user-home mutation;
+- real-host deployment.
+
+REPOSITORY MUTATION BOUNDARY
+
+Phase 107 added only:
+
+packaging/systemd/INSTALL_TRANSACTION.md
+logs/audits/phase-107-packaging-transaction/PRW-PHASE-107-PACKAGING-TRANSACTION.txt
+
+plus one temporary validation workflow that self-deleted after PASS.
+
+No Cargo.toml/Cargo.lock mutation.
+No Agent Rust source mutation.
+No systemd service source mutation after Phase 106.
+No real package install.
+No host activation.
+No linger mutation.
+
+DECISION
+
+PASS.
+
+Phase 107 non-activating packaging transaction design and disposable-root validation are complete.
+
+Phase 108 is authorized as audit/completion review only.
