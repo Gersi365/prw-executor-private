@@ -1,0 +1,146 @@
+Private Remote Workspace
+Phase 019 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 019
+SCOPE: Successful GetAgentStatus response payload composition
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 019 base commit: 0e279ba6b5b100885c3aaa4f85240ec40f33fd6d
+Validated source commit: 47f91c1ca9f99643ebc04e505fde8701dde02f8d
+Validated GitHub Actions run: 31879655407
+
+LOCKED SUCCESS PAYLOAD
+
+A successful GetAgentStatus command payload is exactly 7 bytes:
+- bytes 0..1: LocalAgentResponseStatus::Ok as big-endian u16 (00 00)
+- byte 2: runtime-state u8
+- bytes 3..4: protocol-major big-endian u16
+- bytes 5..6: protocol-minor big-endian u16
+
+Current Ready / protocol 1.0 success bytes:
+00 00 02 00 01 00 00
+
+The implementation composes the existing Phase 016 response-status codec with the existing Phase 018 Agent-status body codec. It does not duplicate either mapping.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/status_snapshot.rs
+- Exported response_payload module.
+- Existing typed status model and Phase 018 codec semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/status_snapshot/response_payload.rs
+- Added LOCAL_AGENT_STATUS_SUCCESS_PAYLOAD_LENGTH = 7.
+- Added encode_success_status_response().
+- Added decode_success_status_response().
+- Added fail-closed composed decoding taxonomy for missing/unknown status, non-success status, invalid body length, unknown runtime state, and unsupported protocol version.
+- Known non-Ok statuses are rejected before status-body interpretation.
+- Added focused exact-byte, all-state round-trip, prefix, non-success, and body-failure tests.
+
+3. contracts/LOCAL_AGENT_STATUS_RESPONSE_CONTRACT.md
+- Added normative seven-byte successful GetAgentStatus payload contract.
+
+4. docs/architecture/PHASE_019_LOCAL_AGENT_STATUS_RESPONSE.md
+- Recorded composition rationale, reuse boundary, non-success separation, and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 019 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_RESPONSE_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/status_snapshot.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot/response_payload.rs
+- added: docs/architecture/PHASE_019_LOCAL_AGENT_STATUS_RESPONSE.md
+
+VALIDATION HISTORY
+
+Run 39
+- Run ID: 31879631778
+- Commit: de7428c59acb5ee213149bbaa2053fbac68534a0
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow in response_payload.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 47f91c1ca9f99643ebc04e505fde8701dde02f8d
+- Change: exact rustfmt-only corrections in response_payload.rs.
+- Payload bytes, status/body composition, failure taxonomy, dependencies, and runtime behavior unchanged.
+
+Run 40
+- Run ID: 31879655407
+- Commit: 47f91c1ca9f99643ebc04e505fde8701dde02f8d
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: successful status payload length locked to seven bytes
+PASS: Ready/current 1.0 exact bytes are 00 00 02 00 01 00 00
+PASS: all four runtime states round trip through the composed success payload
+PASS: missing response-status prefix rejected
+PASS: unknown response status rejected
+PASS: known non-success response status rejected before status-body interpretation
+PASS: invalid status-body length rejected
+PASS: unknown runtime-state identifier rejected
+PASS: unsupported embedded protocol version rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 019 did not:
+- create or validate an outer IPC frame;
+- dispatch or execute commands;
+- bind/listen/accept/connect a socket;
+- add a serialization dependency;
+- collect live process metadata;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 019.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 019 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- outer Response/Error frame-kind + response-status invariant;
+- request-ID correlation at the composed frame level;
+- error-response body schema;
+- bounded private-DNS response body and codec;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 019 implementation-validation report.
+GitHub Actions run 31879655407 is the authoritative executable validation evidence for source commit 47f91c1ca9f99643ebc04e505fde8701dde02f8d.
