@@ -4,6 +4,7 @@
 //! validated frame constructors. It performs no stream or socket I/O.
 
 pub mod stream;
+pub mod transaction;
 
 use crate::frame_object::{
     LocalIpcFrame, LocalIpcFrameError, LocalIpcPayload, LocalIpcPayloadError,
