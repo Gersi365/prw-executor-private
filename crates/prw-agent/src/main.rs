@@ -1,6 +1,8 @@
 //! Headless Private Remote Workspace Agent bootstrap.
 //!
-//! Phase 001 deliberately starts no listeners and performs no system mutation.
+//! The current build-phase bootstrap starts no listeners and performs no system
+//! mutation. Phase 006 defines the future local IPC contract in the library
+//! without activating it.
 
 use prw_network::PrivateDnsConfig;
 
