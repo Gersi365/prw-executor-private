@@ -60,8 +60,8 @@ pub enum XdgRuntimeRootValidationError {
 ///
 /// Returns a bounded [`XdgRuntimeRootValidationError`] when the value is absent,
 /// malformed, cannot be opened safely, or fails descriptor metadata checks.
-pub fn validate_xdg_runtime_root_from_env(
-) -> Result<ValidatedXdgRuntimeRoot, XdgRuntimeRootValidationError> {
+pub fn validate_xdg_runtime_root_from_env()
+-> Result<ValidatedXdgRuntimeRoot, XdgRuntimeRootValidationError> {
     let value = env::var_os("XDG_RUNTIME_DIR");
     validate_xdg_runtime_root_value(value.as_deref())
 }
@@ -193,9 +193,7 @@ mod tests {
 
         assert_eq!(
             validate_xdg_runtime_root_path(&path).unwrap_err(),
-            XdgRuntimeRootValidationError::WrongMode {
-                actual_mode: 0o755
-            }
+            XdgRuntimeRootValidationError::WrongMode { actual_mode: 0o755 }
         );
         assert_eq!(
             fs::metadata(&path)
