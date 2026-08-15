@@ -321,11 +321,11 @@ pub fn run() -> Result<LinuxAgentBootstrapReport, LinuxAgentBootstrapStartFailur
     );
 
     run_signal_aware_linux_production_runtime_from_env(inputs, |_| {})
-        .map(map_terminal_report)
+        .map(|report| map_terminal_report(&report))
         .map_err(map_start_failure)
 }
 
-const fn initial_runtime_config() -> LocalLinuxProductionRuntimeConfig {
+fn initial_runtime_config() -> LocalLinuxProductionRuntimeConfig {
     LocalLinuxProductionRuntimeConfig::new(
         NonZeroUsize::new(2).expect("Phase 101 worker capacity is non-zero"),
         NonZeroU16::new(8).expect("Phase 101 listener backlog is non-zero"),
@@ -338,8 +338,8 @@ const fn initial_runtime_config() -> LocalLinuxProductionRuntimeConfig {
     )
 }
 
-fn map_terminal_report(
-    report: crate::linux_identity::signal_aware_runtime::LocalLinuxSignalAwareRuntimeTerminalReport,
+const fn map_terminal_report(
+    report: &crate::linux_identity::signal_aware_runtime::LocalLinuxSignalAwareRuntimeTerminalReport,
 ) -> LinuxAgentBootstrapReport {
     LinuxAgentBootstrapReport {
         terminal: match report.reason() {
@@ -365,7 +365,9 @@ fn map_terminal_report(
     }
 }
 
-const fn map_counters(counters: LocalLinuxProductionRuntimeCounters) -> LinuxAgentBootstrapCounters {
+const fn map_counters(
+    counters: LocalLinuxProductionRuntimeCounters,
+) -> LinuxAgentBootstrapCounters {
     LinuxAgentBootstrapCounters {
         readiness_steps: counters.readiness_steps(),
         listener_armed_steps: counters.listener_armed_steps(),
@@ -457,10 +459,10 @@ const fn map_lifecycle_start_kind(
 
 #[cfg(test)]
 mod tests {
-    use prw_policy::{Capability, Decision, PolicyEvaluator};
+    use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
 
     use super::{
-        LinuxAgentBootstrapCleanup, LinuxAgentBootstrapReport,
+        LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartKind,
         LinuxAgentBootstrapTerminal, initial_runtime_config, map_lifecycle_start_kind,
     };
@@ -476,7 +478,10 @@ mod tests {
         assert_eq!(config.scheduling_attempt_budget().get(), 2);
         assert_eq!(config.worker_config().request_budget().get(), 1);
         assert_eq!(config.worker_config().read_budget().duration().as_secs(), 2);
-        assert_eq!(config.worker_config().write_budget().duration().as_secs(), 2);
+        assert_eq!(
+            config.worker_config().write_budget().duration().as_secs(),
+            2
+        );
         let capacity = LocalLinuxWorkerCapacity::new(config.worker_capacity());
         assert_eq!(capacity.max_workers(), 2);
     }
@@ -484,7 +489,10 @@ mod tests {
     #[test]
     fn phase_101_policy_allows_only_existing_local_reads() {
         let policy = BoundedLocalReadPolicy::allow_local_reads();
-        assert_eq!(policy.evaluate(Capability::AgentStatusRead), Decision::Allow);
+        assert_eq!(
+            policy.evaluate(Capability::AgentStatusRead),
+            Decision::Allow
+        );
         assert_eq!(
             policy.evaluate(Capability::PrivateDnsConfigRead),
             Decision::Allow
@@ -507,7 +515,7 @@ mod tests {
     fn success_requires_normal_terminal_clean_cleanup_and_restored_mask() {
         let success = LinuxAgentBootstrapReport {
             terminal: LinuxAgentBootstrapTerminal::SigTerm,
-            counters: Default::default(),
+            counters: LinuxAgentBootstrapCounters::default(),
             cleanup: LinuxAgentBootstrapCleanup::Clean,
             signal_mask_restore: LinuxAgentBootstrapSignalMaskRestore::Restored,
         };

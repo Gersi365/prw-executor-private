@@ -7,6 +7,8 @@
 pub mod frame_codec;
 pub mod frame_object;
 #[cfg(target_os = "linux")]
+pub mod linux_bootstrap;
+#[cfg(target_os = "linux")]
 #[allow(
     dead_code,
     reason = "pre-runtime Linux identity adapter is intentionally crate-internal"
