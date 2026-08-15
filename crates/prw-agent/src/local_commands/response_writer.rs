@@ -72,7 +72,8 @@ pub fn write_terminal_response_guarded<W: Write>(
         return Err(LocalTerminalResponseWriteError::WritePoisoned);
     }
 
-    validate_terminal_response_frame(frame).map_err(LocalTerminalResponseWriteError::InvalidFrame)?;
+    validate_terminal_response_frame(frame)
+        .map_err(LocalTerminalResponseWriteError::InvalidFrame)?;
 
     match write_frame(writer, frame) {
         Ok(()) => Ok(()),
@@ -104,11 +105,11 @@ mod tests {
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::writer::LocalIpcFrameWriteError;
+    use crate::local_commands::LocalAgentCommand;
     use crate::local_commands::LocalAgentResponseStatus;
     use crate::local_commands::request_frame::build_local_command_request_frame;
     use crate::local_commands::terminal_response::LocalTerminalResponseError;
     use crate::local_commands::terminal_response::builder::build_terminal_response_frame;
-    use crate::local_commands::LocalAgentCommand;
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
@@ -186,9 +187,7 @@ mod tests {
         let mut state = LocalTerminalResponseWriteState::new();
         let mut failing_writer = FailAfter::new(0);
         let first = success_frame(224);
-        assert!(
-            write_terminal_response_guarded(&mut state, &mut failing_writer, &first).is_err()
-        );
+        assert!(write_terminal_response_guarded(&mut state, &mut failing_writer, &first).is_err());
         assert!(state.is_write_poisoned());
 
         let mut later_writer = CountingWriter::default();
