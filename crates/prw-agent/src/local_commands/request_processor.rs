@@ -37,13 +37,8 @@ pub fn read_and_build_policy_response<R: Read, E: PolicyEvaluator + ?Sized>(
 ) -> Result<LocalIpcFrame, LocalRequestProcessorError> {
     let request =
         read_local_command_request(reader).map_err(LocalRequestProcessorError::Request)?;
-    build_policy_gated_read_only_response(
-        request,
-        evaluator,
-        status_snapshot,
-        private_dns_snapshot,
-    )
-    .map_err(LocalRequestProcessorError::Response)
+    build_policy_gated_read_only_response(request, evaluator, status_snapshot, private_dns_snapshot)
+        .map_err(LocalRequestProcessorError::Response)
 }
 
 /// Phase 040 one-request processing failure.
@@ -138,13 +133,9 @@ mod tests {
         )
         .expect("memory Request write succeeds");
 
-        let response = read_and_build_policy_response(
-            &mut Cursor::new(request_bytes),
-            &policy,
-            status,
-            &dns,
-        )
-        .expect("policy-allowed response builds");
+        let response =
+            read_and_build_policy_response(&mut Cursor::new(request_bytes), &policy, status, &dns)
+                .expect("policy-allowed response builds");
         let decoded = decode_success_status_frame(&response).expect("status response decodes");
 
         assert_eq!(policy.calls(), 1);
@@ -165,13 +156,9 @@ mod tests {
         )
         .expect("memory Request write succeeds");
 
-        let response = read_and_build_policy_response(
-            &mut Cursor::new(request_bytes),
-            &policy,
-            status,
-            &dns,
-        )
-        .expect("policy denial response builds");
+        let response =
+            read_and_build_policy_response(&mut Cursor::new(request_bytes), &policy, status, &dns)
+                .expect("policy denial response builds");
         let terminal =
             validate_terminal_response_frame(&response).expect("terminal response validates");
 
@@ -225,13 +212,8 @@ mod tests {
         request_bytes.pop();
 
         assert!(
-            read_and_build_policy_response(
-                &mut Cursor::new(request_bytes),
-                &policy,
-                status,
-                &dns,
-            )
-            .is_err()
+            read_and_build_policy_response(&mut Cursor::new(request_bytes), &policy, status, &dns,)
+                .is_err()
         );
         assert_eq!(policy.calls(), 0);
     }
