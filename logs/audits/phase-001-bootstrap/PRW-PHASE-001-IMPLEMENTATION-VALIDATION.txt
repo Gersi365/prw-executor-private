@@ -1,0 +1,125 @@
+Private Remote Workspace
+Phase 001 Implementation Validation Report
+
+STATUS: PASS
+LIFECYCLE: IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Repository visibility: private
+Default branch: main
+Validated source commit: bdde7b4389f1a9b55b20b205eef66bf676e86e8a
+Validation workflow: .github/workflows/phase-001-rust-validation.yml
+GitHub Actions workflow ID: 334913600
+Successful validation run ID: 31875982250
+Run number: 5
+Run event: push
+Run conclusion: success
+Run completed: 2026-08-15T09:02:51Z
+
+VALIDATION ENVIRONMENT
+
+Operating system: Ubuntu 24.04.4 LTS
+Runner image: ubuntu-24.04
+Runner image version: 20260810.271.1
+rustc: 1.97.1 (8bab26f4f 2026-07-14)
+cargo: 1.97.1 (c980f4866 2026-06-30)
+rustfmt: 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy: 0.1.97 (8bab26f4f6 2026-07-14)
+
+AUTHORITATIVE VALIDATION COMMANDS
+
+1. cargo fmt --all -- --check
+   RESULT: PASS
+
+2. cargo clippy --workspace --all-targets --all-features -- -D warnings
+   RESULT: PASS
+
+3. cargo test --workspace --all-targets
+   RESULT: PASS
+
+4. cargo build --workspace --all-targets
+   RESULT: PASS
+
+CORRECTIVE SEQUENCE
+
+The initial materialized Phase 001 source baseline was preserved as the starting reference. Validation exposed only bounded compile/lint/format defects. Corrections were applied minimally and sequentially on main:
+
+- 6306c15b8e04aeedd3cde951f8e21df21ea9c676
+  File: crates/prw-policy/src/lib.rs
+  Correction: rustfmt-required assertion formatting only.
+  Behavioral change: none.
+
+- 55aee3db284af10314368aa9f9a28d0e709d50b7
+  File: crates/prw-core/src/lib.rs
+  Correction: added Clippy-required # Errors documentation to the five typed identifier constructors.
+  Behavioral change: none.
+
+- 4914023ab30a6c87bc0577d56ad41c1b349dd7cf
+  File: crates/prw-network/src/lib.rs
+  Correction: replaced the manual PrivateDnsConfig Default implementation with #[derive(Default)].
+  Behavioral change: none; bool, Vec<String>, and all fields retain the same default values.
+
+- bdde7b4389f1a9b55b20b205eef66bf676e86e8a
+  File: crates/prw-files/src/lib.rs
+  Correction: added a local clippy::cast_precision_loss allowance to progress_ratio().
+  Rationale: the public method intentionally returns an approximate floating-point progress ratio from u64 byte counters. No dependency, API, or calculation change was introduced.
+  Behavioral change: none.
+
+VALIDATION INFRASTRUCTURE
+
+- 432bf7bc2cf9dae95da200024caf1794803ba96e
+  Added .github/workflows/phase-001-rust-validation.yml.
+  The workflow has read-only repository contents permission and runs only build/format/lint/test commands. It performs no deployment, release, secret mutation, networking mutation, database operation, authentication operation, or service activation.
+  Audit-only changes under logs/audits/** are excluded from push-triggered validation to prevent evidence commits from creating redundant validation runs.
+
+FAILED RUNS RETAINED AS EVIDENCE
+
+Run 1: 31875874091
+- formatting failure in crates/prw-policy/src/lib.rs
+
+Run 2: 31875894062
+- formatting passed
+- Clippy exposed missing # Errors documentation in prw-core
+
+Run 3: 31875927367
+- formatting passed
+- prior prw-core issues passed
+- Clippy exposed derivable Default implementation in prw-network
+
+Run 4: 31875944941
+- formatting passed
+- prior corrections passed
+- Clippy exposed intentional u64-to-f64 precision-loss lint in prw-files
+
+Run 5: 31875982250
+- formatting PASS
+- Clippy PASS
+- tests PASS
+- build PASS
+
+SCOPE BOUNDARY CONFIRMATION
+
+Phase 001 validation did not implement or activate:
+- production networking;
+- SSH transport/listeners;
+- NAT traversal;
+- relay infrastructure;
+- DNS mutation;
+- enrollment;
+- authentication;
+- database state or migrations;
+- systemd installation/activation;
+- privileged networking;
+- deployment;
+- Android application code;
+- desktop application code;
+- control-plane services.
+
+NON-BLOCKING OBSERVATION
+
+The GitHub-hosted runner emitted a deprecation warning for actions/checkout@v4 targeting Node.js 20; GitHub forced that action to Node.js 24 and checkout completed successfully. This warning did not affect Phase 001 validation and is not classified as a source defect.
+
+FINAL CLASSIFICATION
+
+Phase 001 source baseline is materialized, minimally corrected, and implementation-validated.
+Final status: IMPLEMENTED_AND_VALIDATED / PASS
