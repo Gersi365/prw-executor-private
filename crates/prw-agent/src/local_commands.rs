@@ -4,6 +4,8 @@
 //! response metadata. It does not define payload serialization or runtime
 //! dispatch.
 
+pub mod request_tracker;
+
 use crate::LocalIpcRequestId;
 
 /// Read-only command identifiers admitted by the Phase 008 local baseline.
