@@ -1,0 +1,59 @@
+name: Phase 098 Signal-Aware Readiness Integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase-098-signal-readiness-integrate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Integrate Phase 098 signal-aware readiness
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/prw-agent/src/linux_identity.rs")
+          text = path.read_text()
+          docs_old = "//! SIGTERM/SIGINT `SignalFd` source while preserving `unsafe_code = forbid`. The\n//! Agent bootstrap remains inactive; `main.rs` and systemd still do not start\n//! this runtime."
+          docs_new = "//! SIGTERM/SIGINT `SignalFd` source plus one-step signal-aware readiness with\n//! termination > runtime-wake > listener precedence while preserving\n//! `unsafe_code = forbid`. The Agent bootstrap remains inactive; `main.rs` and\n//! systemd still do not start this runtime."
+          if text.count(docs_old) != 1:
+              raise SystemExit("Phase 098 readiness documentation anchor mismatch")
+          text = text.replace(docs_old, docs_new, 1)
+
+          anchor = "#[allow(\n    dead_code,\n    reason = \"pre-bootstrap safe Linux termination signal source is intentionally crate-internal\"\n)]\n#[path = \"linux_termination_signal.rs\"]\npub mod termination_signal;\n"
+          insert = anchor + "#[allow(\n    dead_code,\n    reason = \"pre-bootstrap signal-aware Linux readiness is intentionally crate-internal\"\n)]\n#[path = \"linux_signal_aware_readiness.rs\"]\npub mod signal_aware_readiness;\n"
+          if text.count(anchor) != 1:
+              raise SystemExit("Phase 098 readiness module insertion anchor mismatch")
+          path.write_text(text.replace(anchor, insert, 1))
+          PY
+
+          cargo fmt --all
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_signal_aware_readiness.rs | sort)"
+          test "$changed" = "$expected"
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          git diff --check
+
+      - name: Commit integrated readiness and self-delete
+        run: |
+          rm .github/workflows/phase-098-signal-readiness-integrate.yml
+          git add crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_signal_aware_readiness.rs .github/workflows/phase-098-signal-readiness-integrate.yml
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git commit -m "Integrate Phase 098 signal-aware readiness"
+          git push
