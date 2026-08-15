@@ -76,16 +76,16 @@ pub mod session_worker;
 pub mod session_worker_thread;
 #[allow(
     dead_code,
-    reason = "pre-runtime scoped worker completion classifier is intentionally crate-internal"
-)]
-#[path = "linux_worker_completion.rs"]
-pub mod worker_completion;
-#[allow(
-    dead_code,
     reason = "pre-runtime bounded Linux worker capacity is intentionally crate-internal"
 )]
 #[path = "linux_worker_capacity.rs"]
 pub mod worker_capacity;
+#[allow(
+    dead_code,
+    reason = "pre-runtime scoped worker completion classifier is intentionally crate-internal"
+)]
+#[path = "linux_worker_completion.rs"]
+pub mod worker_completion;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux XDG runtime-root validation is intentionally crate-internal"
