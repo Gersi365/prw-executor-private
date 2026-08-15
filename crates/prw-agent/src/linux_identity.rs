@@ -5,9 +5,16 @@
 //! authorization, Phase 059 adds typed authenticated stream ownership, Phase 060
 //! composes authenticated application-session processing, Phase 062 adds
 //! read-only XDG runtime-root validation, Phase 067 adds a bound validated Agent
-//! socket, and Phase 068 adds an explicit listening-state transition. The Agent
-//! bootstrap remains inactive and no accept operation is enabled here.
+//! socket, Phase 068 adds an explicit listening-state transition, and Phase 070
+//! adds a nonblocking accept-ready state plus one-shot authenticated accept. The
+//! Agent bootstrap remains inactive and no accept loop is enabled here.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux accept-ready adapter is intentionally crate-internal"
+)]
+#[path = "linux_agent_accept_ready.rs"]
+pub mod accept_ready;
 #[allow(
     dead_code,
     reason = "pre-runtime authenticated Linux connection wrapper is intentionally crate-internal"
@@ -28,7 +35,7 @@ pub mod authenticated_session;
 pub mod bound_socket;
 #[allow(
     dead_code,
-    reason = "pre-accept listening Linux Agent socket is intentionally crate-internal"
+    reason = "pre-runtime listening Linux Agent socket is intentionally crate-internal"
 )]
 #[path = "linux_agent_listening_socket.rs"]
 pub mod listening_socket;
