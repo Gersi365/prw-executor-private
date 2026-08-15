@@ -1,0 +1,100 @@
+Private Remote Workspace
+Phase 040 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 040
+SCOPE: Generic Request read -> policy evaluation -> in-memory terminal response
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial processor/export commit: b56a916633edefbc7eb08e9c3bbc17d82889569f
+Rustfmt corrective: 1da16bd69bfb871557eed133bcaaf109f7cdc9b7
+Authoritative GitHub Actions run: 31883629667
+
+LOCKED ORDERING
+
+1. acquire exactly one bounded generic frame;
+2. decode and validate it as a current local Request;
+3. only after successful Request decoding, invoke the supplied policy evaluator;
+4. build one correlated terminal response frame in memory through Phase 038;
+5. do not write any response bytes in this phase.
+
+INVALID INPUT SEMANTICS
+
+Malformed/truncated/non-Request/unknown-command input:
+- returns the existing typed Request read/decode failure;
+- invokes the policy evaluator zero times;
+- fabricates no success or Unauthorized response.
+
+VALID INPUT SEMANTICS
+
+- allowed valid Request -> existing command-specific successful response frame;
+- denied valid Request -> existing correlated Unauthorized terminal Error frame;
+- policy evaluator is invoked exactly once for a valid current command.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands.rs
+- crates/prw-agent/src/local_commands/request_processor.rs
+- contracts/LOCAL_REQUEST_PROCESSOR_CONTRACT.md
+- docs/architecture/PHASE_040_REQUEST_PROCESSOR.md
+
+VALIDATION HISTORY
+
+Run 80
+- Run ID: 31883550079
+- Commit: b56a916633edefbc7eb08e9c3bbc17d82889569f
+- Result: FAILURE
+- Cause: rustfmt-only reflows in request_processor.rs.
+- Clippy, tests, and build were skipped.
+
+Run 81
+- Run ID: 31883629667
+- Commit: 1da16bd69bfb871557eed133bcaaf109f7cdc9b7
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: valid allowed Request reaches policy exactly once and builds correlated success
+PASS: valid denied Request reaches policy exactly once and builds correlated Unauthorized
+PASS: unknown command is rejected before policy evaluation
+PASS: truncated Request is rejected before policy evaluation
+PASS: no response bytes are written by the processor
+
+AUTHENTICATION BOUNDARY
+
+The policy evaluator remains assumed to be selected/bound by future runtime code only after peer authentication. Phase 040 does not authenticate identity or acquire peer credentials.
+
+RUNTIME MUTATION STATEMENT
+
+Phase 040 performs generic Read operations only. It owns/creates no socket, writes no response transport bytes, mutates no DNS/network/tracker state, performs no authentication, starts no task/thread, accesses no database, activates no systemd unit, deploys nothing, and performs no private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Add a response-side generic Write guard with its own absorbing write-poisoned state. Validate the terminal frame before I/O; any write failure poisons that response-writer state and blocks later writes on the same logical connection instance.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 040 implementation-validation report.
+GitHub Actions run 31883629667 is the authoritative executable validation evidence.
