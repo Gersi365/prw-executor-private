@@ -1,0 +1,106 @@
+Private Remote Workspace
+Phase 084 Linux One-Shot Capacity-Gated Scheduler Transaction
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 9aba616b42a2bd6a8319bb573a792bb4c156949a
+Authoritative GitHub Actions run: 31896863014
+Phase 083 authoritative report commit: 4411f90a1d46d8e778c2227cdf542859d5eb199f
+
+PURPOSE
+
+Compose the validated local Linux runtime primitives into exactly one capacity-gated scheduling attempt without introducing an accept loop, poller, or Agent bootstrap activation.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_one_shot_scheduler.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_084_LINUX_ONE_SHOT_SCHEDULER.md
+
+STRICT ORDERING
+
+One scheduling call performs:
+
+1. acquire one Phase 075 worker permit;
+2. if capacity is full, return AtCapacity without touching the listener;
+3. perform exactly one Phase 070 authenticated accept attempt;
+4. if no connection is queued, release the temporary permit and return NoConnectionReady;
+5. create the Phase 082 cancellation clone while borrowing the authenticated accepted connection;
+6. consume the accepted outcome through the Phase 071 authenticated-session bridge;
+7. spawn exactly one Phase 078 scoped worker using the Phase 076 worker configuration and only the Phase 083 BoundedLocalReadPolicy;
+8. register the scoped handle together with its matching cancellation authority in the Phase 080/082 registry;
+9. return WorkerRegistered.
+
+POLICY BOUNDARY
+
+The scheduling API accepts only BoundedLocalReadPolicy. It does not accept a generic/arbitrary PolicyEvaluator, preserving the Phase 081 restriction against potentially blocking external policy evaluation in the initial runtime path.
+
+FAIL-CLOSED BEHAVIOR
+
+- capacity full: zero accept attempt;
+- no-ready: acquired permit released and no registry entry;
+- accept failure: owned permit/connection state is dropped;
+- cancellation-clone failure: connection is not spawned;
+- scoped-spawn failure: captured session/permit are disposed through the fallible spawn path and local cancellation authority is dropped;
+- registry mutation occurs only after successful worker spawn.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- a client/Request already queued in the kernel listener queue is not consumed while worker capacity is full;
+- after the held permit is released, the same queued connection is accepted, scheduled, processed, and produces the correlated response;
+- NoConnectionReady releases the temporary capacity permit and creates no registry entry;
+- successful scheduling creates exactly one worker registry entry and one active worker slot;
+- the scheduled idle worker can be cancelled and joined through the Phase 082 registry path;
+- capacity returns to zero after worker completion/cancellation;
+- existing listener lifecycle cleanup remains authoritative.
+
+VALIDATION
+
+Authoritative run 31896863014 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE DURING VALIDATION
+
+- initial run 31896761978 stopped only at rustfmt;
+- formatter-only corrections were applied to the Phase 084 scheduler/test scaffold;
+- a stale-content SHA update attempt was rejected by GitHub with 409 and made no mutation;
+- final run 31896863014 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 084:
+
+- performs at most one accept attempt and one worker spawn per call;
+- contains no loop/retry/poll/sleep;
+- does not reap existing workers automatically;
+- chooses no production capacity/backlog/deadline/Request-count values;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no authentication, remote network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Before a long-running scheduler exists, a bounded scheduling-cycle contract should define:
+
+- finished-worker reaping before new scheduling;
+- caller-supplied maximum scheduling attempts per cycle;
+- explicit caller-controlled shutdown state;
+- zero accept when shutdown is requested;
+- capacity-full behavior without busy looping;
+- completion evidence returned to the caller.
+
+FINAL CLASSIFICATION
+
+ONE_SHOT_CAPACITY_GATED_SCHEDULER_IMPLEMENTED / CAPACITY_BEFORE_ACCEPT / AUTH_CANCELLATION_BEFORE_SPAWN / BOUNDED_POLICY_ONLY / NO_ACCEPT_LOOP / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 084 report.
