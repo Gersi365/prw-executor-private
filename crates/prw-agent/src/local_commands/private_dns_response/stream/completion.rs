@@ -43,9 +43,7 @@ pub enum LocalPrivateDnsTrackedReadError {
 mod tests {
     use std::io::Cursor;
 
-    use super::{
-        LocalPrivateDnsTrackedReadError, read_decode_and_complete_private_dns_response,
-    };
+    use super::{LocalPrivateDnsTrackedReadError, read_decode_and_complete_private_dns_response};
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::LocalIpcFrameReadError;
     use crate::frame_object::writer::write_frame;
