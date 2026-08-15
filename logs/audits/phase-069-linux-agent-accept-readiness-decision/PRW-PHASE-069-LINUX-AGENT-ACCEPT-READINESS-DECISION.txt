@@ -1,0 +1,132 @@
+Private Remote Workspace
+Phase 069 Linux Agent Accept / Readiness Security Decision
+
+STATUS: DECISION_LOCKED / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY DESIGN / SECURITY ORDERING LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 068 authoritative report commit: 844c55f54ce751f1b979cbeae0177dcb49aa3b1e
+Phase 068 validated source head: 6416861d47dfa45d14cf0b6ea185077b26f0f82a
+Phase 068 authoritative validation run: 31892620041
+Phase 069 contract commit: 07a590d05a20ea113c69d1059a21d3c77afbfbe3
+
+PURPOSE
+
+Lock the accept blocking/readiness policy and accepted-peer security ordering before introducing the first production accept operation for the filesystem-backed Linux PRW Agent listener.
+
+EVIDENCE REVIEWED
+
+The review confirmed the current validated/runtime contracts already establish:
+
+- Phase 052 caller-bounded application Request processing over an already-authenticated generic stream;
+- Phase 053 requirement that accepted streams must pass kernel SO_PEERCRED same-UID authentication before application processing;
+- Phase 058 same-effective-UID authorization with no application-byte consumption;
+- Phase 059 typed authenticated connected-stream ownership;
+- Phase 060 authenticated application-session composition;
+- Phase 064 mandatory accepted-connection ordering;
+- Phase 065 single-instance authority;
+- Phase 066 locked stale socket-path transaction;
+- Phase 067 descriptor-anchored bound socket with post-bind identity/mode validation;
+- Phase 068 one-way bound-to-listening transition with explicit caller backlog and no accept/readiness policy.
+
+DECISION 1 — LISTENER READINESS MODE
+
+The production listening socket must be nonblocking before accept is exposed.
+
+The next implementation phase will make nonblocking status a listener-lifetime property at socket creation time, alongside close-on-exec, rather than introducing a later mutable fcntl transition.
+
+Reason: a blocking accept could suspend indefinitely with no queued client and would introduce an unreviewed transport wait policy beneath the caller-bounded architecture.
+
+DECISION 2 — ONE-SHOT ACCEPT ONLY
+
+The accept adapter performs at most one kernel accept attempt per invocation.
+
+Outcomes are separated into:
+
+- authenticated connection accepted;
+- no connection currently ready (EAGAIN/EWOULDBLOCK) as a normal readiness outcome;
+- bounded accept failure;
+- bounded peer-authorization failure.
+
+The adapter performs no internal retry, spin, sleep, poll, timeout, thread/task creation, or accept loop.
+
+DECISION 3 — ACCEPTED STREAM REMAINS BLOCKING
+
+The listener is nonblocking, but the accepted connected stream remains blocking.
+
+The accepted descriptor must be close-on-exec and must not request a nonblocking accepted-socket flag.
+
+This preserves the already validated Phase 059/060 std::io::Read/Write behavior. A future nonblocking/async application-stream model would require a separate reviewed change.
+
+DECISION 4 — AUTHENTICATION IS IMMEDIATE AND TYPE-GATED
+
+The accepted raw connected stream remains inside the Linux crate-internal adapter.
+
+Mandatory ordering:
+
+accept -> Phase 059 AuthenticatedLocalLinuxConnection::try_new -> Linux SO_PEERCRED -> exact same-effective-UID authorization -> only then expose authenticated connection/session construction.
+
+On authentication failure the rejected stream is closed/dropped before returning the bounded authorization error. No PRW application-protocol byte may be read first.
+
+DECISION 5 — LISTENER LIFECYCLE IS UNAFFECTED BY ONE ACCEPT
+
+Accepting, rejecting, or observing no-ready must not alter:
+
+- agent.sock filesystem identity or mode;
+- the validated PRW runtime-directory descriptor;
+- the Phase 065 instance lock;
+- stale-path/bind/cleanup ownership;
+- listener backlog state beyond normal kernel queue behavior.
+
+The listening object remains usable for later one-shot accept calls until an explicit future runtime orchestration layer stops accepting and initiates existing cleanup.
+
+DEFERRED ORCHESTRATION
+
+Phase 069 deliberately does not choose:
+
+- poll/ppoll/epoll;
+- an async runtime;
+- a listener thread;
+- accept batching;
+- connection concurrency limits;
+- wall-clock timeout policy;
+- cancellation;
+- per-connection worker/task scheduling;
+- Agent bootstrap/service wiring.
+
+These are higher-level runtime orchestration decisions and are not needed to implement a safe nonblocking one-shot accept primitive.
+
+NEXT SAFE IMPLEMENTATION
+
+Phase 070 may implement only:
+
+1. nonblocking status on the Phase 067 listener socket creation;
+2. a crate-internal one-shot accept adapter over Phase 068 ListeningAgentSocket;
+3. close-on-exec accepted descriptor creation;
+4. conversion to the existing connected stream type;
+5. immediate Phase 059 same-UID authenticated wrapper construction;
+6. typed no-ready / accept-failure / authorization-failure outcomes;
+7. focused temporary Linux tests proving nonblocking listener + blocking authenticated accepted stream semantics.
+
+Phase 070 must not implement an accept loop, application session loop wiring, bootstrap activation, systemd activation, or runtime concurrency.
+
+MUTATION STATEMENT
+
+Phase 069 changes only repository contract/audit documentation.
+
+It:
+- does not alter Rust source;
+- does not bind/listen/accept/connect in production;
+- does not create/remove runtime paths;
+- does not change socket flags in production;
+- does not activate the Agent bootstrap or a service;
+- changes no authentication policy, database, network, DNS, TUN, private-key, or deployment state.
+
+FINAL CLASSIFICATION
+
+NONBLOCKING_LISTENER_LOCKED / ONE_SHOT_ACCEPT_LOCKED / BLOCKING_CLOEXEC_ACCEPTED_STREAM_LOCKED / SO_PEERCRED_BEFORE_APPLICATION_BYTES_LOCKED / READY_FOR_PHASE_070_IMPLEMENTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 069 decision report.
