@@ -13,7 +13,7 @@ use super::deadline_io::LocalLinuxIoBudget;
 use super::one_shot_scheduler::LocalLinuxOneShotScheduleError;
 use super::runtime_orchestration::{
     LocalLinuxRuntimeOrchestrationError, LocalLinuxRuntimeOrchestrationReport,
-    LocalLinuxRuntimeOrchestrationStop,
+    LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulingCycleError,
 };
 use super::runtime_readiness::LocalLinuxRuntimeReadinessError;
 use super::session_worker::LocalLinuxSessionWorkerConfig;
@@ -138,6 +138,22 @@ impl LocalLinuxProductionRuntimeCounters {
             .add_usize(report.readiness_completions().len());
         self.worker_completions
             .add_usize(report.scheduling_completions().len());
+    }
+
+    /// Records evidence accumulated before one scheduling failure.
+    pub fn record_scheduling_error(&mut self, error: &LocalLinuxRuntimeSchedulingCycleError) {
+        self.readiness_steps.increment();
+        self.listener_armed_steps.increment();
+        self.scheduling_attempts
+            .add_usize(error.scheduling_attempts());
+        self.workers_registered
+            .add_usize(error.workers_registered());
+        self.worker_completions.add_usize(error.completions().len());
+    }
+
+    /// Records worker completions joined during the final shutdown transaction.
+    pub fn record_final_completions(&mut self, count: usize) {
+        self.worker_completions.add_usize(count);
     }
 
     /// Records one connection-local peer-authorization rejection.

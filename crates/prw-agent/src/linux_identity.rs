@@ -20,9 +20,10 @@
 //! capacity-aware blocking readiness wait step, Phase 092 adds finite
 //! readiness-plus-completion-wake scheduling orchestration, and Phase 095 adds
 //! immutable production-runtime configuration plus bounded evidence/disposition
-//! types, and Phase 096 adds scoped lifecycle resource assembly with explicit
-//! listener rollback/cleanup. The Agent bootstrap remains inactive and no
-//! long-running runtime loop is enabled.
+//! types, Phase 096 adds scoped lifecycle resource assembly with explicit
+//! listener rollback/cleanup, and Phase 097 adds the callable programmatic-
+//! shutdown long-running runtime loop. The Agent bootstrap remains inactive;
+//! `main.rs`, OS signals, and systemd still do not start this loop.
 
 #[allow(
     dead_code,
@@ -90,6 +91,12 @@ pub mod peer_auth;
 )]
 #[path = "linux_production_lifecycle.rs"]
 pub mod production_lifecycle;
+#[allow(
+    dead_code,
+    reason = "pre-bootstrap Linux production runtime loop is intentionally crate-internal"
+)]
+#[path = "linux_production_runtime_loop.rs"]
+pub mod production_runtime_loop;
 #[allow(
     dead_code,
     reason = "pre-bootstrap Linux production runtime types are intentionally crate-internal"

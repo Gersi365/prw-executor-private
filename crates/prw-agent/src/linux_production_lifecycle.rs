@@ -218,7 +218,7 @@ where
 }
 
 #[cfg(test)]
-fn with_local_linux_production_lifecycle_in_root_path<R, F>(
+pub(super) fn with_local_linux_production_lifecycle_in_root_path<R, F>(
     root_path: &std::path::Path,
     config: LocalLinuxProductionRuntimeConfig,
     operation: F,
