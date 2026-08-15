@@ -1,0 +1,142 @@
+Private Remote Workspace
+Phase 004 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 004
+SCOPE: Device identity public-key and signature encoding contract lock
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 004 base commit: 96d37e9a90c55dd9ac5e4e79d2ba03e9f7dec85e
+Validated source commit: 6736cb17e8faa88a8475575c2e8308211afef4f0
+Validated GitHub Actions run: 31877070885
+
+DECISIONS
+
+1. Device identity public-key encoding
+- Repository identifier: SubjectPublicKeyInfoDer
+- Meaning: DER-encoded X.509 SubjectPublicKeyInfo.
+- ECC algorithm identifier: id-ecPublicKey.
+- Named curve: secp256r1 / NIST P-256.
+- Standards basis: RFC 5480.
+
+2. Device identity signature encoding
+- Repository identifier: EcdsaSigValueDer
+- Meaning: DER-encoded RFC 3279 ECDSA-Sig-Value.
+- ASN.1 structure: SEQUENCE { r INTEGER, s INTEGER }.
+
+3. Explicit metadata rule
+- Algorithm and encoding identifiers are carried explicitly.
+- They must not be inferred from byte length, byte prefix, or platform origin.
+- Signature bytes are not stable object identifiers.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-control-plane/src/lib.rs
+- Added DeviceIdentityPublicKeyEncoding with SubjectPublicKeyInfoDer.
+- Added DeviceIdentitySignatureEncoding with EcdsaSigValueDer.
+- PublicIdentityMaterial now preserves explicit algorithm + public-key encoding + non-empty bytes.
+- Added DeviceIdentitySignature preserving explicit algorithm + signature encoding + non-empty bytes.
+- Added focused tests for empty rejection and metadata preservation.
+- No DER parser, sign/verify implementation, private-key type, or crypto dependency was added.
+
+2. contracts/API_CONTRACT.md
+- Advanced contract version to 0.4.0.
+- Locked public-key and signature serialization identifiers.
+- Recorded strict future parser/provider requirements and explicit deferrals.
+
+3. contracts/SECURITY_MODEL.md
+- Advanced model version to 0.4.0.
+- Recorded RFC 5480 and RFC 3279 representation boundaries.
+- Preserved separation of device identity and transport identity.
+- Preserved on-device private-key direction without selecting a backend.
+
+4. docs/architecture/PHASE_004_DEVICE_IDENTITY_ENCODING.md
+- Recorded decision, rationale, standards/platform references, validation boundary, and explicit deferrals.
+
+5. .github/workflows/phase-001-rust-validation.yml
+- Changed visible workflow name from "Phase 001 Rust Validation" to "PRW Rust Validation".
+- Changed concurrency-group prefix accordingly.
+- Validation commands and audit paths-ignore behavior remain unchanged.
+- Purpose: future GitHub notifications identify the repository-wide validation workflow accurately rather than implying that later phases are Phase 001 work.
+
+SOURCE DELTA SUMMARY
+
+Net files changed relative to Phase 004 base: 5
+- modified: .github/workflows/phase-001-rust-validation.yml
+- modified: contracts/API_CONTRACT.md
+- modified: contracts/SECURITY_MODEL.md
+- modified: crates/prw-control-plane/src/lib.rs
+- added: docs/architecture/PHASE_004_DEVICE_IDENTITY_ENCODING.md
+
+VALIDATION
+
+GitHub Actions run 31877070885
+Commit: 6736cb17e8faa88a8475575c2e8308211afef4f0
+Workflow display name: PRW Rust Validation
+Result: SUCCESS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+CONNECTOR INCIDENT AND RECOVERY EVIDENCE
+
+During Phase 004 preparation, an erroneous connector action created a temporary root file named "nonexistent" containing one byte-string value "x".
+
+Accidental commit:
+- 4c02eb302d425b56f7c91c45e0580808c1aa7f5c
+- File: nonexistent
+- This was not an authorized product/source change and was immediately classified as a procedural connector incident.
+
+Recovery commit:
+- 29db86cca900d3414d2b1cb39d1b11a83cee8cf7
+- Removed exactly the accidental file through a normal forward commit.
+- No force update, history rewrite, reset, or destructive branch rewrite was used.
+- The recovery commit tree is byte-identical to the Phase 003 completion tree: 4bc64a0b0ce4799d62158817e387e5d4e24c7d85.
+
+Incident validation runs:
+- Run 10 / 31877041462: SUCCESS on accidental commit.
+- Run 11 / 31877049910: SUCCESS on recovery commit.
+
+Net-delta verification from Phase 004 base to validated Phase 004 source shows only the five authorized Phase 004 files listed above; the accidental file has no residual repository content.
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 004 did not:
+- generate, store, or expose private keys;
+- add a cryptography dependency;
+- sign or verify messages;
+- implement ASN.1 parsing;
+- implement account authentication;
+- implement enrollment networking;
+- add a database or migration;
+- start a network listener;
+- configure DNS, TUN, or WireGuard;
+- implement NAT traversal or relay runtime;
+- activate services;
+- deploy infrastructure.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- concrete cryptographic provider/library;
+- Android Keystore policy details;
+- Ubuntu private-key backend;
+- strict DER parsing and EC-point validation;
+- ECDSA signing/verification execution;
+- ECDSA low-S policy;
+- proof-of-possession message semantics;
+- key attestation, backup, recovery, and rotation;
+- transport-key cryptography;
+- control-plane wire protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 004 implementation-validation report.
+GitHub Actions run 31877070885 is the authoritative executable validation evidence for validated source commit 6736cb17e8faa88a8475575c2e8308211afef4f0.
