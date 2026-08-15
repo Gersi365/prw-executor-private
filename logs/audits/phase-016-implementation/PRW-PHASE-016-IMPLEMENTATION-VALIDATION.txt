@@ -1,0 +1,145 @@
+Private Remote Workspace
+Phase 016 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 016
+SCOPE: Pure local response-status prefix codec
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 016 base commit: f4b31c9f40e2346cf474aba251883fea7c3271cb
+Validated source commit: f2d10c2bdacd46b046569e27cea812f6429a29b2
+Validated GitHub Actions run: 31878980916
+
+LOCKED RESPONSE PREFIX
+
+Every future terminal local Agent response payload begins with exactly two bytes containing one unsigned 16-bit Phase 008 response-status identifier in big-endian/network byte order.
+
+Mappings:
+- Ok -> 00 00
+- InvalidRequest -> 00 01
+- Unauthorized -> 00 02
+- UnsupportedCommand -> 00 03
+- Conflict -> 00 04
+- InternalError -> 00 05
+
+Any bytes after the two-byte status prefix remain command-specific body bytes and are preserved unchanged by the Phase 016 codec.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported response_codec module.
+- Added LocalAgentResponseStatus::from_code() as the inverse of the existing code() mapping.
+- Added is_success(), defining Ok as the only current success status.
+- Existing command, request-envelope, response-envelope, and request-tracker semantics remain unchanged.
+
+2. crates/prw-agent/src/local_commands/response_codec.rs
+- Added LOCAL_AGENT_RESPONSE_STATUS_PREFIX_LENGTH = 2.
+- Added encode_response_status().
+- Added decode_response_status_prefix().
+- Added MissingStatus and UnknownStatus fail-closed errors.
+- Decoder returns the untouched body slice after the status prefix.
+- Added focused tests for prefix length, big-endian codes, all-status round trips, body preservation, missing prefix, and unknown status rejection.
+
+3. contracts/LOCAL_RESPONSE_STATUS_CODEC_CONTRACT.md
+- Added normative response-status prefix contract.
+- Explicitly deferred command-specific response bodies and outer frame-kind/status coupling.
+
+4. docs/architecture/PHASE_016_LOCAL_RESPONSE_STATUS_CODEC.md
+- Recorded rationale, inverse mapping, fail-closed behavior, serializer deferral, and next response-schema boundary.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 016 base: 4
+- added: contracts/LOCAL_RESPONSE_STATUS_CODEC_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/response_codec.rs
+- added: docs/architecture/PHASE_016_LOCAL_RESPONSE_STATUS_CODEC.md
+
+VALIDATION HISTORY
+
+Run 32
+- Run ID: 31878930774
+- Commit: 7f6736db4db28d78b756454901d335b4fcf50f10
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow in response_codec.rs and one response-status test assertion in local_commands.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- f2d10c2bdacd46b046569e27cea812f6429a29b2
+- Change: exact rustfmt-only corrections in the two Phase 016 source files.
+- Status identifiers, body preservation, decoding rules, dependencies, and runtime behavior unchanged.
+
+Run 33
+- Run ID: 31878980916
+- Commit: f2d10c2bdacd46b046569e27cea812f6429a29b2
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: response-status prefix locked to two bytes
+PASS: stable big-endian status encoding
+PASS: all current statuses encode/decode round trip
+PASS: command-specific body bytes preserved unchanged
+PASS: missing status prefix rejected
+PASS: unknown status identifier rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 016 did not:
+- define or execute command-specific response bodies;
+- dispatch or execute commands;
+- bind/listen/accept/connect a socket;
+- add a serialization dependency;
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 016.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 016 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- typed Agent status response body;
+- bounded private-DNS response body;
+- response-body byte codecs;
+- outer Response/Error frame-kind + status invariant;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 016 implementation-validation report.
+GitHub Actions run 31878980916 is the authoritative executable validation evidence for source commit f2d10c2bdacd46b046569e27cea812f6429a29b2.
