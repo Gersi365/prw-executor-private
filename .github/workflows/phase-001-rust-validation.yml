@@ -1,4 +1,4 @@
-name: Phase 001 Rust Validation
+name: PRW Rust Validation
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase-001-rust-validation-${{ github.ref }}
+  group: prw-rust-validation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
