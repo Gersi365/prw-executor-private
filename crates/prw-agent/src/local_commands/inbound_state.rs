@@ -245,13 +245,11 @@ mod tests {
             ),
             Err(LocalInboundTransactionError::Transaction(
                 LocalRequestResponseTransactionError::RequestProcessing(
-                    LocalRequestProcessorError::Request(
-                        LocalAgentRequestStreamReadError::Decode(
-                            LocalAgentRequestFrameDecodeError::Command(
-                                LocalAgentRequestDecodeError::UnknownCommand
-                            )
+                    LocalRequestProcessorError::Request(LocalAgentRequestStreamReadError::Decode(
+                        LocalAgentRequestFrameDecodeError::Command(
+                            LocalAgentRequestDecodeError::UnknownCommand
                         )
-                    )
+                    ))
                 )
             ))
         );
