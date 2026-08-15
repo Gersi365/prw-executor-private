@@ -90,7 +90,9 @@ const fn map_request_id_error(error: LocalIpcRequestIdError) -> LocalIpcFrameDec
 
 const fn map_header_error(error: LocalIpcFrameHeaderError) -> LocalIpcFrameDecodeError {
     match error {
-        LocalIpcFrameHeaderError::UnsupportedVersion => LocalIpcFrameDecodeError::UnsupportedVersion,
+        LocalIpcFrameHeaderError::UnsupportedVersion => {
+            LocalIpcFrameDecodeError::UnsupportedVersion
+        }
         LocalIpcFrameHeaderError::PayloadTooLarge => LocalIpcFrameDecodeError::PayloadTooLarge,
     }
 }
