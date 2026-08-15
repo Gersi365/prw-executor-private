@@ -1,0 +1,118 @@
+Private Remote Workspace
+Phase 003 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 003
+SCOPE: Device identity signature primitive contract lock
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 003 base commit: 088defaf11d7279facc6ceff4b60e15f573883dd
+Validated source commit: 9088a00fc9b9f6c3e79dc403f1b4b6cc39218b30
+Validated source commits ahead of base: 2
+
+DECISION
+
+The initial device-identity signature primitive is ECDSA over NIST P-256 with SHA-256.
+Repository algorithm identifier: EcdsaP256Sha256.
+
+This lock applies only to device identity. Device identity and future transport identity remain separate cryptographic roles.
+
+RATIONALE BOUNDARY
+
+The decision was made from primary platform and standards evidence:
+- NIST FIPS 186-5 defines ECDSA as a digital-signature technique.
+- NIST SP 800-186 specifies recommended elliptic-curve domain parameters including NIST prime curves.
+- Android Keystore documentation supports EC key generation through KeyGenParameterSpec from API level 23 and provides a NIST P-256 signing example.
+- Android Signature API documents Ed25519 from API level 33.
+
+For the current Ubuntu + Android targets, P-256 therefore provides a broader route to Android OS-backed key storage than an Ed25519-only baseline while remaining a standardized cross-platform signature primitive.
+
+This is an architecture inference from platform compatibility and standards. It does not assert identical hardware-backed security across Android devices.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-control-plane/src/lib.rs
+- Added non-exhaustive DeviceIdentityAlgorithm.
+- Added EcdsaP256Sha256.
+- PublicIdentityMaterial now carries an explicit algorithm plus non-empty opaque public bytes.
+- Algorithm selection cannot be inferred implicitly from byte length.
+- Added algorithm getter and focused preservation test.
+- No private-key type, crypto execution, or provider dependency was added.
+
+2. contracts/API_CONTRACT.md
+- Advanced contract version to 0.3.0.
+- Locked EcdsaP256Sha256 as the initial device-identity algorithm identifier.
+- Preserved deferred public-key/signature encoding, provider, key storage, attestation, rotation, and recovery decisions.
+
+3. contracts/SECURITY_MODEL.md
+- Advanced model version to 0.3.0.
+- Locked P-256/SHA-256 for device identity only.
+- Preserved separation between device identity and transport identity.
+- Preserved on-device private-key direction without choosing a backend.
+
+4. docs/architecture/PHASE_003_DEVICE_IDENTITY.md
+- Recorded the decision, rationale, standards/platform references, explicit deferrals, and validation requirements.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 003 base: 4
+- modified: contracts/API_CONTRACT.md
+- modified: contracts/SECURITY_MODEL.md
+- modified: crates/prw-control-plane/src/lib.rs
+- added: docs/architecture/PHASE_003_DEVICE_IDENTITY.md
+
+VALIDATION HISTORY
+
+Run 8
+- Run ID: 31876691839
+- Commit: 745890e68f7f8be05f5db579f7d8aeb00d92402c
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required two formatting-only changes in Phase 003 tests.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- 9088a00fc9b9f6c3e79dc403f1b4b6cc39218b30
+- Change: exact rustfmt-only corrections.
+- No contract semantics, algorithm selection, domain logic, dependency, or runtime behavior changed.
+
+Run 9
+- Run ID: 31876719147
+- Commit: 9088a00fc9b9f6c3e79dc403f1b4b6cc39218b30
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+EXPLICIT DEFERRALS
+
+Phase 003 did not:
+- add a Rust cryptography dependency;
+- generate or store a private key;
+- select Android Keystore implementation details or require StrongBox;
+- select an Ubuntu private-key provider;
+- define public-key wire encoding;
+- define signature wire encoding;
+- define key attestation, backup, recovery, or rotation;
+- select transport-key cryptography;
+- implement enrollment networking;
+- implement account authentication;
+- start a listener;
+- add a database or migration;
+- configure DNS/TUN/WireGuard;
+- implement NAT traversal or relay runtime;
+- deploy infrastructure.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the authoritative user-facing Phase 003 implementation-validation report.
+GitHub Actions run 31876719147 is the authoritative executable validation evidence for source commit 9088a00fc9b9f6c3e79dc403f1b4b6cc39218b30.
