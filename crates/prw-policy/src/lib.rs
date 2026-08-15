@@ -6,6 +6,10 @@
 /// is implemented merely because it is represented in the domain model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
+    /// Read the Agent's bounded local runtime status snapshot.
+    AgentStatusRead,
+    /// Read the effective bounded private-DNS configuration snapshot.
+    PrivateDnsConfigRead,
     /// Open a terminal session.
     TerminalOpen,
     /// Execute a command through an authorized terminal/session mechanism.
@@ -35,7 +39,9 @@ pub enum Decision {
 
 /// A policy evaluator can decide whether a capability is granted.
 ///
-/// Phase 001 provides only the interface boundary.
+/// The evaluator is intentionally principal-agnostic at this interface layer.
+/// Runtime code must bind/select an evaluator only after authenticating the
+/// relevant principal; representing a capability does not authenticate anyone.
 pub trait PolicyEvaluator {
     /// Evaluates a requested capability.
     fn evaluate(&self, capability: Capability) -> Decision;
@@ -57,5 +63,12 @@ mod tests {
     fn evaluator_can_deny_capability() {
         let evaluator = DenyAll;
         assert_eq!(evaluator.evaluate(Capability::FilesDelete), Decision::Deny);
+    }
+
+    #[test]
+    fn local_read_capabilities_are_distinct() {
+        assert_ne!(Capability::AgentStatusRead, Capability::PrivateDnsConfigRead);
+        assert_ne!(Capability::AgentStatusRead, Capability::FilesRead);
+        assert_ne!(Capability::PrivateDnsConfigRead, Capability::FilesRead);
     }
 }
