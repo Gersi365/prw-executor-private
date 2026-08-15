@@ -1,0 +1,133 @@
+name: Phase 092 Integration Preflight
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase-092-integrate-preflight.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply deterministic Phase 092 integration corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/prw-agent/src/linux_runtime_orchestration.rs")
+          text = path.read_text()
+
+          replacements = [
+              (
+                  "use super::worker_cancellation::{\n    LocalLinuxWorkerCancellation, LocalLinuxWorkerCancellationCreateError,\n};",
+                  "use super::worker_cancellation::LocalLinuxWorkerCancellation;",
+                  1,
+              ),
+              (
+                  "use std::io::Read;\n",
+                  "",
+                  1,
+              ),
+              (
+                  "use super::{\n        LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulerContext,\n        LocalLinuxRuntimeShutdownHandle, run_finite_linux_runtime_orchestration,\n    };",
+                  "use super::{\n        LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulerContext,\n        LocalLinuxRuntimeShutdownHandle, run_finite_linux_runtime_orchestration,\n        wait_once_for_linux_runtime_readiness,\n    };",
+                  1,
+              ),
+              (
+                  "use crate::linux_identity::accept_ready::{\n        AuthenticatedAgentAcceptOutcome, prepare_accept_ready_agent_socket,\n    };",
+                  "use crate::linux_identity::accept_ready::{\n        AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome,\n        prepare_accept_ready_agent_socket,\n    };",
+                  1,
+              ),
+              (
+                  "use crate::linux_identity::{AcceptReadyAgentSocket, xdg_runtime_root};",
+                  "use crate::linux_identity::xdg_runtime_root;",
+                  1,
+              ),
+              (
+                  "fn cleanup(self, listener: AcceptReadyAgentSocket<'_>) {",
+                  "fn cleanup(&self, listener: AcceptReadyAgentSocket<'_>) {",
+                  1,
+              ),
+              (
+                  "            let cancellations = registry.cancel_all();\n            assert!(cancellations.is_empty());\n            let remaining = registry.join_all();\n            assert!(remaining.is_empty());",
+                  "            let _ = registry.cancel_all();\n            let _ = registry.join_all();",
+                  1,
+              ),
+          ]
+
+          for old, new, expected in replacements:
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"expected {expected} occurrence(s) of {old!r}, found {count}")
+              text = text.replace(old, new, expected)
+
+          policy_old = "BoundedLocalReadPolicy::allow_all_local_reads()"
+          policy_count = text.count(policy_old)
+          if policy_count != 4:
+              raise SystemExit(f"expected 4 old policy constructors, found {policy_count}")
+          text = text.replace(policy_old, "BoundedLocalReadPolicy::allow_local_reads()")
+
+          start_marker = "    #[test]\n    fn worker_completion_wake_precedes_dispatch_of_second_queued_client() {"
+          end_marker = "    #[test]\n    fn shutdown_state_is_committed_before_wake_and_prevents_queued_accept() {"
+          start = text.find(start_marker)
+          end = text.find(end_marker)
+          if start == -1 or end == -1 or end <= start:
+              raise SystemExit("Phase 092 deterministic test replacement markers not found")
+
+          replacement_test = '''    #[test]\n    fn worker_completion_wake_restores_capacity_for_next_client() {\n        let fixture = RuntimeFixture::new("completion-restores-capacity");\n        let socket_path = fixture.socket_path();\n        let listener = fixture.listener();\n        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");\n        let capacity = worker_capacity(1);\n        let policy = BoundedLocalReadPolicy::allow_local_reads();\n        let dns = dns_snapshot();\n        let control = LocalLinuxSchedulerControl::new();\n        let context = context(&capacity, &policy, &dns, &wake, 1);\n        let first_client = UnixStream::connect(&socket_path).expect("first client connects");\n\n        thread::scope(|scope| {\n            let mut registry = LocalLinuxScopedWorkerRegistry::new();\n            let first = run_finite_linux_runtime_orchestration(\n                scope,\n                &listener,\n                &wake,\n                &mut registry,\n                &control,\n                &context,\n                NonZeroUsize::new(1).expect("attempt budget is nonzero"),\n            )\n            .expect("first client schedules");\n            assert_eq!(first.workers_registered(), 1);\n            assert_eq!(capacity.active_workers(), 1);\n            assert_eq!(\n                wake.drain(),\n                Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)\n            );\n\n            drop(first_client);\n\n            let completion = wait_once_for_linux_runtime_readiness(\n                &listener,\n                &wake,\n                &capacity,\n                &mut registry,\n                &control,\n            )\n            .expect("first completion wake is observed");\n            assert_eq!(\n                completion.outcome(),\n                crate::linux_identity::runtime_readiness::LocalLinuxRuntimeReadinessOutcome::RuntimeWake\n            );\n            assert_eq!(capacity.active_workers(), 0);\n\n            let mut second_client =\n                UnixStream::connect(&socket_path).expect("second client connects after wake");\n            write_local_command_request(\n                &mut second_client,\n                id(701),\n                LocalAgentCommand::GetAgentStatus,\n            )\n            .expect("second request writes");\n\n            let second = run_finite_linux_runtime_orchestration(\n                scope,\n                &listener,\n                &wake,\n                &mut registry,\n                &control,\n                &context,\n                NonZeroUsize::new(1).expect("attempt budget is nonzero"),\n            )\n            .expect("released capacity permits next scheduling step");\n\n            assert_eq!(second.workers_registered(), 1);\n            assert_eq!(second.scheduling_attempts(), 1);\n            assert_eq!(\n                second.stop(),\n                LocalLinuxRuntimeOrchestrationStop::Scheduling(\n                    LocalLinuxSchedulingCycleStop::AttemptBudgetExhausted\n                )\n            );\n\n            let response = read_frame(&mut second_client).expect("second response reads");\n            let response =\n                decode_success_status_frame(&response).expect("second status response decodes");\n            assert_eq!(response.request_id(), id(701));\n\n            let _ = wait_once_for_linux_runtime_readiness(\n                &listener,\n                &wake,\n                &capacity,\n                &mut registry,\n                &control,\n            )\n            .expect("second completion wake is observed");\n            assert_eq!(capacity.active_workers(), 0);\n\n            let _ = registry.cancel_all();\n            let _ = registry.join_all();\n        });\n\n        fixture.cleanup(listener);\n    }\n\n'''
+          text = text[:start] + replacement_test + text[end:]
+
+          trivial_start = text.find("    #[test]\n    fn closed_client_after_scheduling_eventually_releases_stream() {")
+          if trivial_start == -1:
+              raise SystemExit("trivial closed-client test marker not found")
+          trivial_end = text.find("\n    }\n}", trivial_start)
+          if trivial_end == -1:
+              raise SystemExit("trivial closed-client test end not found")
+          text = text[:trivial_start] + text[trivial_end + len("\n    }"):]
+
+          path.write_text(text)
+
+          identity_path = Path("crates/prw-agent/src/linux_identity.rs")
+          identity = identity_path.read_text()
+          docs_old = "Phase 090 adds\n//! a runtime-specific worker completion wake wrapper, and Phase 091 adds one\n//! capacity-aware blocking readiness wait step. The Agent bootstrap remains\n//! inactive and no long-running accept/readiness loop is enabled."
+          docs_new = "Phase 090 adds\n//! a runtime-specific worker completion wake wrapper, Phase 091 adds one\n//! capacity-aware blocking readiness wait step, and Phase 092 adds finite\n//! readiness-plus-completion-wake scheduling orchestration. The Agent bootstrap\n//! remains inactive and no long-running accept/readiness loop is enabled."
+          if identity.count(docs_old) != 1:
+              raise SystemExit("Phase 092 identity documentation anchor mismatch")
+          identity = identity.replace(docs_old, docs_new, 1)
+
+          module_anchor = '''#[allow(\n    dead_code,\n    reason = "pre-runtime one-step Linux readiness wait is intentionally crate-internal"\n)]\n#[path = "linux_runtime_readiness.rs"]\npub mod runtime_readiness;\n'''
+          module_insert = module_anchor + '''#[allow(\n    dead_code,\n    reason = "pre-runtime finite Linux readiness/scheduling orchestration is intentionally crate-internal"\n)]\n#[path = "linux_runtime_orchestration.rs"]\npub mod runtime_orchestration;\n'''
+          if identity.count(module_anchor) != 1:
+              raise SystemExit("Phase 092 module insertion anchor mismatch")
+          identity = identity.replace(module_anchor, module_insert, 1)
+          identity_path.write_text(identity)
+          PY
+
+          cargo fmt --all
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_runtime_orchestration.rs | sort)"
+          test "$changed" = "$expected"
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          git diff --check
+
+      - name: Commit integrated preflight and self-delete
+        run: |
+          rm .github/workflows/phase-092-integrate-preflight.yml
+          git add crates/prw-agent/src/linux_identity.rs crates/prw-agent/src/linux_runtime_orchestration.rs .github/workflows/phase-092-integrate-preflight.yml
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git commit -m "Integrate Phase 092 finite runtime orchestration"
+          git push
