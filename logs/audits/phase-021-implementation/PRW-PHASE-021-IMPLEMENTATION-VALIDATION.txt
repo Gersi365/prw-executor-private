@@ -1,0 +1,122 @@
+Private Remote Workspace
+Phase 021 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 021
+SCOPE: Transactional terminal-response completion against outstanding-request state
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 021 base commit: f83a25759a1b0cb0fe9cec9104af2cb9c6ca93f7
+Validated source commit: 84dbf335fe525c7ce0e91e8d7ea9a62bb03a1fd2
+Validated GitHub Actions run: 31879928289
+
+LOCKED TRANSACTION ORDER
+
+1. validate the frame through the Phase 020 terminal-response validator;
+2. obtain the existing typed request ID from the validated response;
+3. complete that ID through LocalRequestTracker::complete();
+4. return the terminal response only after completion succeeds.
+
+Invalid terminal frames do not mutate request-tracker state. A valid terminal response for an unknown request ID does not remove any other request. A successfully completed ID is removed exactly once; replay then fails as UnknownRequestId until explicit re-registration.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported terminal_completion module.
+
+2. crates/prw-agent/src/local_commands/terminal_completion.rs
+- Added validate_and_complete_terminal_response().
+- Preserved Phase 020 terminal-response errors separately from Phase 013 tracker errors.
+- Mutates tracker state only after terminal-frame validation succeeds.
+- Uses the existing LocalRequestTracker::complete() transition; no parallel tracker implementation was introduced.
+
+3. contracts/LOCAL_TERMINAL_COMPLETION_CONTRACT.md
+- Added normative operation ordering, exactly-once semantics, and failure-state preservation requirements.
+
+4. docs/architecture/PHASE_021_TERMINAL_COMPLETION.md
+- Recorded transaction rationale and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 021 base: 4
+- added: contracts/LOCAL_TERMINAL_COMPLETION_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/terminal_completion.rs
+- added: docs/architecture/PHASE_021_TERMINAL_COMPLETION.md
+
+VALIDATION HISTORY
+
+Run 42
+- Run ID: 31879928289
+- Commit: 84dbf335fe525c7ce0e91e8d7ea9a62bb03a1fd2
+- Result: SUCCESS
+- No corrective commit was required.
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: valid Response+Ok completes exactly one known request and leaves another untouched
+PASS: valid Error+non-Ok completes its known request
+PASS: invalid terminal frame does not consume registered request state
+PASS: valid terminal response for unknown ID leaves unrelated request state untouched
+PASS: duplicate/replayed terminal response is rejected after first completion
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 021 did not:
+- bind/listen/accept/connect a socket;
+- schedule timeouts or cancellation;
+- start tasks or threads;
+- dispatch or execute commands;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 021.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 021 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- timeout/cancellation and late-response policy;
+- terminal response frame builder/encode-side invariant;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 021 implementation-validation report.
+GitHub Actions run 31879928289 is the authoritative executable validation evidence for source commit 84dbf335fe525c7ce0e91e8d7ea9a62bb03a1fd2.
