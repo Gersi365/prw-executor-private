@@ -13,8 +13,9 @@
 //! body, Phase 078 adds one fallible scoped OS-thread spawn adapter, Phase 079
 //! adds explicit joined-worker completion classification, Phase 080 retains/reaps
 //! scoped worker handles, Phase 082 pairs them with authenticated-stream
-//! cancellation authority, and Phase 084 composes one capacity-gated scheduling
-//! transaction. The Agent bootstrap remains inactive and no accept loop is enabled.
+//! cancellation authority, Phase 084 composes one capacity-gated scheduling
+//! transaction, and Phase 086 adds a finite shutdown-gated scheduling cycle. The
+//! Agent bootstrap remains inactive and no long-running accept loop is enabled.
 
 #[allow(
     dead_code,
@@ -46,6 +47,12 @@ pub mod authenticated_session_bridge;
 )]
 #[path = "linux_agent_bound_socket.rs"]
 pub mod bound_socket;
+#[allow(
+    dead_code,
+    reason = "pre-runtime bounded Linux scheduling cycle is intentionally crate-internal"
+)]
+#[path = "linux_bounded_scheduler_cycle.rs"]
+pub mod bounded_scheduler_cycle;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux absolute-deadline I/O adapter is intentionally crate-internal"
