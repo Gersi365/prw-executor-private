@@ -1,0 +1,97 @@
+Private Remote Workspace
+Phase 082 Linux Worker Cancellation Authority and Registry Pairing
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: a1309c055b458d30801ef4f91170a271c55d4140
+Authoritative GitHub Actions run: 31896529573
+Phase 081 authoritative decision report commit: bbbd7573a7840eb19d8d6335af973ff2e096d98e
+
+PURPOSE
+
+Implement the Phase 081 worker shutdown authority before the first accept-and-spawn scheduler exists.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_worker_cancellation.rs
+- Phase 080 registry extension: crates/prw-agent/src/linux_worker_registry.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_082_LINUX_WORKER_CANCELLATION.md
+
+CANCELLATION AUTHORITY
+
+LocalLinuxWorkerCancellation is constructible only from an already-authenticated AuthenticatedLocalLinuxConnection<UnixStream>.
+
+Construction calls UnixStream::try_clone and retains the independently owned handle solely for terminal shutdown. The wrapper exposes no application Read/Write interface.
+
+cancel() issues shutdown(Shutdown::Both) and returns a bounded ShutdownFailed error if the operating system rejects the call.
+
+REGISTRY PAIRING
+
+Each Phase 080 registry entry now owns exactly:
+
+- one ScopedJoinHandle for the worker;
+- one LocalLinuxWorkerCancellation for the same underlying authenticated connection.
+
+cancel_all() issues shutdown on every retained cancellation authority without removing any worker handle.
+
+reap_finished() removes a finished entry, joins/classifies the worker through Phase 079, then drops the matching cancellation authority.
+
+join_all() joins/classifies all remaining workers and drops every paired cancellation authority.
+
+VALIDATED SHUTDOWN BEHAVIOR
+
+Linux runner tests prove:
+
+- cancellation clone construction occurs after same-UID authenticated wrapping;
+- shutdown(Both) is terminal for the shared connected stream;
+- finished-worker reaping leaves a running worker and its cancellation authority registered;
+- cancel_all() does not remove the worker handle and mandatory join remains possible;
+- a real Phase 078 worker blocked with a 5-second Request-read deadline is woken and joined in less than 2 seconds after cancel_all();
+- the worker-capacity count returns to zero after cancellation and join;
+- the cancellation terminal result may surface as clean EOF or the existing bounded worker error depending on kernel read completion semantics, and both are explicitly classified.
+
+VALIDATION
+
+Authoritative run 31896529573 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- initial run 31896454749 stopped only at rustfmt;
+- formatter-only corrections were applied to the cancellation and registry modules;
+- final run 31896529573 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 082:
+
+- implements no accept scheduler/loop;
+- acquires no worker capacity in production orchestration;
+- binds no runtime policy evaluator;
+- activates no Agent bootstrap/systemd/service state;
+- exposes no application I/O through cancellation handles;
+- changes no network/DNS/TUN/database/private-key/deployment state.
+
+NEXT SAFE STEP
+
+A one-shot scheduling transaction may now be designed with strict ordering:
+
+capacity permit -> one-shot authenticated accept -> cancellation clone -> authenticated session bridge -> scoped spawn -> registry registration.
+
+The initial runtime path must still use only a separately validated bounded/in-memory PolicyEvaluator; arbitrary potentially blocking evaluators remain outside the authorized runtime boundary.
+
+FINAL CLASSIFICATION
+
+AUTHENTICATED_WORKER_CANCELLATION_IMPLEMENTED / REGISTRY_HANDLE_PLUS_CANCELLATION / SHUTDOWN_WAKES_BLOCKING_IO / JOIN_REMAINS_MANDATORY / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 082 report.
