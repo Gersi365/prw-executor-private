@@ -1,6 +1,6 @@
 # Phase 095 — Linux Production Runtime Types
 
-Status: `INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -33,6 +33,24 @@ Initial integration run `31901374645` stopped safely at Clippy because three pur
 
 Phase 095-A01 run `31901410245` changed only those three functions to `const fn` and then passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and `git diff --check` before committing the integrated source and deleting both temporary workflows.
 
+## Authoritative permanent validation
+
+Permanent PRW Rust Validation run:
+
+`31901455301`
+
+Validated commit containing the integrated source:
+
+`0eda7626584e9205546929ba45e13139e05486bf`
+
+The permanent workflow passed:
+
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
 ## Boundary preserved
 
 Phase 095 does not implement:
@@ -44,4 +62,4 @@ Phase 095 does not implement:
 - systemd installation/activation;
 - deployment or public networking.
 
-Permanent PRW Rust Validation is now required on a commit containing the integrated source before Phase 095 is classified `IMPLEMENTED_AND_VALIDATED`.
+Phase 095 is therefore `IMPLEMENTED_AND_VALIDATED` below the production bootstrap boundary.
