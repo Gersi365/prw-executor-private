@@ -1,0 +1,213 @@
+Private Remote Workspace
+Phase 102 Linux Agent Standalone Binary Bootstrap
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / STANDALONE_BINARY_VALIDATED / NO_SYSTEMD_ACTIVATION / NO_DEPLOYMENT
+AUDIT TYPE: SOURCE INTEGRATION + REAL BINARY SUBPROCESS VALIDATION + PERMANENT CI
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 101 contract lock: f6334af4618429390cf32fa91a789614c9ad7ad2
+Bootstrap surface source commit: 937927fd2f6e6c9a71937769e061ee10734a1de8
+Binary proof integration commit: a2dc8574b4df8e7df8e54312a0d5e6be50475594
+Authoritative validation/documentation head: fa948706fa55e12f982d2f3a852a0652e91509b5
+Authoritative permanent CI run: 31904953430
+Exact Rust/Cargo: 1.97.1
+Workspace unsafe policy: unsafe_code = "forbid"
+
+PURPOSE
+
+Phase 102 wires the already-validated Phase 098 signal-aware production-local runtime into the real `prw-agent` executable while preserving the Phase 101 narrow public boundary, fixed bounded initial profile, bounded stderr contract, simple success/failure exit mapping, and explicit separation from systemd packaging/activation.
+
+PHASE 101 CONTRACT PRESERVED
+
+The integrated initial profile is exactly:
+
+- worker capacity: 2;
+- Unix listener backlog: 8;
+- scheduling attempts per listener-ready cycle: 2;
+- requests per session: 1;
+- read I/O budget: 2 seconds;
+- write I/O budget: 2 seconds;
+- policy: `BoundedLocalReadPolicy::allow_local_reads()`;
+- status snapshot: immutable `Ready`;
+- private DNS: `PrivateDnsConfig::default()` projected into the bounded local snapshot.
+
+No configuration-file parser, CLI override, live reload, environment-based capability expansion, or mandatory private DNS was introduced.
+
+PUBLIC API BOUNDARY
+
+Phase 102 adds one Linux-only public bootstrap facade:
+
+`prw_agent::linux_bootstrap`
+
+The existing Linux implementation graph remains crate-private:
+
+`pub(crate) mod linux_identity`
+
+The facade maps internal runtime evidence into bounded bootstrap-level terminal/startup classifications and fixed-size counters. It does not expose the Phase 057-098 lifecycle/socket/readiness/signal/scheduling/worker object graph.
+
+THIN BINARY BOUNDARY
+
+`crates/prw-agent/src/main.rs` now performs only:
+
+1. one call to `prw_agent::linux_bootstrap::run()`;
+2. one bounded stderr startup-failure or terminal-summary record;
+3. the Phase 101 success/failure `ExitCode` mapping.
+
+The binary does not implement its own socket creation, signal handling, worker threads, scheduling loop, configuration parser, systemd behavior, private-DNS mutation, or remote/public networking.
+
+EXIT CONTRACT
+
+Success requires all of:
+
+- normal handled terminal reason: SIGTERM, SIGINT, or clean programmatic shutdown;
+- clean listener/socket cleanup;
+- successful restoration of the prior runtime-thread signal mask.
+
+Every startup/lifecycle/runtime fatal class, cleanup failure, or signal-mask restoration failure maps to failure.
+
+STDERR CONTRACT
+
+The binary emits only one bounded record per tested lifetime outcome:
+
+- one startup-failure record if startup fails; or
+- one terminal summary after runtime return.
+
+The validated terminal output contains bounded high-level classifications/counters only and does not expose request payload data.
+
+SURFACE-INTEGRATION HISTORY
+
+Initial surface run 31904318295 stopped safely before integration because Rust 1.97.1 did not permit staged `Result::expect` calls inside the proposed const configuration constructor and one test import was missing.
+
+A01 run 31904357017 corrected those compile-only findings and stopped at two Clippy cleanliness findings.
+
+A02 run 31904396246 corrected those findings and stopped only at one missing-const Clippy finding.
+
+A03 run 31904436866 applied the accumulated mechanical corrections and passed locked metadata, rustfmt, Clippy `-D warnings`, all workspace/all-target tests, all workspace/all-target builds, and diff-check. Only then was source commit 937927fd2f6e6c9a71937769e061ee10734a1de8 created and the temporary surface workflows removed.
+
+Permanent surface checkpoint 31904558606 independently passed the permanent PRW Rust Validation workflow.
+
+REAL STANDALONE BINARY PROOF
+
+Committed proof:
+
+`crates/prw-agent/tests/phase_102_binary_bootstrap.rs`
+
+The test launches the actual Cargo-built `prw-agent` executable as child processes. It does not substitute direct library calls for the binary boundary.
+
+The proof is sequential and uses isolated temporary XDG runtime roots.
+
+Validated scenario A — SIGTERM:
+
+- real Agent binary starts under valid temporary XDG root;
+- Unix Agent socket becomes connectable;
+- SIGTERM is delivered to the child PID;
+- binary exits successfully;
+- stderr classifies `terminal=sigterm`, `exit=success`, clean cleanup, restored signal mask;
+- socket pathname is absent after exit.
+
+Validated scenario B — SIGINT:
+
+- same binary-level flow using SIGINT;
+- successful handled exit;
+- clean listener/socket cleanup;
+- restored signal mask;
+- no stale socket pathname.
+
+Validated scenario C — real same-UID local request:
+
+- test connects through the real Unix socket;
+- writes a real `GetAgentStatus` request frame with the public request writer;
+- reads/decodes the real successful status response with the public response reader;
+- request ID correlation is preserved;
+- runtime state is `Ready`;
+- protocol version is supported;
+- child then terminates cleanly via SIGTERM.
+
+Validated scenario D — second-instance exclusion:
+
+- first Agent remains active under one temporary XDG runtime root;
+- second Agent against the same root exits failure with `kind=already_running`;
+- second process restores its signal mask;
+- first process remains functional and answers another real status request;
+- first process then terminates cleanly and removes its socket.
+
+Validated scenario E — missing runtime root:
+
+- child starts with `XDG_RUNTIME_DIR` removed;
+- startup fails deterministically with `kind=runtime_root`;
+- process maps to failure exit;
+- signal mask is restored.
+
+Validated scenario F — wrong-mode runtime root:
+
+- temporary root mode is changed to 0755;
+- startup fails with `kind=runtime_root` before usable listener activation;
+- failure exit is returned;
+- signal mask is restored;
+- no Agent socket pathname is left behind.
+
+BINARY-PROOF CORRECTIVE HISTORY
+
+Initial proof workflow 31904663853 encountered hosted-runner Rust component provisioning failure before metadata/Clippy/test. Two retries reproduced the same infrastructure-only failure. The permanent workflow on the same source successfully provisioned exact Rust/Cargo 1.97.1 when tool versions were recorded first.
+
+A01 run 31904782482 adopted that known-good provisioning order. It exposed only a workflow mutation-guard defect: the generated integration test was untracked and therefore absent from `git diff --name-only`.
+
+A02 run 31904847101 corrected the guard to require zero tracked mutations and exactly one expected untracked test file. It reached real Clippy and stopped only because one test helper was eligible for `const fn`.
+
+A03 run 31904884041 applied only that mechanical correction and passed:
+
+- exact toolchain record;
+- locked metadata;
+- rustfmt;
+- workspace/all-target Clippy with `-D warnings`;
+- focused binary subprocess test with one test thread;
+- all workspace/all-target tests;
+- all workspace/all-target builds;
+- diff-check.
+
+Only after that complete PASS did the workflow create proof commit a2dc8574b4df8e7df8e54312a0d5e6be50475594 and delete all temporary binary-proof workflows.
+
+AUTHORITATIVE PERMANENT VALIDATION
+
+Documentation head fa948706fa55e12f982d2f3a852a0652e91509b5 contains the integrated bootstrap surface and committed binary proof.
+
+Permanent PRW Rust Validation run 31904953430 passed every step:
+
+- pinned toolchain record;
+- locked dependency graph;
+- formatting;
+- Clippy `-D warnings`;
+- all workspace/all-target tests, including the committed Phase 102 binary integration test;
+- all workspace/all-target builds.
+
+WORKFLOW CLEANUP
+
+After successful proof integration, `.github/workflows/` contains only:
+
+`.github/workflows/phase-001-rust-validation.yml`
+
+No temporary Phase 102 integration/proof workflow remains.
+
+DEPENDENCY / UNSAFE BOUNDARY
+
+Phase 102 adds no Cargo dependency and does not weaken workspace `unsafe_code = "forbid"`.
+
+SYSTEMD / DEPLOYMENT BOUNDARY
+
+Phase 102 does NOT:
+
+- create or modify a systemd service unit;
+- install, enable, start, stop, or restart a service;
+- change automatic-start policy;
+- mutate login/session/linger state;
+- deploy the Agent to a user host;
+- expose remote/public networking;
+- add a privileged helper;
+- add TUN/relay/database/private-key functionality;
+- make private DNS mandatory;
+- reintroduce Wake-on-LAN / remote wake.
+
+FINAL CLASSIFICATION
+
+PHASE_102_PASS / IMPLEMENTED_AND_VALIDATED / REAL_STANDALONE_BINARY_PROVEN / SIGTERM_PASS / SIGINT_PASS / REAL_LOCAL_STATUS_REQUEST_PASS / SECOND_INSTANCE_EXCLUSION_PASS / INVALID_RUNTIME_ROOT_FAIL_CLOSED / BOUNDED_STDERR_PASS / SIMPLE_EXIT_MAPPING_PASS / NARROW_PUBLIC_FACADE / LINUX_INTERNALS_CRATE_PRIVATE / NO_CARGO_CHURN / UNSAFE_FORBID_PRESERVED / TEMP_WORKFLOWS_REMOVED / NO_SYSTEMD_ACTIVATION / NO_DEPLOYMENT
