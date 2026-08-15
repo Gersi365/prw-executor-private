@@ -23,7 +23,8 @@ impl LocalIpcPayload {
     /// cannot fit the protocol length field or exceeds the Phase 007 1 MiB
     /// global payload limit.
     pub fn new(bytes: Vec<u8>) -> Result<Self, LocalIpcPayloadError> {
-        let length = u32::try_from(bytes.len()).map_err(|_| LocalIpcPayloadError::PayloadTooLarge)?;
+        let length =
+            u32::try_from(bytes.len()).map_err(|_| LocalIpcPayloadError::PayloadTooLarge)?;
         if length > LOCAL_IPC_MAX_PAYLOAD_LENGTH {
             return Err(LocalIpcPayloadError::PayloadTooLarge);
         }
@@ -66,7 +67,9 @@ pub enum LocalIpcPayloadError {
 impl fmt::Display for LocalIpcPayloadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PayloadTooLarge => formatter.write_str("local IPC payload exceeds maximum length"),
+            Self::PayloadTooLarge => {
+                formatter.write_str("local IPC payload exceeds maximum length")
+            }
         }
     }
 }
