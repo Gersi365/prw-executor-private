@@ -76,7 +76,9 @@ mod tests {
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::LocalIpcFrameReadError;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
 
     fn id() -> LocalIpcRequestId {
         LocalIpcRequestId::new(80).expect("non-zero request id")
