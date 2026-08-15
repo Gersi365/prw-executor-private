@@ -1,0 +1,67 @@
+Private Remote Workspace
+Phase 063 Linux PRW Runtime-Directory Preparation
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement the PRW-owned child-directory portion of the Phase 061 XDG runtime security algorithm while keeping every security-sensitive lookup anchored to the already-validated Phase 062 XDG runtime-root descriptor.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_prw_runtime_directory.rs
+- parent integration: crates/prw-agent/src/linux_xdg_runtime_root.rs
+- contract: contracts/LINUX_PRW_RUNTIME_DIRECTORY_PREPARATION_CONTRACT.md
+- architecture: docs/architecture/PHASE_063_LINUX_PRW_RUNTIME_DIRECTORY_PREPARATION.md
+
+PRODUCTION ALGORITHM
+
+- input is a ValidatedXdgRuntimeRoot, not a raw runtime-root pathname;
+- mkdirat attempts only the fixed private-remote-workspace child at requested mode 0700;
+- EEXIST is never trusted as success by itself;
+- openat is relative to the retained validated root descriptor with RDONLY | DIRECTORY | NOFOLLOW | CLOEXEC;
+- fstat proves directory type and effective-UID ownership before any repair;
+- only a verified same-UID PRW child may be normalized with descriptor-based fchmod to exact 0700;
+- descriptor metadata is revalidated after normalization;
+- success returns an owned ValidatedPrwRuntimeDirectory descriptor.
+
+VALIDATED BEHAVIOR
+
+Temporary runner filesystem tests prove:
+- absent PRW child is created and validated at 0700;
+- pre-existing same-UID 0755 child is normalized to exact 0700;
+- symlink child fails closed and its target is not modified;
+- regular-file child fails closed;
+- wrong-owner metadata classification fails before mode policy;
+- descriptor anchoring survives rename/replacement of the original XDG-root pathname: the child is created beneath the renamed original validated directory, not beneath the replacement pathname.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31891031780
+Validated source head: c62abde72adcec82a0ea4588d857f6b0c5be792a
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+SCOPE PRESERVED
+
+Phase 063:
+- does not chmod/chown/replace the XDG runtime root;
+- touches only the fixed PRW-owned child directory in production;
+- does not inspect, create, unlink, bind, listen on, accept from, or connect to agent.sock;
+- activates no service;
+- changes no principal/policy binding;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+PRW_CHILD_DIRECTORY_DESCRIPTOR_ANCHORED / SAME_UID_MODE_NORMALIZATION_ONLY / XDG_ROOT_UNCHANGED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 063 report.
