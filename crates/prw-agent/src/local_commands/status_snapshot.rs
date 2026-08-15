@@ -1,11 +1,13 @@
 //! Typed read-only Agent status snapshot.
 //!
 //! Phase 017 defines the minimal body model for a successful
-//! `GetAgentStatus` response. Phase 018 adds its fixed-width byte codec, and
-//! Phase 019 composes that body with the common success-status prefix. Runtime
-//! command dispatch and socket I/O remain out of scope.
+//! `GetAgentStatus` response. Phase 018 adds its fixed-width byte codec, Phase
+//! 019 composes the command payload, and Phase 023 composes a complete
+//! validated in-memory response frame. Runtime command dispatch and socket I/O
+//! remain out of scope.
 
 pub mod codec;
+pub mod response_frame;
 pub mod response_payload;
 
 use crate::LocalIpcProtocolVersion;
