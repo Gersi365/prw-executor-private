@@ -1,0 +1,69 @@
+Private Remote Workspace
+Phase 066 Linux Agent Socket-Path Preparation
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement the Phase 064 stale-agent.sock classification/unlink transaction as a descriptor-relative operation that is callable only with an already-acquired Phase 065 AgentInstanceLock authority, without binding or listening in production.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_socket_path.rs
+- parent integration: crates/prw-agent/src/linux_agent_instance_lock.rs
+- contract: contracts/LINUX_AGENT_SOCKET_PATH_PREPARATION_CONTRACT.md
+- architecture: docs/architecture/PHASE_066_LINUX_AGENT_SOCKET_PATH_PREPARATION.md
+
+PRODUCTION ALGORITHM
+
+- requires &ValidatedPrwRuntimeDirectory and &AgentInstanceLock;
+- statat(agent.sock, SYMLINK_NOFOLLOW) relative to the validated PRW directory;
+- ENOENT returns AlreadyAbsent;
+- existing object must already be Unix-socket type, same effective UID, exact 0600;
+- no chmod/chown repair of agent.sock candidates;
+- records first metadata snapshot;
+- immediate second no-follow stat must match device, inode, socket type, owner UID, and mode;
+- mismatch/disappearance/error before unlink fails closed;
+- only unchanged trusted-shape candidate is removed by descriptor-relative unlinkat;
+- final no-follow stat must report ENOENT;
+- no connect probe.
+
+VALIDATED BEHAVIOR
+
+Temporary runner tests prove:
+- missing agent.sock -> AlreadyAbsent;
+- same-UID stale pathname Unix socket at 0600 -> removed and absence verified;
+- symlink -> NotSocket, target unchanged, symlink remains;
+- regular file -> NotSocket and remains;
+- socket at wrong mode 0660 -> WrongMode and remains;
+- explicit wrong-owner socket metadata classification fails closed;
+- two simultaneous distinct socket nodes do not match stale identity;
+- a second conforming lifecycle authority remains blocked by the Phase 065 instance lock.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31891786334
+Validated source head: 175eedd89b02fb0ee494cbbb1b3d7e5aafab6d7a
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+SCOPE PRESERVED
+
+Phase 066:
+- may inspect/unlink only agent.sock when the adapter is explicitly invoked with a live AgentInstanceLock;
+- production code performs no socket create/bind/listen/accept/connect;
+- is not called by the Agent bootstrap;
+- changes no service/network/DNS/TUN/database/deployment state.
+
+FINAL CLASSIFICATION
+
+STALE_SOCKET_CLASSIFICATION_IMPLEMENTED / INSTANCE_LOCK_REQUIRED / NOFOLLOW_TYPE_OWNER_MODE_IDENTITY_GUARD / NO_BIND_OR_LISTEN / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 066 report.
