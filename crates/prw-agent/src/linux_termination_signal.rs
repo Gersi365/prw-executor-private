@@ -36,34 +36,34 @@ pub enum LocalLinuxTerminationSignalMaskRestore {
 pub enum LocalLinuxTerminationSignalSourceCreateError {
     /// The calling thread could not atomically preserve and block the termination mask.
     MaskBlockFailed,
-    /// Creating the nonblocking close-on-exec SignalFd failed after the mask changed.
+    /// Creating the nonblocking close-on-exec `SignalFd` failed after the mask changed.
     DescriptorCreateFailed {
         /// Best-effort rollback result for the previously installed signal mask.
         mask_restore: LocalLinuxTerminationSignalMaskRestore,
     },
 }
 
-/// Successful result from one nonblocking SignalFd read.
+/// Successful result from one nonblocking `SignalFd` read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalLinuxTerminationSignalRead {
-    /// One supported termination signal was consumed from SignalFd.
+    /// One supported termination signal was consumed from `SignalFd`.
     Signal(LocalLinuxTerminationSignal),
-    /// SignalFd was nonblocking and had no signal available at read time.
+    /// `SignalFd` was nonblocking and had no signal available at read time.
     WouldBlock,
-    /// The fixed SignalFd read was interrupted; caller must re-observe readiness.
+    /// The fixed `SignalFd` read was interrupted; caller must re-observe readiness.
     Interrupted,
 }
 
-/// Bounded non-retryable SignalFd read failure.
+/// Bounded non-retryable `SignalFd` read failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalLinuxTerminationSignalReadError {
-    /// SignalFd returned a signal outside the exact SIGTERM/SIGINT contract.
+    /// `SignalFd` returned a signal outside the exact SIGTERM/SIGINT contract.
     UnexpectedSignal,
-    /// SignalFd read failed for an errno other than EINTR.
+    /// `SignalFd` read failed for an errno other than EINTR.
     ReadFailed,
 }
 
-/// Thread-affine owner for the blocked termination mask and pollable SignalFd.
+/// Thread-affine owner for the blocked termination mask and pollable `SignalFd`.
 #[derive(Debug)]
 pub struct LocalLinuxTerminationSignalSource {
     descriptor: Option<SignalFd>,
@@ -72,16 +72,16 @@ pub struct LocalLinuxTerminationSignalSource {
 }
 
 impl LocalLinuxTerminationSignalSource {
-    /// Blocks SIGTERM/SIGINT on the calling thread and creates one SignalFd.
+    /// Blocks SIGTERM/SIGINT on the calling thread and creates one `SignalFd`.
     ///
     /// The exact prior thread mask is retained for explicit restoration. If
-    /// SignalFd creation fails after the mask change, mask rollback is attempted
+    /// `SignalFd` creation fails after the mask change, mask rollback is attempted
     /// before the error is returned.
     ///
     /// # Errors
     ///
     /// Returns a bounded creation error if the thread mask cannot be changed or
-    /// the nonblocking close-on-exec SignalFd cannot be created.
+    /// the nonblocking close-on-exec `SignalFd` cannot be created.
     pub fn create() -> Result<Self, LocalLinuxTerminationSignalSourceCreateError> {
         let mask = termination_mask();
         let previous_mask = mask
@@ -89,16 +89,13 @@ impl LocalLinuxTerminationSignalSource {
             .map_err(|_| LocalLinuxTerminationSignalSourceCreateError::MaskBlockFailed)?;
 
         let flags = SfdFlags::SFD_NONBLOCK | SfdFlags::SFD_CLOEXEC;
-        let descriptor = match SignalFd::with_flags(&mask, flags) {
-            Ok(descriptor) => descriptor,
-            Err(_) => {
-                let mask_restore = restore_mask(&previous_mask);
-                return Err(
-                    LocalLinuxTerminationSignalSourceCreateError::DescriptorCreateFailed {
-                        mask_restore,
-                    },
-                );
-            }
+        let Ok(descriptor) = SignalFd::with_flags(&mask, flags) else {
+            let mask_restore = restore_mask(&previous_mask);
+            return Err(
+                LocalLinuxTerminationSignalSourceCreateError::DescriptorCreateFailed {
+                    mask_restore,
+                },
+            );
         };
 
         Ok(Self {
@@ -113,7 +110,7 @@ impl LocalLinuxTerminationSignalSource {
     /// # Errors
     ///
     /// Returns a bounded error for an unexpected signal number or a non-EINTR
-    /// SignalFd read failure.
+    /// `SignalFd` read failure.
     pub fn read_signal(
         &self,
     ) -> Result<LocalLinuxTerminationSignalRead, LocalLinuxTerminationSignalReadError> {
@@ -126,12 +123,12 @@ impl LocalLinuxTerminationSignalSource {
             Ok(Some(info)) => classify_signal_number(info.ssi_signo)
                 .map(LocalLinuxTerminationSignalRead::Signal),
             Ok(None) => Ok(LocalLinuxTerminationSignalRead::WouldBlock),
-            Err(error) if error == Errno::EINTR => Ok(LocalLinuxTerminationSignalRead::Interrupted),
+            Err(Errno::EINTR) => Ok(LocalLinuxTerminationSignalRead::Interrupted),
             Err(_) => Err(LocalLinuxTerminationSignalReadError::ReadFailed),
         }
     }
 
-    /// Closes SignalFd and restores the exact prior calling-thread signal mask.
+    /// Closes `SignalFd` and restores the exact prior calling-thread signal mask.
     #[must_use]
     pub fn restore(mut self) -> LocalLinuxTerminationSignalMaskRestore {
         drop(self.descriptor.take());
