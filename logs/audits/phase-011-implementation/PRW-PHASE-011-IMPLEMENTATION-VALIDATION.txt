@@ -1,0 +1,152 @@
+Private Remote Workspace
+Phase 011 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 011
+SCOPE: Bounded generic local IPC frame reader over std::io::Read
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 011 base commit: 1d2b28b995160d5769db56b9dbe47b8136892aa4
+Validated source commit: 0753bb3da524537c2adbcc427001774220044e8b
+Validated GitHub Actions run: 31878218042
+
+IMPLEMENTED READ ORDER
+
+The generic reader acquires one complete frame in this exact order:
+1. read exactly 24 header bytes;
+2. decode and validate through the Phase 009 codec;
+3. reject invalid header metadata before payload allocation/read;
+4. checked conversion of validated u32 payload length to usize;
+5. allocate exactly the validated payload length;
+6. read exactly that payload length;
+7. construct the Phase 010 bounded payload;
+8. couple header and payload into a Phase 010 LocalIpcFrame;
+9. leave following stream bytes unread.
+
+This preserves the Phase 007 1 MiB payload ceiling before receive allocation.
+
+ERROR TAXONOMY
+
+LocalIpcFrameReadError:
+- TruncatedHeader
+- HeaderIo
+- InvalidHeader(LocalIpcFrameDecodeError)
+- PayloadLengthUnsupported
+- TruncatedPayload
+- PayloadIo
+- PayloadInvariant
+- FrameInvariant
+
+Public errors remain bounded and do not expose raw operating-system error text or peer payload bytes.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 011 base: 4
+- added: contracts/LOCAL_FRAME_READER_CONTRACT.md
+- modified: crates/prw-agent/src/frame_object.rs
+- added: crates/prw-agent/src/frame_object/reader.rs
+- added: docs/architecture/PHASE_011_LOCAL_FRAME_READER.md
+
+VALIDATION HISTORY
+
+Run 23
+- Run ID: 31878157764
+- Commit: 59563ba9abbbdd0e6819e50ca5b0be9ba169d0e7
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only changes in reader.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit 1
+- 32c04d8cc8dd421cb609fbab4107c8a5195ce4fe
+- Change: exact rustfmt-only corrections.
+- Read order, allocation boundary, error taxonomy, and runtime behavior unchanged.
+
+Run 24
+- Run ID: 31878187220
+- Commit: 32c04d8cc8dd421cb609fbab4107c8a5195ce4fe
+- Result: FAILURE
+- Formatting: PASS
+- Clippy: needless_pass_by_value on two private std::io::Error classification helpers.
+- Tests and build were skipped after Clippy failed.
+
+Corrective commit 2
+- 0753bb3da524537c2adbcc427001774220044e8b
+- Change: classifiers now borrow std::io::Error through map_err closures.
+- Error classification and I/O semantics remain unchanged.
+
+Run 25
+- Run ID: 31878218042
+- Commit: 0753bb3da524537c2adbcc427001774220044e8b
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: valid frame read leaves following bytes unread
+PASS: truncated header rejected
+PASS: oversized wire payload length rejected during header validation before payload acquisition
+PASS: truncated payload rejected
+PASS: zero-length payload consumes no following bytes
+
+RUNTIME BOUNDARY
+
+The implementation is generic over std::io::Read and tests use std::io::Cursor only.
+
+Phase 011 did not:
+- bind/listen/accept/connect a Unix socket;
+- retrieve SO_PEERCRED;
+- create or modify the XDG runtime socket path;
+- activate the Agent as a service;
+- choose a production sync/async socket runtime;
+- deserialize or dispatch payload commands;
+- add any dependency.
+
+SECURITY / MUTATION STATEMENT
+
+Phase 011 did not:
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 011 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- generic frame writer;
+- actual Unix socket runtime;
+- runtime SO_PEERCRED enforcement;
+- connection/multi-frame loop policy;
+- timeout/cancellation semantics;
+- command payload serialization;
+- runtime command dispatch;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 011 implementation-validation report.
+GitHub Actions run 31878218042 is the authoritative executable validation evidence for source commit 0753bb3da524537c2adbcc427001774220044e8b.
