@@ -1,0 +1,137 @@
+Private Remote Workspace
+Phase 025 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 025
+SCOPE: Command-specific decode-before-outstanding-request completion
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 025 base commit: 7fd45c7f403a9d108c7471d375b7d8e7dc0d002c
+Validated source commit: eaf36b1d317988f1cadef4233849cc4e34854ce0
+Validated GitHub Actions run: 31880521079
+
+LOCKED ORDERING
+
+For streamed successful GetAgentStatus responses:
+1. acquire one complete validated frame through the Phase 024 read path;
+2. validate terminal Response+Ok semantics and fully decode the fixed five-byte Agent status body;
+3. obtain the typed request ID from the fully decoded result;
+4. complete exactly that ID through LocalRequestTracker::complete();
+5. return the decoded result only after tracker completion succeeds.
+
+Tracker state remains unchanged for generic frame-read failures and command-specific decode failures. A fully decoded unknown request ID also leaves unrelated outstanding requests unchanged.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- Exported stream_completion module.
+
+2. crates/prw-agent/src/local_commands/status_snapshot/response_frame/stream_completion.rs
+- Added read_decode_and_complete_status_response<R: Read>().
+- Reused Phase 024 stream acquisition/decode and Phase 013 LocalRequestTracker::complete().
+- Preserved read/decode failures separately from tracker transition failures.
+- Added focused memory-only state-preservation and exactly-once tests.
+
+3. contracts/LOCAL_AGENT_STATUS_COMPLETION_CONTRACT.md
+- Added normative command-specific decode-before-completion ordering.
+- Clarified that Phase 021 remains the generic terminal-completion primitive while Phase 025 adds a stricter GetAgentStatus prerequisite.
+
+4. docs/architecture/PHASE_025_STATUS_DECODE_BEFORE_COMPLETION.md
+- Recorded rationale, ordering, failure-state preservation, and next provider-neutral gap.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 025 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_COMPLETION_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/status_snapshot/response_frame.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot/response_frame/stream_completion.rs
+- added: docs/architecture/PHASE_025_STATUS_DECODE_BEFORE_COMPLETION.md
+
+VALIDATION HISTORY
+
+Run 49
+- Run ID: 31880488514
+- Commit: 377972ff8d6b480c69e5e29e9125c1fafb4fecbc
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required import ordering/reflow in stream_completion.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit
+- eaf36b1d317988f1cadef4233849cc4e34854ce0
+- Change: exact rustfmt-only correction in stream_completion.rs.
+- Decode/completion ordering, error taxonomy, tracker mutation semantics, dependencies, and runtime behavior unchanged.
+
+Run 50
+- Run ID: 31880521079
+- Commit: eaf36b1d317988f1cadef4233849cc4e34854ce0
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: fully valid known response completes exactly its own request
+PASS: malformed command-specific status body leaves request state outstanding
+PASS: truncated stream leaves request state outstanding
+PASS: fully decoded unknown request ID leaves unrelated tracker state untouched
+PASS: replay after successful completion is rejected as UnknownRequestId
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 025 did not:
+- create/bind/listen/accept/connect a Unix socket;
+- access peer credentials;
+- start an async runtime, task, thread, or timer;
+- dispatch or execute Agent commands;
+- collect live Agent state;
+- add a dependency;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 025.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 025 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- timeout/cancellation and late-response semantics;
+- command-specific error body schema;
+- bounded private-DNS response body and codec;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 025 implementation-validation report.
+GitHub Actions run 31880521079 is the authoritative executable validation evidence for source commit eaf36b1d317988f1cadef4233849cc4e34854ce0.
