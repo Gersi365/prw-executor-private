@@ -1,0 +1,130 @@
+Private Remote Workspace
+Phase 088-A01 Rust 1.97.1 Toolchain Pin Propagation Corrective
+
+STATUS: PASS / CORRECTED_AND_VALIDATED
+AUDIT TYPE: MINIMAL BUILD-CONFIGURATION SYNCHRONIZATION CORRECTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Pre-corrective reproducibility audit commit: d6c55a917dd18f64d3170a2b4340e0d1936e8c8c
+Corrected source head: a742329329c48aedde001646f73d651c4740a432
+Authoritative GitHub Actions run: 31898966438
+Historical Drive pin evidence: PM-P0024-toolchain-pin-and-sandbox-probe.txt
+Phase 086 historical validated source head: 6f67a1be406a217f8079120345d8a1224b269110
+Phase 086 historical authoritative run: 31897946657
+
+PURPOSE
+
+Propagate the already-audited exact Rust 1.97.1 toolchain pin from the later Drive build baseline into the current authoritative GitHub implementation repository, correcting the cross-workspace synchronization drift identified by the pre-implementation reproducibility audit.
+
+This corrective is not a Rust upgrade and does not alter product/runtime architecture.
+
+AUTHORIZED BASELINE BEING RESTORED
+
+The original Phase 001 source bundle used `channel = "stable"`.
+
+Drive Phase 024 later intentionally changed:
+
+    rust-toolchain.toml: stable -> exact 1.97.1
+
+and recorded the exact version as the candidate build toolchain. Subsequent real GitHub validation for Phase 086 happened to resolve `stable` to Rust/Cargo 1.97.1 and passed, but the GitHub source itself still lacked the exact literal pin.
+
+CORRECTIVE CHANGE
+
+Exactly one repository file changed:
+
+    rust-toolchain.toml
+
+Before:
+
+    channel = "stable"
+
+After:
+
+    channel = "1.97.1"
+
+No other source/configuration file changed in corrective commit `a742329329c48aedde001646f73d651c4740a432`.
+
+GitHub compare evidence from pre-corrective head `d6c55a917dd18f64d3170a2b4340e0d1936e8c8c` to corrected head shows:
+
+- ahead by exactly one commit;
+- exactly one changed file: `rust-toolchain.toml`;
+- one addition and one deletion.
+
+TOOLCHAIN EXECUTION PROOF
+
+Authoritative GitHub Actions run `31898966438` resolved and executed:
+
+- rustc `1.97.1`;
+- cargo `1.97.1`;
+- rustfmt `1.9.0-stable` from the Rust 1.97.1 toolchain;
+- clippy `0.1.97` from the same toolchain.
+
+The runner log also records the exact 1.97.1 channel synchronization before the toolchain commands, demonstrating that the literal repository pin controlled selection rather than relying on whatever version the moving `stable` channel happened to represent.
+
+VALIDATION
+
+Authoritative run `31898966438` passed:
+
+- toolchain recording;
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+All workflow steps completed successfully.
+
+CARGO.LOCK IMMUTABILITY
+
+`Cargo.lock` remained byte-identical across the corrective.
+
+Blob SHA before and after:
+
+    76af6bd831191309ac904dfe02ef76729de9a4fb
+
+Therefore the toolchain synchronization did not alter dependency resolution or package versions.
+
+HISTORICAL PHASE 086 STATUS
+
+Phase 086 remains valid and unchanged.
+
+Its historical run `31897946657` already executed Rust/Cargo 1.97.1 and passed the same locked validation gates. Phase 088-A01 only makes that exact version an explicit repository invariant for future runs.
+
+DEFERRED CI HARDENING
+
+This corrective intentionally does NOT change:
+
+- `runs-on: ubuntu-latest`;
+- `actions/checkout@v4`;
+- any workflow logic.
+
+The moving hosted-runner label and major-version checkout reference remain separately documented reproducibility surfaces. They are not bundled into this narrow corrective.
+
+PHASE 088 READINESS RELATIONSHIP
+
+With the exact Rust toolchain pin restored and validated, the toolchain reproducibility prerequisite for future Phase 088 readiness implementation is satisfied.
+
+The actual readiness architecture remains NOT APPROVED by this corrective. The capacity-aware poll/shared runtime-wake decision package in commit `182b1d99cb19a863b9925fd0bf9a851d8f530b8f`, as corrected by Phase 087-A01, remains the separate architecture gate.
+
+NO RUNTIME / PRODUCT MUTATION
+
+This corrective did NOT:
+
+- change Rust application/library source;
+- change Cargo.toml or Cargo.lock;
+- enable rustix `event`;
+- change dependencies;
+- change the permanent GitHub Actions workflow;
+- add poll/eventfd/epoll code;
+- modify `main.rs`;
+- activate Agent bootstrap/systemd/service state;
+- change authentication, DNS, TUN, remote networking, relay, database, private-key, deployment or production state.
+
+FINAL CLASSIFICATION
+
+DRIVE_TO_GITHUB_TOOLCHAIN_PIN_PROPAGATED / EXACT_RUST_1_97_1_SOURCE_LOCKED / CARGO_LOCK_BYTE_IDENTICAL / COMPLETE_LOCKED_RUST_VALIDATION_PASS / NO_RUNTIME_ACTIVATION / PHASE_088_ARCHITECTURE_GATE_REMAINS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing report for the Phase 088-A01 toolchain pin propagation corrective.
