@@ -1,0 +1,51 @@
+name: Phase 091 Clippy Corrective
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase-091-clippy-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply exact Clippy corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("crates/prw-agent/src/linux_runtime_readiness.rs")
+          text = path.read_text()
+          replacements = [
+              ("pub fn wait_once_for_linux_runtime_readiness<'scope>(", "pub fn wait_once_for_linux_runtime_readiness("),
+              ("registry: &mut LocalLinuxScopedWorkerRegistry<'scope>,", "registry: &mut LocalLinuxScopedWorkerRegistry<'_>,"),
+              ("\nfn report(\n", "\nconst fn report(\n"),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one occurrence of {old!r}, found {count}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          changed="$(git diff --name-only)"
+          test "$changed" = "crates/prw-agent/src/linux_runtime_readiness.rs"
+          cargo fmt --all -- --check
+          git diff --check
+
+      - name: Commit corrective and self-delete
+        run: |
+          rm .github/workflows/phase-091-clippy-fix.yml
+          git add crates/prw-agent/src/linux_runtime_readiness.rs .github/workflows/phase-091-clippy-fix.yml
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git commit -m "Fix Phase 091 Clippy compatibility"
+          git push
