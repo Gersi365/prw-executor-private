@@ -79,7 +79,8 @@ pub fn decode_success_private_dns_frame(
     }
 
     let body = &frame.payload().as_bytes()[LOCAL_AGENT_RESPONSE_STATUS_PREFIX_LENGTH..];
-    let snapshot = decode_private_dns_snapshot(body).map_err(LocalPrivateDnsFrameDecodeError::Body)?;
+    let snapshot =
+        decode_private_dns_snapshot(body).map_err(LocalPrivateDnsFrameDecodeError::Body)?;
 
     Ok(LocalPrivateDnsFrame {
         request_id: terminal.request_id(),
@@ -114,6 +115,7 @@ mod tests {
         LocalPrivateDnsFrameDecodeError, build_success_private_dns_frame,
         decode_success_private_dns_frame,
     };
+    use crate::LocalIpcMessageKind;
     use crate::LocalIpcRequestId;
     use crate::local_commands::LocalAgentResponseStatus;
     use crate::local_commands::private_dns_codec::{
@@ -126,7 +128,6 @@ mod tests {
         LocalPrivateDnsSnapshot,
     };
     use crate::local_commands::terminal_response::builder::build_terminal_response_frame;
-    use crate::LocalIpcMessageKind;
     use prw_network::PrivateDnsConfig;
 
     fn id(value: u64) -> LocalIpcRequestId {
@@ -187,24 +188,26 @@ mod tests {
         };
         let snapshot = snapshot(&config);
         let encoded = encode_private_dns_snapshot(&snapshot).expect("maximum snapshot encodes");
-        let frame = build_success_private_dns_frame(id(102), &snapshot).expect("maximum frame fits");
+        let frame =
+            build_success_private_dns_frame(id(102), &snapshot).expect("maximum frame fits");
 
         assert_eq!(encoded.len(), LOCAL_PRIVATE_DNS_MAX_ENCODED_LENGTH);
         assert_eq!(
             usize::try_from(frame.header().payload_length()).expect("u32 fits usize"),
             LOCAL_PRIVATE_DNS_MAX_SUCCESS_PAYLOAD_LENGTH
         );
-        assert_eq!(decode_success_private_dns_frame(&frame).expect("decodes").snapshot(), &snapshot);
+        assert_eq!(
+            decode_success_private_dns_frame(&frame)
+                .expect("decodes")
+                .snapshot(),
+            &snapshot
+        );
     }
 
     #[test]
     fn valid_terminal_error_is_not_a_success_private_dns_frame() {
-        let frame = build_terminal_response_frame(
-            id(103),
-            LocalAgentResponseStatus::Conflict,
-            &[],
-        )
-        .expect("valid terminal error");
+        let frame = build_terminal_response_frame(id(103), LocalAgentResponseStatus::Conflict, &[])
+            .expect("valid terminal error");
 
         assert_eq!(
             decode_success_private_dns_frame(&frame),
@@ -214,12 +217,9 @@ mod tests {
 
     #[test]
     fn malformed_private_dns_body_is_rejected_after_terminal_validation() {
-        let frame = build_terminal_response_frame(
-            id(104),
-            LocalAgentResponseStatus::Ok,
-            &[0b100, 0, 0],
-        )
-        .expect("structurally valid response");
+        let frame =
+            build_terminal_response_frame(id(104), LocalAgentResponseStatus::Ok, &[0b100, 0, 0])
+                .expect("structurally valid response");
 
         assert_eq!(
             decode_success_private_dns_frame(&frame),
