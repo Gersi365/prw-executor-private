@@ -1,0 +1,247 @@
+Private Remote Workspace
+Phase 108 systemd Packaging Completion Review
+
+STATUS: PASS / PHASE_105_TO_108_SEQUENCE_COMPLETE / NON_ACTIVATING_SYSTEMD_PACKAGING_COMPLETE / REAL_HOST_ACTIVATION_GATE_REQUIRED
+AUDIT TYPE: FINAL NET-DIFF / REPOSITORY CLEANLINESS / PACKAGING BOUNDARY / PERMANENT CI COMPLETION REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 104 decision-preparation commit: 9c7d2d69aeacf32a67ceae987b258e50fa32002d
+Phase 105 contract-lock commit: a2884334f3e7dbca1eb5e0b7448ead66f550c6fe
+Phase 106 authoritative report commit: 9273d53d6729f1d0d10c10fa259ad23f0bd74d85
+Phase 107 authoritative report commit: 730789b0f0143748949ff0b497bca881f2877531
+Phase 108 finalized completion-review document commit: 9b9d324afef328d8dca85c375918b3cb3376408f
+Final permanent PRW Rust Validation: 31906554120 PASS
+
+USER AUTHORIZATION BOUNDARY
+
+The user explicitly authorized Phases 105-108 systemd packaging according to the Phase 104 user-service architecture, while retaining real-host activation and linger as a separate later gate.
+
+This Phase 108 review confirms that the authorized non-activating sequence is complete and that the separate activation gate remains intact.
+
+PHASE 105 RESULT
+
+PASS / APPROVED_AND_LOCKED / DECISION_ONLY.
+
+The systemd user-service contract locked:
+
+- Ubuntu 24.04/systemd 255 baseline for initial packaging validation;
+- unit name `prw-agent.service`;
+- packaged executable destination `/usr/lib/private-remote-workspace/prw-agent`;
+- global user unit destination `/usr/lib/systemd/user/prw-agent.service`;
+- repository unit source `packaging/systemd/prw-agent.service`;
+- Type=exec;
+- Restart=on-failure;
+- RestartSec=5s;
+- StartLimitIntervalSec=60s;
+- StartLimitBurst=5;
+- TimeoutStopSec=15s;
+- UMask=0077;
+- NoNewPrivileges=yes;
+- StandardOutput=journal;
+- StandardError=journal;
+- WantedBy=default.target;
+- no `.socket` activation;
+- no synthesized XDG_RUNTIME_DIR;
+- no shell wrapper;
+- no root runtime identity;
+- no linger mutation.
+
+PHASE 106 RESULT
+
+PASS / IMPLEMENTED_AND_VALIDATED / USER_SERVICE_SOURCE_LOCKED.
+
+Committed source:
+
+packaging/systemd/prw-agent.service
+
+Integrated source commit:
+
+007e5adbc64ed874109787971e3127abad8a5a26
+
+Static validation corrective run:
+
+31906322126 PASS
+
+Permanent Rust CI:
+
+31906345773 PASS
+
+The exact Phase 105 unit contract was validated against the Ubuntu 24.04/systemd 255 runner surface. The real absolute ExecStart value remained under byte-for-byte contract validation while only a disposable validation projection used `/usr/bin/true` for user-scope `systemd-analyze verify` syntax checking.
+
+All temporary Phase 106 validation workflows were removed after PASS.
+
+PHASE 107 RESULT
+
+PASS / TRANSACTION_CONTRACT_IMPLEMENTED_AND_VALIDATED / DISPOSABLE_ROOT_ONLY.
+
+Committed transaction contract:
+
+packaging/systemd/INSTALL_TRANSACTION.md
+
+Source commit:
+
+e7fafa641194f7503a72c83083ecb9b2fe0a39d6
+
+Validation run:
+
+31906446409 PASS
+
+The isolated proof used only a disposable temporary filesystem root and dummy executable payloads. It proved:
+
+- fresh install layout;
+- executable mode 0755;
+- service-unit mode 0644;
+- exact unit payload preservation;
+- injected upgrade failure restores exact previous bytes/modes;
+- successful dummy upgrade;
+- injected remove failure restores exact previous bytes/modes;
+- successful removal;
+- no default.target.wants activation artifact.
+
+No runnable real-host installer was introduced by Phase 107.
+
+PHASE 108 NET-DIFF REVIEW
+
+Compare base:
+
+a2884334f3e7dbca1eb5e0b7448ead66f550c6fe
+
+Compare pre-report head:
+
+9b9d324afef328d8dca85c375918b3cb3376408f
+
+Net changed files are exactly:
+
+1. docs/architecture/PHASE_106_SYSTEMD_USER_SERVICE.md
+2. docs/architecture/PHASE_108_SYSTEMD_PACKAGING_COMPLETION_REVIEW.md
+3. logs/audits/phase-106-systemd-user-service/PRW-PHASE-106-SYSTEMD-USER-SERVICE.txt
+4. logs/audits/phase-107-packaging-transaction/PRW-PHASE-107-PACKAGING-TRANSACTION.txt
+5. packaging/systemd/INSTALL_TRANSACTION.md
+6. packaging/systemd/README.md
+7. packaging/systemd/prw-agent.service
+
+The Phase 108 authoritative report itself is the only additional file introduced after that pre-report compare head.
+
+There is no net mutation to:
+
+- Cargo.toml;
+- Cargo.lock;
+- Agent Rust source;
+- permanent workflow source;
+- Android/Desktop source;
+- public/remote network listeners;
+- any `.socket` unit;
+- any enablement symlink;
+- any real-host activation state.
+
+REPOSITORY CLEANLINESS
+
+Current `.github/workflows/` contains only:
+
+.github/workflows/phase-001-rust-validation.yml
+
+All Phase 106 and Phase 107 temporary workflows self-deleted after successful use.
+
+Current Cargo.lock blob remains:
+
+18db6137fc0f4f5bda22ad92425cff5edfb33c73
+
+Current `packaging/systemd/` contains exactly:
+
+- INSTALL_TRANSACTION.md
+- README.md
+- prw-agent.service
+
+No `.socket` unit is present.
+
+SERVICE SOURCE READBACK
+
+The final service source remains:
+
+[Unit]
+Description=Private Remote Workspace Agent
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/private-remote-workspace/prw-agent
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+
+The Agent remains a systemd user service at runtime, retaining its own same-UID XDG runtime validation, instance-lock, Unix-socket bind/listen/readiness, and cleanup ownership.
+
+FINAL PERMANENT CI
+
+Run:
+
+31906554120
+
+Result:
+
+PASS.
+
+Passed:
+
+- exact pinned Rust/Cargo toolchain record;
+- locked dependency graph;
+- rustfmt;
+- Clippy with `-D warnings`;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+ACTIVATION GATE PRESERVED
+
+Phases 105-108 did NOT perform:
+
+- real copy/install into `/usr`;
+- real root ownership mutation;
+- systemctl --user daemon-reload;
+- systemctl enable;
+- systemctl start/stop/restart;
+- default.target.wants link creation on a real host;
+- loginctl enable-linger;
+- loginctl disable-linger;
+- mutation of pre-existing linger state;
+- live-service upgrade;
+- activation-aware uninstall;
+- deployment;
+- public/remote network activation.
+
+Linger remains separately owned by a future activation transaction. A future activation phase must capture the exact prior linger state, mutate it only under explicit authorization, and never disable a pre-existing linger choice during rollback/uninstall.
+
+BASELINE PRESERVED
+
+- Rust/Cargo exact pin: 1.97.1;
+- unsafe_code = "forbid";
+- Cargo.lock blob: 18db6137fc0f4f5bda22ad92425cff5edfb33c73;
+- narrow public linux_bootstrap facade;
+- linux_identity crate-private;
+- private DNS optional/default-disabled;
+- Wake-on-LAN out of scope;
+- no public listener.
+
+COMPLETION DECISION
+
+PASS.
+
+The user-approved Phase 105-108 non-activating systemd packaging sequence is complete.
+
+The repository now contains:
+
+- one validated systemd user-service source;
+- one validated non-activating package file transaction contract;
+- static validation and isolated rollback evidence;
+- permanent CI evidence;
+- preserved separation between package source and real-host activation.
+
+A new explicit approval is required before any Phase 109+ real-host installation, daemon-reload, enable/start, linger transaction, or deployment work.
