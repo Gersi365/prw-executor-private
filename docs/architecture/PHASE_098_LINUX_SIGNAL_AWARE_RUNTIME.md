@@ -1,6 +1,6 @@
 # Phase 098 — Linux Signal-Aware Production Runtime
 
-Status: `FULL_SIGNAL_AWARE_RUNTIME_INTEGRATED_AWAITING_AUTHORITATIVE_CI`
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -163,9 +163,25 @@ Full signal-aware runtime preflight run:
 
 The run passed locked metadata, rustfmt, Clippy with `-D warnings`, all workspace/all-target tests including the isolated precedence proof, all workspace/all-target builds, and `git diff --check` before committing `3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8` and deleting its temporary integration workflow.
 
-## Authoritative validation state
+## Authoritative permanent validation
 
-The complete Phase 098 source is integrated. Permanent PRW Rust Validation is now required on a commit containing `3847dcdd825d3eccfdf15a16f32bf5fce4b0d7b8` before Phase 098 is classified `IMPLEMENTED_AND_VALIDATED`.
+Permanent PRW Rust Validation run:
+
+`31903139121`
+
+Validated head containing the complete Phase 098 source:
+
+`e6ea68033dff556200dc61db46d6faab1264129f`
+
+The permanent workflow passed:
+
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+Phase 098 is therefore `IMPLEMENTED_AND_VALIDATED` below the `main.rs`/systemd activation boundary.
 
 ## Boundary preserved
 
