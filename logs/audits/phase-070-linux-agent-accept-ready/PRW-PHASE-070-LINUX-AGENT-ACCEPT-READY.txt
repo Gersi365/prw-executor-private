@@ -1,0 +1,124 @@
+Private Remote Workspace
+Phase 070 Linux Agent Accept-Ready Type State and One-Shot Authenticated Accept
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: c2d0cd5f23a61cf64c654358141ea715569aafe8
+Authoritative GitHub Actions run: 31893607406
+Phase 069 corrected decision report head before implementation: 8e4014dec9071cfbf6693e001f493bb3fa565695
+
+PURPOSE
+
+Implement the Phase 069 security/readiness decision as an explicit type-state boundary between a Phase 068 listening socket and the first one-shot accepted connection, while preserving immediate Linux SO_PEERCRED same-UID authentication and avoiding any accept loop or runtime orchestration policy.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_accept_ready.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_AGENT_ACCEPT_READINESS_CONTRACT.md
+- architecture: docs/architecture/PHASE_070_LINUX_AGENT_ACCEPT_READY.md
+
+TYPE-STATE ORDERING
+
+The validated Linux local socket lifecycle now includes:
+
+BoundAgentSocket
+  -> ListeningAgentSocket
+  -> AcceptReadyAgentSocket
+  -> one-shot authenticated accepted connection
+
+A plain Phase 068 ListeningAgentSocket exposes no accept operation through the Phase 070 API.
+
+READINESS TRANSITION
+
+prepare_accept_ready_agent_socket:
+
+- consumes a Phase 068 ListeningAgentSocket;
+- reads current descriptor status flags with rustix::fs::fcntl_getfl;
+- sets O_NONBLOCK with rustix::fs::fcntl_setfl while preserving existing status flags when needed;
+- reads status flags again;
+- returns AcceptReadyAgentSocket only after O_NONBLOCK is verified;
+- on transition failure returns the original listening object together with a bounded readiness-transition error so caller cleanup ownership is preserved.
+
+ONE-SHOT ACCEPT
+
+AcceptReadyAgentSocket::try_accept_authenticated:
+
+- performs at most one rustix::net::accept_with call per invocation;
+- requests SocketFlags::CLOEXEC for the accepted descriptor;
+- treats EAGAIN/EWOULDBLOCK as the normal NoConnectionReady outcome;
+- maps other kernel accept failures to a bounded AcceptFailed error;
+- converts a successfully accepted descriptor to the connected Unix stream type only inside the crate-internal Linux boundary;
+- immediately invokes Phase 059 AuthenticatedLocalLinuxConnection::try_new;
+- therefore Linux SO_PEERCRED and exact same-effective-UID authorization occur before any PRW application-protocol byte is read;
+- returns only the authenticated wrapper on success;
+- explicitly drops the rejected connected stream before returning a bounded peer-authorization failure.
+
+ACCEPTED STREAM SEMANTICS
+
+The listener is nonblocking after the Phase 070 readiness transition.
+
+The accepted connected stream requests close-on-exec but not accepted-stream NONBLOCK. Linux runner validation proved:
+
+- accepted descriptor has FD_CLOEXEC;
+- accepted stream does not have O_NONBLOCK;
+- this preserves the existing blocking std::io::Read/Write semantics expected by Phase 059/060.
+
+VALIDATED SECURITY ORDERING
+
+Temporary Linux runner tests prove:
+
+- the accept-ready listener has O_NONBLOCK;
+- an empty connection queue returns NoConnectionReady without blocking;
+- a local same-UID client is accepted and authenticated;
+- accepted descriptor is CLOEXEC and remains blocking;
+- sentinel bytes written before accept/authentication remain unread through the authentication boundary and are recoverable only after successful authenticated wrapping;
+- peer UID reported by the authenticated wrapper equals the Agent effective UID;
+- accepting one client does not consume the listener lifecycle and a later client can also be accepted;
+- after sequential accepts, an empty queue again returns NoConnectionReady;
+- Phase 065 instance-lock contention remains AlreadyRunning while the accept-ready listener is alive;
+- existing Phase 067/068 cleanup remains authoritative.
+
+VALIDATION
+
+Passed gates in authoritative run 31893607406:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- Run 31893422427: stopped only at rustfmt; formatting corrected.
+- Run 31893499242: formatting passed; Clippy reported needless mutable receiver for one-shot accept.
+- Final corrective changed try_accept_authenticated from &mut self to &self and removed now-unnecessary mutable test bindings. This does not change kernel one-shot semantics; connection concurrency/scheduling policy remains intentionally outside this phase.
+- Final run 31893607406 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 070:
+
+- implements no accept loop;
+- performs no internal retry, spin, sleep, poll, timeout, thread, task, or scheduler work;
+- does not construct or process a Phase 060 application session yet;
+- does not wire runtime code into the Agent bootstrap;
+- does not activate systemd or another service;
+- does not add TCP or abstract-socket fallback;
+- changes no principal/policy binding;
+- changes no network/DNS/TUN/database/private-key/deployment state.
+
+NEXT SAFE STEP
+
+A later explicitly bounded phase may bridge AuthenticatedLocalLinuxConnection<UnixStream> into the already validated Phase 060 AuthenticatedLocalLinuxSession without introducing an accept loop or service activation.
+
+FINAL CLASSIFICATION
+
+ACCEPT_READY_TYPE_STATE_IMPLEMENTED / NONBLOCKING_ONE_SHOT_ACCEPT / CLOEXEC_BLOCKING_ACCEPTED_STREAM / SO_PEERCRED_BEFORE_APPLICATION_BYTES / LISTENER_REUSABLE / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 070 report.
