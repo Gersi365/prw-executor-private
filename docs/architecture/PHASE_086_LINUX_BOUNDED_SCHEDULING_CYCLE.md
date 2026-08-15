@@ -1,6 +1,6 @@
 # Phase 086 — Linux Bounded Scheduling Cycle
 
-Status: formatter-corrected integrated source awaiting authoritative CI validation
+Status: `IMPLEMENTED_AND_VALIDATED`
 
 ## Purpose
 
@@ -56,13 +56,20 @@ Phase 086 does not:
 - automatically call worker cancellation/join on shutdown;
 - activate Agent bootstrap/systemd/service state.
 
-## Validation target
+## Validation
 
-CI must prove:
+Authoritative GitHub Actions run `31897946657` validated source head `6f67a1be406a217f8079120345d8a1224b269110` and passed:
+
+- `cargo metadata --locked --no-deps --format-version 1`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`;
+- `cargo test --locked --workspace --all-targets`;
+- `cargo build --locked --workspace --all-targets`.
+
+The validated tests prove:
 
 - shutdown requested before a cycle results in zero scheduling attempts and leaves a queued client unconsumed;
 - `NoConnectionReady` stops after one attempt even with a larger budget;
 - `AtCapacity` stops after one attempt and does not consume a queued connection;
 - exact attempt budget limits multiple queued worker registrations;
-- a finished worker is reaped before the next scheduling attempt and its completion appears in cycle evidence;
-- locked metadata, rustfmt, Clippy `-D warnings`, tests, and build remain green.
+- a finished worker is reaped before the next scheduling attempt and its completion appears in cycle evidence.
