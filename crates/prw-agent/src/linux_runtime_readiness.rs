@@ -258,9 +258,7 @@ fn classify_descriptor_revents(
     let errors = PollFlags::ERR | PollFlags::HUP | PollFlags::NVAL;
     if revents.intersects(errors) {
         return Err(match descriptor {
-            LocalLinuxPollDescriptor::Wake => {
-                LocalLinuxRuntimeReadinessError::WakeDescriptorFailed
-            }
+            LocalLinuxPollDescriptor::Wake => LocalLinuxRuntimeReadinessError::WakeDescriptorFailed,
             LocalLinuxPollDescriptor::Listener => {
                 LocalLinuxRuntimeReadinessError::ListenerDescriptorFailed
             }
@@ -269,9 +267,7 @@ fn classify_descriptor_revents(
 
     if !revents.difference(PollFlags::IN).is_empty() {
         return Err(match descriptor {
-            LocalLinuxPollDescriptor::Wake => {
-                LocalLinuxRuntimeReadinessError::InvalidWakeReadiness
-            }
+            LocalLinuxPollDescriptor::Wake => LocalLinuxRuntimeReadinessError::InvalidWakeReadiness,
             LocalLinuxPollDescriptor::Listener => {
                 LocalLinuxRuntimeReadinessError::InvalidListenerReadiness
             }
@@ -316,7 +312,9 @@ mod tests {
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
         AgentInstanceLock, acquire_agent_instance_lock,
     };
-    use crate::linux_identity::{accept_ready::prepare_accept_ready_agent_socket, xdg_runtime_root};
+    use crate::linux_identity::{
+        accept_ready::prepare_accept_ready_agent_socket, xdg_runtime_root,
+    };
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -340,10 +338,9 @@ mod tests {
         create_directory_with_mode(&root_path, 0o700);
         let root = xdg_runtime_root::validate_xdg_runtime_root_path(&root_path)
             .expect("temporary root satisfies Phase 062 validation");
-        let runtime_directory = xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(
-            &root,
-        )
-        .expect("temporary PRW directory satisfies Phase 063 preparation");
+        let runtime_directory =
+            xdg_runtime_root::prw_runtime_directory::prepare_prw_runtime_directory(&root)
+                .expect("temporary PRW directory satisfies Phase 063 preparation");
         drop(root);
         let instance_lock = acquire_agent_instance_lock(&runtime_directory)
             .expect("temporary lifecycle authority satisfies Phase 065");
@@ -375,11 +372,9 @@ mod tests {
         let (root_path, runtime_directory, instance_lock) = runtime_owners("shutdown");
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(4).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(4).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
         let listener = prepare_accept_ready_agent_socket(listening)
             .expect("Phase 070 listener becomes accept-ready");
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
@@ -398,7 +393,10 @@ mod tests {
             )
             .expect("shutdown is a normal finite outcome");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::ShutdownObserved);
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::ShutdownObserved
+            );
             assert!(!report.listener_armed());
             assert!(report.completions().is_empty());
         });
@@ -412,11 +410,9 @@ mod tests {
         let socket_path = agent_socket_path(&root_path);
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(4).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(4).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
         let listener = prepare_accept_ready_agent_socket(listening)
             .expect("Phase 070 listener becomes accept-ready");
         let client = UnixStream::connect(&socket_path).expect("test client queues");
@@ -435,7 +431,10 @@ mod tests {
             )
             .expect("listener readiness is observed");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::ListenerReady);
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::ListenerReady
+            );
             assert!(report.listener_armed());
             assert!(report.completions().is_empty());
         });
@@ -450,19 +449,21 @@ mod tests {
         let socket_path = agent_socket_path(&root_path);
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(4).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(4).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
         let listener = prepare_accept_ready_agent_socket(listening)
             .expect("Phase 070 listener becomes accept-ready");
         let client = UnixStream::connect(&socket_path).expect("queued test client connects");
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
         let workers = capacity(1);
-        let permit = workers.try_acquire().expect("sole capacity permit acquires");
+        let permit = workers
+            .try_acquire()
+            .expect("sole capacity permit acquires");
         let control = LocalLinuxSchedulerControl::new();
-        wake.notifier().notify().expect("controlled runtime wake posts");
+        wake.notifier()
+            .notify()
+            .expect("controlled runtime wake posts");
 
         thread::scope(|_| {
             let mut registry = LocalLinuxScopedWorkerRegistry::new();
@@ -475,7 +476,10 @@ mod tests {
             )
             .expect("wake-only wait succeeds while capacity is full");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::RuntimeWake);
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::RuntimeWake
+            );
             assert!(!report.listener_armed());
         });
 
@@ -492,7 +496,10 @@ mod tests {
             )
             .expect("listener becomes eligible after capacity release");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::ListenerReady);
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::ListenerReady
+            );
             assert!(report.listener_armed());
         });
 
@@ -506,16 +513,16 @@ mod tests {
         let socket_path = agent_socket_path(&root_path);
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(4).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(4).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
         let listener = prepare_accept_ready_agent_socket(listening)
             .expect("Phase 070 listener becomes accept-ready");
         let client = UnixStream::connect(&socket_path).expect("queued test client connects");
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
-        wake.notifier().notify().expect("controlled runtime wake posts");
+        wake.notifier()
+            .notify()
+            .expect("controlled runtime wake posts");
         let workers = capacity(1);
         let control = LocalLinuxSchedulerControl::new();
 
@@ -530,8 +537,14 @@ mod tests {
             )
             .expect("simultaneous readiness is valid");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::ListenerReady);
-            assert_eq!(wake.drain(), Err(LocalLinuxRuntimeWakeDrainError::WouldBlock));
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::ListenerReady
+            );
+            assert_eq!(
+                wake.drain(),
+                Err(LocalLinuxRuntimeWakeDrainError::WouldBlock)
+            );
         });
 
         drop(client);
@@ -543,11 +556,9 @@ mod tests {
         let (root_path, runtime_directory, instance_lock) = runtime_owners("reap");
         let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
             .expect("Phase 067 bound socket creates");
-        let listening = listen_bound_agent_socket(
-            bound,
-            NonZeroU16::new(4).expect("test backlog is nonzero"),
-        )
-        .expect("Phase 068 listener creates");
+        let listening =
+            listen_bound_agent_socket(bound, NonZeroU16::new(4).expect("test backlog is nonzero"))
+                .expect("Phase 068 listener creates");
         let listener = prepare_accept_ready_agent_socket(listening)
             .expect("Phase 070 listener becomes accept-ready");
         let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
@@ -569,15 +580,16 @@ mod tests {
             let (server, _peer) = UnixStream::pair().expect("cancellation socket pair creates");
             let connection = AuthenticatedLocalLinuxConnection::try_new(server)
                 .expect("same-UID cancellation stream authenticates");
-            let cancellation = LocalLinuxWorkerCancellation::try_from_authenticated_connection(
-                &connection,
-            )
-            .expect("cancellation clone creates");
+            let cancellation =
+                LocalLinuxWorkerCancellation::try_from_authenticated_connection(&connection)
+                    .expect("cancellation clone creates");
             drop(connection);
 
             let mut registry = LocalLinuxScopedWorkerRegistry::new();
             registry.register(handle, cancellation);
-            wake.notifier().notify().expect("controlled completion-style wake posts");
+            wake.notifier()
+                .notify()
+                .expect("controlled completion-style wake posts");
 
             let report = wait_once_for_linux_runtime_readiness(
                 &listener,
@@ -588,7 +600,10 @@ mod tests {
             )
             .expect("runtime wake reaps finished handle");
 
-            assert_eq!(report.outcome(), LocalLinuxRuntimeReadinessOutcome::RuntimeWake);
+            assert_eq!(
+                report.outcome(),
+                LocalLinuxRuntimeReadinessOutcome::RuntimeWake
+            );
             assert_eq!(
                 report.completions(),
                 &[LocalLinuxScopedWorkerCompletion::Stopped(
