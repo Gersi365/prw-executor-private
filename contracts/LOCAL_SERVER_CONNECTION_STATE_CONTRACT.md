@@ -17,9 +17,11 @@ A connection instance is usable only while both component states are healthy.
 
 The aggregate exposes one of three unusable reasons:
 
-- `InboundReadPoisoned`;
-- `ResponseWritePoisoned`;
-- `BothPoisoned`.
+- `InboundRead`;
+- `ResponseWrite`;
+- `Both`.
+
+The enum type `LocalServerConnectionUnusableReason` carries the common unusable-state context; the shorter variants avoid redundant naming while preserving the same state classification.
 
 ## Processing rule
 
