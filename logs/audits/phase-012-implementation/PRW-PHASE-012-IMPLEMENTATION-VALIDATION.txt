@@ -1,0 +1,121 @@
+Private Remote Workspace
+Phase 012 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 012
+SCOPE: Generic local IPC frame writer over std::io::Write
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 012 base commit: aa757a2ca1507c71f300ce86a68d052ff0865b0d
+Validated source commit: ee069374e79a7218ea808076848f1da39a9b0b5e
+Validated GitHub Actions run: 31878316240
+
+IMPLEMENTED WRITE ORDER
+
+The generic writer emits one complete validated frame in this exact order:
+1. encode the validated header through the Phase 009 codec;
+2. write all 24 header bytes;
+3. only after the header completes, write all bounded payload bytes;
+4. return without separators, padding, trailers, or implicit flush.
+
+The writer never recomputes, clamps, truncates, pads, or silently rewrites the Phase 010 payload-length relationship.
+
+ERROR TAXONOMY
+
+LocalIpcFrameWriteError:
+- HeaderIo
+- PayloadIo
+
+The public error boundary remains bounded and does not expose raw operating-system errors or payload bytes.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 012 base: 4
+- added: contracts/LOCAL_FRAME_WRITER_CONTRACT.md
+- modified: crates/prw-agent/src/frame_object.rs
+- added: crates/prw-agent/src/frame_object/writer.rs
+- added: docs/architecture/PHASE_012_LOCAL_FRAME_WRITER.md
+
+VALIDATION
+
+Run 26
+- Run ID: 31878316240
+- Commit: ee069374e79a7218ea808076848f1da39a9b0b5e
+- Result: SUCCESS on first validation attempt.
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: exact header-then-payload bytes emitted
+PASS: generic writer -> generic reader in-memory round trip
+PASS: zero payload emits header only
+PASS: header write failure classified as HeaderIo
+PASS: payload write failure after complete header classified as PayloadIo
+
+FLUSH / PARTIAL-WRITE POLICY
+
+write_frame does not call flush(). Buffering, flush, backpressure, and batching policy remain owned by a future connection/runtime layer.
+
+A partial failed write is not repaired or rewound by Phase 012. Future connection policy must treat stream state after a partial frame write explicitly rather than attempting blind resynchronization.
+
+RUNTIME BOUNDARY
+
+The implementation is generic over std::io::Write and tests use Vec<u8> plus deterministic synthetic failing writers.
+
+Phase 012 did not:
+- bind/listen/accept/connect a Unix socket;
+- retrieve SO_PEERCRED;
+- create or modify the XDG runtime socket path;
+- activate the Agent as a service;
+- select a production sync/async socket runtime;
+- serialize or dispatch commands;
+- add any dependency.
+
+SECURITY / MUTATION STATEMENT
+
+Phase 012 did not:
+- implement shell/PTY execution;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 012 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- actual Unix socket runtime;
+- runtime SO_PEERCRED enforcement;
+- connection/multi-frame loop policy;
+- outstanding-request concurrency policy;
+- timeout/backpressure/cancellation semantics;
+- command payload serialization;
+- runtime command dispatch;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 012 implementation-validation report.
+GitHub Actions run 31878316240 is the authoritative executable validation evidence for source commit ee069374e79a7218ea808076848f1da39a9b0b5e.
