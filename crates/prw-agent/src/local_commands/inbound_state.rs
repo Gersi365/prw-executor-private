@@ -123,9 +123,7 @@ mod tests {
         LocalAgentRequestStreamReadError, write_local_command_request,
     };
     use crate::local_commands::request_processor::LocalRequestProcessorError;
-    use crate::local_commands::request_response_transaction::{
-        LocalRequestResponseTransactionError,
-    };
+    use crate::local_commands::request_response_transaction::LocalRequestResponseTransactionError;
     use crate::local_commands::response_writer::{
         LocalTerminalResponseWriteError, LocalTerminalResponseWriteState,
     };
@@ -270,7 +268,8 @@ mod tests {
         let policy = CountingPolicy::allow(Capability::AgentStatusRead);
         let mut inbound = LocalInboundRequestState::ReadPoisoned;
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut reader = CountingReader::new(request_bytes(id(242), LocalAgentCommand::GetAgentStatus));
+        let mut reader =
+            CountingReader::new(request_bytes(id(242), LocalAgentCommand::GetAgentStatus));
         let mut writer = CountingWriter::default();
 
         assert_eq!(
