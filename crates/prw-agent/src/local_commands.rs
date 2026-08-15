@@ -63,6 +63,11 @@ pub mod response_codec;
 pub(crate) mod response_writer;
 #[allow(
     dead_code,
+    reason = "pre-runtime bounded server connection loop is intentionally crate-internal"
+)]
+pub(crate) mod server_connection_loop;
+#[allow(
+    dead_code,
     reason = "pre-runtime server connection state is intentionally crate-internal"
 )]
 pub(crate) mod server_connection_state;
