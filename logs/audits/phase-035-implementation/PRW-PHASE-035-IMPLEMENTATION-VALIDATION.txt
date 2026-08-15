@@ -1,0 +1,84 @@
+Private Remote Workspace
+Phase 035 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 035
+SCOPE: Provider-neutral connection discard and outstanding-request abandonment
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial source commit: e0b9fc1a7170a24591ac97bf4ffc5771814d3d6a
+Rustfmt corrective: c58254ce0618cf4100761edacf0bbde645626ce8
+Authoritative GitHub Actions run: 31882793865
+
+LOCKED DISPOSITION
+
+- Connection discard is not terminal-response completion.
+- Every still-outstanding request ID is removed from the old tracker and returned in deterministic registration order as abandoned.
+- The disposition records whether the discarded connection send-state was WritePoisoned.
+- The request whose ambiguous write poisoned a connection remains outstanding until discard and is therefore surfaced among abandoned IDs.
+- No automatic retry occurs.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands/request_tracker.rs
+- crates/prw-agent/src/local_commands/request_frame.rs
+- crates/prw-agent/src/local_commands/request_frame/discard.rs
+- contracts/LOCAL_CONNECTION_DISCARD_CONTRACT.md
+- docs/architecture/PHASE_035_CONNECTION_DISCARD.md
+
+VALIDATION HISTORY
+
+Run 71
+- Run ID: 31882762660
+- Commit: e0b9fc1a7170a24591ac97bf4ffc5771814d3d6a
+- Result: FAILURE
+- Cause: rustfmt-only reflow in discard.rs.
+
+Run 72
+- Run ID: 31882793865
+- Commit: c58254ce0618cf4100761edacf0bbde645626ce8
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: tracker abandon_all returns IDs in registration order and empties the tracker
+PASS: healthy discard surfaces every outstanding ID
+PASS: poisoned discard records poison context and preserves the ambiguous ID for the caller
+PASS: empty discard is stable
+PASS: abandoned ID is not fabricated as a completed Request
+PASS: no retry is triggered by discard
+
+RUNTIME MUTATION STATEMENT
+
+Phase 035 closes no socket, sends no cancellation, reconnects nothing, schedules no retry, dispatches no live command, mutates no DNS/network state, adds no dependency, starts no async work, activates no systemd unit, adds no database, deploys no infrastructure, and performs no private-key operation.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+NEXT GAP
+
+Compose the two existing read-only command request types with their already-validated response builders in a pure in-memory responder, without accessing host state or a live transport.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 035 implementation-validation report.
+GitHub Actions run 31882793865 is the authoritative executable validation evidence.
