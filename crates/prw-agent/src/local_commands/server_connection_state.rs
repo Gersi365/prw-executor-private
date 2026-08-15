@@ -1,12 +1,17 @@
 //! Aggregate pure in-memory server-side connection processing state.
 //!
 //! Phase 044 combines inbound Request framing safety and terminal-response write
-//! safety for one future local IPC connection instance. It owns no transport.
+//! safety for one future local IPC connection instance. Phase 051 extends the
+//! same aggregate with a clean-EOF-aware boundary entry point. It owns no transport.
 
 use std::io::{Read, Write};
 
 use prw_policy::PolicyEvaluator;
 
+use super::boundary_inbound_state::{
+    LocalBoundaryInboundError, process_one_with_boundary_inbound_guard,
+};
+use super::boundary_request_response_transaction::LocalBoundaryRequestResponseOutcome;
 use super::inbound_state::{
     LocalInboundRequestState, LocalInboundTransactionError, process_one_with_inbound_guard,
 };
@@ -103,6 +108,48 @@ pub fn process_one_on_server_connection<R: Read, W: Write, E: PolicyEvaluator + 
     .map_err(LocalServerConnectionProcessError::Transaction)
 }
 
+/// Processes one clean-EOF-aware boundary attempt through the aggregate state.
+///
+/// The existing aggregate usability check occurs before any input read. A usable
+/// connection delegates to the Phase 050 boundary-aware inbound guard, which
+/// preserves clean EOF and owns component state transitions.
+///
+/// # Errors
+///
+/// Returns [`LocalBoundaryServerConnectionProcessError::ConnectionUnusable`]
+/// before I/O when the aggregate state is already unusable, or
+/// [`LocalBoundaryServerConnectionProcessError::Transaction`] for the delegated
+/// Phase 050 failure after any applicable component-state transition.
+pub fn process_one_at_boundary_on_server_connection<
+    R: Read,
+    W: Write,
+    E: PolicyEvaluator + ?Sized,
+>(
+    reader: &mut R,
+    writer: &mut W,
+    state: &mut LocalServerConnectionState,
+    evaluator: &E,
+    status_snapshot: LocalAgentStatusSnapshot,
+    private_dns_snapshot: &LocalPrivateDnsSnapshot,
+) -> Result<LocalBoundaryRequestResponseOutcome, LocalBoundaryServerConnectionProcessError> {
+    if let Some(reason) = state.unusable_reason() {
+        return Err(
+            LocalBoundaryServerConnectionProcessError::ConnectionUnusable(reason),
+        );
+    }
+
+    process_one_with_boundary_inbound_guard(
+        reader,
+        writer,
+        &mut state.inbound,
+        &mut state.response_write,
+        evaluator,
+        status_snapshot,
+        private_dns_snapshot,
+    )
+    .map_err(LocalBoundaryServerConnectionProcessError::Transaction)
+}
+
 /// Why a server-side connection state cannot process another Request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalServerConnectionUnusableReason {
@@ -123,19 +170,30 @@ pub enum LocalServerConnectionProcessError {
     Transaction(LocalInboundTransactionError),
 }
 
+/// Phase 051 boundary-aware aggregate server-connection processing failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalBoundaryServerConnectionProcessError {
+    /// The connection state was already unusable before this boundary attempt.
+    ConnectionUnusable(LocalServerConnectionUnusableReason),
+    /// The delegated Phase 050 boundary-aware inbound transaction failed.
+    Transaction(LocalBoundaryInboundError),
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
     use std::io::{Cursor, Error, Read, Result as IoResult, Write};
 
     use super::{
-        LocalServerConnectionProcessError, LocalServerConnectionState,
-        LocalServerConnectionUnusableReason, process_one_on_server_connection,
+        LocalBoundaryServerConnectionProcessError, LocalServerConnectionProcessError,
+        LocalServerConnectionState, LocalServerConnectionUnusableReason,
+        process_one_at_boundary_on_server_connection, process_one_on_server_connection,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::writer::write_frame;
     use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::local_commands::LocalAgentCommand;
+    use crate::local_commands::boundary_request_response_transaction::LocalBoundaryRequestResponseOutcome;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
     use crate::local_commands::status_snapshot::{
@@ -330,6 +388,174 @@ mod tests {
         assert_eq!(later_reader.read_calls, 0);
         assert_eq!(later_writer.written, 0);
         assert_eq!(policy.calls(), policy_calls_before);
+    }
+
+    #[test]
+    fn boundary_clean_eof_keeps_aggregate_state_usable() {
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let policy = CountingPolicy::new();
+        let mut state = LocalServerConnectionState::new();
+        let mut output = Vec::new();
+
+        assert_eq!(
+            process_one_at_boundary_on_server_connection(
+                &mut Cursor::new(Vec::<u8>::new()),
+                &mut output,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            ),
+            Ok(LocalBoundaryRequestResponseOutcome::CleanEof)
+        );
+        assert!(state.is_usable());
+        assert!(output.is_empty());
+        assert_eq!(policy.calls(), 0);
+    }
+
+    #[test]
+    fn boundary_repeated_calls_process_frames_then_clean_eof() {
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let policy = CountingPolicy::new();
+        let mut state = LocalServerConnectionState::new();
+        let mut bytes = request_bytes(id(310), LocalAgentCommand::GetAgentStatus);
+        bytes.extend(request_bytes(id(311), LocalAgentCommand::GetPrivateDnsConfig));
+        let mut input = Cursor::new(bytes);
+        let mut output = Vec::new();
+
+        assert_eq!(
+            process_one_at_boundary_on_server_connection(
+                &mut input,
+                &mut output,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            ),
+            Ok(LocalBoundaryRequestResponseOutcome::ResponseWritten)
+        );
+        assert_eq!(
+            process_one_at_boundary_on_server_connection(
+                &mut input,
+                &mut output,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            ),
+            Ok(LocalBoundaryRequestResponseOutcome::ResponseWritten)
+        );
+        assert_eq!(
+            process_one_at_boundary_on_server_connection(
+                &mut input,
+                &mut output,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            ),
+            Ok(LocalBoundaryRequestResponseOutcome::CleanEof)
+        );
+        assert!(state.is_usable());
+        assert_eq!(policy.calls(), 2);
+        assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn boundary_truncation_marks_aggregate_inbound_unusable() {
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let policy = CountingPolicy::new();
+        let mut state = LocalServerConnectionState::new();
+        let mut bytes = request_bytes(id(312), LocalAgentCommand::GetAgentStatus);
+        bytes.truncate(6);
+        let mut output = Vec::new();
+
+        assert!(
+            process_one_at_boundary_on_server_connection(
+                &mut Cursor::new(bytes),
+                &mut output,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            state.unusable_reason(),
+            Some(LocalServerConnectionUnusableReason::InboundRead)
+        );
+        assert!(output.is_empty());
+        assert_eq!(policy.calls(), 0);
+    }
+
+    #[test]
+    fn boundary_response_write_failure_marks_aggregate_write_unusable() {
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let policy = CountingPolicy::new();
+        let mut state = LocalServerConnectionState::new();
+        let mut writer = FailAfter::new(24);
+
+        assert!(
+            process_one_at_boundary_on_server_connection(
+                &mut Cursor::new(request_bytes(id(313), LocalAgentCommand::GetAgentStatus)),
+                &mut writer,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            state.unusable_reason(),
+            Some(LocalServerConnectionUnusableReason::ResponseWrite)
+        );
+        assert_eq!(policy.calls(), 1);
+    }
+
+    #[test]
+    fn boundary_unusable_state_rejects_before_any_io() {
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let policy = CountingPolicy::new();
+        let mut state = LocalServerConnectionState::new();
+        let mut failing_writer = FailAfter::new(0);
+        assert!(
+            process_one_at_boundary_on_server_connection(
+                &mut Cursor::new(request_bytes(id(314), LocalAgentCommand::GetAgentStatus)),
+                &mut failing_writer,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            )
+            .is_err()
+        );
+
+        let calls_before = policy.calls();
+        let mut reader = CountingReader::new(request_bytes(id(315), LocalAgentCommand::GetAgentStatus));
+        let mut writer = CountingWriter::default();
+        assert_eq!(
+            process_one_at_boundary_on_server_connection(
+                &mut reader,
+                &mut writer,
+                &mut state,
+                &policy,
+                status,
+                &dns,
+            ),
+            Err(LocalBoundaryServerConnectionProcessError::ConnectionUnusable(
+                LocalServerConnectionUnusableReason::ResponseWrite
+            ))
+        );
+        assert_eq!(reader.read_calls, 0);
+        assert_eq!(writer.written, 0);
+        assert_eq!(policy.calls(), calls_before);
     }
 
     struct CountingReader {
