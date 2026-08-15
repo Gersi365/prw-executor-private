@@ -9,6 +9,11 @@
     reason = "pre-runtime admission pipeline is intentionally crate-internal"
 )]
 pub(crate) mod admission;
+#[allow(
+    dead_code,
+    reason = "pre-runtime boundary policy processor is intentionally crate-internal"
+)]
+pub(crate) mod boundary_policy_processor;
 pub mod codec;
 #[allow(
     dead_code,
