@@ -1,0 +1,239 @@
+Private Remote Workspace
+Phase 100 Linux Agent Bootstrap Decision Preparation
+
+STATUS: DECISION_PACKAGE_PREPARED / NOT_APPROVED / NO_BOOTSTRAP_SOURCE_MUTATION / NO_SYSTEMD_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY BINARY BOOTSTRAP / EXIT / LOGGING / SERVICE-BOUNDARY DECISION PREPARATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 099 completion-review commit: 5bb0d57d1c53b8eed0ab013293b6b889c91361fa
+Phase 098 authoritative permanent CI run: 31903139121
+Current bootstrap source: crates/prw-agent/src/main.rs
+Current systemd packaging surface: packaging/systemd/README.md only
+
+PURPOSE
+
+Phase 100 prepares the next explicit decision after the Phase 094-A01 authorization was exhausted by Phase 099.
+
+This package does not approve or perform `main.rs` wiring, process activation, systemd unit creation, installation, enablement, start, restart-policy mutation, or deployment.
+
+CURRENT STATE
+
+The production-local runtime is complete and permanently validated below bootstrap.
+
+`crates/prw-agent/src/main.rs` remains the Phase 001 inactive bootstrap. It constructs only the default `PrivateDnsConfig` and prints one informational line. It does not create runtime configuration, policy/snapshots, a signal source, lifecycle resources, listener, worker scope, or production runtime.
+
+The current `packaging/systemd/` directory contains only `README.md`. No service unit exists in the repository. The README states the intended Agent is a headless automatically started service but requires service architecture validation for restart policy, startup ordering, filesystem permissions, secret storage, logs, and rollback behavior before activation.
+
+RECOMMENDED GATE DECOMPOSITION
+
+Do not combine binary bootstrap and systemd activation in one approval.
+
+Recommended sequence after explicit approval:
+
+Phase 101 — Binary bootstrap contract lock
+- lock production runtime default/config source;
+- lock policy/snapshot construction;
+- lock startup failure and terminal-report exit mapping;
+- lock bounded stderr/journal-facing logging contract;
+- no code change.
+
+Phase 102 — `main.rs` callable runtime wiring
+- wire the already-validated Phase 098 runtime into the binary;
+- no systemd unit;
+- no installation or automatic start;
+- validate in controlled subprocess/temp-XDG environments;
+- prove SIGTERM/SIGINT binary behavior and exit mapping;
+- prove second-instance rejection;
+- prove cleanup and no stale socket after exit.
+
+Phase 103 — Binary bootstrap completion review
+- permanent CI and subprocess evidence;
+- confirm no packaging/service activation mutation;
+- explicit gate before systemd.
+
+Only later, under separate approval:
+
+Phase 104+ — systemd packaging/activation design and implementation
+- unit contents;
+- restart policy;
+- startup ordering;
+- environment/config source;
+- filesystem/runtime permissions;
+- logs/journal behavior;
+- install/upgrade/rollback semantics;
+- enable/start/stop/restart validation;
+- user-impacting host activation.
+
+RECOMMENDED BINARY BOOTSTRAP CONTRACT
+
+1. Keep `main.rs` thin.
+
+`main.rs` should compose validated domain/runtime inputs and delegate to the Phase 098 callable runtime. Runtime algorithms should remain in library modules and not be reimplemented in the binary.
+
+2. Preserve the existing unprivileged/same-user local runtime model.
+
+The first bootstrap should not add a privileged helper, public listener, TUN, relay, database, or remote transport. Those remain separate architecture domains.
+
+3. Keep private DNS optional.
+
+The binary may construct the existing default/effective private-DNS snapshot, but bootstrap must not make private DNS mandatory for Agent startup or local IPC.
+
+4. Avoid a new general configuration parser in the first bootstrap phase.
+
+The production-local runtime requires bounded values for:
+- worker capacity;
+- Unix listener backlog;
+- per-readiness scheduling attempt budget;
+- per-session request budget;
+- read I/O budget;
+- write I/O budget.
+
+Recommendation: lock one explicit initial bounded default profile in Phase 101 and encode those values in a small bootstrap configuration constructor/constants. Do not introduce TOML/YAML/JSON parsing, mutable live reload, or secret configuration as part of first `main.rs` wiring.
+
+The exact numeric values are intentionally NOT locked by Phase 100. They require explicit Phase 101 decision approval.
+
+5. Keep local command policy explicit.
+
+The initial binary must construct one explicit `BoundedLocalReadPolicy`; it must not infer permissions from process environment or silently broaden the command surface.
+
+Recommendation: Phase 101 explicitly decide whether the already-implemented local read commands are both allowed in the initial service profile. No file/terminal/forwarding/device-management capability expansion belongs in bootstrap.
+
+6. Construct immutable snapshots before entering the runtime.
+
+The initial Agent status snapshot and optional private-DNS snapshot should be validated/constructed before the long-running runtime begins and passed through `LocalLinuxProductionRuntimeInputs`.
+
+Any future dynamic state/config refresh is a later feature and should not be smuggled into bootstrap.
+
+7. Exit mapping must be binary-owned and simple.
+
+Recommended initial mapping:
+- clean programmatic shutdown => success exit;
+- handled SIGTERM/SIGINT termination with clean terminal transaction => success exit;
+- startup/lifecycle failure => failure exit;
+- readiness/runtime fail-stop => failure exit;
+- listener/socket cleanup failure => failure exit even if original reason was clean shutdown;
+- signal-mask restoration failure => failure exit even if original reason was clean shutdown.
+
+Recommendation: use a minimal success/failure process exit contract initially rather than a large unstable numeric taxonomy. Preserve detailed typed reason in the log line/auditable text, not in many exit codes.
+
+Exact binary exit representation is NOT approved by Phase 100.
+
+8. Logging should be bounded and dependency-minimal initially.
+
+Recommendation:
+- no new logging framework dependency in the first bootstrap;
+- emit bounded deterministic startup/failure/terminal summary to stderr;
+- do not print secrets, private-key material, request payloads, filesystem content, or unbounded worker evidence;
+- terminal summary may include high-level typed reason, bounded counters, cleanup classification, and mask-restoration classification;
+- avoid per-readiness-loop or per-poll logging that could become unbounded/noisy.
+
+This is compatible with later journal capture without making systemd a prerequisite for testing the binary.
+
+9. `main.rs` must not own signal-handler logic.
+
+The binary should call the Phase 098 safe signal-aware runtime. It must not add direct signal handlers, libc FFI, unsafe blocks, or a parallel signal implementation.
+
+10. Preserve `unsafe_code = "forbid"`.
+
+No bootstrap justification currently exists for weakening the workspace unsafe policy.
+
+BINARY VALIDATION REQUIREMENTS BEFORE SYSTEMD
+
+A source-changing bootstrap phase should not be classified complete until controlled binary/subprocess tests prove at minimum:
+
+A. clean startup + SIGTERM
+- temporary valid XDG runtime root;
+- start the compiled Agent binary;
+- wait for validated Agent socket presence/readiness without an arbitrary busy loop;
+- send SIGTERM;
+- binary exits according to locked success mapping;
+- socket pathname is absent after exit.
+
+B. clean startup + SIGINT
+- same as SIGTERM with SIGINT.
+
+C. one local request
+- start binary in temporary runtime root;
+- same-UID local client performs one existing bounded read request;
+- validate correlated response;
+- terminate cleanly;
+- prove cleanup.
+
+D. second-instance exclusion
+- start first Agent in temporary runtime root;
+- start second Agent with same runtime root;
+- second process must fail deterministically with typed/aligned AlreadyRunning startup evidence;
+- first Agent remains functional;
+- terminate first cleanly;
+- prove cleanup.
+
+E. invalid runtime-root failure
+- missing/invalid/incorrect-mode XDG runtime root must fail before listener activation and return the locked failure exit mapping.
+
+F. no stale socket after startup/runtime failure where cleanup is possible.
+
+G. binary test must not install or rely on systemd.
+
+SERVICE PACKAGING BOUNDARY
+
+The repository currently contains no systemd service unit, only a README boundary.
+
+Therefore systemd should remain a separate approval after binary bootstrap validation.
+
+A later service decision must explicitly lock:
+- unit identity and executable path;
+- user/account model;
+- XDG_RUNTIME_DIR/session/runtime-directory behavior under the chosen system service or user-service model;
+- restart conditions and rate limits;
+- startup ordering;
+- environment/config injection;
+- filesystem permissions;
+- stdout/stderr/journal behavior;
+- privilege/no-new-privileges and sandboxing options;
+- install/upgrade/remove paths;
+- enable/start/stop/restart rollback;
+- service-manager signal/timeout behavior;
+- activation validation on a real test host.
+
+Do not infer these from the old Phase 001 packaging README.
+
+RECOMMENDED DECISION FOR FUTURE APPROVAL
+
+Recommended future architecture decision:
+
+- approve Phases 101-103 only;
+- Phase 101 locks a fixed initial bootstrap profile, local policy, exit mapping, and bounded logging;
+- Phase 102 wires `main.rs` to the already-validated Phase 098 runtime without systemd;
+- Phase 102 uses subprocess/temp-XDG tests and real SIGTERM/SIGINT binary validation;
+- Phase 103 performs completion review;
+- systemd packaging/activation remains a later explicit user-impacting gate.
+
+NOT APPROVED BY THIS PACKAGE
+
+Phase 100 does not authorize:
+- edits to `crates/prw-agent/src/main.rs`;
+- production numeric runtime defaults;
+- local-read policy choice;
+- process exit-code implementation;
+- logging implementation;
+- a systemd unit file;
+- install/enable/start/stop/restart;
+- automatic startup;
+- deployment;
+- privileged helper implementation;
+- remote/public networking;
+- auth/enrollment expansion;
+- mandatory private DNS;
+- TUN/relay/database/private-key changes;
+- Wake-on-LAN / remote wake.
+
+NEXT EXPLICIT APPROVAL TEXT
+
+A source-changing bootstrap sequence should begin only after an explicit user approval equivalent to:
+
+"Approve the Phase 100 recommended binary-bootstrap sequence (Phases 101-103), while keeping systemd packaging/activation and deployment separately gated."
+
+FINAL CLASSIFICATION
+
+BOOTSTRAP_DECISION_PREPARED / NOT_APPROVED / THIN_MAIN_RECOMMENDED / FIXED_INITIAL_BOUNDED_PROFILE_RECOMMENDED / SIMPLE_SUCCESS_FAILURE_EXIT_CONTRACT_RECOMMENDED / BOUNDED_STDERR_LOGGING_RECOMMENDED / REAL_BINARY_SIGTERM_SIGINT_TESTS_REQUIRED / SECOND_INSTANCE_BINARY_TEST_REQUIRED / SYSTEMD_SEPARATELY_GATED / MAIN_RS_UNCHANGED / NO_SYSTEMD_MUTATION / NO_ACTIVATION / NO_DEPLOYMENT
