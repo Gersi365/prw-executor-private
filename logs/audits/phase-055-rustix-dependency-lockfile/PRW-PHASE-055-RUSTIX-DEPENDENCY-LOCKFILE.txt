@@ -1,0 +1,104 @@
+Private Remote Workspace
+Phase 055 rustix Dependency Materialization and Cargo.lock Bootstrap
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Materialize the Phase 054 exact rustix dependency decision and establish the repository's first Cargo.lock without hand-constructing dependency resolution.
+
+AUTHORIZED DEPENDENCY
+
+`crates/prw-agent/Cargo.toml` now contains exactly:
+
+`rustix = { version = "=1.1.4", default-features = false, features = ["std", "fs", "net", "process"] }`
+
+No rustix runtime API is called by PRW source in this phase.
+
+LOCKFILE BOOTSTRAP METHOD
+
+The repository had no Cargo.lock before Phase 055.
+
+A temporary, repository-contained GitHub Actions workflow was used only to run the repository toolchain's `cargo generate-lockfile` on Ubuntu 24.04. The capture job used:
+
+- rustc 1.97.1;
+- cargo 1.97.1;
+- Cargo lockfile format version 4.
+
+Capture workflow run: `31888304068`.
+Capture job: `95020698488`.
+
+Cargo reported: `Locking 7 packages to latest compatible versions`.
+
+The generated lockfile SHA-256 was:
+
+`1f149fd10b82b08a4368c6ad122672d349dbdd7cd88274d4a81f208b4974b9eb`
+
+The exact generated Cargo.lock bytes were emitted by the capture job, decoded, independently SHA-256 checked against the runner-reported checksum, and committed without manual dependency-resolution edits.
+
+The resulting external registry packages are:
+
+- bitflags 2.13.1;
+- errno 0.3.14;
+- libc 0.2.189;
+- linux-raw-sys 0.12.1;
+- rustix 1.1.4;
+- windows-link 0.2.1;
+- windows-sys 0.61.2.
+
+The target-specific packages present in the lockfile are Cargo's resolved cross-target dependency metadata; their presence does not expand PRW's enabled rustix feature set beyond the Phase 054 lock.
+
+TEMPORARY WORKFLOW LIFECYCLE
+
+Temporary workflow path:
+`.github/workflows/phase-055-lockfile-capture.yml`
+
+It was created only for exact lockfile capture and then deleted after Cargo.lock was committed. It is not present in the final Phase 055 repository state.
+
+FINAL REPOSITORY STATE
+
+Final implementation commit before the authoritative validation run:
+`46bf2c243d21a6c1d40c14100de8ac6a34bd0ca8`
+
+That state contains:
+- the exact Phase 054 rustix dependency declaration;
+- committed Cargo.lock;
+- no temporary capture workflow;
+- no new runtime source using rustix;
+- no Unix listener or filesystem/runtime-path activation.
+
+VALIDATION
+
+Authoritative normal repository validation run:
+`31888373627`
+
+All standard gates passed:
+- `cargo fmt --all -- --check` — PASS;
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` — PASS;
+- `cargo test --workspace --all-targets` — PASS;
+- `cargo build --workspace --all-targets` — PASS.
+
+An earlier normal run on the Cargo.lock commit itself, `31888360634`, also completed successfully; it is supplementary evidence only. The authoritative Phase 055 conclusion uses the later final-state run after removal of the temporary workflow.
+
+SCOPE PRESERVED
+
+Phase 055:
+- bound no socket;
+- created/removed no XDG runtime path;
+- performed no peer-credential lookup in PRW runtime;
+- added no handwritten unsafe code;
+- activated no service;
+- changed no authentication/database/network/DNS/TUN state;
+- performed no deployment.
+
+NEXT SAFE STEP
+
+Enforce committed lockfile usage in the standard Rust CI gates with Cargo `--locked`, then validate the hardened workflow before implementing any rustix-backed platform abstraction.
+
+FINAL CLASSIFICATION
+
+RUSTIX_DEPENDENCY_MATERIALIZED / CARGO_LOCK_BOOTSTRAPPED_FROM_CARGO / TEMP_CAPTURE_REMOVED / STANDARD_CI_PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 055 report.
