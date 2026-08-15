@@ -291,7 +291,8 @@ mod tests {
         let dns = dns_snapshot();
         let policy = CountingPolicy::new();
         let mut state = LocalServerConnectionState::new();
-        let mut first_input = Cursor::new(request_bytes(id(253), LocalAgentCommand::GetAgentStatus));
+        let mut first_input =
+            Cursor::new(request_bytes(id(253), LocalAgentCommand::GetAgentStatus));
         let mut failing_writer = FailAfter::new(0);
         assert!(
             process_one_on_server_connection(
