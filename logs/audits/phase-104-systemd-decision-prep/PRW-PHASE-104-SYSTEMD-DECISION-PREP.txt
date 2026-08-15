@@ -1,0 +1,288 @@
+Private Remote Workspace
+Phase 104 systemd Packaging / Automatic-Startup Decision Preparation
+
+STATUS: DECISION_PACKAGE_PREPARED / NOT_APPROVED / NO_SYSTEMD_SOURCE_MUTATION / NO_INSTALL / NO_ENABLE / NO_START / NO_HOST_ACTIVATION
+AUDIT TYPE: READ-ONLY SERVICE ARCHITECTURE / PACKAGING / LIFECYCLE / ROLLBACK DECISION PREPARATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 103 completion-review commit: e9c31d7c5336d60a7a153deb44e39ff34f42dab3
+Phase 102 authoritative CI: 31904953430
+Current systemd packaging surface: packaging/systemd/README.md only
+Current Agent runtime model: unprivileged same-user standalone binary with XDG_RUNTIME_DIR Unix socket
+
+PURPOSE
+
+Phase 104 prepares the next explicit decision after completion of the user-approved Phase 101-103 standalone binary-bootstrap sequence.
+
+This package does not approve or perform service-unit creation, install, enablement, start, restart, linger mutation, automatic startup, host deployment, or public/remote networking.
+
+CURRENT STATE
+
+The real `prw-agent` binary is now permanently validated standalone.
+
+It:
+
+- runs unprivileged as the invoking user;
+- validates `$XDG_RUNTIME_DIR` ownership/mode;
+- creates a fixed PRW child runtime directory;
+- acquires an exclusive instance lock;
+- binds its own authenticated same-UID Unix socket;
+- owns bind/listen/accept lifecycle itself;
+- handles SIGTERM/SIGINT synchronously through the validated signal-aware runtime;
+- performs cancel/join/socket cleanup and restores its prior signal mask;
+- emits one bounded stderr outcome record;
+- exits success for normal handled termination with clean cleanup/restoration and failure otherwise.
+
+`packaging/systemd/` still contains only `README.md`.
+
+PRIMARY-SOURCE SYSTEMD / XDG FACTS USED BY THIS PREPARATION
+
+1. The XDG Base Directory specification defines `$XDG_RUNTIME_DIR` as the per-user runtime location for objects such as Unix sockets. It requires user ownership and mode 0700.
+
+2. `pam_systemd` documents that the per-user systemd manager is started for the user and that `/run/user/$UID` is the user's XDG runtime directory.
+
+3. `loginctl enable-linger` documents that, when lingering is enabled, the user manager is spawned at boot and kept around after logouts, enabling long-running user services without an active login.
+
+4. logind documentation states that linger preserves the user's runtime context beyond logout and that changing linger is a persistent user-state operation subject to authorization.
+
+These facts align strongly with the existing PRW same-UID/XDG-runtime design and make a user service the least architecture-changing service-manager model.
+
+RECOMMENDED SERVICE IDENTITY
+
+Recommend:
+
+- systemd **user service**, not a system service;
+- service name: `prw-agent.service`;
+- service process runs as the existing user, with no `User=` privilege-domain transition in the unit;
+- no privileged helper is introduced by the initial service packaging;
+- no root-owned system daemon owns the current local Agent socket.
+
+Rationale:
+
+- preserves the already-validated same-UID authorization model;
+- preserves `$XDG_RUNTIME_DIR` ownership and mode assumptions;
+- avoids introducing a new root/service-account identity and cross-UID IPC boundary;
+- keeps future privileged networking/helper work separately architected.
+
+RECOMMENDED SOCKET OWNERSHIP
+
+Do NOT add a `.socket` unit in the first systemd packaging sequence.
+
+The Agent already owns:
+
+- instance locking;
+- stale-socket handling;
+- bind;
+- listen;
+- readiness;
+- exact socket cleanup.
+
+Systemd socket activation would require the Agent to consume an inherited listener or otherwise change this validated ownership model. That is a separate architecture change and is not justified for initial automatic startup.
+
+Recommended initial packaging therefore contains one `.service` unit only.
+
+RECOMMENDED UNIT EXECUTION MODEL
+
+Recommended initial service semantics:
+
+- `Type=exec` if supported by the target Ubuntu/systemd baseline chosen in the next decision; otherwise use an explicitly reviewed compatible non-forking type;
+- one absolute `ExecStart=` path to the packaged `prw-agent` executable;
+- no shell wrapper;
+- no `ExecStartPre=` that creates or chmods the PRW runtime directory, because the binary already validates/owns that lifecycle;
+- no `Environment=XDG_RUNTIME_DIR=...` synthesis; the service should consume the user manager's real runtime environment and fail closed if it is absent/invalid;
+- no working-directory dependency;
+- no configuration-file parser introduced by service packaging.
+
+SERVICE READINESS
+
+The current binary has no `sd_notify` protocol and intentionally performs no service-manager-specific signaling.
+
+Therefore initial service packaging must not pretend systemd `active` means the PRW Unix listener has completed application readiness.
+
+Controlled validation should prove readiness by connecting to the actual Agent Unix socket, as Phase 102 already does for the standalone binary.
+
+Do not add `Type=notify` or a new notification dependency merely for packaging convenience.
+
+RECOMMENDED RESTART POLICY
+
+Recommended initial policy:
+
+- restart on unexpected failure, not on normal handled SIGTERM/SIGINT;
+- use a bounded restart delay;
+- use systemd start-rate limiting to prevent a deterministic startup defect from becoming a tight crash loop;
+- do not use `Restart=always` in the first service contract.
+
+Candidate values for the next explicit lock:
+
+- `Restart=on-failure`;
+- `RestartSec=5s`;
+- `StartLimitIntervalSec=60s`;
+- `StartLimitBurst=5`.
+
+These exact values are recommendations only and are NOT locked by Phase 104.
+
+STOP / SIGNAL POLICY
+
+The Agent already handles SIGTERM synchronously and returns only after terminal worker/listener cleanup and signal-mask restoration.
+
+Recommended service behavior:
+
+- retain normal systemd SIGTERM stop behavior;
+- do not add a custom `ExecStop=` in the first unit;
+- choose a bounded `TimeoutStopSec=` long enough for the Agent's already-bounded shutdown transaction;
+- allow systemd's normal forced termination policy only after that timeout;
+- do not add a second custom signal protocol.
+
+Candidate `TimeoutStopSec=15s` for the next explicit lock. This is NOT approved by Phase 104.
+
+LOGGING POLICY
+
+The standalone binary already emits one bounded stderr startup-failure or terminal summary record.
+
+Recommended packaging:
+
+- rely on the user service manager/journal capture of stdout/stderr;
+- do not add a logging framework or file-log rotation subsystem as part of systemd packaging;
+- no verbose per-loop logging;
+- no environment/request/private-key dump.
+
+If explicit unit settings are desired, review `StandardOutput=journal` and `StandardError=journal` against the selected target-systemd baseline in the next phase rather than assuming version behavior.
+
+SECURITY / SANDBOXING POLICY
+
+Do not over-sandbox the first unit in ways that silently preclude future user-authorized file workspace operations.
+
+Safe initial candidates to evaluate in the next lock:
+
+- restrictive `UMask=0077`;
+- `NoNewPrivileges=yes`, provided validation confirms no current Agent path requires privilege gain.
+
+Do NOT lock aggressive home/filesystem isolation such as a blanket inaccessible home directory in this phase, because PRW's product scope includes user workspace/file access in later phases.
+
+Every hardening directive should be tested against the actual intended Agent capabilities before becoming a product contract.
+
+AUTOMATIC START / LINGER BOUNDARY
+
+For a user service to run at machine boot without a user login, lingering is the relevant systemd mechanism.
+
+`loginctl enable-linger USER` is a persistent user-state change. It causes the user manager to be spawned at boot and retained after logout.
+
+Therefore:
+
+- unit source creation must NOT implicitly mutate linger;
+- unit installation must NOT implicitly mutate linger without explicit activation authorization;
+- `enable-linger` must be an explicit, reversible activation transaction with before/after evidence;
+- rollback must be able to restore the prior linger state if activation fails;
+- if linger was already enabled before PRW activation, uninstall/rollback must not blindly disable a pre-existing user choice.
+
+This is a hard activation boundary.
+
+ENABLEMENT TARGET
+
+For the user-service design, recommend enabling the Agent in the user manager's normal default startup transaction, subject to target-version verification in the next lock.
+
+The exact `[Install]` target is NOT locked by Phase 104.
+
+The next decision should verify and then explicitly lock the target (candidate `WantedBy=default.target`) against the selected supported Ubuntu/systemd baseline.
+
+INSTALL PATH BOUNDARY
+
+The executable/package destination is not yet locked.
+
+The next packaging decision must distinguish:
+
+A. package-managed system location containing an unprivileged user-service executable; or
+B. per-user installation under the user's data/libexec tree.
+
+Do not hard-code an unreviewed path into the first unit.
+
+Whichever path is chosen must be:
+
+- absolute in `ExecStart=`;
+- non-ambiguous;
+- protected against unintended executable replacement according to the chosen install model;
+- included in install/upgrade/remove rollback evidence.
+
+RECOMMENDED PACKAGING SEQUENCE
+
+To preserve the careful validation model, recommend a bounded sequence before any host activation:
+
+Phase 105 — systemd service contract lock (decision-only)
+- lock user-service identity;
+- supported Ubuntu/systemd baseline;
+- unit name;
+- executable/install model;
+- unit type;
+- install target;
+- restart/rate-limit values;
+- stop timeout;
+- logging directives;
+- initial hardening directives;
+- explicit linger ownership/rollback policy;
+- no source mutation.
+
+Phase 106 — service-unit source + static validation
+- add only the reviewed `prw-agent.service` source and packaging documentation/tests;
+- no `.socket` unit;
+- no install/enable/start;
+- validate unit syntax and expansion with appropriate systemd tooling where available;
+- validate repository guards and permanent CI;
+- preserve standalone binary behavior.
+
+Phase 107 — packaging/install transaction design and non-activating validation
+- define exact install/remove/upgrade locations and rollback rules;
+- validate copies/permissions/symlink intent in isolated staging where possible;
+- still no linger mutation and no service start.
+
+Phase 108 — pre-activation completion review
+- audit-only net-diff and static/package evidence;
+- confirm no service-manager/host state was changed;
+- establish a new explicit activation gate.
+
+Only after a later explicit activation approval:
+
+Phase 109+ — controlled real-host activation
+- read and preserve prior linger state;
+- install exact validated artifacts;
+- daemon-reload user manager as required;
+- enable the unit;
+- optionally enable linger only if approved and needed;
+- start service;
+- prove real socket readiness/request;
+- prove restart behavior;
+- prove SIGTERM stop/cleanup;
+- prove boot/logout behavior according to locked contract;
+- rollback atomically on failure;
+- never disable a pre-existing linger setting that PRW did not own.
+
+SYSTEMD SOURCE MUTATION NOT APPROVED BY PHASE 104
+
+Phase 104 does not authorize:
+
+- creation of `prw-agent.service`;
+- any `.socket` unit;
+- changes to `packaging/systemd/README.md`;
+- executable installation;
+- user-unit installation;
+- daemon-reload;
+- enable/disable;
+- start/stop/restart;
+- `loginctl enable-linger` or disable-linger;
+- automatic startup;
+- host deployment;
+- remote/public networking;
+- privileged helper;
+- TUN/relay/database/private-key expansion;
+- mandatory private DNS;
+- Wake-on-LAN / remote wake.
+
+RECOMMENDED NEXT APPROVAL
+
+A source-changing packaging sequence should begin only after explicit approval equivalent to:
+
+"Approve the Phase 104 recommended non-activating systemd packaging sequence (Phases 105-108), using a user-service architecture and keeping real host activation/linger changes separately gated."
+
+FINAL CLASSIFICATION
+
+PHASE_104_DECISION_PREPARED / NOT_APPROVED / USER_SERVICE_RECOMMENDED / SERVICE_ONLY_NO_SOCKET_ACTIVATION / SAME_UID_XDG_MODEL_PRESERVED / RESTART_ON_FAILURE_RECOMMENDED / RATE_LIMIT_RECOMMENDED / NORMAL_SIGTERM_STOP_RECOMMENDED / BOUNDED_JOURNAL_LOGGING_RECOMMENDED / CONSERVATIVE_HARDENING_RECOMMENDED / LINGER_REQUIRED_FOR_BOOT_WITHOUT_LOGIN / LINGER_EXPLICITLY_REVERSIBLE_AND_SEPARATELY_GATED / PHASES_105_TO_108_RECOMMENDED_NON_ACTIVATING / NO_SYSTEMD_SOURCE_MUTATION / NO_INSTALL / NO_ENABLE / NO_START / NO_ACTIVATION / NO_DEPLOYMENT
