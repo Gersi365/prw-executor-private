@@ -8,9 +8,10 @@
 //! socket, Phase 068 adds an explicit listening-state transition, Phase 070 adds
 //! a nonblocking accept-ready state plus one-shot authenticated accept, Phase 071
 //! adds pure composition into Phase 060 authenticated session state, Phase 073
-//! adds absolute-deadline blocking stream I/O primitives, and Phase 075 adds
-//! bounded thread-safe worker-capacity accounting. The Agent bootstrap remains
-//! inactive and no accept/session scheduler is enabled here.
+//! adds absolute-deadline blocking stream I/O primitives, Phase 075 adds bounded
+//! thread-safe worker-capacity accounting, and Phase 076 adds a finite session
+//! worker body without spawning a thread. The Agent bootstrap remains inactive
+//! and no accept/session scheduler is enabled here.
 
 #[allow(
     dead_code,
@@ -60,6 +61,12 @@ pub mod listening_socket;
 )]
 #[path = "linux_peer_auth.rs"]
 pub mod peer_auth;
+#[allow(
+    dead_code,
+    reason = "pre-runtime finite Linux session worker body is intentionally crate-internal"
+)]
+#[path = "linux_session_worker.rs"]
+pub mod session_worker;
 #[allow(
     dead_code,
     reason = "pre-runtime bounded Linux worker capacity is intentionally crate-internal"
