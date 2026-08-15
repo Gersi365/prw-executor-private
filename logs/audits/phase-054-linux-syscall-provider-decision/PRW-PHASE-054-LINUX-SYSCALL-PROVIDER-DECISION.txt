@@ -1,0 +1,117 @@
+Private Remote Workspace
+Phase 054 Linux Syscall Provider Decision Audit
+
+STATUS: DECISION_LOCKED / DEPENDENCY_NOT_YET_MATERIALIZED
+AUDIT TYPE: EXTERNAL-DEPENDENCY AND SAFE-SYSCALL-PROVIDER EVIDENCE REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date of external evidence review: 2026-08-15
+
+PURPOSE
+
+Resolve the first remaining Phase 014/053 blocker: select one safe Linux syscall wrapper/provider for the future filesystem-backed local IPC security adapter while preserving PRW's workspace-level unsafe_code = "forbid" policy and without activating any socket or runtime-path mutation.
+
+CANDIDATES REVIEWED
+
+1. rustix 1.1.4
+2. nix 0.31.3
+
+PRIMARY-SOURCE FINDINGS — RUSTIX 1.1.4
+
+The reviewed rustix release documents itself as safe Rust bindings to POSIX/Unix/Linux/Winsock-like syscalls and exposes Rust I/O-safety types rather than requiring raw file-descriptor handling in caller code.
+
+The current rustix 1.1.4 public API provides the required narrow primitives:
+- `rustix::net::sockopt::socket_peercred` returning typed `UCred` on Linux;
+- `UCred` fields for peer PID, UID, and GID;
+- `process` APIs for local process UID identity;
+- `fs::openat`;
+- `OFlags::NOFOLLOW`, `DIRECTORY`, and `CLOEXEC`;
+- `fs::statat` plus `AtFlags::SYMLINK_NOFOLLOW`;
+- `fs::unlinkat`;
+- `fs::mkdirat`;
+- `fs::chmodat` / `fchmod`.
+
+The rustix feature manifest shows default feature `std`, with filesystem/network/process modules separately gated. The selected initial feature footprint can therefore be locked explicitly to:
+
+`default-features = false`
+`features = ["std", "fs", "net", "process"]`
+
+No `all-apis`, `use-libc`, kernel-version optimization bundle, async/event, mount, PTY, or unrelated module is required.
+
+On supported Linux targets rustix normally uses its Linux raw-syscall backend while retaining safe public abstractions. PRW does not need to depend on backend internals or enable `use-libc`.
+
+PRIMARY-SOURCE FINDINGS — NIX 0.31.3
+
+The reviewed nix release also provides safe wrappers sufficient for the use case, including peer-credential socket options, `fstatat`, `unlinkat`, no-follow flags, and UID APIs.
+
+Its current feature model has no effective default API features and would require the relevant `socket`, `fs`, and `user` surfaces. The socket feature pulls its memoffset feature, and the crate manifest uses libc as a normal dependency.
+
+No security defect was identified in nix. It was not selected because the reviewed narrow PRW adapter maps more directly to rustix's I/O-safety API and explicit fs/net/process modules with no compensating advantage from carrying a second alternative syscall abstraction.
+
+DECISION
+
+SELECT `rustix 1.1.4`.
+
+The first authorized dependency materialization shape is:
+
+`rustix = { version = "=1.1.4", default-features = false, features = ["std", "fs", "net", "process"] }`
+
+Exact version pinning is intentional for the first runtime-security baseline. The resulting Cargo.lock change must be committed and validated. Any later version or feature change requires explicit dependency review.
+
+WHY THIS SATISFIES THE CURRENT BLOCKER
+
+The provider supplies safe APIs for both sides of the remaining Linux security boundary:
+
+A. accepted-peer identity:
+- kernel socket peer credentials;
+- typed peer UID;
+- local process UID comparison.
+
+B. race-resistant pathname work:
+- directory-FD-relative open/stat/create/unlink operations;
+- no-follow final-component checks;
+- explicit mode manipulation/verification support.
+
+It therefore avoids introducing handwritten unsafe FFI into PRW and is compatible with the locked Local IPC contract's fail-closed model.
+
+WHAT THIS DECISION DOES NOT SOLVE
+
+Provider selection is not the stale-socket/path-lifecycle algorithm itself.
+
+Still unresolved before production listener activation:
+- exact XDG runtime-root validation sequence;
+- descriptor-anchored PRW subdirectory creation/validation;
+- stale socket classification and safe unlink conditions;
+- live-instance/connect-probe ordering;
+- bind/post-bind validation and cleanup;
+- accepted-peer same-UID adapter ordering;
+- listener/service lifecycle.
+
+NEXT SAFE STEP
+
+Phase 055 may materialize the exact rustix dependency and committed lockfile update and validate a non-activating platform abstraction surface. It must not bind/listen/accept on a filesystem socket or mutate XDG runtime paths.
+
+MUTATION STATEMENT
+
+This phase:
+- added no Cargo dependency;
+- changed no Cargo.lock;
+- bound no socket;
+- created/removed no runtime path;
+- performed no peer-credential lookup in PRW runtime;
+- activated no service;
+- changed no authentication/database/network/DNS/TUN state;
+- performed no deployment.
+
+AUTHORITATIVE DECISION CONTRACT
+
+`contracts/LINUX_PLATFORM_SYSCALL_PROVIDER_DECISION.md`
+
+FINAL CLASSIFICATION
+
+RUSTIX_1_1_4_SELECTED / EXACT_MINIMAL_FEATURE_SET_LOCKED / DEPENDENCY_MATERIALIZATION_NOT_YET_PERFORMED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 054 provider decision report.
