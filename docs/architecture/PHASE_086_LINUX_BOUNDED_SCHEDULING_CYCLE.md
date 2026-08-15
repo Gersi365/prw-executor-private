@@ -1,6 +1,6 @@
 # Phase 086 — Linux Bounded Scheduling Cycle
 
-Status: integrated source awaiting authoritative CI validation
+Status: formatter-corrected integrated source awaiting authoritative CI validation
 
 ## Purpose
 
