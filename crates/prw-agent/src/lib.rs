@@ -77,8 +77,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        AGENT_RUNTIME_DIRECTORY_MODE, AGENT_SOCKET_MODE, LocalIpcContract,
-        LocalIpcTransport, LocalPeerAuthorization, LocalPeerCredentialSource,
+        AGENT_RUNTIME_DIRECTORY_MODE, AGENT_SOCKET_MODE, LocalIpcContract, LocalIpcTransport,
+        LocalPeerAuthorization, LocalPeerCredentialSource,
     };
 
     #[test]
@@ -90,11 +90,11 @@ mod tests {
             contract.peer_credentials,
             LocalPeerCredentialSource::LinuxSoPeerCred
         );
+        assert_eq!(contract.authorization, LocalPeerAuthorization::SameUserId);
         assert_eq!(
-            contract.authorization,
-            LocalPeerAuthorization::SameUserId
+            contract.runtime_directory_mode,
+            AGENT_RUNTIME_DIRECTORY_MODE
         );
-        assert_eq!(contract.runtime_directory_mode, AGENT_RUNTIME_DIRECTORY_MODE);
         assert_eq!(contract.socket_mode, AGENT_SOCKET_MODE);
         assert_eq!(contract.runtime_directory_mode, 0o700);
         assert_eq!(contract.socket_mode, 0o600);
