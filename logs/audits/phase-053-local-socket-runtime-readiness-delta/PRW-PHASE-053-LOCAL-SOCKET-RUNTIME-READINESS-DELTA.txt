@@ -1,0 +1,161 @@
+Private Remote Workspace
+Phase 053 Local Unix Socket Runtime Readiness Delta Audit
+
+STATUS: PROVIDER_NEUTRAL_CONNECTION_LIFECYCLE_COMPLETE / NOT_READY_FOR_SOCKET_RUNTIME
+AUDIT TYPE: READ-ONLY POST-PHASE-052 RUNTIME-READINESS DELTA REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Current main after Phase 052 authoritative report: 245ca885816d9d97999d0d7e29ddbf1a82618f3f
+Phase 052 validated implementation head: fc61c0fd1f494256ce095cf0e4f535f3b5ad9144
+Phase 052 authoritative validation run: 31887833081
+Baseline runtime-readiness audit: Phase 014
+Refresh audit: Phase 045
+
+PURPOSE
+
+Determine which Phase 014 runtime-readiness gaps have been closed by the provider-neutral protocol/lifecycle implementation completed through Phase 052, and isolate the remaining blockers before the first filesystem-backed Unix-domain Agent listener can be authorized.
+
+CURRENT VALIDATED PROVIDER-NEUTRAL BASELINE
+
+The repository now has validated implementation for the generic local control-channel lifecycle needed after a connection has already been authenticated and supplied as generic Read/Write objects:
+
+- bounded/versioned frame codec and complete frame objects;
+- generic frame reader/writer;
+- clean EOF at a frame boundary distinguished from partial-frame truncation;
+- typed read-only Request decoding;
+- correlated terminal success/error response framing;
+- policy-gated Request processing;
+- guarded response-write poisoning;
+- inbound read/decode poisoning;
+- aggregate connection usability state;
+- clean-EOF-aware aggregate processing;
+- caller-budgeted multi-Request processing loop;
+- exact stop outcomes for clean EOF and budget exhaustion;
+- no over-read of the next frame when a work budget is exhausted;
+- resumable bounded processing on the same generic stream/state;
+- fail-closed propagation of framing, decode, policy-response, and write failures.
+
+Phase 052 was validated by GitHub Actions run 31887833081 at head fc61c0fd1f494256ce095cf0e4f535f3b5ad9144 with formatting, Clippy under -D warnings, tests, and workspace build all passing.
+
+PHASE 014 SAFE-CONTINUATION DELTA
+
+The major provider-neutral connection-lifecycle work explicitly identified by Phase 014 as safe continuation is now substantially complete for the current read-only local command baseline.
+
+In particular, a future authenticated connected stream no longer needs new protocol design to determine:
+- frame boundaries;
+- clean EOF versus truncation;
+- Request decode ordering;
+- policy-before-success-response behavior;
+- response-write ambiguity handling;
+- inbound stream poisoning;
+- aggregate connection usability;
+- bounded repeated processing and resumption.
+
+This materially narrows the remaining runtime work.
+
+RUNTIME BOUNDARY REMAINS UNCHANGED
+
+The locked LOCAL_IPC_CONTRACT still requires:
+- AF_UNIX SOCK_STREAM;
+- filesystem endpoint $XDG_RUNTIME_DIR/private-remote-workspace/agent.sock;
+- fail-closed XDG runtime-directory validation;
+- PRW runtime subdirectory mode 0700;
+- socket filesystem mode 0600 with actual post-bind validation;
+- Linux kernel-reported SO_PEERCRED;
+- same-UID authorization before any application Request processing;
+- no TCP, loopback-TCP, /tmp, or abstract-socket fallback.
+
+CURRENT SOURCE CONFIRMATION
+
+The prw-agent Cargo manifest still contains only internal workspace dependencies. No safe syscall wrapper has been added.
+
+The prw-agent binary bootstrap still explicitly starts no listeners and performs no system mutation.
+
+Therefore no accidental socket/runtime activation occurred while the provider-neutral lifecycle was completed.
+
+REMAINING HARD BLOCKERS
+
+The blockers from Phase 014 are now concentrated in the platform/security and pathname-lifecycle layer:
+
+1. SAFE SYSCALL PROVIDER LOCK
+- select and lock one safe wrapper/provider compatible with workspace unsafe_code = "forbid";
+- verify exact crate/version policy and minimal feature set;
+- verify stable Linux SO_PEERCRED support;
+- verify no-follow/stat/unlink primitives needed by the final pathname lifecycle.
+
+2. XDG RUNTIME-DIRECTORY SECURITY VALIDATION
+- absolute-path and environment validation;
+- current-user ownership validation;
+- required 0700 access-mode validation;
+- fail closed with no weaker fallback.
+
+3. PRW RUNTIME SUBDIRECTORY LIFECYCLE
+- create/validate $XDG_RUNTIME_DIR/private-remote-workspace;
+- enforce expected owner/type/mode;
+- avoid following attacker-controlled final components.
+
+4. STALE SOCKET / SINGLE-INSTANCE ALGORITHM
+- classify missing path, live Agent, stale socket, symlink, non-socket object, wrong owner, permission failure, and race/change cases;
+- define whether/how a connect probe participates;
+- prove conditions under which unlink is permitted;
+- avoid naive "exists => unlink" behavior.
+
+5. BIND / POST-BIND VALIDATION / CLEANUP
+- bind pathname socket;
+- establish 0600 mode under an explicit strategy;
+- validate resulting object type/owner/mode;
+- define cleanup after partial startup failure and orderly shutdown.
+
+6. ACCEPTED-PEER AUTHENTICATION ORDER
+- accept connection;
+- retrieve kernel-reported SO_PEERCRED;
+- compare peer UID to the Agent/local policy UID;
+- reject mismatch before any application-protocol byte is read;
+- only then pass the authenticated stream/policy context into the already validated Phase 052 generic connection lifecycle.
+
+7. PROCESS/LISTENER LIFETIME
+- second-instance behavior;
+- orderly and unclean termination behavior;
+- socket-path cleanup policy;
+- integration with the future daemon/service lifecycle without activating it prematurely.
+
+IMPORTANT AUTHENTICATION GAP
+
+The current generic pipeline accepts a caller-supplied PolicyEvaluator and its contracts explicitly assume an already authenticated policy context. Phase 052 therefore must not be wired directly to an accepted UnixStream before peer authentication exists.
+
+The future runtime adapter must make the sequence explicit:
+
+accept -> kernel peer credentials -> same-UID authorization -> construct/select authenticated policy context -> invoke bounded generic connection processing.
+
+No policy evaluator is a substitute for SO_PEERCRED authentication.
+
+READINESS CLASSIFICATION
+
+Protocol/application lifecycle after authentication:
+READY_FOR_RUNTIME_ADAPTER INTEGRATION.
+
+Filesystem-backed Unix listener and peer-authentication runtime:
+NOT_READY_FOR_ACTIVATION.
+
+The next safe step is a focused dependency/provider and pathname-lifecycle design lock. That work may select one safe syscall wrapper but must not bind a socket, create/remove XDG runtime paths, or activate a service until the algorithm and dependency footprint are validated.
+
+MUTATION STATEMENT
+
+This audit:
+- binds no socket;
+- creates/removes no XDG runtime path;
+- retrieves no process credentials;
+- adds no dependency;
+- changes no Rust source;
+- activates no service;
+- changes no authentication/database/network/DNS/TUN state;
+- performs no deployment.
+
+FINAL CLASSIFICATION
+
+PROVIDER_NEUTRAL_CONNECTION_LIFECYCLE_COMPLETE / NOT_READY_FOR_SOCKET_RUNTIME / READY_FOR_FOCUSED_PROVIDER_AND_PATH_LIFECYCLE_DECISION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 053 runtime-readiness delta report.
