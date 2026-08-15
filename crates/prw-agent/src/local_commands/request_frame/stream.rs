@@ -8,6 +8,7 @@ use std::io::{Read, Write};
 use crate::LocalIpcRequestId;
 use crate::frame_object::reader::{LocalIpcFrameReadError, read_frame};
 use crate::frame_object::writer::{LocalIpcFrameWriteError, write_frame};
+use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
 
 use super::{
     LocalAgentRequestFrameBuildError, LocalAgentRequestFrameDecodeError,
@@ -78,16 +79,14 @@ mod tests {
         read_local_command_request, write_local_command_request,
     };
     use crate::LocalIpcRequestId;
-    use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::frame_object::reader::LocalIpcFrameReadError;
     use crate::frame_object::writer::{LocalIpcFrameWriteError, write_frame};
+    use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::local_commands::LocalAgentCommand;
     use crate::local_commands::request_frame::{
         LOCAL_AGENT_REQUEST_WIRE_LENGTH, LocalAgentRequestFrameDecodeError,
     };
-    use crate::{
-        LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion,
-    };
+    use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion};
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
@@ -117,12 +116,8 @@ mod tests {
         let mut bytes = Vec::new();
         write_local_command_request(&mut bytes, id(141), LocalAgentCommand::GetAgentStatus)
             .expect("first request write succeeds");
-        write_local_command_request(
-            &mut bytes,
-            id(142),
-            LocalAgentCommand::GetPrivateDnsConfig,
-        )
-        .expect("second request write succeeds");
+        write_local_command_request(&mut bytes, id(142), LocalAgentCommand::GetPrivateDnsConfig)
+            .expect("second request write succeeds");
         let mut cursor = Cursor::new(bytes);
 
         let first = read_local_command_request(&mut cursor).expect("first request reads");
