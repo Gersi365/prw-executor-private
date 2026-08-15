@@ -1,6 +1,6 @@
 # Phase 091 — Linux One-Step Runtime Readiness
 
-Status: `FORMATTER_CORRECTED_INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
+Status: `CLIPPY_CORRECTED_INTEGRATED_SOURCE_AWAITING_AUTHORITATIVE_CI_VALIDATION`
 
 ## Purpose
 
@@ -59,7 +59,7 @@ Phase 091 uses rustix 1.1.4:
 - `poll(&mut fds, None)`;
 - `PollFd::revents()`.
 
-## Validation state
+## Validation and corrective state
 
 Initial integrated run `31900029359` passed exact Rust/Cargo 1.97.1 toolchain resolution and locked metadata, then failed safely only at `cargo fmt --all -- --check`.
 
@@ -67,13 +67,34 @@ Temporary workflow `phase-091-rustfmt-fix.yml` applied `cargo fmt --all` with a 
 
 `crates/prw-agent/src/linux_runtime_readiness.rs`
 
-The corrective succeeded in run `31900068830` and produced formatter commit:
+The formatter corrective succeeded in run `31900068830` and produced commit:
 
 `3f3eb2b95b02a711584d8a4ab86910bfff53c8ee`
 
-The temporary workflow removed itself in that same commit and no longer exists on `main`.
+The temporary formatter workflow removed itself in that same commit.
 
-The formatter-corrected integrated source now requires the permanent PRW Rust Validation workflow before Phase 091 can be classified `IMPLEMENTED_AND_VALIDATED`.
+Permanent validation run `31900113946` then passed toolchain resolution, locked metadata and rustfmt, and reached Clippy. Clippy reported exactly two compatibility/style findings under the repository `-D warnings` baseline:
+
+1. the named `'scope` lifetime on `wait_once_for_linux_runtime_readiness(...)` was elidable;
+2. the private `report(...)` constructor could be `const fn`.
+
+No readiness logic defect was reported.
+
+Temporary workflow `phase-091-clippy-fix.yml` applied only those exact text changes with occurrence-count guards, required `git diff --name-only` to contain exactly `crates/prw-agent/src/linux_runtime_readiness.rs`, ran `cargo fmt --all -- --check` and `git diff --check`, then self-deleted.
+
+The exact Clippy corrective succeeded in run `31900151699` and produced source commit:
+
+`b783686affc6889913a3221b9026af07c07bd0a0`
+
+That corrective changed only:
+
+- lifetime elision on `wait_once_for_linux_runtime_readiness(...)`;
+- `LocalLinuxScopedWorkerRegistry<'scope>` to `LocalLinuxScopedWorkerRegistry<'_>` at that function boundary;
+- `fn report(...)` to `const fn report(...)`.
+
+No readiness branch, poll policy, wake ordering, capacity rule, completion handling or test behavior changed.
+
+Both temporary corrective workflows are absent from `main`. The formatter/Clippy-corrected source now requires one final permanent PRW Rust Validation run before Phase 091 may be classified `IMPLEMENTED_AND_VALIDATED`.
 
 ## Explicitly not implemented
 
