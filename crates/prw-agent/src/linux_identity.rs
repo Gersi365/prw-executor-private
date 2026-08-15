@@ -2,9 +2,15 @@
 //!
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
-//! authorization as a crate-internal submodule. This boundary owns no socket
-//! lifecycle.
+//! authorization, and Phase 059 adds typed authenticated stream ownership. This
+//! boundary owns no listener or filesystem socket lifecycle.
 
+#[allow(
+    dead_code,
+    reason = "pre-runtime authenticated Linux connection wrapper is intentionally crate-internal"
+)]
+#[path = "linux_authenticated_connection.rs"]
+pub mod authenticated_connection;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
