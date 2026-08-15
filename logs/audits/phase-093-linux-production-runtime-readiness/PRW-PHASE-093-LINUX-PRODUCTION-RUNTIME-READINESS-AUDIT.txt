@@ -1,0 +1,350 @@
+Private Remote Workspace
+Phase 093 Linux Production Runtime Readiness Audit
+
+STATUS: READINESS_AUDIT_COMPLETE / PRODUCTION_RUNTIME_ARCHITECTURE_APPROVAL_REQUIRED / NO_RUNTIME_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: READ-ONLY ARCHITECTURE / LIFECYCLE / FAILURE-POLICY / BOOTSTRAP BOUNDARY REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 092 authoritative PASS report commit: 0c4538287558ba1155c6867cbdc2dbaed1cf23f6
+Phase 092 authoritative validation run: 31900742402
+Phase 092 validated source/trigger head: 9700e9ec4343a0877104cacd5a40205aef84a4bf
+Exact Rust/Cargo toolchain: 1.97.1
+
+PURPOSE
+
+Determine whether the repository is ready to cross from the validated finite Phase 092 orchestration boundary into a production long-running Linux Agent runtime/bootstrap, and enumerate the architecture decisions that must be locked before any such source implementation or activation.
+
+This audit does not approve or implement the production runtime boundary.
+
+CURRENT AUTHORITATIVE FACTS
+
+1. `crates/prw-agent/src/main.rs` remains deliberately non-activating. It creates only a default private-DNS config and prints bootstrap state. It starts no listener and performs no runtime/service mutation.
+
+2. The Linux runtime-root chain is already strongly typed and descriptor anchored:
+
+   - Phase 062 validates `$XDG_RUNTIME_DIR` from the process environment;
+   - Phase 063 prepares/normalizes the fixed PRW child at exact same-UID `0700`;
+   - Phase 065 opens/validates the persistent `agent.lock` file and acquires a nonblocking exclusive advisory lock;
+   - Phase 066/067/068/070 own stale-path preparation, bound socket identity, listening transition, nonblocking accept-ready transition, and exact-identity cleanup.
+
+3. Phase 089 owns a shared non-semaphore eventfd runtime wake transport.
+
+4. Phase 090 owns the runtime-specific scoped worker completion-wake spawn path.
+
+5. Phase 091 owns exactly one capacity-aware blocking poll invocation per call and excludes the listener from the wait set while worker capacity is full.
+
+6. Phase 092 owns exactly one readiness invocation plus at most one caller-bounded runtime scheduling cycle. It explicitly contains no production outer loop.
+
+7. Phase 092 supplies `LocalLinuxRuntimeShutdownHandle::request_shutdown_and_wake()`, which commits monotonic shutdown state before posting runtime wake, but no OS signal/service-manager producer invokes it.
+
+8. `LocalLinuxScopedWorkerRegistry` owns explicit `cancel_all()` and consuming `join_all()` semantics. Scoped handles cannot detach beyond the enclosing `std::thread::scope` lifetime.
+
+9. systemd packaging remains intentionally non-active. The repository states that the final service architecture must validate restart policy, startup ordering, filesystem permissions, secret storage, logs, and rollback before activation.
+
+10. There is no current production configuration owner for worker capacity, socket backlog, Phase 092 scheduling attempt budget, worker request budget, read/write I/O budgets, or future service lifecycle policy.
+
+READINESS CLASSIFICATION
+
+The repository is READY_FOR_EXPLICIT_PRODUCTION_RUNTIME_ARCHITECTURE_DECISION.
+
+It is NOT ready for automatic production runtime implementation or activation because failure policy, shutdown source, configuration ownership, lifecycle rollback, outer-loop exit evidence, and service/bootstrap boundaries remain intentionally unlocked.
+
+PROPOSED OWNERSHIP CHAIN — DECISION CANDIDATE ONLY
+
+A future production runtime owner should have one explicit lifetime containing, in dependency order:
+
+1. validated XDG runtime root;
+2. validated/prepared PRW runtime directory;
+3. exclusive Agent instance lock;
+4. validated production runtime configuration;
+5. scheduler control + Phase 089 runtime wake;
+6. worker capacity + bounded local policy/snapshots;
+7. bound/listening/accept-ready local Agent socket;
+8. one controlled `std::thread::scope`;
+9. one scoped worker registry;
+10. one long-running outer orchestration owner;
+11. terminal cancellation/join evidence;
+12. explicit listener/socket pathname cleanup;
+13. release of instance-lock/runtime-directory descriptor ownership.
+
+This ordering is not yet locked.
+
+INITIALIZATION / ROLLBACK PRINCIPLE
+
+A future decision should minimize rollback obligations by creating resources with no persistent socket-path side effect before binding the Agent socket where practical.
+
+Candidate principle:
+
+- validate/prepare runtime directories and acquire instance authority first;
+- validate configuration and create in-memory/wake/capacity/control state before socket bind where dependencies allow;
+- only then bind/listen/prepare the accept-ready socket;
+- after bind succeeds, every later initialization failure must explicitly consume/cleanup the validated socket object before returning;
+- persistent `agent.lock` file and PRW runtime directory may remain as safe persistent filesystem objects while the advisory lock/descriptors are released;
+- stale socket recovery remains owned by the existing descriptor-anchored Phase 066/067 lifecycle on a later start.
+
+No production initialization code is authorized by this audit.
+
+OUTER LOOP — REQUIRED DECISIONS
+
+A long-running loop cannot simply call Phase 092 forever without explicit policy.
+
+The decision must lock how each finite outcome maps to the next action:
+
+- `ShutdownObserved` — terminal break into cancellation/join/cleanup;
+- `RuntimeWake` — re-observe state and normally continue;
+- `WaitInterrupted` — re-observe shutdown and define whether/when to wait again without an uncontrolled signal-storm spin;
+- `Scheduling(AttemptBudgetExhausted)` — define immediate next wait behavior and fairness intent;
+- `Scheduling(AtCapacity)` — next wait must preserve capacity-aware listener suppression and depend on completion/shutdown wake;
+- `Scheduling(NoConnectionReady)` — return to blocking readiness rather than busy retry;
+- readiness errors — classify fatal vs externally recoverable;
+- scheduling errors — classify connection-local/transient/resource/invariant failures before deciding continue vs terminate.
+
+ERROR-POLICY GAP — HIGH IMPORTANCE
+
+Phase 092 deliberately preserves bounded lower-level errors; it does not decide daemon survival policy.
+
+Examples requiring production classification include:
+
+- authenticated accept / peer-authorization failure;
+- listener accept syscall failure;
+- cancellation-descriptor clone failure;
+- OS scoped-thread spawn failure;
+- poll descriptor error/invalid readiness;
+- runtime-wake drain failure.
+
+A production daemon must not accidentally use one blanket rule such as:
+
+- terminate the whole Agent on every single connection-local failure; or
+- retry every failure forever.
+
+The decision should define a small explicit outer-runtime disposition taxonomy, for example conceptually:
+
+- continue after bounded connection-local rejection;
+- continue only after state re-observation;
+- terminate runtime fail-closed;
+- terminate due requested shutdown.
+
+Exact variants are not locked here.
+
+PEER-AUTHORIZATION FAILURE CONSIDERATION
+
+Current one-shot scheduling reports peer-authorization failure through the bounded scheduling error path. The local socket mode/same-UID design already strongly limits who can connect, but production outer-loop policy must still explicitly decide whether one rejected peer is a connection-local event or a daemon-fatal event.
+
+This must not be left to accidental `?` propagation from the outer loop.
+
+WORKER-SPAWN RESOURCE FAILURE CONSIDERATION
+
+A scoped worker spawn failure can represent resource pressure. Immediate unbounded retry against a persistently readable listener could create a busy failure loop.
+
+The production decision must choose a bounded disposition such as fail-stop, explicit backoff/circuit policy, or another controlled state transition. No sleep/backoff policy is authorized yet.
+
+COMPLETION-WAKE NOTIFIER FAULT CONSIDERATION
+
+Phase 090 intentionally makes completion wake non-panicking during normal teardown or panic unwind:
+
+- the completion guard calls the Phase 089 notifier;
+- notifier failure is discarded inside `Drop` so a worker panic cannot become a double panic/abort.
+
+This is correct for unwinding safety but creates a production observability question.
+
+When the listener is suppressed at full worker capacity, worker completion wake is part of liveness. With the current Arc-owned eventfd lifetime and EINTR/EAGAIN handling, unexpected fatal write failure should be exceptional, but production architecture must explicitly lock whether such a notifier failure is treated as:
+
+- an invariant impossible under owned-descriptor lifetime assumptions;
+- a separately recorded runtime fault;
+- a trigger for another fail-closed mechanism.
+
+A future design must not make `Drop` panic.
+
+SIGNAL / SHUTDOWN-SOURCE GAP
+
+The repository currently contains no production SIGTERM/SIGINT handling or other service-manager shutdown source.
+
+The next architecture decision must choose the shutdown producer mechanism and preserve the Phase 088/092 ordering:
+
+1. terminal shutdown state becomes visible;
+2. runtime wake is posted;
+3. outer readiness owner wakes;
+4. no later listener dispatch occurs after shutdown observation;
+5. all registered workers are cancelled;
+6. all remaining scoped workers are joined/classified;
+7. listener/socket path is explicitly cleaned;
+8. lifecycle descriptors/instance authority are released.
+
+Signal handling must not be improvised inside unsafe/asynchronous callback context without a separately reviewed design.
+
+Candidate mechanisms such as a dedicated signal-waiting thread, a pollable signal descriptor, or another service-control source require a dedicated decision. This audit does not select one.
+
+PRODUCTION CONFIGURATION GAP
+
+The current lower-level APIs correctly require explicit bounded values, but no production owner selects them.
+
+A future decision must identify the authoritative source and validation rules for at least:
+
+- worker capacity;
+- Unix listener backlog;
+- per-readiness scheduling attempt budget;
+- per-worker request budget;
+- read I/O absolute budget;
+- write I/O absolute budget.
+
+Configuration must be validated before listener activation.
+
+The decision must also state which values are:
+
+- compiled safe defaults;
+- environment/config-file inputs;
+- future remotely administered values;
+- immutable for one process lifetime vs dynamically replaceable.
+
+No production numeric values are selected by this audit.
+
+STATUS SNAPSHOT / DNS SNAPSHOT OWNERSHIP
+
+Phase 092 context currently borrows one `LocalAgentStatusSnapshot` value and one `LocalPrivateDnsSnapshot` reference for finite scheduling.
+
+A production loop must lock whether these are:
+
+- immutable process-lifetime snapshots;
+- atomically/reloadably replaced snapshots;
+- reconstructed per cycle;
+- supplied by another bounded state owner.
+
+Private DNS remains optional and this decision must not make private DNS a prerequisite for basic local runtime connectivity.
+
+SCOPED THREAD LIFETIME
+
+A production runtime should preserve the structural no-detach model already validated:
+
+- one controlled `std::thread::scope` contains registry and all session workers;
+- the outer runtime loop runs inside that scope;
+- terminal shutdown stops new scheduling;
+- `cancel_all()` precedes consuming `join_all()`;
+- scope exit occurs only after all residual worker handles are classified.
+
+Moving to detached `'static` worker threads would be an architecture change and is not authorized.
+
+SHUTDOWN / CLEANUP TRANSACTION — DECISION CANDIDATE
+
+Candidate terminal order:
+
+1. outer loop observes `ShutdownObserved` or fatal runtime disposition;
+2. no new scheduling is permitted;
+3. collect `registry.cancel_all()` evidence;
+4. consume `registry.join_all()` and collect completion evidence;
+5. leave worker thread scope;
+6. explicitly consume `AcceptReadyAgentSocket::cleanup()`;
+7. record cleanup success/failure;
+8. release instance lock and runtime-directory/root descriptors;
+9. return one typed process/runtime exit classification.
+
+The future decision must define what happens when worker cancellation, join classification, or socket cleanup contains failures. Cleanup errors must not erase the original runtime failure or shutdown reason.
+
+EXIT EVIDENCE / PROCESS STATUS GAP
+
+Phase 092 returns structured per-invocation evidence, but no long-running aggregate runtime report exists.
+
+Before wiring `main.rs`, the architecture should lock a final runtime evidence type that can retain at least:
+
+- terminal reason;
+- accumulated or bounded summary of worker completions;
+- scheduling/readiness failure classification if any;
+- cancellation outcomes;
+- residual join completions;
+- socket cleanup outcome;
+- whether shutdown was requested vs runtime failed.
+
+The process exit-code mapping is a separate bootstrap/service contract and should not be hidden inside lower-level orchestration.
+
+LOGGING / SERVICE OBSERVABILITY GAP
+
+`main.rs` currently uses a simple stdout print and there is no production runtime logging contract.
+
+Before service activation, a decision is required for:
+
+- startup success/failure reporting;
+- clean shutdown vs runtime-failure reporting;
+- peer rejection/resource failure observability;
+- integration with the eventual service manager/journal;
+- whether a logging dependency is needed or a narrow standard-stream baseline is sufficient initially.
+
+No logging dependency is authorized by this audit.
+
+SYSTEMD BOUNDARY
+
+The current packaging README correctly keeps systemd inactive and states that final service architecture must validate restart policy, startup ordering, filesystem permissions, secret storage, logs, and rollback behavior.
+
+Production runtime implementation should therefore remain separable from service installation/activation.
+
+Candidate staged boundary:
+
+- first validate a callable long-running runtime with explicit shutdown control in tests;
+- then validate a non-activating `main.rs` bootstrap composition/exit mapping;
+- only later design/package systemd policy;
+- activation remains a separate explicit user-impacting step.
+
+This staging is a recommendation, not authorization.
+
+PHASE 094 DECISION QUESTIONS
+
+Before production runtime source mutation, a future explicit decision should lock at least:
+
+1. the long-running runtime owner/type boundary;
+2. exact initialization order;
+3. exact partial-initialization rollback behavior;
+4. outer-loop outcome-to-action table;
+5. scheduling/readiness error disposition taxonomy;
+6. connection-local peer rejection policy;
+7. worker-spawn resource failure policy and anti-busy-loop behavior;
+8. production shutdown source mechanism;
+9. shutdown state/wake ordering;
+10. worker cancel/join/cleanup order;
+11. treatment/observability of completion-wake notifier fault;
+12. production configuration owner/source and validation rules;
+13. status/private-DNS snapshot lifetime/reload model;
+14. final runtime evidence/terminal-reason type;
+15. process exit-code mapping boundary;
+16. logging/observability baseline;
+17. whether the long-running runtime is implemented before `main.rs` wiring;
+18. whether systemd packaging remains a later separate phase;
+19. what remains strictly outside the local-runtime phase: remote networking, enrollment/auth, DNS/TUN mutation, relay, database, keys, deployment.
+
+RECOMMENDED IMPLEMENTATION DECOMPOSITION — NOT APPROVED
+
+If a future Phase 094 decision locks the above boundaries, a low-risk decomposition could be:
+
+A. production runtime configuration + typed terminal/error disposition contracts, no listener activation;
+B. lifecycle initialization/rollback owner validated entirely in temporary test runtime directories, no `main.rs` wiring;
+C. caller-controlled long-running loop function with test-owned shutdown source, no OS signals or systemd;
+D. shutdown/cancel/join/cleanup aggregate evidence validation;
+E. separately approved OS shutdown-source integration;
+F. separately approved `main.rs` bootstrap/exit mapping;
+G. separately approved systemd packaging and only later activation.
+
+The exact phase numbering and decomposition are not locked by this audit.
+
+NO-MUTATION / NO-ACTIVATION STATEMENT
+
+Phase 093 changes only this audit evidence.
+
+It does NOT:
+
+- modify Rust runtime source;
+- modify Cargo.toml or Cargo.lock;
+- modify `main.rs`;
+- add an outer loop;
+- add production configuration values;
+- add signal handling;
+- modify systemd packaging;
+- activate any listener/service/process state;
+- change auth/enrollment/DNS/TUN/relay/database/private-key/deployment behavior.
+
+NEXT SAFE STEP
+
+Prepare an explicit Phase 094 production-runtime architecture decision package from the questions above. Source implementation of a long-running runtime/bootstrap must not begin until that new decision is explicitly approved.
+
+FINAL CLASSIFICATION
+
+PHASE_093_READINESS_AUDIT_COMPLETE / FINITE_RUNTIME_PRIMITIVES_READY / PRODUCTION_COMPOSITION_POLICY_MISSING / ERROR_DISPOSITION_MUST_BE_LOCKED / SIGNAL_SOURCE_MUST_BE_LOCKED / CONFIG_OWNER_MUST_BE_LOCKED / CLEANUP_AND_EXIT_EVIDENCE_MUST_BE_LOCKED / NO_RUNTIME_SOURCE_MUTATION / NO_RUNTIME_ACTIVATION / EXPLICIT_PHASE_094_APPROVAL_REQUIRED
+
+This is the single authoritative user-facing Phase 093 readiness audit report.
