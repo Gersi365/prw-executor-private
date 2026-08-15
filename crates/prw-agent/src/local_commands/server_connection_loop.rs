@@ -41,11 +41,7 @@ pub enum LocalServerConnectionLoopStop {
 ///
 /// Returns the existing Phase 051 aggregate processing error immediately. Any
 /// component-state transition performed by lower layers remains authoritative.
-pub fn process_server_connection_with_budget<
-    R: Read,
-    W: Write,
-    E: PolicyEvaluator + ?Sized,
->(
+pub fn process_server_connection_with_budget<R: Read, W: Write, E: PolicyEvaluator + ?Sized>(
     reader: &mut R,
     writer: &mut W,
     state: &mut LocalServerConnectionState,
@@ -86,8 +82,7 @@ mod tests {
     use crate::local_commands::LocalAgentCommand;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::{
-        LOCAL_AGENT_REQUEST_WIRE_LENGTH,
-        stream::write_local_command_request,
+        LOCAL_AGENT_REQUEST_WIRE_LENGTH, stream::write_local_command_request,
     };
     use crate::local_commands::server_connection_state::{
         LocalServerConnectionState, LocalServerConnectionUnusableReason,
