@@ -1,11 +1,12 @@
 //! Bounded provider-neutral local Agent command contracts.
 //!
 //! Phase 008 introduces only read-only command identifiers and correlated
-//! response metadata. It does not define payload serialization or runtime
-//! dispatch.
+//! response metadata. Later phases add pure request/response byte codecs without
+//! activating runtime dispatch.
 
 pub mod codec;
 pub mod request_tracker;
+pub mod response_codec;
 
 use crate::LocalIpcRequestId;
 
@@ -70,6 +71,26 @@ impl LocalAgentResponseStatus {
             Self::Conflict => 4,
             Self::InternalError => 5,
         }
+    }
+
+    /// Returns the status represented by a stable identifier.
+    #[must_use]
+    pub const fn from_code(code: u16) -> Option<Self> {
+        match code {
+            0 => Some(Self::Ok),
+            1 => Some(Self::InvalidRequest),
+            2 => Some(Self::Unauthorized),
+            3 => Some(Self::UnsupportedCommand),
+            4 => Some(Self::Conflict),
+            5 => Some(Self::InternalError),
+            _ => None,
+        }
+    }
+
+    /// Returns whether the status represents success.
+    #[must_use]
+    pub const fn is_success(self) -> bool {
+        matches!(self, Self::Ok)
     }
 }
 
@@ -161,6 +182,14 @@ mod tests {
         assert_eq!(LocalAgentResponseStatus::UnsupportedCommand.code(), 3);
         assert_eq!(LocalAgentResponseStatus::Conflict.code(), 4);
         assert_eq!(LocalAgentResponseStatus::InternalError.code(), 5);
+        assert_eq!(LocalAgentResponseStatus::from_code(0), Some(LocalAgentResponseStatus::Ok));
+        assert_eq!(
+            LocalAgentResponseStatus::from_code(5),
+            Some(LocalAgentResponseStatus::InternalError)
+        );
+        assert_eq!(LocalAgentResponseStatus::from_code(6), None);
+        assert!(LocalAgentResponseStatus::Ok.is_success());
+        assert!(!LocalAgentResponseStatus::InvalidRequest.is_success());
     }
 
     #[test]
