@@ -1,0 +1,92 @@
+Private Remote Workspace
+Phase 059 Linux Authenticated Connection Wrapper
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Create a type-level ownership boundary that associates one already-connected Linux stream with the Phase 058 same-effective-UID authorization proof before mutable application-stream access is exposed inside the Agent crate.
+
+IMPLEMENTED
+
+Source:
+`crates/prw-agent/src/linux_authenticated_connection.rs`
+
+Integrated as the crate-internal `linux_identity::authenticated_connection` submodule.
+
+The implementation provides:
+- `AuthenticatedLocalLinuxConnection<S>` owning the exact stream instance that was authorized;
+- construction only through `try_new(stream)` which performs Phase 058 authorization first;
+- immutable access to the authorized kernel peer credentials;
+- mutable stream access only after successful construction;
+- recovery of owned stream through `into_stream()`;
+- `LocalLinuxConnectionAuthorizationFailure<S>` returning both the original stream and bounded authorization failure when construction fails.
+
+SECURITY ORDERING
+
+Construction ordering is:
+
+1. take ownership of an already-connected stream;
+2. obtain kernel peer credentials and perform same-effective-UID authorization through Phase 058;
+3. construct the authenticated wrapper only on success;
+4. expose no application-stream access before successful construction.
+
+The constructor performs no application-protocol read or write.
+
+ORDERING TEST
+
+A Linux test writes sentinel application bytes from the opposite endpoint of an anonymous `UnixStream::pair()` before wrapper construction. The server endpoint is then authorized and wrapped. Reading from the wrapped stream after construction recovers the sentinel bytes exactly, proving that `SO_PEERCRED` authorization did not consume application data.
+
+FAILURE OWNERSHIP TEST
+
+A read-only `/dev/null` descriptor fails kernel peer-credential authorization. The typed construction failure returns the original `File` together with the bounded authorization error, proving caller disposal ownership is preserved without protocol I/O.
+
+CORRECTIVE HISTORY
+
+Initial integrated run `31889089701` passed locked dependency verification and formatting, then exposed two local implementation/test issues:
+- Clippy requested `stream_mut()` to be `const fn`;
+- test `expect`/`expect_err` paths required `Debug` on the typed construction failure.
+
+The corrective changed `stream_mut()` to `const fn` and derived `Debug` for `LocalLinuxConnectionAuthorizationFailure<S>`. Authorization ordering, stream ownership, and failure semantics were unchanged.
+
+FINAL VALIDATION
+
+Authoritative GitHub Actions run:
+`31889161989`
+
+Validated head:
+`77842ce211f8928130dda2cc06571df0c13578d7`
+
+Validated gates:
+- `cargo metadata --locked --no-deps --format-version 1` — PASS;
+- `cargo fmt --all -- --check` — PASS;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` — PASS;
+- `cargo test --locked --workspace --all-targets` — PASS;
+- `cargo build --locked --workspace --all-targets` — PASS.
+
+SCOPE PRESERVED
+
+Phase 059:
+- creates no socket;
+- binds no filesystem pathname;
+- creates no listener;
+- performs no accept/connect lifecycle;
+- creates/removes no XDG runtime path;
+- performs no command-policy evaluation;
+- invokes no Phase 052 application loop;
+- adds no unsafe PRW code;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+AUTHORITATIVE CONTRACT
+
+`contracts/LINUX_AUTHENTICATED_CONNECTION_WRAPPER_CONTRACT.md`
+
+FINAL CLASSIFICATION
+
+AUTHENTICATED_STREAM_OWNERSHIP_BOUNDARY_VALIDATED / NO_APPLICATION_BYTES_BEFORE_AUTH / FAILURE_RETURNS_STREAM / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 059 report.
