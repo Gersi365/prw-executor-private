@@ -27,7 +27,7 @@ pub fn read_frame<R: Read>(reader: &mut R) -> Result<LocalIpcFrame, LocalIpcFram
     let mut header_bytes = [0_u8; ENCODED_LOCAL_IPC_HEADER_LENGTH];
     reader
         .read_exact(&mut header_bytes)
-        .map_err(classify_header_io_error)?;
+        .map_err(|error| classify_header_io_error(&error))?;
 
     let header =
         decode_frame_header(&header_bytes).map_err(LocalIpcFrameReadError::InvalidHeader)?;
@@ -37,14 +37,14 @@ pub fn read_frame<R: Read>(reader: &mut R) -> Result<LocalIpcFrame, LocalIpcFram
     let mut payload_bytes = vec![0_u8; payload_length];
     reader
         .read_exact(&mut payload_bytes)
-        .map_err(classify_payload_io_error)?;
+        .map_err(|error| classify_payload_io_error(&error))?;
 
     let payload = LocalIpcPayload::new(payload_bytes)
         .map_err(|_| LocalIpcFrameReadError::PayloadInvariant)?;
     LocalIpcFrame::new(header, payload).map_err(|_| LocalIpcFrameReadError::FrameInvariant)
 }
 
-fn classify_header_io_error(error: std::io::Error) -> LocalIpcFrameReadError {
+fn classify_header_io_error(error: &std::io::Error) -> LocalIpcFrameReadError {
     if error.kind() == ErrorKind::UnexpectedEof {
         LocalIpcFrameReadError::TruncatedHeader
     } else {
@@ -52,7 +52,7 @@ fn classify_header_io_error(error: std::io::Error) -> LocalIpcFrameReadError {
     }
 }
 
-fn classify_payload_io_error(error: std::io::Error) -> LocalIpcFrameReadError {
+fn classify_payload_io_error(error: &std::io::Error) -> LocalIpcFrameReadError {
     if error.kind() == ErrorKind::UnexpectedEof {
         LocalIpcFrameReadError::TruncatedPayload
     } else {
