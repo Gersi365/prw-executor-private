@@ -1,7 +1,15 @@
 //! Descriptor-anchored single-instance authority for the Linux PRW Agent.
 //!
 //! Phase 065 owns only the persistent `agent.lock` file and its advisory lock.
-//! It does not inspect or mutate `agent.sock`.
+//! Phase 066 is nested beneath this authority and handles stale `agent.sock`
+//! preparation without binding or listening.
+
+#[allow(
+    dead_code,
+    reason = "pre-bind Agent socket-path preparation is intentionally crate-internal"
+)]
+#[path = "linux_agent_socket_path.rs"]
+pub mod socket_path;
 
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
