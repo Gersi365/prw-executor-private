@@ -19,6 +19,11 @@ pub mod private_dns_codec;
 pub mod private_dns_response;
 pub mod private_dns_snapshot;
 pub mod request_frame;
+#[allow(
+    dead_code,
+    reason = "pre-runtime request processor is intentionally crate-internal"
+)]
+pub(crate) mod request_processor;
 pub mod request_tracker;
 #[allow(
     dead_code,
