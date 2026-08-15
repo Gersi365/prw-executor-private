@@ -1,0 +1,85 @@
+Private Remote Workspace
+Phase 057 Linux Local Peer Identity Adapter
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Introduce the first PRW source use of the locked rustix 1.1.4 platform provider, limited to read-only Linux identity operations over an already-existing file descriptor.
+
+IMPLEMENTED
+
+Linux-only crate-internal module:
+`crates/prw-agent/src/linux_identity.rs`
+
+The adapter provides:
+- Agent effective UID through `rustix::process::geteuid()`;
+- Linux kernel peer PID/UID/GID through `rustix::net::sockopt::socket_peercred` (`SO_PEERCRED`);
+- a PRW-local typed `LocalLinuxPeerCredentials` record;
+- a bounded `PeerCredentialLookup` failure classification.
+
+No rustix-specific credential type is exposed outside the crate-internal platform module.
+
+SECURITY BOUNDARY
+
+Phase 057 retrieves identity only. It does not authorize a peer and performs no application-protocol read or write.
+
+The locked future ordering remains:
+
+peer credentials -> same-effective-UID decision -> only then application Request processing.
+
+TEST STRATEGY
+
+The Linux test uses only `std::os::unix::net::UnixStream::pair()` as an anonymous already-connected descriptor source.
+
+It validates that kernel-reported credentials on both pair endpoints match:
+- the current process PID;
+- the Agent effective UID;
+- the process effective GID.
+
+No filesystem socket pathname, listener, bind, accept, or XDG runtime path is involved.
+
+CORRECTIVE HISTORY
+
+Initial integrated run `31888621437` passed locked dependency verification and formatting but Clippy rejected two test-only local variable names as too similar. Production adapter code required no semantic correction. The redundant GID binding was removed and the test compares directly to `getegid().as_raw()`.
+
+FINAL VALIDATION
+
+Authoritative GitHub Actions run:
+`31888671471`
+
+Validated head:
+`ea10bbe3408f730f0e403bfe31f8bab6eaa608e4`
+
+Validated gates:
+- `cargo metadata --locked --no-deps --format-version 1` — PASS;
+- `cargo fmt --all -- --check` — PASS;
+- `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` — PASS;
+- `cargo test --locked --workspace --all-targets` — PASS;
+- `cargo build --locked --workspace --all-targets` — PASS.
+
+SCOPE PRESERVED
+
+Phase 057:
+- binds no filesystem socket;
+- creates no listener;
+- performs no accept/connect lifecycle;
+- creates/removes no XDG runtime path;
+- performs no peer authorization;
+- performs no application protocol I/O on the test socket pair;
+- adds no unsafe PRW code;
+- activates no service;
+- changes no database/network/DNS/TUN state;
+- performs no deployment.
+
+AUTHORITATIVE CONTRACT
+
+`contracts/LINUX_LOCAL_PEER_IDENTITY_ADAPTER_CONTRACT.md`
+
+FINAL CLASSIFICATION
+
+LINUX_EFFECTIVE_UID_AND_SO_PEERCRED_ADAPTER_VALIDATED / NO_RUNTIME_ACTIVATION / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 057 report.
