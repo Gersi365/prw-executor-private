@@ -1,0 +1,73 @@
+Private Remote Workspace
+Phase 068 Linux Agent Listening Socket
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+PURPOSE
+
+Implement the one-way typed transition from a validated Phase 067 BoundAgentSocket into listening state without combining it with accept/readiness/application processing or Agent bootstrap activation.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_agent_listening_socket.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- contract: contracts/LINUX_AGENT_LISTENING_SOCKET_CONTRACT.md
+- architecture: docs/architecture/PHASE_068_LINUX_AGENT_LISTENING_SOCKET.md
+
+PRODUCTION ALGORITHM
+
+- consumes BoundAgentSocket;
+- caller supplies explicit NonZeroU16 backlog; no default backlog is invented;
+- converts backlog losslessly to the i32 required by rustix::net::listen;
+- calls listen exactly once;
+- success returns ListeningAgentSocket owning the Phase 067 bound object and transitively retaining the validated PRW runtime-directory and Phase 065 instance-lock borrows;
+- failure returns ListeningAgentSocketTransitionFailure containing the original still-bound socket for caller-directed Phase 067 cleanup;
+- no reverse listening->bound conversion is exposed;
+- cleanup delegates to Phase 067 exact-identity cleanup.
+
+VALIDATED BEHAVIOR
+
+Temporary runner tests prove:
+- validated bound socket transitions to listening state with caller-supplied backlog;
+- Phase 067 filesystem identity is preserved across listen;
+- a local UnixStream client can establish a connection after the transition;
+- explicit listening cleanup removes the validated pathname;
+- Phase 065 instance-lock contention remains AlreadyRunning while the listening object is alive.
+
+No accept call or application-protocol read occurs in Phase 068 production or tests.
+
+VALIDATION
+
+Authoritative GitHub Actions run: 31892620041
+Validated source head: 6416861d47dfa45d14cf0b6ea185077b26f0f82a
+
+Passed gates:
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- rustfmt-only reflow corrections;
+- explicit function lifetime name removed per Clippy elidable-lifetime guidance; ownership and borrow semantics remain unchanged.
+
+SCOPE PRESERVED
+
+Phase 068:
+- calls listen only when this crate-internal adapter is explicitly invoked;
+- implements no accept/accept4 or accept loop;
+- introduces no blocking/readiness policy;
+- reads/writes no application-protocol data;
+- is not invoked by the Agent bootstrap;
+- activates no service;
+- changes no network/DNS/TUN/database/deployment state.
+
+FINAL CLASSIFICATION
+
+BOUND_TO_LISTENING_TYPED_TRANSITION_IMPLEMENTED / CALLER_SUPPLIED_BACKLOG / INSTANCE_LOCK_RETAINED / NO_ACCEPT / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 068 report.
