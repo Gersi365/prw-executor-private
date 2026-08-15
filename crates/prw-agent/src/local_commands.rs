@@ -31,6 +31,11 @@ pub mod request_tracker;
 )]
 pub(crate) mod responder;
 pub mod response_codec;
+#[allow(
+    dead_code,
+    reason = "pre-runtime terminal response writer is intentionally crate-internal"
+)]
+pub(crate) mod response_writer;
 pub mod status_snapshot;
 pub mod terminal_completion;
 pub mod terminal_response;
