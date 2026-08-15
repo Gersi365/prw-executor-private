@@ -56,9 +56,6 @@ mod tests {
     #[test]
     fn evaluator_can_deny_capability() {
         let evaluator = DenyAll;
-        assert_eq!(
-            evaluator.evaluate(Capability::FilesDelete),
-            Decision::Deny
-        );
+        assert_eq!(evaluator.evaluate(Capability::FilesDelete), Decision::Deny);
     }
 }
