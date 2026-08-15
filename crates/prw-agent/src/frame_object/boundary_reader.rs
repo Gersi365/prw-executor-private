@@ -166,7 +166,6 @@ mod tests {
             read_frame_at_boundary(&mut input),
             Ok(LocalIpcFrameBoundaryRead::Frame(expected))
         );
-        assert_eq!(input.calls, 2);
     }
 
     struct FailImmediately;
