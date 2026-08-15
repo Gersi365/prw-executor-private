@@ -43,7 +43,7 @@ impl AcceptReadyAgentSocket<'_> {
     /// [`AuthenticatedAgentAcceptError::PeerAuthorization`] when `SO_PEERCRED`
     /// same-UID authorization rejects the accepted stream.
     pub fn try_accept_authenticated(
-        &mut self,
+        &self,
     ) -> Result<AuthenticatedAgentAcceptOutcome, AuthenticatedAgentAcceptError> {
         let accepted = match accept_with(&self.listening_socket, SocketFlags::CLOEXEC) {
             Ok(descriptor) => descriptor,
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn readiness_transition_sets_nonblocking_and_empty_queue_returns_no_ready() {
         let (root_path, runtime_directory, instance_lock) = create_runtime_owners("no-ready");
-        let mut ready = make_accept_ready(&runtime_directory, &instance_lock);
+        let ready = make_accept_ready(&runtime_directory, &instance_lock);
 
         let status = fcntl_getfl(&ready).expect("accept-ready status flags read");
         assert!(status.contains(OFlags::NONBLOCK));
@@ -271,7 +271,7 @@ mod tests {
     fn accepted_stream_is_cloexec_blocking_authenticated_and_bytes_remain_unread() {
         let (root_path, runtime_directory, instance_lock) = create_runtime_owners("accepted");
         let socket_path = agent_socket_path(&root_path);
-        let mut ready = make_accept_ready(&runtime_directory, &instance_lock);
+        let ready = make_accept_ready(&runtime_directory, &instance_lock);
         let mut client = UnixStream::connect(&socket_path).expect("test client connects");
         let sentinel = *b"PRW-phase-070-auth-order";
         client
@@ -312,7 +312,7 @@ mod tests {
     fn one_accept_does_not_consume_listener_lifecycle_or_later_client() {
         let (root_path, runtime_directory, instance_lock) = create_runtime_owners("reusable");
         let socket_path = agent_socket_path(&root_path);
-        let mut ready = make_accept_ready(&runtime_directory, &instance_lock);
+        let ready = make_accept_ready(&runtime_directory, &instance_lock);
 
         let first_client = UnixStream::connect(&socket_path).expect("first client connects");
         let first = ready
