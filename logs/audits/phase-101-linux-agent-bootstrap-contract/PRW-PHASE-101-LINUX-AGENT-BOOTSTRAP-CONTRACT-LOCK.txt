@@ -1,0 +1,277 @@
+Private Remote Workspace
+Phase 101 Linux Agent Binary Bootstrap Contract Lock
+
+STATUS: APPROVED_AND_LOCKED / DECISION_ONLY / PHASE_102_SOURCE_WIRING_AUTHORIZED / NO_SYSTEMD_MUTATION / NO_RUNTIME_ACTIVATION
+AUDIT TYPE: BINARY BOOTSTRAP PROFILE / PUBLIC FACADE / POLICY / EXIT / LOGGING CONTRACT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 100 decision-preparation commit: 037f5e8504ecac087a0abae21889be45a2ee5ee5
+Phase 099 completion-review commit: 5bb0d57d1c53b8eed0ab013293b6b889c91361fa
+Phase 098 authoritative permanent CI run: 31903139121
+
+AUTHORIZATION
+
+The user's continuation after the Phase 100 gate is treated as approval of the Phase 100 recommended binary-bootstrap sequence, Phases 101-103, while systemd packaging/activation and deployment remain separately gated.
+
+The user subsequently instructed that work should proceed carefully at the same pace and standard as before. This Phase 101 lock therefore does not compress, merge, or bypass validation stages.
+
+PURPOSE
+
+Phase 101 locks the exact first standalone Agent-binary bootstrap contract needed by Phase 102.
+
+Phase 101 itself changes no Rust source, Cargo metadata, workflow, systemd packaging, host state, runtime directory, socket, process, signal mask, or service-manager state.
+
+DISCOVERED VISIBILITY BOUNDARY
+
+`crates/prw-agent/src/main.rs` is a separate binary crate target that consumes the `prw_agent` library crate.
+
+The Linux runtime implementation is currently rooted under `linux_identity`, which is deliberately `pub(crate)` in `crates/prw-agent/src/lib.rs`.
+
+Therefore Phase 102 MUST NOT solve bootstrap access by making `linux_identity` wholesale public.
+
+That would unintentionally expose the internal Phase 057-098 lifecycle/socket/readiness/signal/worker implementation surface as public library API.
+
+LOCKED FACADE DECISION
+
+Phase 102 SHALL add one narrow Linux-only public bootstrap facade in the library crate.
+
+Recommended module identity:
+
+`prw_agent::linux_bootstrap`
+
+The facade SHALL:
+
+- remain `#[cfg(target_os = "linux")]`;
+- own construction of the fixed initial runtime profile and immutable local snapshots;
+- delegate to the already-validated Phase 098 signal-aware runtime;
+- expose only bootstrap-level outcome/error/evidence needed by `main.rs`;
+- keep `linux_identity` and its lifecycle/readiness/signal/worker modules `pub(crate)`;
+- contain no alternate socket, signal, scheduling, or worker algorithms;
+- contain no systemd-specific behavior;
+- contain no configuration-file parser;
+- contain no environment-based capability broadening.
+
+`main.rs` SHALL remain thin and SHALL call only this facade plus binary-owned formatting/exit mapping.
+
+LOCKED INITIAL BOUNDED RUNTIME PROFILE
+
+The first standalone binary profile reuses the values already exercised by the integrated Phase 098 signal-aware runtime proof:
+
+- worker capacity: 2;
+- Unix listener backlog: 8;
+- scheduling attempt budget per listener-ready cycle: 2;
+- per-session request budget: 1;
+- absolute read I/O budget: 2 seconds;
+- absolute write I/O budget: 2 seconds.
+
+Rationale:
+
+- all values are strictly positive and accepted by existing constructors;
+- they match an already-compiled/tested Phase 098 runtime configuration instead of inventing a new production tuning profile;
+- low concurrency/budgets minimize first-bootstrap resource and failure surface;
+- performance tuning is explicitly deferred until real standalone/service evidence exists.
+
+No environment variable, TOML, YAML, JSON, command-line switch, or live reload may override these values in Phase 102.
+
+LOCKED LOCAL POLICY
+
+Phase 102 SHALL use:
+
+`BoundedLocalReadPolicy::allow_local_reads()`
+
+This permits exactly the currently implemented local read capabilities:
+
+- `AgentStatusRead` / `GetAgentStatus`;
+- `PrivateDnsConfigRead` / `GetPrivateDnsConfig`.
+
+Every represented non-local capability remains denied by the existing policy implementation, including terminal, file read/write/delete, forwarding, device management, and policy management.
+
+No capability expansion is authorized by Phase 101.
+
+LOCKED STATUS SNAPSHOT
+
+The first runtime status snapshot SHALL be:
+
+`LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready)`
+
+The snapshot is immutable for the lifetime of this first bootstrap invocation.
+
+Dynamic lifecycle-state publishing is not introduced by Phase 102.
+
+LOCKED PRIVATE-DNS SNAPSHOT
+
+Private DNS remains optional and disabled by default.
+
+Phase 102 SHALL construct:
+
+1. `PrivateDnsConfig::default()`;
+2. `LocalPrivateDnsSnapshot::try_from_config(&config)`;
+3. fail startup if the projection unexpectedly fails.
+
+The default currently projects to disabled device naming, no resolvers, and no split domains.
+
+Phase 102 SHALL NOT mutate system DNS, make private DNS mandatory, or add external DNS configuration parsing.
+
+LOCKED BOOTSTRAP FACADE RESULT CONTRACT
+
+The public facade SHALL prevent `main.rs` from depending on internal Phase 057-098 types directly.
+
+It SHALL expose a small bootstrap-level result model sufficient to classify:
+
+Successful/handled terminal outcomes:
+
+- handled SIGTERM;
+- handled SIGINT;
+- clean programmatic shutdown if such a path is used by controlled tests/future caller.
+
+Failure outcomes:
+
+- bootstrap input/snapshot construction failure;
+- safe signal-source startup failure;
+- lifecycle/XDG/runtime-directory/instance-lock/socket startup failure;
+- readiness/runtime fail-stop;
+- listener/socket cleanup failure;
+- signal-mask restoration failure.
+
+The facade MAY preserve a bounded diagnostic classification string/enum, but SHALL NOT expose unbounded worker/request data or internal implementation object graphs.
+
+LOCKED EXIT CONTRACT
+
+Phase 102 SHALL implement only two process classes:
+
+- success => `ExitCode::SUCCESS`;
+- failure => `ExitCode::FAILURE`.
+
+Success requires BOTH:
+
+- terminal reason is a handled normal termination (`SIGTERM`, `SIGINT`, or clean programmatic shutdown);
+- listener/socket cleanup and signal-mask restoration are clean.
+
+Failure includes ANY:
+
+- bootstrap/snapshot/startup/lifecycle error;
+- readiness/runtime fatal reason;
+- cleanup failure even after a normal terminal reason;
+- signal-mask restoration failure even after a normal terminal reason.
+
+Phase 102 SHALL NOT introduce a multi-number exit taxonomy.
+
+LOCKED LOGGING CONTRACT
+
+No logging framework dependency is added in Phase 102.
+
+The binary SHALL use bounded deterministic stderr records only.
+
+Allowed record classes:
+
+1. one startup-failure record, only if startup fails;
+2. one terminal summary record after a runtime lifetime returns.
+
+No per-poll, per-readiness-step, per-accept-loop, or per-worker continuous logging is allowed in the first bootstrap.
+
+The terminal summary MAY include only bounded high-level fields such as:
+
+- event class;
+- terminal classification;
+- success/failure exit class;
+- readiness-step count;
+- scheduling-attempt count;
+- workers-registered count;
+- worker-completion count;
+- peer-rejection count;
+- cleanup classification;
+- signal-mask restoration classification.
+
+The record MUST NOT include:
+
+- secrets/private keys;
+- request or response payloads;
+- arbitrary filesystem content;
+- environment dumps;
+- unbounded vectors;
+- raw internal debug dumps that could grow with process lifetime.
+
+Formatting SHALL be stable enough for subprocess tests to match bounded tokens, but Phase 102 does not create a formal public log protocol.
+
+LOCKED `main.rs` RESPONSIBILITY
+
+`main.rs` SHALL be a thin binary adapter only:
+
+1. call the Linux bootstrap facade;
+2. emit the bounded startup-failure or terminal summary line to stderr;
+3. map the facade result to success/failure `ExitCode`.
+
+`main.rs` SHALL NOT:
+
+- construct sockets directly;
+- manipulate signal masks or install signal handlers;
+- create worker threads directly;
+- duplicate runtime loops;
+- parse a new general config format;
+- invoke systemctl/loginctl;
+- install files;
+- mutate private DNS;
+- open public/remote listeners.
+
+LOCKED PHASE 102 SOURCE BOUNDARY
+
+Authorized source-changing scope is limited to the minimum needed for standalone binary wiring, expected to include:
+
+- one new Linux-only public bootstrap facade source file;
+- `crates/prw-agent/src/lib.rs` to export only that facade on Linux;
+- `crates/prw-agent/src/main.rs` thin wiring;
+- focused tests/subprocess helpers as required;
+- a Phase 102 architecture/status document if needed;
+- one temporary self-deleting validation workflow if the existing permanent workflow cannot safely perform controlled source integration.
+
+Internal `linux_identity` visibility SHALL remain `pub(crate)`.
+
+Cargo dependency changes are NOT authorized unless Phase 102 encounters a demonstrated blocker and records a separate corrective decision before mutation.
+
+SYSTEMD / DEPLOYMENT BOUNDARY
+
+Still explicitly NOT authorized:
+
+- systemd unit creation;
+- packaging changes for activation;
+- install/enable/start/stop/restart;
+- automatic startup;
+- linger/session/service-manager mutation;
+- host deployment;
+- remote/public networking;
+- privileged helper;
+- TUN/relay/database/private-key expansion;
+- mandatory private DNS;
+- Wake-on-LAN / remote wake.
+
+PHASE 102 REQUIRED VALIDATION
+
+Phase 102 cannot be classified implemented-and-validated until controlled standalone-binary evidence proves at minimum:
+
+A. successful standalone startup under a temporary valid XDG runtime root;
+B. real SIGTERM -> success exit -> socket pathname absent;
+C. real SIGINT -> success exit -> socket pathname absent;
+D. one same-UID local bounded read request produces a correlated successful response before clean termination;
+E. second binary instance against the same runtime root fails deterministically while the first remains functional;
+F. invalid/missing runtime-root startup fails before usable listener activation;
+G. bounded stderr output matches the locked classes and contains no unbounded/debug payload dump;
+H. no systemd dependency or host installation is used by the tests;
+I. workspace locked metadata, rustfmt, Clippy `-D warnings`, all tests, all-target build, and diff checks pass;
+J. the temporary integration workflow, if used, is removed after successful integration.
+
+PHASE 103
+
+After Phase 102 permanent validation, Phase 103 is audit-only completion review.
+
+It must confirm:
+
+- binary bootstrap is standalone-valid;
+- internal Linux runtime surface did not become wholesale public;
+- no systemd/activation/deployment mutation occurred;
+- no unexpected Cargo dependency churn occurred;
+- the next systemd architecture gate remains explicit.
+
+FINAL CLASSIFICATION
+
+PHASE_101_APPROVED_AND_LOCKED / DECISION_ONLY / CONSERVATIVE_VALIDATED_PROFILE_REUSED / WORKERS_2 / BACKLOG_8 / SCHEDULING_ATTEMPTS_2 / REQUESTS_PER_SESSION_1 / READ_2S / WRITE_2S / ALLOW_EXACT_TWO_LOCAL_READS / PRIVATE_DNS_DEFAULT_OPTIONAL / READY_IMMUTABLE_STATUS / NARROW_PUBLIC_BOOTSTRAP_FACADE_REQUIRED / LINUX_INTERNALS_REMAIN_CRATE_PRIVATE / SIMPLE_SUCCESS_FAILURE_EXIT / BOUNDED_STDERR_ONLY / PHASE_102_SOURCE_WIRING_AUTHORIZED / SYSTEMD_SEPARATELY_GATED / NO_ACTIVATION / NO_DEPLOYMENT
