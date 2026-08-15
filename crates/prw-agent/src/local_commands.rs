@@ -8,6 +8,7 @@ pub mod codec;
 pub mod request_tracker;
 pub mod response_codec;
 pub mod status_snapshot;
+pub mod terminal_completion;
 pub mod terminal_response;
 
 use crate::LocalIpcRequestId;
