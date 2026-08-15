@@ -76,12 +76,8 @@ mod tests {
     #[test]
     fn valid_request_preserves_id_and_command() {
         let mut bytes = Vec::new();
-        write_local_command_request(
-            &mut bytes,
-            id(270),
-            LocalAgentCommand::GetPrivateDnsConfig,
-        )
-        .expect("memory Request write succeeds");
+        write_local_command_request(&mut bytes, id(270), LocalAgentCommand::GetPrivateDnsConfig)
+            .expect("memory Request write succeeds");
 
         let outcome = read_local_command_request_at_boundary(&mut Cursor::new(bytes))
             .expect("valid Request reads");
@@ -98,12 +94,8 @@ mod tests {
         let mut bytes = Vec::new();
         write_local_command_request(&mut bytes, id(271), LocalAgentCommand::GetAgentStatus)
             .expect("first Request writes");
-        write_local_command_request(
-            &mut bytes,
-            id(272),
-            LocalAgentCommand::GetPrivateDnsConfig,
-        )
-        .expect("second Request writes");
+        write_local_command_request(&mut bytes, id(272), LocalAgentCommand::GetPrivateDnsConfig)
+            .expect("second Request writes");
         let mut input = Cursor::new(bytes);
 
         let first = read_local_command_request_at_boundary(&mut input).expect("first reads");
