@@ -89,7 +89,8 @@ fn validate_xdg_runtime_root_value(
     validate_xdg_runtime_root_path(path)
 }
 
-fn validate_xdg_runtime_root_path(
+/// Validates one already-resolved absolute runtime-root path within the Linux module.
+pub(super) fn validate_xdg_runtime_root_path(
     path: &Path,
 ) -> Result<ValidatedXdgRuntimeRoot, XdgRuntimeRootValidationError> {
     let descriptor = open(
