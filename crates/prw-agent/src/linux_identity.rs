@@ -1,7 +1,15 @@
 //! Non-activating Linux local peer identity adapter.
 //!
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
-//! from an already-existing socket file descriptor. It owns no socket lifecycle.
+//! from an already-existing socket file descriptor. Phase 058 adds same-UID
+//! authorization as a crate-internal submodule. This boundary owns no socket lifecycle.
+
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
+)]
+#[path = "linux_peer_auth.rs"]
+pub mod peer_auth;
 
 use rustix::fd::AsFd;
 use rustix::net::sockopt::socket_peercred;
