@@ -1,0 +1,80 @@
+Private Remote Workspace
+Phase 094-A01 Linux Production Runtime Architecture Decision
+
+STATUS: APPROVED_AND_LOCKED / PHASE_095_TO_099_AUTHORIZED_BELOW_BOOTSTRAP / NO_MAIN_RS_ACTIVATION / NO_SYSTEMD_ACTIVATION
+DECISION TYPE: PRODUCTION-LOCAL-RUNTIME ARCHITECTURE LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 092 authoritative PASS report commit: 0c4538287558ba1155c6867cbdc2dbaed1cf23f6
+Phase 093 readiness audit commit: 0cb49db603aca4130ec93bf547e47e31af01335f
+Phase 094 decision-preparation commit: 9cf8e10a016fd1dc0034d2663b291acb2476be6a
+Approval: user instruction "vazhdo" immediately after the explicit Phase 094 production-runtime architecture gate.
+Exact Rust/Cargo toolchain: 1.97.1
+
+LOCKED DECISIONS
+
+1. The first production-local runtime is implemented as an explicit callable owner/function below `main.rs`.
+2. All session workers remain inside one controlled `std::thread::scope` lifetime.
+3. Phase 091 compatibility is preserved; production-specific readiness is layered rather than deleting the validated finite API.
+4. Runtime configuration is represented by an immutable validated `LocalLinuxProductionRuntimeConfig` and is not parsed inside the runtime loop.
+5. Initial configuration fields cover worker capacity, listener backlog, per-readiness scheduling attempt budget, worker request budget, worker read I/O budget, and worker write I/O budget.
+6. Runtime process-lifetime evidence remains memory-bounded: saturating counters plus bounded final cancellation/join/cleanup evidence; no unbounded completion vector.
+7. Success-outcome disposition is locked as follows:
+   - ShutdownObserved => terminal shutdown transaction;
+   - RuntimeWake => continue to readiness after wake/state/completion handling;
+   - WaitInterrupted => re-observe terminal state and return to readiness; no hidden syscall retry loop;
+   - Scheduling(AttemptBudgetExhausted) => return to readiness;
+   - Scheduling(AtCapacity) => return to capacity-aware readiness;
+   - Scheduling(NoConnectionReady) => return to blocking readiness.
+8. Connection-local same-UID peer-authorization rejection is non-terminal: record bounded rejection evidence and continue.
+9. All other initial readiness/scheduling failures are fail-stop terminal runtime failures. No internal unbounded retry/backoff policy is introduced.
+10. Completion-wake Drop behavior remains non-panicking. The eventfd Arc-ownership liveness invariant is documented; no speculative fault latch is added in Phase 095-099 without a concrete terminal-observability design.
+11. Terminal cleanup ordering is locked:
+    - terminal state set/observed;
+    - no later listener dispatch;
+    - registry.cancel_all();
+    - registry.join_all();
+    - worker scope exits;
+    - accept-ready listener/socket cleanup;
+    - signal-source/mask restoration where required by the callable boundary;
+    - remaining lifecycle descriptors release;
+    - return typed bounded terminal evidence.
+12. Cleanup failure preserves, rather than overwrites, the original terminal reason.
+13. Process exit-code mapping remains outside the core runtime and is deferred to a later `main.rs` bootstrap phase.
+14. Workspace `unsafe_code = "forbid"` remains locked.
+15. Direct libc signal FFI is not authorized.
+16. The preferred real production shutdown source is a reviewed safe synchronous Linux signal wrapper with a pollable signal descriptor, selected only after dependency/MSRV/license/feature/lockfile precheck.
+17. Initial termination signals are SIGTERM and SIGINT. SIGHUP reload remains deferred.
+18. Semantic simultaneous-readiness precedence for the future signal-aware adapter is termination signal first, then Phase 089 runtime wake, then listener readiness.
+19. Real signal-mask/delivery validation must be isolated in a dedicated subprocess/integration-test boundary rather than mutating ordinary parallel test-runner signal state.
+20. Systemd installation/enable/start, deployment, remote/public listeners, and production `main.rs` activation remain outside this authorization.
+
+AUTHORIZED IMPLEMENTATION SEQUENCE
+
+Phase 095 — production runtime config + bounded terminal/evidence/error-disposition types.
+Phase 096 — production lifecycle owner + rollback assembly in temporary runtime directories; no `main.rs` wiring.
+Phase 097 — caller-controlled long-running loop using Phase 092 and existing programmatic shutdown handle; no OS signal handling.
+Phase 098 — safe Linux signal-source dependency precheck + signal-aware readiness adapter; preserve `unsafe_code = forbid`; real signal delivery in isolated subprocess; no `main.rs`/systemd activation.
+Phase 099 — production-local-runtime completion review below bootstrap.
+
+BOUNDARY PRESERVED
+
+This approval does not authorize:
+- editing `crates/prw-agent/src/main.rs` to start the runtime;
+- installing/enabling/starting systemd units;
+- service-manager restart policy changes;
+- deployment;
+- remote/public network listeners;
+- auth/enrollment expansion;
+- TUN/relay/database/private-key changes;
+- mandatory private DNS;
+- Wake-on-LAN / remote wake.
+
+NEXT GATE AFTER PHASE 099
+
+A separate explicit approval is required before `main.rs` bootstrap/exit mapping and before any systemd packaging or activation work.
+
+CLASSIFICATION
+
+PRODUCTION_RUNTIME_ARCHITECTURE_APPROVED / PHASE_095_TO_099_AUTHORIZED / MEMORY_BOUNDED_EVIDENCE / CONNECTION_LOCAL_PEER_REJECTION_CONTINUES / OTHER_INITIAL_RUNTIME_FAILURES_FAIL_STOP / UNSAFE_FORBID_PRESERVED / SAFE_SIGNAL_WRAPPER_PRECHECK_REQUIRED / CALLABLE_RUNTIME_BELOW_BOOTSTRAP / NO_MAIN_RS_ACTIVATION / NO_SYSTEMD_ACTIVATION
