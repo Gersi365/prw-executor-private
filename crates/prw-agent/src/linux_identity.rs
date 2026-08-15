@@ -9,9 +9,9 @@
 //! a nonblocking accept-ready state plus one-shot authenticated accept, Phase 071
 //! adds pure composition into Phase 060 authenticated session state, Phase 073
 //! adds absolute-deadline blocking stream I/O primitives, Phase 075 adds bounded
-//! thread-safe worker-capacity accounting, and Phase 076 adds a finite session
-//! worker body without spawning a thread. The Agent bootstrap remains inactive
-//! and no accept/session scheduler is enabled here.
+//! thread-safe worker-capacity accounting, Phase 076 adds a finite session worker
+//! body, and Phase 078 adds one fallible scoped OS-thread spawn adapter. The Agent
+//! bootstrap remains inactive and no accept/session scheduler is enabled here.
 
 #[allow(
     dead_code,
@@ -67,6 +67,12 @@ pub mod peer_auth;
 )]
 #[path = "linux_session_worker.rs"]
 pub mod session_worker;
+#[allow(
+    dead_code,
+    reason = "pre-runtime scoped Linux worker spawn adapter is intentionally crate-internal"
+)]
+#[path = "linux_session_worker_thread.rs"]
+pub mod session_worker_thread;
 #[allow(
     dead_code,
     reason = "pre-runtime bounded Linux worker capacity is intentionally crate-internal"
