@@ -133,9 +133,7 @@ pub fn process_one_at_boundary_on_server_connection<
     private_dns_snapshot: &LocalPrivateDnsSnapshot,
 ) -> Result<LocalBoundaryRequestResponseOutcome, LocalBoundaryServerConnectionProcessError> {
     if let Some(reason) = state.unusable_reason() {
-        return Err(
-            LocalBoundaryServerConnectionProcessError::ConnectionUnusable(reason),
-        );
+        return Err(LocalBoundaryServerConnectionProcessError::ConnectionUnusable(reason));
     }
 
     process_one_with_boundary_inbound_guard(
@@ -421,7 +419,10 @@ mod tests {
         let policy = CountingPolicy::new();
         let mut state = LocalServerConnectionState::new();
         let mut bytes = request_bytes(id(310), LocalAgentCommand::GetAgentStatus);
-        bytes.extend(request_bytes(id(311), LocalAgentCommand::GetPrivateDnsConfig));
+        bytes.extend(request_bytes(
+            id(311),
+            LocalAgentCommand::GetPrivateDnsConfig,
+        ));
         let mut input = Cursor::new(bytes);
         let mut output = Vec::new();
 
@@ -538,7 +539,8 @@ mod tests {
         );
 
         let calls_before = policy.calls();
-        let mut reader = CountingReader::new(request_bytes(id(315), LocalAgentCommand::GetAgentStatus));
+        let mut reader =
+            CountingReader::new(request_bytes(id(315), LocalAgentCommand::GetAgentStatus));
         let mut writer = CountingWriter::default();
         assert_eq!(
             process_one_at_boundary_on_server_connection(
@@ -549,9 +551,11 @@ mod tests {
                 status,
                 &dns,
             ),
-            Err(LocalBoundaryServerConnectionProcessError::ConnectionUnusable(
-                LocalServerConnectionUnusableReason::ResponseWrite
-            ))
+            Err(
+                LocalBoundaryServerConnectionProcessError::ConnectionUnusable(
+                    LocalServerConnectionUnusableReason::ResponseWrite
+                )
+            )
         );
         assert_eq!(reader.read_calls, 0);
         assert_eq!(writer.written, 0);
