@@ -9,9 +9,14 @@ Repository: Gersi365/prw-executor-private
 Branch: main
 Phase 030 base commit: dad722bac0fe92b465d8dc83103dedc23ae1436a
 Initial source commit: 54534d30e1429dba2f3d2325ddcf39a871ae868e
-Validated source commit: 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57
-Initial GitHub Actions run: 31881376104
-Validated GitHub Actions run: 31881436424
+First corrective commit: 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57
+Residual rustfmt corrective commit: fc9e7c1e1d86b440271cf41f915580136dacf010
+Final validated workspace commit: 3df02f1125a6c2da59410bb06c34ca73e7fbc67f
+Final authoritative GitHub Actions run: 31882111108
+
+AUDIT CORRECTION
+
+The previous version of this report incorrectly recorded the first corrective commit as a successful final validation. Authoritative GitHub metadata shows run 60 (31881555703) for commit 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57 completed with conclusion FAILURE. A residual rustfmt reflow remained in completion.rs. That residual was later detected again by the Phase 031 validation run, corrected without semantic changes in commit fc9e7c1e1d86b440271cf41f915580136dacf010, and validated together with the Phase 031 workspace in run 62.
 
 LOCKED ORDERING
 
@@ -27,28 +32,10 @@ Tracker state remains unchanged for generic frame-read failures and bounded comm
 
 IMPLEMENTED SOURCE BOUNDARY
 
-1. crates/prw-agent/src/local_commands/private_dns_response/stream.rs
-- Exported stream::completion.
-
-2. crates/prw-agent/src/local_commands/private_dns_response/stream/completion.rs
-- Added read_decode_and_complete_private_dns_response<R: Read>().
-- Reused Phase 029 full read/decode and Phase 013 LocalRequestTracker::complete().
-- Preserved read/decode failures separately from tracker transition failures.
-- Added focused memory-only state-preservation and exactly-once tests.
-
-3. contracts/LOCAL_PRIVATE_DNS_COMPLETION_CONTRACT.md
-- Added normative decode-before-completion ordering and state-preservation rules.
-
-4. docs/architecture/PHASE_030_PRIVATE_DNS_DECODE_BEFORE_COMPLETION.md
-- Recorded ordering rationale, reuse boundary, failure preservation, and next request-side gap.
-
-SOURCE DELTA SUMMARY
-
-Files changed relative to Phase 030 base: 4
-- added: contracts/LOCAL_PRIVATE_DNS_COMPLETION_CONTRACT.md
-- modified: crates/prw-agent/src/local_commands/private_dns_response/stream.rs
-- added: crates/prw-agent/src/local_commands/private_dns_response/stream/completion.rs
-- added: docs/architecture/PHASE_030_PRIVATE_DNS_DECODE_BEFORE_COMPLETION.md
+- crates/prw-agent/src/local_commands/private_dns_response/stream.rs
+- crates/prw-agent/src/local_commands/private_dns_response/stream/completion.rs
+- contracts/LOCAL_PRIVATE_DNS_COMPLETION_CONTRACT.md
+- docs/architecture/PHASE_030_PRIVATE_DNS_DECODE_BEFORE_COMPLETION.md
 
 VALIDATION HISTORY
 
@@ -57,17 +44,26 @@ Run 59
 - Commit: 54534d30e1429dba2f3d2325ddcf39a871ae868e
 - Result: FAILURE
 - Classification: SOURCE_FORMATTING_DEFECT
-- Exact cause: rustfmt-only reflow in private_dns_response/stream/completion.rs.
-- Clippy, tests, and build were skipped after the formatting gate failed.
-
-Corrective commit
-- 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57
-- Applied exact rustfmt output only.
-- Decode-before-completion ordering, typed errors, tracker semantics, dependencies, and runtime behavior unchanged.
 
 Run 60
-- Run ID: 31881436424
+- Run ID: 31881555703
 - Commit: 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57
+- Result: FAILURE
+- Classification: RESIDUAL_SOURCE_FORMATTING_DEFECT
+
+Run 61
+- Run ID: 31881812108
+- Commit: 4e05dddea85cc6478c041143d945f04c8e53e089
+- Result: FAILURE
+- Phase 031 run also exposed the still-present Phase 030 rustfmt residual.
+
+Residual corrective
+- Commit: fc9e7c1e1d86b440271cf41f915580136dacf010
+- Exact rustfmt reflow only; no Phase 030 behavior or ordering changed.
+
+Run 62
+- Run ID: 31882111108
+- Commit: 3df02f1125a6c2da59410bb06c34ca73e7fbc67f
 - Result: SUCCESS
 
 FINAL VALIDATION RESULTS
@@ -77,29 +73,17 @@ PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
 PASS: cargo test --workspace --all-targets
 PASS: cargo build --workspace --all-targets
 
-FOCUSED TEST COVERAGE
+FOCUSED SAFETY PROPERTIES
 
-PASS: fully valid known private-DNS response completes only its request ID
+PASS: valid known private-DNS response completes only its request ID
 PASS: malformed private-DNS body leaves request state outstanding
 PASS: truncated stream leaves request state outstanding
 PASS: fully decoded unknown request ID leaves unrelated tracker state untouched
-PASS: replay after successful completion is rejected as UnknownRequestId
+PASS: replay after successful completion is rejected
 
 SECURITY / RUNTIME MUTATION STATEMENT
 
-Phase 030 did not:
-- create/bind/listen/accept/connect a Unix socket;
-- access peer credentials;
-- mutate operating-system DNS/network state;
-- start an async runtime, task, thread, or timer;
-- dispatch or execute Agent commands;
-- add a dependency;
-- invoke a privileged helper;
-- implement account authentication;
-- implement cryptographic private-key operations;
-- activate systemd;
-- add a database or migration;
-- deploy infrastructure.
+Phase 030 did not create/bind/listen/connect a Unix socket, access peer credentials, mutate DNS/network state, dispatch live commands, add a dependency, activate systemd, add a database, deploy infrastructure, or implement private-key operations.
 
 LOCAL SOCKET RUNTIME STATUS
 
@@ -111,21 +95,6 @@ CRYPTO PROVIDER STATUS
 Phase 005 remains authoritative:
 NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
 
-EXPLICIT DEFERRALS
-
-Still deferred:
-- complete Request frame builder/decoder for read-only local commands;
-- request stream composition and request-registration ordering;
-- resolver-address semantic validation;
-- split-domain normalization/validation policy;
-- command-specific error body schema;
-- timeout/cancellation and late-response policy;
-- live runtime command dispatch;
-- Unix socket runtime and SO_PEERCRED enforcement;
-- privileged-helper protocol;
-- crypto-provider selection;
-- remote control-plane protocol.
-
 FINAL CLASSIFICATION
 
 IMPLEMENTED_AND_VALIDATED / PASS
@@ -133,4 +102,4 @@ IMPLEMENTED_AND_VALIDATED / PASS
 AUTHORITATIVE EVIDENCE
 
 This file is the single authoritative user-facing Phase 030 implementation-validation report.
-GitHub Actions run 31881436424 is the authoritative executable validation evidence for source commit 9ec2ee1eb0e823540c0c73ab110ff7a066e5fc57.
+GitHub Actions run 31882111108 is the final executable validation evidence covering the corrected Phase 030 source in workspace commit 3df02f1125a6c2da59410bb06c34ca73e7fbc67f.
