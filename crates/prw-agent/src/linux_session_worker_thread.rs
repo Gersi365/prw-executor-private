@@ -1,8 +1,11 @@
 //! Single scoped OS-thread spawn adapter for one finite authenticated session worker.
 //!
 //! Phase 078 creates exactly one scoped native worker from already-authenticated
-//! session state and an already-acquired Phase 075 permit. It does not accept a
-//! connection, schedule multiple workers, or activate the Agent bootstrap.
+//! session state and an already-acquired Phase 075 permit. Phase 090 adds an
+//! optional runtime-specific spawn path whose wrapper emits a non-panicking
+//! Phase 089 completion wake after worker-owned state has returned or unwound.
+//! Neither path accepts connections, schedules multiple workers, or activates
+//! the Agent bootstrap.
 
 use std::os::unix::net::UnixStream;
 use std::thread::{Builder, Scope, ScopedJoinHandle};
@@ -10,6 +13,7 @@ use std::thread::{Builder, Scope, ScopedJoinHandle};
 use prw_policy::PolicyEvaluator;
 
 use super::authenticated_session::AuthenticatedLocalLinuxSession;
+use super::runtime_wake::LocalLinuxRuntimeWakeNotifier;
 use super::session_worker::{
     LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop,
     run_authenticated_session_worker,
@@ -27,6 +31,38 @@ pub type LocalLinuxScopedWorkerResult =
 pub enum LocalLinuxScopedWorkerSpawnError {
     /// The operating system rejected the scoped thread-creation request.
     SpawnFailed,
+}
+
+/// Runtime-specific Phase 090 worker configuration with completion wake authority.
+#[derive(Debug, Clone)]
+pub struct LocalLinuxCompletionWakeWorkerConfig {
+    worker_config: LocalLinuxSessionWorkerConfig,
+    completion_wake: LocalLinuxRuntimeWakeNotifier,
+}
+
+impl LocalLinuxCompletionWakeWorkerConfig {
+    /// Couples one existing finite worker configuration to one Phase 089 notifier.
+    #[must_use]
+    pub const fn new(
+        worker_config: LocalLinuxSessionWorkerConfig,
+        completion_wake: LocalLinuxRuntimeWakeNotifier,
+    ) -> Self {
+        Self {
+            worker_config,
+            completion_wake,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct LocalLinuxWorkerCompletionWakeGuard {
+    notifier: LocalLinuxRuntimeWakeNotifier,
+}
+
+impl Drop for LocalLinuxWorkerCompletionWakeGuard {
+    fn drop(&mut self) {
+        let _ = self.notifier.notify();
+    }
 }
 
 /// Spawns exactly one scoped OS thread for an already-accounted authenticated session.
@@ -70,6 +106,53 @@ where
         .map_err(|_| LocalLinuxScopedWorkerSpawnError::SpawnFailed)
 }
 
+/// Spawns one scoped worker whose wrapper emits a Phase 089 completion wake.
+///
+/// The completion guard lives in the wrapper frame outside
+/// [`run_authenticated_session_worker`]. On normal return, worker-owned state,
+/// including the Phase 075 permit, has already been released before the guard
+/// posts the wake. During panic unwinding, callee-owned state unwinds before the
+/// wrapper guard is dropped, preserving the same release-before-wake ordering.
+///
+/// Wake notification failure is deliberately non-panicking during wrapper drop.
+/// Worker result/panic classification remains owned by the existing Phase 079
+/// join boundary rather than being encoded in the wake counter.
+///
+/// # Errors
+///
+/// Returns [`LocalLinuxScopedWorkerSpawnError::SpawnFailed`] when
+/// [`Builder::spawn_scoped`] cannot create the native thread. A failed spawn does
+/// not emit a completion wake because no worker began execution.
+pub fn spawn_authenticated_session_worker_with_completion_wake<'scope, E>(
+    scope: &'scope Scope<'scope, '_>,
+    session: AuthenticatedLocalLinuxSession<UnixStream>,
+    permit: LocalLinuxWorkerPermit,
+    evaluator: &'scope E,
+    status_snapshot: LocalAgentStatusSnapshot,
+    private_dns_snapshot: &'scope LocalPrivateDnsSnapshot,
+    config: LocalLinuxCompletionWakeWorkerConfig,
+) -> Result<ScopedJoinHandle<'scope, LocalLinuxScopedWorkerResult>, LocalLinuxScopedWorkerSpawnError>
+where
+    E: PolicyEvaluator + Sync + ?Sized,
+{
+    Builder::new()
+        .spawn_scoped(scope, move || {
+            let _completion_wake_guard = LocalLinuxWorkerCompletionWakeGuard {
+                notifier: config.completion_wake,
+            };
+
+            run_authenticated_session_worker(
+                session,
+                permit,
+                evaluator,
+                status_snapshot,
+                private_dns_snapshot,
+                config.worker_config,
+            )
+        })
+        .map_err(|_| LocalLinuxScopedWorkerSpawnError::SpawnFailed)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;
@@ -83,12 +166,16 @@ mod tests {
     use prw_network::PrivateDnsConfig;
     use prw_policy::{Capability, Decision, PolicyEvaluator};
 
-    use super::spawn_authenticated_session_worker;
+    use super::{
+        LocalLinuxCompletionWakeWorkerConfig, spawn_authenticated_session_worker,
+        spawn_authenticated_session_worker_with_completion_wake,
+    };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
     use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
     use crate::linux_identity::authenticated_session::AuthenticatedLocalLinuxSession;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
+    use crate::linux_identity::runtime_wake::LocalLinuxRuntimeWake;
     use crate::linux_identity::session_worker::{
         LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerStop,
     };
@@ -232,11 +319,95 @@ mod tests {
         assert_eq!(response.header().request_id(), id(501));
     }
 
+    #[test]
+    fn completion_wake_is_observable_after_normal_worker_releases_capacity() {
+        let (server, mut client) = UnixStream::pair().expect("anonymous Unix pair creates");
+        let capacity = LocalLinuxWorkerCapacity::new(
+            NonZeroUsize::new(1).expect("test worker capacity is non-zero"),
+        );
+        let policy = AlwaysAllow;
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+
+        write_local_command_request(&mut client, id(502), LocalAgentCommand::GetAgentStatus)
+            .expect("Request writes");
+
+        thread::scope(|scope| {
+            let permit = capacity.try_acquire().expect("worker slot acquires");
+            let config = LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
+            let handle = spawn_authenticated_session_worker_with_completion_wake(
+                scope,
+                session(server),
+                permit,
+                &policy,
+                status,
+                &dns,
+                config,
+            )
+            .expect("completion-wake worker spawns");
+
+            assert!(matches!(
+                handle.join().expect("worker does not panic"),
+                Ok(LocalLinuxSessionWorkerStop::RequestBudgetExhausted { .. })
+            ));
+        });
+
+        assert_eq!(capacity.active_workers(), 0);
+        assert_eq!(wake.drain(), Ok(()));
+
+        let response = read_frame(&mut client).expect("response reads");
+        assert_eq!(response.header().request_id(), id(502));
+    }
+
+    #[test]
+    fn completion_wake_survives_policy_panic_after_permit_unwinds() {
+        let (server, mut client) = UnixStream::pair().expect("anonymous Unix pair creates");
+        let capacity = LocalLinuxWorkerCapacity::new(
+            NonZeroUsize::new(1).expect("test worker capacity is non-zero"),
+        );
+        let policy = PanicPolicy;
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+
+        write_local_command_request(&mut client, id(503), LocalAgentCommand::GetAgentStatus)
+            .expect("Request writes");
+
+        thread::scope(|scope| {
+            let permit = capacity.try_acquire().expect("worker slot acquires");
+            let config = LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
+            let handle = spawn_authenticated_session_worker_with_completion_wake(
+                scope,
+                session(server),
+                permit,
+                &policy,
+                status,
+                &dns,
+                config,
+            )
+            .expect("completion-wake worker spawns");
+
+            assert!(handle.join().is_err());
+        });
+
+        assert_eq!(capacity.active_workers(), 0);
+        assert_eq!(wake.drain(), Ok(()));
+    }
+
     struct AlwaysAllow;
 
     impl PolicyEvaluator for AlwaysAllow {
         fn evaluate(&self, _capability: Capability) -> Decision {
             Decision::Allow
+        }
+    }
+
+    struct PanicPolicy;
+
+    impl PolicyEvaluator for PanicPolicy {
+        fn evaluate(&self, _capability: Capability) -> Decision {
+            panic!("planned Phase 090 policy panic")
         }
     }
 }
