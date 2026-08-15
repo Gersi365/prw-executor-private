@@ -1,38 +1,68 @@
 //! Transport-agnostic control-plane contracts for Private Remote Workspace.
 //!
 //! Phase 002 defines typed identity, enrollment, and revocation boundaries only.
-//! It does not select an HTTP/RPC protocol, persistence layer, authentication
-//! mechanism, cryptographic primitive, or network listener.
+//! Phase 003 locks the initial device-identity signature algorithm identifier.
+//! These types still do not select an HTTP/RPC protocol, persistence layer,
+//! authentication mechanism, private-key backend, or network listener.
 
 use std::fmt;
 
 use prw_core::{DeviceId, DeviceLifecycle, EnrollmentId, UserId, WorkspaceId};
 
+/// Initial device-identity signature algorithm.
+///
+/// Phase 003 selects ECDSA with NIST P-256 and SHA-256 as the first device
+/// identity signature primitive. Key storage, concrete crypto library/backend,
+/// public-key wire encoding, and signature wire encoding remain deferred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeviceIdentityAlgorithm {
+    /// ECDSA over NIST P-256 with SHA-256.
+    EcdsaP256Sha256,
+}
+
 /// Opaque public device-identity material.
 ///
-/// The bytes are intentionally algorithm- and serialization-agnostic in Phase 002.
-/// Private identity material is never represented by this type.
+/// The bytes remain serialization-agnostic in Phase 003. They are paired with
+/// an explicit [`DeviceIdentityAlgorithm`] so the algorithm is never inferred
+/// from byte length or another implicit property. Private identity material is
+/// never represented by this type.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PublicIdentityMaterial(Vec<u8>);
+pub struct PublicIdentityMaterial {
+    algorithm: DeviceIdentityAlgorithm,
+    bytes: Vec<u8>,
+}
 
 impl PublicIdentityMaterial {
-    /// Creates non-empty opaque public identity material.
+    /// Creates non-empty opaque public identity material for an explicit algorithm.
     ///
     /// # Errors
     ///
     /// Returns [`IdentityMaterialError::Empty`] when no public bytes are supplied.
-    pub fn new(value: impl Into<Vec<u8>>) -> Result<Self, IdentityMaterialError> {
+    pub fn new(
+        algorithm: DeviceIdentityAlgorithm,
+        value: impl Into<Vec<u8>>,
+    ) -> Result<Self, IdentityMaterialError> {
         let value = value.into();
         if value.is_empty() {
             return Err(IdentityMaterialError::Empty);
         }
-        Ok(Self(value))
+        Ok(Self {
+            algorithm,
+            bytes: value,
+        })
+    }
+
+    /// Returns the explicit device-identity algorithm.
+    #[must_use]
+    pub const fn algorithm(&self) -> DeviceIdentityAlgorithm {
+        self.algorithm
     }
 
     /// Returns the opaque public bytes.
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+        &self.bytes
     }
 }
 
@@ -188,16 +218,33 @@ pub enum ControlPlaneAction {
 #[cfg(test)]
 mod tests {
     use super::{
-        ControlPlaneAction, EnrollmentDecision, EnrollmentRequest, EnrollmentState,
-        EnrollmentTransitionError, IdentityMaterialError, PublicIdentityMaterial,
+        ControlPlaneAction, DeviceIdentityAlgorithm, EnrollmentDecision, EnrollmentRequest,
+        EnrollmentState, EnrollmentTransitionError, IdentityMaterialError, PublicIdentityMaterial,
     };
     use prw_core::{DeviceId, EnrollmentId, UserId, WorkspaceId};
 
     #[test]
     fn public_identity_material_rejects_empty_bytes() {
         assert_eq!(
-            PublicIdentityMaterial::new(Vec::<u8>::new()),
+            PublicIdentityMaterial::new(
+                DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                Vec::<u8>::new()
+            ),
             Err(IdentityMaterialError::Empty)
+        );
+    }
+
+    #[test]
+    fn public_identity_material_preserves_algorithm() {
+        let identity = PublicIdentityMaterial::new(
+            DeviceIdentityAlgorithm::EcdsaP256Sha256,
+            vec![1, 2, 3],
+        )
+        .expect("non-empty public identity");
+
+        assert_eq!(
+            identity.algorithm(),
+            DeviceIdentityAlgorithm::EcdsaP256Sha256
         );
     }
 
@@ -221,8 +268,11 @@ mod tests {
             workspace_id: WorkspaceId::new("workspace-1").expect("valid workspace id"),
             user_id: UserId::new("user-1").expect("valid user id"),
             device_id: DeviceId::new("device-1").expect("valid device id"),
-            public_identity: PublicIdentityMaterial::new(vec![1, 2, 3])
-                .expect("non-empty public identity"),
+            public_identity: PublicIdentityMaterial::new(
+                DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                vec![1, 2, 3],
+            )
+            .expect("non-empty public identity"),
         };
 
         assert!(matches!(
