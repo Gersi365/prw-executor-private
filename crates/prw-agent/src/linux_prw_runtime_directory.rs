@@ -64,11 +64,7 @@ pub enum PrwRuntimeDirectoryPreparationError {
 pub fn prepare_prw_runtime_directory(
     root: &ValidatedXdgRuntimeRoot,
 ) -> Result<ValidatedPrwRuntimeDirectory, PrwRuntimeDirectoryPreparationError> {
-    let creation = mkdirat(
-        root.as_fd(),
-        AGENT_RUNTIME_SUBDIRECTORY,
-        Mode::RWXU,
-    );
+    let creation = mkdirat(root.as_fd(), AGENT_RUNTIME_SUBDIRECTORY, Mode::RWXU);
     if !matches!(creation, Ok(()) | Err(Errno::EXIST)) {
         return Err(PrwRuntimeDirectoryPreparationError::CreateFailed);
     }
@@ -81,8 +77,8 @@ pub fn prepare_prw_runtime_directory(
     )
     .map_err(|_| PrwRuntimeDirectoryPreparationError::OpenFailed)?;
 
-    let metadata = fstat(&descriptor)
-        .map_err(|_| PrwRuntimeDirectoryPreparationError::MetadataReadFailed)?;
+    let metadata =
+        fstat(&descriptor).map_err(|_| PrwRuntimeDirectoryPreparationError::MetadataReadFailed)?;
     validate_child_identity(&metadata, effective_agent_uid())?;
 
     if Mode::from_raw_mode(metadata.st_mode).bits() != AGENT_RUNTIME_DIRECTORY_MODE {
@@ -142,8 +138,7 @@ mod tests {
     use rustix::fs::{Mode, OFlags, fstat, open};
 
     use super::{
-        PrwRuntimeDirectoryPreparationError, prepare_prw_runtime_directory,
-        validate_child_identity,
+        PrwRuntimeDirectoryPreparationError, prepare_prw_runtime_directory, validate_child_identity,
     };
     use crate::AGENT_RUNTIME_SUBDIRECTORY;
 
