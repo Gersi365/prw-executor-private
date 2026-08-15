@@ -1,0 +1,84 @@
+Private Remote Workspace
+Phase 073 Linux Absolute-Deadline Blocking I/O Adapter
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 1f234a4d11254541391df3ba4f386001064b9862
+Authoritative GitHub Actions run: 31894761221
+Phase 072 authoritative decision head: eb645fb15831d20c69bfbdfe50a7e2b7f147dd04
+
+PURPOSE
+
+Implement the first Phase 072 wait-bound primitive while preserving the existing blocking accepted-stream model and without spawning workers, accepting connections, or activating the Agent runtime.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_deadline_io.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_073_LINUX_ABSOLUTE_DEADLINE_IO.md
+
+MODEL
+
+- LocalLinuxIoBudget accepts only strictly positive Duration values.
+- LocalLinuxDeadlineReader computes one monotonic absolute deadline when the read phase starts.
+- LocalLinuxDeadlineWriter computes one independent monotonic absolute deadline when the write phase starts.
+- Before every underlying blocking read/write call, the remaining time until the same stored deadline is recomputed.
+- The corresponding UnixStream read/write timeout is set to no more than the remaining duration.
+- Partial progress does not replace or extend the stored absolute deadline.
+- timeout-style WouldBlock/TimedOut errors are normalized to std::io::ErrorKind::TimedOut inside the adapter.
+- an unrepresentable now+budget deadline is rejected before I/O.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- zero Duration is rejected;
+- unrepresentable monotonic deadline is rejected;
+- independent read/write deadline adapters round-trip bytes over UnixStream::pair();
+- successful partial read progress leaves the reader absolute deadline unchanged;
+- successful write progress leaves the writer absolute deadline unchanged;
+- an idle peer read expires and is surfaced as TimedOut.
+
+VALIDATION
+
+Authoritative run 31894761221 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- initial run 31894627500 stopped only at rustfmt;
+- formatter corrections were applied without semantic change;
+- run 31894708079 passed formatting and Clippy requested const qualification for one budget constructor and two test-only deadline accessors;
+- final run 31894761221 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 073:
+
+- does not change listener or connected-stream O_NONBLOCK mode;
+- does not accept/authenticate a connection;
+- does not process a PRW Request;
+- does not create a worker/thread/task;
+- does not choose production deadline values;
+- does not wire the adapter into Phase 060 yet;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no network/DNS/TUN/database/private-key/deployment state.
+
+NEXT SAFE STEP
+
+Phase 074 may compose a single authenticated Request transaction so that the absolute read deadline begins immediately before frame acquisition and the independent absolute write deadline begins only after a complete valid Request has been read/decoded and a terminal response has been built.
+
+FINAL CLASSIFICATION
+
+ABSOLUTE_DEADLINE_IO_ADAPTER_IMPLEMENTED / BLOCKING_STREAM_PRESERVED / PARTIAL_PROGRESS_DOES_NOT_RESET_DEADLINE / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 073 report.
