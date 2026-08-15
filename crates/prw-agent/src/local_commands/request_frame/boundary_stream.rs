@@ -13,7 +13,7 @@ use super::stream::LocalAgentRequestStreamReadError;
 
 /// Successful boundary-aware outcome for one local command Request attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LocalAgentRequestBoundaryRead {
+pub enum LocalAgentRequestBoundaryRead {
     /// The peer reached EOF before any byte of a new frame was acquired.
     CleanEof,
     /// One complete valid current local command Request was decoded.
@@ -31,7 +31,7 @@ pub(crate) enum LocalAgentRequestBoundaryRead {
 /// Preserves frame-acquisition failures as
 /// [`LocalAgentRequestStreamReadError::Read`] and Request-specific decode
 /// failures as [`LocalAgentRequestStreamReadError::Decode`].
-pub(crate) fn read_local_command_request_at_boundary<R: Read>(
+pub fn read_local_command_request_at_boundary<R: Read>(
     reader: &mut R,
 ) -> Result<LocalAgentRequestBoundaryRead, LocalAgentRequestStreamReadError> {
     match read_frame_at_boundary(reader).map_err(LocalAgentRequestStreamReadError::Read)? {
