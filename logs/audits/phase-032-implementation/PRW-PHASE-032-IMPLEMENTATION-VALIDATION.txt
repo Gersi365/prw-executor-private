@@ -1,0 +1,87 @@
+Private Remote Workspace
+Phase 032 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 032
+SCOPE: Generic std::io Request stream composition
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Initial source commit: acd2f9d8b1ea8975a4bf05c289369f53371d9676
+Rustfmt corrective: 779ea8b939a237aefb85818883bfcf24ac9511ec
+Clippy corrective: efdc5d95908c9eb6c4dd0e16ed1f211e4cd3c2b8
+Authoritative GitHub Actions run: 31882320257
+
+IMPLEMENTED SOURCE BOUNDARY
+
+- crates/prw-agent/src/local_commands/request_frame.rs
+- crates/prw-agent/src/local_commands/request_frame/stream.rs
+- contracts/LOCAL_REQUEST_STREAM_CONTRACT.md
+- docs/architecture/PHASE_032_LOCAL_REQUEST_STREAM.md
+
+LOCKED COMPOSITION
+
+Write path:
+typed request -> Phase 031 Request frame builder -> Phase 012 generic frame writer
+
+Read path:
+Phase 011 generic frame reader -> Phase 031 Request decoder -> typed request envelope
+
+The current Request wire shape remains 24-byte header + 2-byte command payload = 26 bytes.
+
+VALIDATION HISTORY
+
+Run 63
+- Run ID: 31882252627
+- Result: FAILURE
+- Cause: rustfmt-only reflow in request_frame/stream.rs.
+
+Run 64
+- Run ID: 31882287232
+- Result: FAILURE
+- fmt: PASS
+- Cause: Clippy detected two test-only types imported in production scope.
+
+Run 65
+- Run ID: 31882320257
+- Commit: efdc5d95908c9eb6c4dd0e16ed1f211e4cd3c2b8
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED SAFETY PROPERTIES
+
+PASS: both current read-only commands round-trip through memory streams
+PASS: one successful read consumes exactly one frame
+PASS: truncated Request preserves generic TruncatedPayload classification
+PASS: non-Request frame preserves Request-specific decode failure
+PASS: payload write failure preserves generic PayloadIo classification
+PASS: no implicit flush was introduced
+
+RUNTIME MUTATION STATEMENT
+
+Phase 032 did not create/bind/listen/accept/connect a Unix socket, mutate tracker state, dispatch live commands, mutate DNS/network state, add a dependency, start async work, activate systemd, add a database, deploy infrastructure, or perform private-key operations.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 032 implementation-validation report.
+GitHub Actions run 31882320257 is the authoritative executable validation evidence.
