@@ -1,0 +1,85 @@
+Private Remote Workspace
+Phase 088 Linux Runtime Readiness Architecture Decision
+
+STATUS: APPROVED_AND_LOCKED / IMPLEMENTATION_AUTHORIZED_BELOW_BOOTSTRAP_BOUNDARY / NO_RUNTIME_ACTIVATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Decision document commit: 7d28cdce059926aa8872de220c6825a857a07d6f
+Phase 087-A01 corrective commit: aef90e7baf9f11228a9ec6a5eeaae5976fe31940
+Phase 088 decision-preparation commit: 182b1d99cb19a863b9925fd0bf9a851d8f530b8f
+Phase 088-A02 I/O semantics precheck commit: 1f1582d998796de25aff02a522c6b419da1c1787
+Phase 088-A03 testability precheck commit: eee2003d476f7336c1c4dae57e30bc08b06165ba
+Exact Rust 1.97.1 corrective PASS report commit: b2526508021e809f7258af98c6ee4ae582b09f63
+
+APPROVAL
+
+The user explicitly said "vazhdo" after the assistant presented the Phase 088 architecture gate and stated that the next source-changing step required explicit approval. This continuation is therefore recorded as approval of the prepared Phase 088 readiness architecture and its bounded implementation decomposition.
+
+The approval does not extend to the separately deferred production Agent bootstrap/systemd activation boundary.
+
+LOCKED ARCHITECTURE
+
+- capacity-aware blocking poll;
+- one shared non-semaphore Linux eventfd as coalescing runtime wake transport;
+- eventfd flags: initial 0, CLOEXEC, NONBLOCK, no SEMAPHORE;
+- runtime wake always armed;
+- listener armed only while active_workers() < max_workers();
+- worker-completion and terminal-shutdown wake producers share the wake transport;
+- eventfd counter carries no semantic event count;
+- fixed native-endian u64 value 1 for notification;
+- eventfd read/write retry only EINTR for the same fixed operation;
+- write EAGAIN means wake already pending;
+- short I/O and unexpected drain/readiness states fail closed;
+- blocking poll uses no timeout;
+- poll EINTR is surfaced as structured WaitInterrupted and is not internally retried;
+- runtime wake precedence over simultaneous listener readiness;
+- wake handling re-observes shutdown, reaps finished workers, then recomputes capacity;
+- worker completion wake is implemented outside LocalLinuxWorkerPermit accounting and after permit release/unwind;
+- registry cancel_all() precedes join_all() at shutdown;
+- all scoped worker handles remain inside one std::thread::scope lifetime.
+
+IMPLEMENTATION AUTHORIZATION
+
+Authorized below the bootstrap boundary:
+
+Phase 089 — runtime wake primitive.
+Phase 090 — scoped worker completion wake.
+Phase 091 — one-step capacity-aware readiness wait.
+Phase 092 — finite readiness + Phase 086 orchestration proof.
+
+Each phase requires isolated validation before the next material layer is treated as authoritative.
+
+DEPENDENCY INVARIANT
+
+The existing rustix package remains exactly 1.1.4. Phase 089 may enable only feature "event" in prw-agent. Cargo.lock must remain byte-identical; any lockfile mutation is a stop-and-audit condition.
+
+VALIDATION INVARIANT
+
+All source-changing phases must pass the permanent GitHub Rust validation workflow using the repository's exact Rust 1.97.1 toolchain:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+DEFERRED / NOT AUTHORIZED
+
+- production long-running Agent loop;
+- main.rs runtime activation;
+- signal/service-manager shutdown integration;
+- systemd creation/install/enable/start;
+- remote/public network listener;
+- production deployment;
+- auth/enrollment/DNS/TUN/relay/database/private-key changes.
+
+NEXT ACTION
+
+Proceed with Phase 089 runtime wake primitive only, validate it, and preserve the no-bootstrap/no-runtime-activation boundary.
+
+FINAL CLASSIFICATION
+
+PHASE_088_APPROVED_AND_LOCKED / CAPACITY_AWARE_POLL / SHARED_RUNTIME_EVENTFD / COMPLETION_WAKE_REQUIRED / EXPLICIT_IO_ERROR_POLICY / WAKE_FIRST_PRECEDENCE / SCOPED_THREAD_LIFETIME_PRESERVED / PHASES_089_TO_092_AUTHORIZED_BELOW_BOOTSTRAP / NO_RUNTIME_ACTIVATION
+
+This is the single authoritative user-facing Phase 088 decision report.
