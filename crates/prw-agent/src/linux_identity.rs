@@ -3,9 +3,9 @@
 //! Phase 057 reads only the Agent effective UID and Linux kernel `SO_PEERCRED`
 //! from an already-existing socket file descriptor. Phase 058 adds same-UID
 //! authorization, Phase 059 adds typed authenticated stream ownership, Phase 060
-//! composes authenticated application-session processing, and Phase 062 adds
-//! read-only XDG runtime-root validation. This boundary owns no listener or
-//! filesystem socket lifecycle.
+//! composes authenticated application-session processing, Phase 062 adds
+//! read-only XDG runtime-root validation, and Phase 067 adds a bound-but-not-
+//! listening validated Agent socket object. The Agent bootstrap remains inactive.
 
 #[allow(
     dead_code,
@@ -19,6 +19,12 @@ pub mod authenticated_connection;
 )]
 #[path = "linux_authenticated_session.rs"]
 pub mod authenticated_session;
+#[allow(
+    dead_code,
+    reason = "pre-listen bound Linux Agent socket is intentionally crate-internal"
+)]
+#[path = "linux_agent_bound_socket.rs"]
+pub mod bound_socket;
 #[allow(
     dead_code,
     reason = "pre-runtime Linux same-UID authorization is intentionally crate-internal"
