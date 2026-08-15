@@ -36,8 +36,16 @@ pub fn encoded_private_dns_snapshot_len(snapshot: &LocalPrivateDnsSnapshot) -> u
 }
 
 /// Encodes one validated private-DNS snapshot into the Phase 027 byte format.
-#[must_use]
-pub fn encode_private_dns_snapshot(snapshot: &LocalPrivateDnsSnapshot) -> Vec<u8> {
+///
+/// # Errors
+///
+/// Returns [`LocalPrivateDnsEncodeError`] if an internal snapshot invariant can
+/// no longer be represented by the locked one-byte list counts or two-byte
+/// entry lengths. Public snapshot construction prevents these states, but the
+/// encoder remains defensive and non-panicking.
+pub fn encode_private_dns_snapshot(
+    snapshot: &LocalPrivateDnsSnapshot,
+) -> Result<Vec<u8>, LocalPrivateDnsEncodeError> {
     let mut flags = 0_u8;
     if snapshot.enabled() {
         flags |= FLAG_ENABLED;
@@ -46,20 +54,22 @@ pub fn encode_private_dns_snapshot(snapshot: &LocalPrivateDnsSnapshot) -> Vec<u8
         flags |= FLAG_DEVICE_NAMING;
     }
 
+    let resolver_count = u8::try_from(snapshot.resolvers().len())
+        .map_err(|_| LocalPrivateDnsEncodeError::ResolverCountInvariant)?;
+    let split_domain_count = u8::try_from(snapshot.split_domains().len())
+        .map_err(|_| LocalPrivateDnsEncodeError::SplitDomainCountInvariant)?;
+
     let mut output = Vec::with_capacity(encoded_private_dns_snapshot_len(snapshot));
     output.push(flags);
-    output
-        .push(u8::try_from(snapshot.resolvers().len()).expect("validated resolver count fits u8"));
-    output.push(
-        u8::try_from(snapshot.split_domains().len()).expect("validated split-domain count fits u8"),
-    );
+    output.push(resolver_count);
+    output.push(split_domain_count);
     for resolver in snapshot.resolvers() {
-        append_string(&mut output, resolver);
+        append_string(&mut output, resolver)?;
     }
     for domain in snapshot.split_domains() {
-        append_string(&mut output, domain);
+        append_string(&mut output, domain)?;
     }
-    output
+    Ok(output)
 }
 
 /// Decodes one exact Phase 027 private-DNS snapshot body.
@@ -122,10 +132,15 @@ pub fn decode_private_dns_snapshot(
         .map_err(LocalPrivateDnsDecodeError::SnapshotInvariant)
 }
 
-fn append_string(output: &mut Vec<u8>, value: &str) {
-    let length = u16::try_from(value.len()).expect("validated private-DNS string length fits u16");
+fn append_string(
+    output: &mut Vec<u8>,
+    value: &str,
+) -> Result<(), LocalPrivateDnsEncodeError> {
+    let length = u16::try_from(value.len())
+        .map_err(|_| LocalPrivateDnsEncodeError::EntryLengthInvariant)?;
     output.extend_from_slice(&length.to_be_bytes());
     output.extend_from_slice(value.as_bytes());
+    Ok(())
 }
 
 fn read_string(
@@ -155,6 +170,17 @@ fn read_string(
         .to_owned();
     *cursor = end;
     Ok(value)
+}
+
+/// Defensive Phase 027 private-DNS snapshot encoding failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalPrivateDnsEncodeError {
+    /// Resolver count cannot be represented by the locked one-byte count field.
+    ResolverCountInvariant,
+    /// Split-domain count cannot be represented by the locked one-byte count field.
+    SplitDomainCountInvariant,
+    /// An entry length cannot be represented by the locked two-byte length field.
+    EntryLengthInvariant,
 }
 
 /// Fail-closed Phase 027 private-DNS snapshot decoding failure.
@@ -201,10 +227,14 @@ mod tests {
         LocalPrivateDnsSnapshot::try_from_config(config).expect("bounded test config")
     }
 
+    fn encode(snapshot: &LocalPrivateDnsSnapshot) -> Vec<u8> {
+        encode_private_dns_snapshot(snapshot).expect("validated snapshot encodes")
+    }
+
     #[test]
     fn default_snapshot_has_stable_three_byte_encoding() {
         let snapshot = snapshot(&PrivateDnsConfig::default());
-        assert_eq!(encode_private_dns_snapshot(&snapshot), [0, 0, 0]);
+        assert_eq!(encode(&snapshot), [0, 0, 0]);
         assert_eq!(decode_private_dns_snapshot(&[0, 0, 0]), Ok(snapshot));
     }
 
@@ -217,7 +247,7 @@ mod tests {
             split_domains: vec!["corp.example".into(), "láb.example".into()],
         };
         let snapshot = snapshot(&config);
-        let encoded = encode_private_dns_snapshot(&snapshot);
+        let encoded = encode(&snapshot);
 
         assert_eq!(encoded[0], 0b11);
         assert_eq!(encoded[1], 2);
@@ -241,7 +271,7 @@ mod tests {
             ],
         };
         let snapshot = snapshot(&config);
-        let encoded = encode_private_dns_snapshot(&snapshot);
+        let encoded = encode(&snapshot);
 
         assert_eq!(encoded.len(), LOCAL_PRIVATE_DNS_MAX_ENCODED_LENGTH);
         assert_eq!(decode_private_dns_snapshot(&encoded), Ok(snapshot));
