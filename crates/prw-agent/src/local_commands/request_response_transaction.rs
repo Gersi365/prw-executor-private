@@ -36,11 +36,7 @@ use super::status_snapshot::LocalAgentStatusSnapshot;
 /// decode, policy-response construction failures, or
 /// [`LocalRequestResponseTransactionError::ResponseWrite`] for guarded response
 /// validation/write failures.
-pub fn process_and_write_one_read_only_request<
-    R: Read,
-    W: Write,
-    E: PolicyEvaluator + ?Sized,
->(
+pub fn process_and_write_one_read_only_request<R: Read, W: Write, E: PolicyEvaluator + ?Sized>(
     reader: &mut R,
     writer: &mut W,
     response_write_state: &mut LocalTerminalResponseWriteState,
@@ -54,13 +50,9 @@ pub fn process_and_write_one_read_only_request<
         ));
     }
 
-    let response = read_and_build_policy_response(
-        reader,
-        evaluator,
-        status_snapshot,
-        private_dns_snapshot,
-    )
-    .map_err(LocalRequestResponseTransactionError::RequestProcessing)?;
+    let response =
+        read_and_build_policy_response(reader, evaluator, status_snapshot, private_dns_snapshot)
+            .map_err(LocalRequestResponseTransactionError::RequestProcessing)?;
 
     write_terminal_response_guarded(response_write_state, writer, &response)
         .map_err(LocalRequestResponseTransactionError::ResponseWrite)
@@ -80,14 +72,13 @@ mod tests {
     use std::cell::Cell;
     use std::io::{Cursor, Error, Read, Result as IoResult, Write};
 
-    use super::{
-        LocalRequestResponseTransactionError, process_and_write_one_read_only_request,
-    };
+    use super::{LocalRequestResponseTransactionError, process_and_write_one_read_only_request};
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
     use crate::frame_object::writer::{LocalIpcFrameWriteError, write_frame};
     use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::local_commands::LocalAgentCommand;
+    use crate::local_commands::LocalAgentResponseStatus;
     use crate::local_commands::codec::LocalAgentRequestDecodeError;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::LocalAgentRequestFrameDecodeError;
@@ -103,7 +94,6 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
-    use crate::local_commands::LocalAgentResponseStatus;
     use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion};
     use prw_network::PrivateDnsConfig;
     use prw_policy::{Capability, Decision, PolicyEvaluator};
@@ -165,7 +155,8 @@ mod tests {
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
         let dns = dns_snapshot();
         let policy = CountingPolicy::allow(Capability::AgentStatusRead);
-        let mut reader = CountingReader::new(request_bytes(id(230), LocalAgentCommand::GetAgentStatus));
+        let mut reader =
+            CountingReader::new(request_bytes(id(230), LocalAgentCommand::GetAgentStatus));
         let mut writer = CountingWriter::default();
         let mut state = LocalTerminalResponseWriteState::WritePoisoned;
 
@@ -237,7 +228,8 @@ mod tests {
         .expect("denied transaction writes Unauthorized");
 
         let frame = read_frame(&mut Cursor::new(output)).expect("response frame reads");
-        let terminal = validate_terminal_response_frame(&frame).expect("terminal response validates");
+        let terminal =
+            validate_terminal_response_frame(&frame).expect("terminal response validates");
         assert_eq!(terminal.request_id(), id(232));
         assert_eq!(terminal.status(), LocalAgentResponseStatus::Unauthorized);
         assert_eq!(policy.calls(), 1);
