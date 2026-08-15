@@ -1,0 +1,190 @@
+Private Remote Workspace
+Phase 027 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 027
+SCOPE: Bounded binary codec for LocalPrivateDnsSnapshot
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 027 base commit: 745f57b030425b99be9dd86732f0703ec57191f1
+Validated source commit: fed462a1a09ddf8eba1ad08afaa9d5d6f3fdf3d4
+Validated GitHub Actions run: 31880989556
+
+LOCKED WIRE FORMAT
+
+Fixed three-byte header:
+- byte 0: flags
+  - bit 0 = enabled
+  - bit 1 = device_naming
+  - bits 2..7 reserved and required zero
+- byte 1: resolver count, additionally bounded to <=16
+- byte 2: split-domain count, additionally bounded to <=64
+
+Entries follow in source order: all resolvers, then all split domains.
+Each entry is encoded as:
+- u16 big-endian UTF-8 byte length
+- exactly that many UTF-8 bytes
+
+Per-entry Phase 026 bounds remain authoritative:
+- resolver: 1..=128 UTF-8 bytes
+- split domain: 1..=253 UTF-8 bytes
+
+Maximum encoded snapshot size: exactly 18,403 bytes.
+
+ENCODER SAFETY
+
+The final encoder is fallible and non-panicking:
+- encode_private_dns_snapshot(&LocalPrivateDnsSnapshot) -> Result<Vec<u8>, LocalPrivateDnsEncodeError>
+- defensive typed failures cover impossible count/entry-length representation invariant breaks.
+- valid snapshots produce the same locked wire bytes as before the corrective.
+
+DECODER ORDERING
+
+1. require fixed header;
+2. reject reserved flags;
+3. reject counts above Phase 026 bounds before vector allocation;
+4. require complete two-byte entry length;
+5. reject zero/over-bound length before String allocation;
+6. require declared bytes;
+7. validate UTF-8 before ownership conversion;
+8. reject trailing bytes;
+9. perform defensive final LocalPrivateDnsSnapshot validation.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands.rs
+- Exported private_dns_codec module.
+
+2. crates/prw-agent/src/local_commands/private_dns_codec.rs
+- Added bounded encoder/decoder and exact encoded-length calculation.
+- Added LocalPrivateDnsEncodeError and LocalPrivateDnsDecodeError typed taxonomies.
+- Added focused stable-byte, maximum-size, round-trip, flags/counts, entry-boundary, UTF-8, truncation, and trailing-byte tests.
+
+3. contracts/LOCAL_PRIVATE_DNS_CODEC_CONTRACT.md
+- Added normative binary format, bounds, allocation ordering, preservation, and runtime exclusions.
+
+4. docs/architecture/PHASE_027_PRIVATE_DNS_CODEC.md
+- Recorded layout, maximum size, allocation strategy, semantic separation, and future composition boundary.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 027 base: 4
+- added: contracts/LOCAL_PRIVATE_DNS_CODEC_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands.rs
+- added: crates/prw-agent/src/local_commands/private_dns_codec.rs
+- added: docs/architecture/PHASE_027_PRIVATE_DNS_CODEC.md
+
+VALIDATION HISTORY
+
+Run 52
+- Run ID: 31880820441
+- Commit: 0aa7341b71bc748363bf7747f6f9de4312ebc410
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt-only formatting differences in private_dns_codec.rs.
+
+Corrective commit 1
+- f76dd493fc71e36bd2f48b5b22f291f6745c116d
+- Applied exact rustfmt output.
+
+Run 53
+- Run ID: 31880858892
+- Commit: f76dd493fc71e36bd2f48b5b22f291f6745c116d
+- Result: FAILURE
+- Classification: CLIPPY_API_SAFETY_DEFECT
+- Exact cause: clippy::missing_panics_doc identified encoder expect() paths used for defensive numeric conversions.
+
+Corrective commit 2
+- 27b71b276aa1573c2598d864df16cb16d65ec495
+- Replaced panic-capable expect() conversions with a fallible typed encoder.
+- Wire layout and valid-snapshot bytes unchanged.
+
+Run 54
+- Run ID: 31880941051
+- Commit: 27b71b276aa1573c2598d864df16cb16d65ec495
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: one rustfmt-only helper-function reflow after the fallible API change.
+
+Corrective commit 3
+- fed462a1a09ddf8eba1ad08afaa9d5d6f3fdf3d4
+- Applied exact rustfmt output only.
+
+Run 55
+- Run ID: 31880989556
+- Commit: fed462a1a09ddf8eba1ad08afaa9d5d6f3fdf3d4
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: default snapshot stable bytes 00 00 00
+PASS: flags/list contents/order and UTF-8 round trip exactly
+PASS: maximum bounded snapshot encodes to exactly 18,403 bytes
+PASS: truncated fixed header rejected
+PASS: reserved flags rejected
+PASS: excessive resolver/split-domain counts rejected
+PASS: truncated entry-length field rejected
+PASS: zero-length entry rejected
+PASS: over-bound entry length rejected
+PASS: truncated entry bytes rejected
+PASS: invalid UTF-8 rejected
+PASS: trailing bytes rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 027 did not:
+- parse resolver IP semantics or DNS/IDNA naming semantics;
+- normalize/sort/deduplicate DNS values;
+- enable/disable or reconfigure DNS;
+- mutate network/routing state;
+- create/bind/listen/accept/connect a socket;
+- dispatch or execute commands;
+- add a dependency;
+- invoke a privileged helper;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- successful GetPrivateDnsConfig response payload/frame composition;
+- stream/read completion composition for GetPrivateDnsConfig;
+- resolver-address semantic validation;
+- split-domain normalization/validation policy;
+- command-specific error body schema;
+- timeout/cancellation policy;
+- live runtime command dispatch;
+- Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 027 implementation-validation report.
+GitHub Actions run 31880989556 is the authoritative executable validation evidence for source commit fed462a1a09ddf8eba1ad08afaa9d5d6f3fdf3d4.
