@@ -1,0 +1,81 @@
+Private Remote Workspace
+Phase 080 Linux Scoped Worker Registry / Reaper
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 72cf4864a6c524ef9f5b011900ebbbb233e47c6b
+Authoritative GitHub Actions run: 31896177860
+Phase 079 authoritative report commit: 2c9998512eafb4292cf02c139b032beac30fd372
+
+PURPOSE
+
+Retain Phase 078 scoped worker handles and explicitly classify every joined result through Phase 079 before an accept scheduler or Agent runtime is introduced.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_worker_registry.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_080_LINUX_SCOPED_WORKER_REGISTRY.md
+
+REGISTRY SEMANTICS
+
+- register(handle) retains one already-spawned scoped worker handle;
+- len/is_empty expose retained-handle accounting only;
+- reap_finished uses ScopedJoinHandle::is_finished and joins only handles already reported finished, leaving running workers registered;
+- join_all consumes the registry, joins all remaining handles, and routes every result through the Phase 079 normal/error/panic classifier;
+- the registry does not duplicate Phase 075 active-worker capacity accounting;
+- the type is marked must-use so orchestration misuse is visible where possible;
+- std::thread::scope remains the structural no-detach boundary.
+
+VALIDATED BEHAVIOR
+
+Scoped Linux tests prove:
+
+- empty and registration accounting;
+- a completed worker is reaped while a deliberately blocked worker remains registered;
+- reaping does not join the still-running worker;
+- join_all waits for/classifies the remaining worker;
+- join_all preserves registration order for its returned classifications;
+- a worker panic is classified through Phase 079 rather than escaping as an unexamined join error.
+
+VALIDATION
+
+Authoritative run 31896177860 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVE DURING VALIDATION
+
+- initial run 31896124811 passed metadata/formatting and Clippy identified one redundant must-use annotation plus two accessors eligible for const qualification;
+- the redundant function annotation was removed and len/is_empty were made const without semantic change;
+- final run 31896177860 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 080:
+
+- spawns no production worker;
+- acquires no worker permit;
+- accepts no connection;
+- implements no scheduler;
+- implements no shutdown/cancellation primitive;
+- activates no Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT READINESS QUESTION
+
+Before the first accept-and-spawn scheduling transaction is implemented, active workers need a separately owned shutdown authority capable of interrupting blocking UnixStream I/O during Agent shutdown. The scheduler should register that authority together with the scoped join handle rather than retrofit it after scheduling is active.
+
+FINAL CLASSIFICATION
+
+SCOPED_HANDLE_REGISTRY_IMPLEMENTED / NONBLOCKING_FINISHED_REAP / EXPLICIT_JOIN_ALL / COMPLETION_CLASSIFICATION_PRESERVED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 080 report.
