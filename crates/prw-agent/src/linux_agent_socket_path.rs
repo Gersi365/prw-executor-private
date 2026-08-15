@@ -8,8 +8,8 @@ use std::os::fd::AsFd;
 use rustix::fs::{AtFlags, FileType, Mode, Stat, statat, unlinkat};
 use rustix::io::Errno;
 
-use super::AgentInstanceLock;
 use super::super::ValidatedPrwRuntimeDirectory;
+use super::AgentInstanceLock;
 use crate::linux_identity::effective_agent_uid;
 use crate::{AGENT_SOCKET_FILENAME, AGENT_SOCKET_MODE};
 
@@ -272,10 +272,12 @@ mod tests {
                 & 0o7777,
             0o644
         );
-        assert!(fs::symlink_metadata(&socket_path)
-            .expect("symlink remains")
-            .file_type()
-            .is_symlink());
+        assert!(
+            fs::symlink_metadata(&socket_path)
+                .expect("symlink remains")
+                .file_type()
+                .is_symlink()
+        );
 
         drop(instance_lock);
         drop(runtime_directory);
@@ -313,10 +315,12 @@ mod tests {
             prepare_agent_socket_path_for_bind(&runtime_directory, &instance_lock).unwrap_err(),
             AgentSocketPathPreparationError::WrongMode { actual_mode: 0o660 }
         );
-        assert!(fs::symlink_metadata(&socket_path)
-            .expect("wrong-mode socket remains")
-            .file_type()
-            .is_socket());
+        assert!(
+            fs::symlink_metadata(&socket_path)
+                .expect("wrong-mode socket remains")
+                .file_type()
+                .is_socket()
+        );
 
         drop(instance_lock);
         drop(runtime_directory);
