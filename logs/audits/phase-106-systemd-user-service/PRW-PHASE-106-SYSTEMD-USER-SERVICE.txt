@@ -1,0 +1,189 @@
+Private Remote Workspace
+Phase 106 systemd User-Service Source and Static Validation
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED / USER_SERVICE_SOURCE_LOCKED / NO_INSTALL / NO_ENABLE / NO_START / NO_LINGER_MUTATION / NO_HOST_ACTIVATION
+AUDIT TYPE: SOURCE INTEGRATION / STATIC SYSTEMD VALIDATION / PERMANENT BASELINE CHECK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 105 contract-lock commit: a2884334f3e7dbca1eb5e0b7448ead66f550c6fe
+Integrated service source commit: 007e5adbc64ed874109787971e3127abad8a5a26
+Temporary-workflow cleanup commit: eabc15033719cecb60cdab7c99efc7d39d8a8b0d
+Architecture/status documentation commit: ce37991693963bdb6798ebd876bd54b29e1ff08a
+Permanent PRW Rust Validation: 31906345773 PASS
+
+AUTHORIZED SCOPE
+
+Phase 106 was authorized to create and statically validate the Phase 105 locked systemd user-service source without installing or activating it.
+
+IMPLEMENTED SOURCE
+
+Repository service source:
+
+packaging/systemd/prw-agent.service
+
+Exact content:
+
+[Unit]
+Description=Private Remote Workspace Agent
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/private-remote-workspace/prw-agent
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+
+Repository packaging boundary documentation was updated in:
+
+packaging/systemd/README.md
+
+The README records the locked executable destination, global user-unit destination, user-service identity, socket-ownership boundary, service policy, and separate activation/linger gate.
+
+STATIC VALIDATION HISTORY
+
+Initial temporary workflow run:
+
+31906284775
+
+Result:
+
+FAILED SAFELY BEFORE SOURCE COMMIT.
+
+The run proved:
+
+- Ubuntu 24.04 runner;
+- systemd 255.4-derived runner baseline;
+- exact service text contract;
+- forbidden directive/shell/privilege surface.
+
+It then failed only because `systemd-analyze --user --root=<disposable-root> verify` could not initialize user-scope unit search paths for the synthetic root.
+
+No repository service source was committed by the failed run.
+
+Corrective temporary workflow run:
+
+31906322126
+
+Result:
+
+PASS.
+
+Corrective scope was limited to validation harness behavior:
+
+1. Preserve the exact locked repository unit source.
+2. Preserve the real absolute ExecStart path under byte-for-byte contract validation.
+3. Create a disposable validation projection replacing only the ExecStart value with `/usr/bin/true`, which exists on the runner.
+4. Run `systemd-analyze --user verify` on that projection to validate user-service syntax/directives on the selected systemd baseline.
+5. Correct the Git mutation guard to distinguish the tracked README replacement from the newly generated untracked service file.
+
+No service semantics changed in the corrective.
+
+A01 PASSED:
+
+- exact systemd baseline gate;
+- exact byte-level unit contract;
+- forbidden-surface guard;
+- user-scope `systemd-analyze verify` syntax validation;
+- tracked/untracked mutation boundary;
+- `git diff --check`.
+
+Only after that PASS did the workflow commit the service source and README, then remove both temporary Phase 106 workflows.
+
+PERMANENT REPOSITORY VALIDATION
+
+Permanent CI run:
+
+31906345773
+
+Result:
+
+PASS.
+
+Passed:
+
+- exact Rust/Cargo 1.97.1 toolchain record;
+- locked Cargo metadata/dependency graph;
+- rustfmt;
+- Clippy with `-D warnings`;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+The packaging source therefore does not disturb the existing Rust baseline.
+
+SERVICE CONTRACT CONFIRMED
+
+Identity:
+
+- systemd user service;
+- no User= or Group=;
+- no DynamicUser=;
+- no root runtime process.
+
+Lifecycle:
+
+- Type=exec;
+- no Type=notify;
+- no socket activation;
+- no RuntimeDirectory=;
+- no synthesized XDG_RUNTIME_DIR;
+- Agent retains instance-lock/bind/listen/readiness/socket-cleanup ownership.
+
+Restart:
+
+- Restart=on-failure;
+- RestartSec=5s;
+- StartLimitIntervalSec=60s;
+- StartLimitBurst=5.
+
+Stop:
+
+- TimeoutStopSec=15s;
+- no ExecStop=;
+- normal service-manager SIGTERM path retained.
+
+Logging:
+
+- StandardOutput=journal;
+- StandardError=journal;
+- no new logging dependency.
+
+Hardening:
+
+- UMask=0077;
+- NoNewPrivileges=yes;
+- aggressive filesystem/home isolation intentionally deferred pending later workspace/file capability validation.
+
+Enablement metadata:
+
+- WantedBy=default.target;
+- no enablement symlink created.
+
+MUTATION BOUNDARY
+
+Phase 106 added/changed only the approved packaging source/documentation plus Phase 106 architecture/audit evidence and temporary workflows that were subsequently removed.
+
+No Cargo.toml or Cargo.lock mutation occurred.
+No Agent Rust source mutation occurred.
+No real systemd unit was installed.
+No user manager was reloaded.
+No service was enabled or started.
+No linger state was read-modify-written by this phase.
+No deployment occurred.
+
+CURRENT BOUNDARY
+
+Phase 106 is complete.
+
+Phase 107 is authorized only for package install/upgrade/remove transaction design and disposable-root validation.
+
+Real-host install, daemon-reload, enable/start, linger mutation, and deployment remain prohibited until a later explicit activation approval after Phase 108.
