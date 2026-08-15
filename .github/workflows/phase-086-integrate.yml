@@ -29,31 +29,35 @@ jobs:
           if 'pub mod bounded_scheduler_cycle;' in text:
               raise SystemExit('Phase 086 module is already integrated; refusing duplicate patch')
 
-          old_doc = '''//! cancellation authority, and Phase 084 composes one capacity-gated scheduling
-//! transaction. The Agent bootstrap remains inactive and no accept loop is enabled.
-'''
-          new_doc = '''//! cancellation authority, Phase 084 composes one capacity-gated scheduling
-//! transaction, and Phase 086 adds a finite shutdown-gated scheduling cycle. The
-//! Agent bootstrap remains inactive and no long-running accept loop is enabled.
-'''
+          old_doc = (
+              '//! cancellation authority, and Phase 084 composes one capacity-gated scheduling\n'
+              '//! transaction. The Agent bootstrap remains inactive and no accept loop is enabled.\n'
+          )
+          new_doc = (
+              '//! cancellation authority, Phase 084 composes one capacity-gated scheduling\n'
+              '//! transaction, and Phase 086 adds a finite shutdown-gated scheduling cycle. The\n'
+              '//! Agent bootstrap remains inactive and no long-running accept loop is enabled.\n'
+          )
           if text.count(old_doc) != 1:
               raise SystemExit('Phase 086 expected doc marker mismatch')
           text = text.replace(old_doc, new_doc)
 
-          marker = '''#[allow(
-    dead_code,
-    reason = "pre-listen bound Linux Agent socket is intentionally crate-internal"
-)]
-#[path = "linux_agent_bound_socket.rs"]
-pub mod bound_socket;
-'''
-          insertion = '''#[allow(
-    dead_code,
-    reason = "pre-runtime bounded Linux scheduling cycle is intentionally crate-internal"
-)]
-#[path = "linux_bounded_scheduler_cycle.rs"]
-pub mod bounded_scheduler_cycle;
-''' + marker
+          marker = (
+              '#[allow(\n'
+              '    dead_code,\n'
+              '    reason = "pre-listen bound Linux Agent socket is intentionally crate-internal"\n'
+              ')]\n'
+              '#[path = "linux_agent_bound_socket.rs"]\n'
+              'pub mod bound_socket;\n'
+          )
+          insertion = (
+              '#[allow(\n'
+              '    dead_code,\n'
+              '    reason = "pre-runtime bounded Linux scheduling cycle is intentionally crate-internal"\n'
+              ')]\n'
+              '#[path = "linux_bounded_scheduler_cycle.rs"]\n'
+              'pub mod bounded_scheduler_cycle;\n'
+          ) + marker
           if text.count(marker) != 1:
               raise SystemExit('Phase 086 expected module marker mismatch')
           text = text.replace(marker, insertion)
