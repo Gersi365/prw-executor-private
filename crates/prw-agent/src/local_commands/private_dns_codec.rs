@@ -48,12 +48,10 @@ pub fn encode_private_dns_snapshot(snapshot: &LocalPrivateDnsSnapshot) -> Vec<u8
 
     let mut output = Vec::with_capacity(encoded_private_dns_snapshot_len(snapshot));
     output.push(flags);
+    output
+        .push(u8::try_from(snapshot.resolvers().len()).expect("validated resolver count fits u8"));
     output.push(
-        u8::try_from(snapshot.resolvers().len()).expect("validated resolver count fits u8"),
-    );
-    output.push(
-        u8::try_from(snapshot.split_domains().len())
-            .expect("validated split-domain count fits u8"),
+        u8::try_from(snapshot.split_domains().len()).expect("validated split-domain count fits u8"),
     );
     for resolver in snapshot.resolvers() {
         append_string(&mut output, resolver);
@@ -138,10 +136,7 @@ fn read_string(
     if payload.len().saturating_sub(*cursor) < 2 {
         return Err(LocalPrivateDnsDecodeError::EntryLengthTruncated);
     }
-    let length = usize::from(u16::from_be_bytes([
-        payload[*cursor],
-        payload[*cursor + 1],
-    ]));
+    let length = usize::from(u16::from_be_bytes([payload[*cursor], payload[*cursor + 1]]));
     *cursor += 2;
 
     if length == 0 {
@@ -210,10 +205,7 @@ mod tests {
     fn default_snapshot_has_stable_three_byte_encoding() {
         let snapshot = snapshot(&PrivateDnsConfig::default());
         assert_eq!(encode_private_dns_snapshot(&snapshot), [0, 0, 0]);
-        assert_eq!(
-            decode_private_dns_snapshot(&[0, 0, 0]),
-            Ok(snapshot)
-        );
+        assert_eq!(decode_private_dns_snapshot(&[0, 0, 0]), Ok(snapshot));
     }
 
     #[test]
