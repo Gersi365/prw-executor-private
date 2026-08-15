@@ -4,6 +4,7 @@
 //! response metadata. It does not define payload serialization or runtime
 //! dispatch.
 
+pub mod codec;
 pub mod request_tracker;
 
 use crate::LocalIpcRequestId;
@@ -25,6 +26,16 @@ impl LocalAgentCommand {
         match self {
             Self::GetAgentStatus => 1,
             Self::GetPrivateDnsConfig => 2,
+        }
+    }
+
+    /// Returns the command represented by a stable identifier.
+    #[must_use]
+    pub const fn from_code(code: u16) -> Option<Self> {
+        match code {
+            1 => Some(Self::GetAgentStatus),
+            2 => Some(Self::GetPrivateDnsConfig),
+            _ => None,
         }
     }
 }
@@ -131,6 +142,12 @@ mod tests {
     fn read_only_command_codes_are_stable() {
         assert_eq!(LocalAgentCommand::GetAgentStatus.code(), 1);
         assert_eq!(LocalAgentCommand::GetPrivateDnsConfig.code(), 2);
+        assert_eq!(LocalAgentCommand::from_code(1), Some(LocalAgentCommand::GetAgentStatus));
+        assert_eq!(
+            LocalAgentCommand::from_code(2),
+            Some(LocalAgentCommand::GetPrivateDnsConfig)
+        );
+        assert_eq!(LocalAgentCommand::from_code(3), None);
     }
 
     #[test]
