@@ -7,6 +7,7 @@
 
 use crate::frame_object::LocalIpcFrame;
 
+use super::LocalAgentCommand;
 use super::admission::LocalPolicyAdmittedRequest;
 use super::private_dns_response::{
     LocalPrivateDnsFrameBuildError, build_success_private_dns_frame,
@@ -15,7 +16,6 @@ use super::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use super::status_snapshot::LocalAgentStatusSnapshot;
 use super::status_snapshot::response_frame::build_success_status_frame;
 use super::terminal_response::builder::LocalTerminalResponseBuildError;
-use super::LocalAgentCommand;
 
 /// Builds one successful terminal response for a policy-admitted read-only request.
 ///
@@ -97,7 +97,8 @@ mod tests {
     fn admitted_status_request_uses_existing_builder_and_preserves_correlation() {
         let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
         let dns = dns_snapshot();
-        let raw_request = LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
+        let raw_request =
+            LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
         let request =
             policy_admit_local_request(raw_request, &AllowAll).expect("request is admitted");
 
