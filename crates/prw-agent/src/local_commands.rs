@@ -5,6 +5,7 @@
 //! typed response bodies without activating runtime dispatch.
 
 pub mod codec;
+pub mod private_dns_codec;
 pub mod private_dns_snapshot;
 pub mod request_tracker;
 pub mod response_codec;
