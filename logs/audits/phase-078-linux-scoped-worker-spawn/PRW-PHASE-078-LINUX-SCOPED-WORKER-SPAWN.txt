@@ -1,0 +1,89 @@
+Private Remote Workspace
+Phase 078 Linux Single Scoped Worker Spawn Adapter
+
+STATUS: PASS / IMPLEMENTED_AND_VALIDATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Validated source head: 79151a8041e926f7aa2d3b74aa24e4475cc63374
+Authoritative GitHub Actions run: 31895837165
+Phase 077 authoritative decision report commit: 208e34836906b624f40724c2a6a02ddc71464bcc
+
+PURPOSE
+
+Implement exactly one fallible scoped native session-worker spawn around the Phase 076 finite worker body while preserving the Phase 077 no-detach lifetime decision and without introducing a scheduler or Agent bootstrap activation.
+
+IMPLEMENTED
+
+- source: crates/prw-agent/src/linux_session_worker_thread.rs
+- Linux platform integration: crates/prw-agent/src/linux_identity.rs
+- architecture: docs/architecture/PHASE_078_LINUX_SCOPED_WORKER_SPAWN.md
+
+SPAWN ORDERING
+
+The adapter receives:
+
+- an existing std::thread::Scope;
+- one already-authenticated AuthenticatedLocalLinuxSession<UnixStream>;
+- one already-acquired Phase 075 LocalLinuxWorkerPermit;
+- borrowed policy/snapshot context valid for the scope;
+- typed Phase 076 worker configuration.
+
+Builder::spawn_scoped is invoked exactly once.
+
+On successful spawn, session and permit move into the scoped closure and the closure runs the Phase 076 worker body exactly once. The caller receives the ScopedJoinHandle and therefore retains explicit join/result authority.
+
+The enclosing Rust thread scope remains the structural lifetime boundary, so the session worker cannot outlive that scope.
+
+VALIDATED BEHAVIOR
+
+Linux runner tests prove:
+
+- the worker-capacity permit remains active while policy evaluation is deliberately held inside the scoped worker;
+- explicit join returns the exact Phase 076 RequestBudgetExhausted result;
+- capacity returns to zero after the worker completes;
+- the terminal response remains readable and the worker-owned session stream then reaches EOF;
+- policy and DNS snapshot data can be borrowed from the surrounding thread-scope environment;
+- test synchronization uses only safe Rust atomics/barriers under workspace unsafe_code=forbid.
+
+VALIDATION
+
+Authoritative run 31895837165 passed:
+
+- cargo metadata --locked --no-deps --format-version 1
+- cargo fmt --all -- --check
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+- cargo test --locked --workspace --all-targets
+- cargo build --locked --workspace --all-targets
+
+CORRECTIVES DURING VALIDATION
+
+- pre-integration test scaffold replaced a Cell/unsafe Sync shortcut with AtomicUsize so no unsafe code entered the build graph;
+- run 31895782002 passed locked metadata/formatting and Clippy identified one unused test import plus one elidable Scope environment lifetime;
+- both were corrected without changing scoped worker semantics;
+- final run 31895837165 passed all gates.
+
+SCOPE PRESERVED
+
+Phase 078:
+
+- spawns only one worker per adapter call;
+- performs no accept operation;
+- does not acquire worker capacity itself;
+- implements no multi-worker registry/reaper;
+- implements no scheduler or shutdown/cancellation;
+- chooses no production thread name/stack size or runtime bound values;
+- does not activate Agent bootstrap/systemd/service state;
+- changes no authentication, policy, network, DNS, TUN, database, private-key, or deployment state.
+
+NEXT SAFE STEP
+
+Phase 079 may add an explicit scoped-worker join/completion classifier that distinguishes normal Phase 076 stop, bounded Phase 076 error, and worker panic before any multi-worker registry or accept scheduler is implemented.
+
+FINAL CLASSIFICATION
+
+SINGLE_SCOPED_WORKER_SPAWN_IMPLEMENTED / FALLIBLE_OS_THREAD_CREATION / EXPLICIT_JOIN_AUTHORITY / CAPACITY_PERMIT_MOVES_WITH_WORKER / NO_SCHEDULER / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 078 report.
