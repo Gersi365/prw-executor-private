@@ -44,7 +44,7 @@ impl<S> AuthenticatedLocalLinuxConnection<S> {
     }
 
     /// Returns mutable access to the stream only after successful authorization.
-    pub fn stream_mut(&mut self) -> &mut S {
+    pub const fn stream_mut(&mut self) -> &mut S {
         &mut self.stream
     }
 
@@ -56,6 +56,7 @@ impl<S> AuthenticatedLocalLinuxConnection<S> {
 }
 
 /// Failed attempt to turn an owned connected stream into an authenticated wrapper.
+#[derive(Debug)]
 pub struct LocalLinuxConnectionAuthorizationFailure<S> {
     stream: S,
     error: LocalLinuxPeerAuthorizationError,
