@@ -6,6 +6,7 @@
 
 pub mod codec;
 pub mod private_dns_codec;
+pub mod private_dns_response;
 pub mod private_dns_snapshot;
 pub mod request_tracker;
 pub mod response_codec;
