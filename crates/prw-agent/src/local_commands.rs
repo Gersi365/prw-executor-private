@@ -6,6 +6,7 @@
 
 pub mod admission;
 pub mod codec;
+pub mod policy_response;
 pub mod private_dns_codec;
 pub mod private_dns_response;
 pub mod private_dns_snapshot;
