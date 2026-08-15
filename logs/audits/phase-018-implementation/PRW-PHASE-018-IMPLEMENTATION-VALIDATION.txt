@@ -1,0 +1,156 @@
+Private Remote Workspace
+Phase 018 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 018
+SCOPE: Fixed-width local Agent status body codec
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 018 base commit: e82328b0b2b6da2ed5a7b8a9fdc3581773332d55
+Validated source commit: 97849196304c806d55bad91bd3cfaead6d26fa1c
+Validated GitHub Actions run: 31879527307
+
+LOCKED STATUS BODY
+
+Successful GetAgentStatus command-specific body length: exactly 5 bytes.
+
+Layout:
+- byte 0: runtime_state as u8
+- bytes 1..2: protocol_major as big-endian u16
+- bytes 3..4: protocol_minor as big-endian u16
+
+Current Ready / protocol 1.0 bytes:
+02 00 01 00 00
+
+The implementation deliberately preserves the pre-existing LocalIpcProtocolVersion u16/u16 domain width. An earlier candidate one-byte-per-version-component design was rejected before source mutation after repository inspection showed that it would narrow the established type.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/status_snapshot.rs
+- Exported the status_snapshot::codec module.
+- Existing Phase 017 typed status model remains unchanged.
+
+2. crates/prw-agent/src/local_commands/status_snapshot/codec.rs
+- Added LOCAL_AGENT_STATUS_BODY_LENGTH = 5.
+- Added encode_status_snapshot().
+- Added decode_status_snapshot().
+- Added fail-closed InvalidLength, UnknownRuntimeState, and UnsupportedProtocolVersion errors.
+- Decoder validates exact length, state identifier, and exact supported protocol version before returning a typed snapshot.
+- Added focused tests for exact bytes, all-state round trips, invalid lengths, unknown state, and unsupported major/minor versions.
+
+3. contracts/LOCAL_AGENT_STATUS_CODEC_CONTRACT.md
+- Added normative five-byte status body contract and validation rules.
+
+4. docs/architecture/PHASE_018_LOCAL_AGENT_STATUS_CODEC.md
+- Recorded rationale, preservation of u16 version width, fixed-width choice, compatibility policy, and runtime deferrals.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 018 base: 4
+- added: contracts/LOCAL_AGENT_STATUS_CODEC_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/status_snapshot.rs
+- added: crates/prw-agent/src/local_commands/status_snapshot/codec.rs
+- added: docs/architecture/PHASE_018_LOCAL_AGENT_STATUS_CODEC.md
+
+VALIDATION HISTORY
+
+Run 36
+- Run ID: 31879480306
+- Commit: e49e1c7fd2828f8071afed378adbe1be2d8cae26
+- Result: FAILURE
+- Classification: SOURCE_FORMATTING_DEFECT
+- Exact cause: rustfmt required formatting-only reflow in status_snapshot/codec.rs.
+- Clippy, tests, and build were skipped after the formatting gate failed.
+
+Corrective commit 1
+- b4f98b13081b7e2326038b54e40e0a9616b06ffa
+- Change: exact rustfmt-only corrections in status_snapshot/codec.rs.
+- Wire format, validation semantics, dependencies, and runtime behavior unchanged.
+
+Run 37
+- Run ID: 31879503065
+- Commit: b4f98b13081b7e2326038b54e40e0a9616b06ffa
+- Result: FAILURE
+- Classification: CLIPPY_STYLE_DEFECT
+- Exact cause: clippy::manual_let_else in the runtime-state decoding branch.
+- Tests and build were skipped after Clippy failed.
+
+Corrective commit 2
+- 97849196304c806d55bad91bd3cfaead6d26fa1c
+- Change: replaced the equivalent match with let-else.
+- Validation order, failure taxonomy, wire bytes, and runtime behavior unchanged.
+
+Run 38
+- Run ID: 31879527307
+- Commit: 97849196304c806d55bad91bd3cfaead6d26fa1c
+- Result: SUCCESS
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: status body length locked to five bytes
+PASS: Ready/current 1.0 exact bytes are 02 00 01 00 00
+PASS: all four runtime states encode/decode round trip
+PASS: short and trailing-byte bodies rejected
+PASS: unknown runtime-state identifier rejected
+PASS: unsupported major version rejected
+PASS: unsupported minor version rejected
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 018 did not:
+- dispatch or execute commands;
+- bind/listen/accept/connect a socket;
+- add a serialization dependency;
+- collect live process metadata;
+- mutate files, DNS, network, policy, enrollment, or services;
+- implement shell/PTY execution;
+- implement privileged-helper invocation;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+No Unix socket runtime or syscall-wrapper dependency was introduced by Phase 018.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+Phase 018 remains provider-neutral.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- composition of Phase 016 response-status prefix with the Phase 018 status body;
+- outer Response/Error frame-kind + status invariant;
+- bounded private-DNS response body and codec;
+- live runtime status collection;
+- runtime command dispatch;
+- actual Unix socket runtime and SO_PEERCRED enforcement;
+- timeout/cancellation policy;
+- privileged-helper protocol;
+- systemd activation;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 018 implementation-validation report.
+GitHub Actions run 31879527307 is the authoritative executable validation evidence for source commit 97849196304c806d55bad91bd3cfaead6d26fa1c.
