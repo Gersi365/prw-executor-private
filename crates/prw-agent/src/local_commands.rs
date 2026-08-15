@@ -4,15 +4,15 @@
 //! response metadata. Later phases add pure request/response byte codecs and
 //! typed response bodies without activating runtime dispatch.
 
-pub mod admission;
+pub(crate) mod admission;
 pub mod codec;
-pub mod policy_response;
+pub(crate) mod policy_response;
 pub mod private_dns_codec;
 pub mod private_dns_response;
 pub mod private_dns_snapshot;
 pub mod request_frame;
 pub mod request_tracker;
-pub mod responder;
+pub(crate) mod responder;
 pub mod response_codec;
 pub mod status_snapshot;
 pub mod terminal_completion;
