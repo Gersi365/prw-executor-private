@@ -6,6 +6,12 @@
 
 pub mod frame_codec;
 pub mod frame_object;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "pre-runtime Linux identity adapter is intentionally crate-internal"
+)]
+pub(crate) mod linux_identity;
 pub mod local_commands;
 
 use std::fmt;
@@ -221,7 +227,7 @@ impl LocalIpcFrameHeader {
         })
     }
 
-    /// Returns the validated protocol version.
+    /// Returns the validated frame header.
     #[must_use]
     pub const fn version(self) -> LocalIpcProtocolVersion {
         self.version
