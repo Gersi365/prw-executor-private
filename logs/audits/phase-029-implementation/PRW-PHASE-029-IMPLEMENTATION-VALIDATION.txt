@@ -1,0 +1,133 @@
+Private Remote Workspace
+Phase 029 Implementation Validation
+
+STATUS: IMPLEMENTED_AND_VALIDATED / PASS
+PHASE: 029
+SCOPE: Generic stream composition for successful GetPrivateDnsConfig response frames
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 029 base commit: ceb0a85e8043f30fc782229b3688cc84f35ef73f
+Validated source commit: 33792a9458cd082b789c1d6d8f82d9610cbdf79f
+Validated GitHub Actions run: 31881269111
+
+LOCKED STREAM COMPOSITION
+
+Default disabled private-DNS response wire size:
+- 24-byte frame header
+- 5-byte successful payload
+- total: exactly 29 bytes
+
+Maximum bounded response wire size:
+- 24-byte frame header
+- 18,405-byte successful payload
+- total: exactly 18,429 bytes
+
+Write path:
+1. Phase 028 builds a complete validated private-DNS response frame.
+2. Phase 012 write_frame() writes exact header then payload.
+3. No implicit flush is performed.
+
+Read path:
+1. Phase 011 read_frame() validates the 24-byte header before payload allocation.
+2. Exactly the declared bounded payload is read.
+3. Phase 028 decodes the acquired frame as a successful GetPrivateDnsConfig response.
+4. Bytes following the first complete frame remain unread.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+1. crates/prw-agent/src/local_commands/private_dns_response.rs
+- Exported private_dns_response::stream.
+
+2. crates/prw-agent/src/local_commands/private_dns_response/stream.rs
+- Added write_success_private_dns_response<W: Write>().
+- Added read_success_private_dns_response<R: Read>().
+- Preserved build vs write failures and generic read vs command-specific decode failures as typed categories.
+- Added memory-only Vec/Cursor tests.
+
+3. contracts/LOCAL_PRIVATE_DNS_STREAM_CONTRACT.md
+- Added normative stream ordering, exact sizes, one-frame consumption, error preservation, and runtime exclusions.
+
+4. docs/architecture/PHASE_029_PRIVATE_DNS_STREAM.md
+- Recorded stream composition and memory-only validation boundary.
+
+SOURCE DELTA SUMMARY
+
+Files changed relative to Phase 029 base: 4
+- added: contracts/LOCAL_PRIVATE_DNS_STREAM_CONTRACT.md
+- modified: crates/prw-agent/src/local_commands/private_dns_response.rs
+- added: crates/prw-agent/src/local_commands/private_dns_response/stream.rs
+- added: docs/architecture/PHASE_029_PRIVATE_DNS_STREAM.md
+
+VALIDATION HISTORY
+
+Run 58
+- Run ID: 31881269111
+- Commit: 33792a9458cd082b789c1d6d8f82d9610cbdf79f
+- Result: SUCCESS
+- No corrective commit was required.
+
+FINAL VALIDATION RESULTS
+
+PASS: cargo fmt --all -- --check
+PASS: cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS: cargo test --workspace --all-targets
+PASS: cargo build --workspace --all-targets
+
+FOCUSED TEST COVERAGE
+
+PASS: default successful response wire length exactly 29 bytes
+PASS: bounded UTF-8/list/flag snapshot round trips through generic stream I/O
+PASS: maximum bounded snapshot produces exact 18,429-byte wire length
+PASS: reader consumes exactly one frame and leaves trailing bytes unread
+PASS: truncated payload preserved as LocalIpcFrameReadError::TruncatedPayload
+
+SECURITY / RUNTIME MUTATION STATEMENT
+
+Phase 029 did not:
+- create/bind/listen/accept/connect a Unix socket;
+- access peer credentials;
+- parse/mutate operating-system DNS state;
+- start async tasks/threads/timers;
+- dispatch or execute commands;
+- mutate outstanding-request state;
+- add a dependency;
+- invoke a privileged helper;
+- implement account authentication;
+- implement cryptographic private-key operations;
+- activate systemd;
+- add a database or migration;
+- deploy infrastructure.
+
+LOCAL SOCKET RUNTIME STATUS
+
+Phase 014 remains authoritative:
+NOT_READY_FOR_RUNTIME_ACTIVATION / CONTINUE_PROVIDER_NEUTRAL_WORK.
+
+CRYPTO PROVIDER STATUS
+
+Phase 005 remains authoritative:
+NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK.
+
+EXPLICIT DEFERRALS
+
+Still deferred:
+- decode-before-outstanding-request completion for streamed GetPrivateDnsConfig;
+- resolver-address semantic validation;
+- split-domain normalization/validation policy;
+- command-specific error body schema;
+- timeout/cancellation policy;
+- live runtime command dispatch;
+- Unix socket runtime and SO_PEERCRED enforcement;
+- privileged-helper protocol;
+- crypto-provider selection;
+- remote control-plane protocol.
+
+FINAL CLASSIFICATION
+
+IMPLEMENTED_AND_VALIDATED / PASS
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 029 implementation-validation report.
+GitHub Actions run 31881269111 is the authoritative executable validation evidence for source commit 33792a9458cd082b789c1d6d8f82d9610cbdf79f.
