@@ -14,17 +14,22 @@ use jni::{
 };
 use prw_control_plane::{
     DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentityPublicKeyEncoding,
-    DeviceIdentitySignature, DeviceIdentitySignatureEncoding, PublicIdentityMaterial,
+    DeviceIdentitySignature, DeviceIdentitySignatureEncoding, EnrollmentRequest,
+    PublicIdentityMaterial,
+    enrollment_pop::{EnrollmentProofNonce, encode_enrollment_proof_message},
     session_auth::{SessionAuthNonce, encode_session_auth_message},
 };
-use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
+use prw_core::{DeviceId, DeviceLifecycle, EnrollmentId, SessionId, UserId, WorkspaceId};
 use prw_device_identity::verify_device_identity_signature;
 use prw_remote_transport::ControlFrame;
 
 pub const ANDROID_ADAPTER_PROTOCOL_VERSION: i32 = 1;
 const BOOTSTRAP_MAGIC: [u8; 4] = *b"P145";
 const BOOTSTRAP_VERSION: u16 = 1;
+const ENROLLMENT_MAGIC: [u8; 4] = *b"P146";
+const ENROLLMENT_VERSION: u16 = 1;
 const MAX_BOOTSTRAP_BYTES: usize = 4_096;
+const MAX_ENROLLMENT_REQUEST_BYTES: usize = 4_400;
 const MAX_IDENTIFIER_BYTES: usize = 1_024;
 const MAX_PUBLIC_SPKI_BYTES: usize = 256;
 const MAX_SIGNATURE_BYTES: usize = 256;
@@ -32,6 +37,7 @@ const MAX_SIGNATURE_BYTES: usize = 256;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AndroidAdapterError {
     InvalidBootstrap,
+    InvalidEnrollment,
     InvalidIdentifier,
     InvalidPublicIdentity,
     InvalidControlFrame,
@@ -41,6 +47,7 @@ impl fmt::Display for AndroidAdapterError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidBootstrap => "invalid Android bootstrap request",
+            Self::InvalidEnrollment => "invalid Android enrollment proof request",
             Self::InvalidIdentifier => "invalid Android bootstrap identifier",
             Self::InvalidPublicIdentity => "invalid Android bootstrap public identity",
             Self::InvalidControlFrame => "invalid PRWM control frame",
@@ -54,6 +61,11 @@ struct BootstrapIdentity {
     binding: DeviceIdentityBinding,
     session_id: SessionId,
     nonce: SessionAuthNonce,
+}
+
+struct EnrollmentIdentity {
+    request: EnrollmentRequest,
+    nonce: EnrollmentProofNonce,
 }
 
 /// Decodes and re-encodes one bounded PRWM control frame using the existing transport codec.
@@ -103,6 +115,40 @@ pub fn verify_session_signature(input: &[u8], signature: &[u8]) -> bool {
     verify_device_identity_signature(&parsed.binding.public_identity, &message, &signature).is_ok()
 }
 
+/// Builds the canonical typed PRW enrollment proof-of-possession message.
+///
+/// # Errors
+///
+/// Returns a bounded [`AndroidAdapterError`] when the local JNI enrollment envelope,
+/// identifiers, public identity, nonce, or canonical proof message is invalid.
+pub fn canonical_enrollment_message(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {
+    let parsed = parse_enrollment(input)?;
+    encode_enrollment_proof_message(&parsed.request, parsed.nonce)
+        .map_err(|_| AndroidAdapterError::InvalidEnrollment)
+}
+
+/// Verifies a bounded DER P-256 signature over the canonical enrollment message.
+#[must_use]
+pub fn verify_enrollment_signature(input: &[u8], signature: &[u8]) -> bool {
+    if signature.is_empty() || signature.len() > MAX_SIGNATURE_BYTES {
+        return false;
+    }
+    let Ok(parsed) = parse_enrollment(input) else {
+        return false;
+    };
+    let Ok(message) = encode_enrollment_proof_message(&parsed.request, parsed.nonce) else {
+        return false;
+    };
+    let Ok(signature) = DeviceIdentitySignature::new(
+        DeviceIdentityAlgorithm::EcdsaP256Sha256,
+        DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
+        signature.to_vec(),
+    ) else {
+        return false;
+    };
+    verify_device_identity_signature(&parsed.request.public_identity, &message, &signature).is_ok()
+}
+
 fn parse_bootstrap(input: &[u8]) -> Result<BootstrapIdentity, AndroidAdapterError> {
     if input.len() > MAX_BOOTSTRAP_BYTES || input.len() < 6 + 32 {
         return Err(AndroidAdapterError::InvalidBootstrap);
@@ -138,6 +184,44 @@ fn parse_bootstrap(input: &[u8]) -> Result<BootstrapIdentity, AndroidAdapterErro
         },
         session_id: SessionId::new(session).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
         nonce: SessionAuthNonce::new(nonce),
+    })
+}
+
+fn parse_enrollment(input: &[u8]) -> Result<EnrollmentIdentity, AndroidAdapterError> {
+    if input.len() > MAX_ENROLLMENT_REQUEST_BYTES || input.len() < 6 + 32 {
+        return Err(AndroidAdapterError::InvalidEnrollment);
+    }
+    if input[..4] != ENROLLMENT_MAGIC
+        || u16::from_be_bytes([input[4], input[5]]) != ENROLLMENT_VERSION
+    {
+        return Err(AndroidAdapterError::InvalidEnrollment);
+    }
+    let mut reader = Reader::new(&input[6..]);
+    let enrollment = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+    let workspace = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+    let user = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+    let device = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+    let public_spki = reader.bytes(MAX_PUBLIC_SPKI_BYTES)?;
+    let nonce = reader.array::<32>()?;
+    reader.finish()?;
+
+    let public_identity = PublicIdentityMaterial::new(
+        DeviceIdentityAlgorithm::EcdsaP256Sha256,
+        DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer,
+        public_spki,
+    )
+    .map_err(|_| AndroidAdapterError::InvalidPublicIdentity)?;
+    Ok(EnrollmentIdentity {
+        request: EnrollmentRequest {
+            enrollment_id: EnrollmentId::new(enrollment)
+                .map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+            workspace_id: WorkspaceId::new(workspace)
+                .map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+            user_id: UserId::new(user).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+            device_id: DeviceId::new(device).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+            public_identity,
+        },
+        nonce: EnrollmentProofNonce::new(nonce),
     })
 }
 
@@ -264,6 +348,37 @@ pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_verifySessionS
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_canonicalEnrollmentMessage<
+    'caller,
+>(
+    mut env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input: JByteArray<'caller>,
+) -> JByteArray<'caller> {
+    jni_bytes(&mut env, &input, |bytes| {
+        canonical_enrollment_message(bytes).unwrap_or_default()
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_verifyEnrollmentSignature<
+    'caller,
+>(
+    mut unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input: JByteArray<'caller>,
+    signature: JByteArray<'caller>,
+) -> jboolean {
+    unowned_env
+        .with_env(|env| -> jni::errors::Result<_> {
+            let input = env.convert_byte_array(&input)?;
+            let signature = env.convert_byte_array(&signature)?;
+            Ok(verify_enrollment_signature(&input, &signature))
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 #[cfg(test)]
 mod tests {
     use aws_lc_rs::{
@@ -340,6 +455,61 @@ mod tests {
         assert!(
             message.starts_with(prw_control_plane::session_auth::SESSION_AUTH_DOMAIN_SEPARATOR)
         );
+    }
+
+    fn enrollment_input(public_spki: &[u8]) -> Vec<u8> {
+        let mut value = Vec::new();
+        value.extend_from_slice(&ENROLLMENT_MAGIC);
+        value.extend_from_slice(&ENROLLMENT_VERSION.to_be_bytes());
+        field(&mut value, b"enrollment-146");
+        field(&mut value, b"workspace-146");
+        field(&mut value, b"user-146");
+        field(&mut value, b"device-146");
+        field(&mut value, public_spki);
+        value.extend_from_slice(&[11; 32]);
+        value
+    }
+
+    #[test]
+    fn typed_enrollment_message_and_signature_validate() {
+        let pkcs8 =
+            EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                .expect("key");
+        let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("signer");
+        let input = enrollment_input(signer.public_identity().as_bytes());
+        let parsed = parse_enrollment(&input).expect("parse enrollment");
+        let canonical = canonical_enrollment_message(&input).expect("canonical enrollment");
+        let challenge = prw_control_plane::enrollment_pop::EnrollmentProofChallengeState::new(
+            parsed.request.clone(),
+            parsed.nonce,
+            10,
+            20,
+        )
+        .expect("challenge state");
+        let proof = signer
+            .sign_enrollment_proof(&parsed.request, challenge.challenge())
+            .expect("typed enrollment proof");
+        assert!(verify_enrollment_signature(
+            &input,
+            proof.signature().as_bytes()
+        ));
+        let mut bad = proof.signature().as_bytes().to_vec();
+        let last = bad.len() - 1;
+        bad[last] ^= 1;
+        assert!(!verify_enrollment_signature(&input, &bad));
+        assert!(
+            canonical
+                .starts_with(prw_control_plane::enrollment_pop::ENROLLMENT_PROOF_DOMAIN_SEPARATOR)
+        );
+    }
+
+    #[test]
+    fn malformed_enrollment_fails_closed() {
+        assert_eq!(
+            canonical_enrollment_message(b"P146\x00\x01"),
+            Err(AndroidAdapterError::InvalidEnrollment)
+        );
+        assert!(!verify_enrollment_signature(b"bad", &[1, 2, 3]));
     }
 
     #[test]

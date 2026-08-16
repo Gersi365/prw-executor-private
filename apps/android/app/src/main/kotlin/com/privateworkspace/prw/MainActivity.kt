@@ -30,14 +30,35 @@ internal class MainActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
-                        Text("Phase 145 Android foundation")
-                        Text("State: ${state.connectionState}")
+                        Text("Phase 146 enrollment and device management")
+                        Text("Connection: ${state.connectionState}")
                         Text("Identity ready: ${state.identityReady}")
                         Text("Native bridge: ${state.nativeBridgeReady}")
                         Text("Authenticated bootstrap: ${state.bootstrapValidated}")
+                        Text("Enrollment proof: ${state.enrollmentState}")
                         Text(state.detail)
                         Button(onClick = model::validateLocalBootstrap) {
                             Text("Validate local bootstrap")
+                        }
+                        Button(onClick = model::validateLocalEnrollmentProof) {
+                            Text("Validate local enrollment proof")
+                        }
+                        Button(onClick = model::loadDisposableDeviceSnapshots) {
+                            Text("Load disposable device snapshots")
+                        }
+                        state.devices.forEach { device ->
+                            Text("${device.deviceId}: ${device.lifecycle}")
+                            if (device.lifecycle == DeviceLifecycleView.Enrolled) {
+                                Button(onClick = { model.requestRevocation(device.deviceId) }) {
+                                    Text(
+                                        if (state.pendingRevocationDeviceId == device.deviceId) {
+                                            "Revocation pending"
+                                        } else {
+                                            "Request revocation"
+                                        },
+                                    )
+                                }
+                            }
                         }
                         Button(onClick = model::disconnect) {
                             Text("Disconnect")

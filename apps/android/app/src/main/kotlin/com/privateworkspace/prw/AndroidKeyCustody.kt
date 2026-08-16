@@ -18,7 +18,11 @@ internal class AndroidKeyCustody(
 
     fun deviceIdentityIsNonExportable(): Boolean = isNonExportable(DEVICE_IDENTITY_ALIAS)
 
-    internal fun signCanonicalSessionProof(message: ByteArray): ByteArray {
+    internal fun signCanonicalSessionProof(message: ByteArray): ByteArray = signTypedDeviceProof(message)
+
+    internal fun signCanonicalEnrollmentProof(message: ByteArray): ByteArray = signTypedDeviceProof(message)
+
+    private fun signTypedDeviceProof(message: ByteArray): ByteArray {
         require(message.isNotEmpty() && message.size <= MAX_TYPED_MESSAGE_BYTES)
         ensurePublicSpki(DEVICE_IDENTITY_ALIAS)
         val privateKey = keyStore.getKey(DEVICE_IDENTITY_ALIAS, null) as? PrivateKey

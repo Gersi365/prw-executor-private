@@ -9,4 +9,6 @@ internal object NativeBridge {
     @JvmStatic external fun roundTripControlFrame(frame: ByteArray): ByteArray
     @JvmStatic external fun canonicalSessionMessage(request: ByteArray): ByteArray
     @JvmStatic external fun verifySessionSignature(request: ByteArray, signature: ByteArray): Boolean
+    @JvmStatic external fun canonicalEnrollmentMessage(request: ByteArray): ByteArray
+    @JvmStatic external fun verifyEnrollmentSignature(request: ByteArray, signature: ByteArray): Boolean
 }

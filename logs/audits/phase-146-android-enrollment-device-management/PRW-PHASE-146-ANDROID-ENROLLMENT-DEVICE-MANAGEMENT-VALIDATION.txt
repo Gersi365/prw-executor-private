@@ -1,0 +1,25 @@
+Private Remote Workspace
+Phase 146 — Android Enrollment and Device Management
+
+STATUS:
+PASS / TYPED_ANDROID_ENROLLMENT_PROOF / EXISTING_RUST_CANONICAL_ENCODER_AND_VERIFIER_REUSED / NON_EXPORTABLE_ANDROID_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_REVOKED / NO_NEW_DEPENDENCIES / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: a7080982f78c81d0bfc95dc26018ee45a2816d2b
+Authoritative validation run: 31966387956
+Native adapter source SHA-256: 0e15ac2e312c8de76540026fddcd303a122204069c41061325cc4d18f26026ae
+Android custody source SHA-256: cf8fb928d9acb01e9140fc717f444d995f61815d7e0930e9b7b3897e8b15d86b
+Device-management source SHA-256: d01e71c404aa9b323643dff0d4c149016f49280b4c11836c6f08e9affceae89f
+Validated debug APK SHA-256: 7ae5bc9a353b80ef27147edb86bb176df4b13bd763248f770c5482c5589b644a
+
+CONTRACT: contracts/ANDROID_ENROLLMENT_DEVICE_MANAGEMENT_CONTRACT.md
+ENROLLMENT: Android-local P146 JNI envelope is not a network protocol; native adapter reconstructs existing EnrollmentRequest/EnrollmentProofNonce and delegates canonical proof bytes to prw-control-plane encode_enrollment_proof_message.
+SIGNATURE: Android Keystore device key remains non-exportable P-256; typed enrollment proof signing is distinct from UI/generic signing authority; existing Rust device-identity verifier validates DER signature.
+DEVICE STATUS: presentation exposes only PendingEnrollment, Enrolled and Revoked; disposable injected snapshots stand in for future authoritative fetch without creating production registry persistence.
+REVOCATION: local request creates only pending intent; displayed lifecycle remains authoritative and can become Revoked only through a later authoritative snapshot.
+DEPENDENCIES: no Android Gradle or native Cargo dependency change.
+PRODUCTION BOUNDARY: no account login, real enrollment, production device-list endpoint, revocation propagation, production network listener/transport, release signing/distribution, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.
+
+FINAL CLASSIFICATION: PHASE_146_FUNCTIONALLY_VALIDATED / TYPED_ANDROID_ENROLLMENT_PROOF / NON_EXPORTABLE_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_AUTHORITY / NO_NEW_DEPENDENCIES / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_147

@@ -6,17 +6,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+internal enum class EnrollmentPresentationState {
+    NotReady,
+    Ready,
+    ProofValidated,
+    Error,
+}
+
 internal data class PrwUiState(
     val connectionState: ConnectionState = ConnectionState.Disconnected,
     val identityReady: Boolean = false,
     val nativeBridgeReady: Boolean = false,
     val bootstrapValidated: Boolean = false,
+    val enrollmentState: EnrollmentPresentationState = EnrollmentPresentationState.NotReady,
+    val devices: List<DeviceSnapshot> = emptyList(),
+    val pendingRevocationDeviceId: String? = null,
     val detail: String = "Development bootstrap only — no production endpoint",
 )
 
 internal class MainViewModel(
     private val custody: AndroidKeyCustody = AndroidKeyCustody(),
     private val controller: ConnectionController = ConnectionController(),
+    private val deviceManagement: DeviceManagementController = DeviceManagementController(),
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(PrwUiState())
     val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
@@ -45,7 +56,7 @@ internal class MainViewModel(
             check(NativeBridge.verifySessionSignature(request, signature))
             check(controller.transition(ConnectionState.Connected))
         }.onSuccess {
-            mutableUiState.value = PrwUiState(
+            mutableUiState.value = mutableUiState.value.copy(
                 connectionState = ConnectionState.Connected,
                 identityReady = true,
                 nativeBridgeReady = true,
@@ -54,7 +65,7 @@ internal class MainViewModel(
             )
         }.onFailure { error ->
             controller.transition(ConnectionState.Error)
-            mutableUiState.value = PrwUiState(
+            mutableUiState.value = mutableUiState.value.copy(
                 connectionState = ConnectionState.Error,
                 identityReady = runCatching { custody.deviceIdentityIsNonExportable() }.getOrDefault(false),
                 nativeBridgeReady = runCatching { NativeBridge.protocolVersion() == 1 }.getOrDefault(false),
@@ -62,6 +73,65 @@ internal class MainViewModel(
                 detail = error.message ?: "Local bootstrap failed closed",
             )
         }
+    }
+
+    fun validateLocalEnrollmentProof() {
+        mutableUiState.value = mutableUiState.value.copy(
+            enrollmentState = EnrollmentPresentationState.Ready,
+            detail = "Preparing disposable typed enrollment proof; no enrollment authority is contacted",
+        )
+        runCatching {
+            check(NativeBridge.protocolVersion() == 1)
+            val spki = custody.ensureDeviceIdentitySpki()
+            check(custody.deviceIdentityIsNonExportable())
+            val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+            val request = EnrollmentProofRequest(
+                enrollmentId = "phase146-local-enrollment",
+                workspaceId = "phase146-development-workspace",
+                userId = "phase146-development-user",
+                deviceId = "phase146-android-device",
+                publicSpki = spki,
+                nonce = nonce,
+            ).encode()
+            val canonical = NativeBridge.canonicalEnrollmentMessage(request)
+            check(canonical.isNotEmpty())
+            val signature = custody.signCanonicalEnrollmentProof(canonical)
+            check(NativeBridge.verifyEnrollmentSignature(request, signature))
+        }.onSuccess {
+            mutableUiState.value = mutableUiState.value.copy(
+                identityReady = true,
+                nativeBridgeReady = true,
+                enrollmentState = EnrollmentPresentationState.ProofValidated,
+                detail = "Disposable enrollment proof validated locally; authoritative enrollment remains unchanged",
+            )
+        }.onFailure { error ->
+            mutableUiState.value = mutableUiState.value.copy(
+                enrollmentState = EnrollmentPresentationState.Error,
+                detail = error.message ?: "Enrollment proof failed closed",
+            )
+        }
+    }
+
+    fun loadDisposableDeviceSnapshots() {
+        val accepted = deviceManagement.applyAuthoritativeSnapshot(
+            listOf(
+                DeviceSnapshot("phase146-android-device", DeviceLifecycleView.Enrolled),
+                DeviceSnapshot("phase146-pending-device", DeviceLifecycleView.PendingEnrollment),
+            ),
+        )
+        check(accepted)
+        publishDeviceState("Loaded disposable authoritative device snapshots; no production registry contacted")
+    }
+
+    fun requestRevocation(deviceId: String) {
+        val accepted = deviceManagement.requestRevocation(deviceId)
+        publishDeviceState(
+            if (accepted) {
+                "Revocation intent pending for $deviceId; authoritative lifecycle remains Enrolled"
+            } else {
+                "Revocation intent rejected by current authoritative lifecycle/pending state"
+            },
+        )
     }
 
     fun disconnect() {
@@ -72,17 +142,25 @@ internal class MainViewModel(
         } else if (current == ConnectionState.Error) {
             check(controller.transition(ConnectionState.Disconnected))
         }
-        mutableUiState.value = PrwUiState(
+        mutableUiState.value = mutableUiState.value.copy(
             connectionState = controller.state.value,
-            identityReady = mutableUiState.value.identityReady,
-            nativeBridgeReady = mutableUiState.value.nativeBridgeReady,
             bootstrapValidated = false,
+            detail = "Development bootstrap only — no production endpoint",
         )
     }
 
     private fun publish(detail: String) {
         mutableUiState.value = mutableUiState.value.copy(
             connectionState = controller.state.value,
+            detail = detail,
+        )
+    }
+
+    private fun publishDeviceState(detail: String) {
+        val deviceState = deviceManagement.state()
+        mutableUiState.value = mutableUiState.value.copy(
+            devices = deviceState.devices,
+            pendingRevocationDeviceId = deviceState.pendingRevocationDeviceId,
             detail = detail,
         )
     }
