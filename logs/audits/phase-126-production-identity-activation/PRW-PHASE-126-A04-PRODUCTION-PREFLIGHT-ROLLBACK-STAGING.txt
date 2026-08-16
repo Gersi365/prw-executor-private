@@ -1,0 +1,270 @@
+Private Remote Workspace
+Phase 126-A04 — Production Read-Only Preflight and Rollback Staging
+
+STATUS:
+PASS / READ_ONLY_PRODUCTION_PREFLIGHT_PASS / ROLLBACK_STAGED / REPRODUCIBLE_CANDIDATES_LOCKED / PRODUCTION_STATE_REPROVED_UNCHANGED / NO_PRODUCTION_KEY_CREATED / NO_PRODUCTION_IDENTITY_ACTIVATION / EXPLICIT_REAL_HOST_MUTATION_GATE_STILL_REQUIRED
+
+AUDIT TYPE: PRODUCTION READ-ONLY PREFLIGHT / NON-PRODUCTION ROLLBACK STAGING / REPRODUCIBILITY LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+
+PURPOSE
+
+Phase 126-A04 performs the final non-activating preparation required by the Phase 124 / Phase 126-A00 production device-identity contract before any real PowerCode production identity mutation can be authorized.
+
+This phase:
+- re-proves the current production Agent/systemd/runtime baseline read-only;
+- proves the production encrypted identity destination and production identity drop-in are still absent;
+- proves TPM2/systemd credential capability is available;
+- locks independently reproducible candidate Agent and provisioner binaries;
+- stages the exact candidate payload, exact rollback Agent bytes, vendor-unit snapshot, manifest, checksums, status probe, and the not-installed drop-in payload under user state only;
+- re-proves the production runtime and identity destinations unchanged after staging.
+
+This phase does NOT cross the explicit real-host production mutation gate.
+
+AUTHORITATIVE EVIDENCE ORDER
+
+1. GitHub Actions job logs for the cited run/job.
+2. GitHub Actions artifact metadata/digest.
+3. Git commit metadata for exact source/workflow/audit commits.
+4. This narrative report.
+
+STARTING AUTHORITY
+
+Phase 126-A03 authoritative reconciliation head:
+b969aeb1858ab812684811dfe317c0466753d273
+
+Phase 126-A03 reconciliation file:
+logs/audits/phase-126-production-identity-activation/PRW-PHASE-126-A03-EVIDENCE-RECONCILIATION.txt
+
+A04 INITIAL SAFE FAILURE
+
+Initial A04 workflow commit:
+27ba0de37fe4c5c29cdca3a53590748fcb30b635
+
+Initial A04 workflow run:
+31938201954
+
+Hosted build job:
+95143349775 — FAILURE
+
+PowerCode preflight-stage job:
+95143605080 — SKIPPED
+
+The hosted build produced:
+- candidate Agent SHA-256: 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+- sequential provisioner SHA-256: 4ce96901bfa836d8df759fcc6a836394b2a8b1b72b01fdf21fe88e935f4b9e37
+- A04 status probe SHA-256: f4c0dc6cc3a08baaece15a6be5bdf8ad81be89f8795ea6db699750c7af4b6681
+- Cargo.lock SHA-256: aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424
+
+The job failed only because it compared the clean sequential provisioner build against the historical A03 joint-workspace-build provisioner hash a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b.
+
+No PowerCode job ran in this failed attempt. Therefore this failure performed no PowerCode staging and no production mutation.
+
+A04-A01 REPRODUCIBILITY DIAGNOSTIC
+
+Diagnostic workflow commit:
+b106834ab3df92006c5b47b1b7d2802f9dd78538
+
+Diagnostic workflow run:
+31938424396
+
+Diagnostic job:
+95143900045 — FAILURE overall because its final expected-SHA literal was incorrect.
+
+The diagnostic evidence before that final assertion nevertheless established:
+- joint-build Agent SHA-256: 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+- joint-build provisioner SHA-256: a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b
+- clean sequential build 1 provisioner SHA-256: 4ce96901bfa836d8df759fcc6a836394b2a8b1b72b01fdf21fe88e935f4b9e37
+- clean sequential build 2 provisioner SHA-256: 4ce96901bfa836d8df759fcc6a836394b2a8b1b72b01fdf21fe88e935f4b9e37
+- marker: phase126_a04_a01_repeat_sequential=byte_identical
+- marker: phase126_a04_a01_joint_vs_sequential=different
+
+The difference was traced to Cargo workspace feature unification: the joint Agent+provisioner build causes dependency feature selection, notably rustix features, to differ from an independently built provisioner. This affects binary bytes without representing a source-code or functional defect.
+
+A04 therefore does not treat a build from a materially different Cargo invocation as an equivalent provenance source. The activation candidate contract was hardened to require two independent clean builds of each candidate binary and byte equality between the corresponding pair.
+
+Diagnostic workflow cleanup commit:
+c4c7679353eb21ce937164b8d5e5686fa03f6f3e
+
+Permanent Rust validation on the diagnostic-cleanup head:
+- run: 31938613968
+- job: 95144479785 — SUCCESS
+
+A04 REPRODUCIBLE CANDIDATE LOCK
+
+Hardened A04 workflow commit:
+1e0b5eec93538bcbf120fa800cf85227eeb32410
+
+Permanent Rust validation on this hardening commit:
+- run: 31938599223
+- job: 95144326356 — SUCCESS
+
+The permanent validation passed the locked dependency graph, rustfmt, Clippy with -D warnings, all workspace/all-target tests, and workspace build.
+
+Final A04 workflow run:
+31938599238 — SUCCESS
+
+Hosted reproducible-build job:
+95144326485 — SUCCESS
+
+PowerCode read-only preflight/staging job:
+95144988093 — SUCCESS
+
+The hosted job built each activation candidate twice in independent clean Cargo target directories and required byte equality.
+
+Authoritative reproducibility markers:
+phase126_a04_agent_reproducibility=byte_identical
+phase126_a04_provisioner_reproducibility=byte_identical
+phase126_a04_hosted_candidate_build=pass
+
+Authoritative activation manifest:
+source_commit=1e0b5eec93538bcbf120fa800cf85227eeb32410
+cargo_lock_sha256=aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424
+candidate_agent_sha256=4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+provisioner_sha256=4ce96901bfa836d8df759fcc6a836394b2a8b1b72b01fdf21fe88e935f4b9e37
+status_probe_sha256=f4c0dc6cc3a08baaece15a6be5bdf8ad81be89f8795ea6db699750c7af4b6681
+rustc_version=rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo_version=cargo 1.97.1 (c980f4866 2026-06-30)
+build_contract=independent_clean_targets_repeat_twice
+
+Activation manifest SHA-256:
+23256ad22a9d3b646462efe52f893dcc46413a8285dd417f80d6159b17d047e2
+
+A04 evidence artifact:
+- artifact ID: 9261441440
+- artifact name: phase126-a04-activation-candidates
+- artifact size: 2543378 bytes
+- artifact ZIP SHA-256: 5ecc6dd87fc6c8f42e0866e22ca43c418e0b083176297ab761583903c6d2fb7a
+- one-day CI evidence retention; not a production release artifact
+
+POWERCode READ-ONLY PRODUCTION PREFLIGHT
+
+PowerCode job authoritative baseline observations:
+- host: PowerCode
+- user: gersi365
+- UID: 1000
+- GID: 1000
+- XDG state root: /home/gersi365/.local/state
+- XDG config root: /home/gersi365/.config
+- installed production Agent: /usr/lib/private-remote-workspace/prw-agent
+- installed production Agent SHA-256: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+- production vendor unit: /usr/lib/systemd/user/prw-agent.service
+- production vendor unit SHA-256: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+- production service active: yes
+- production service enabled: yes
+- Linger: yes
+- production DropInPaths: empty
+- production local IPC: Ready / protocol supported
+- production encrypted identity credential destination: absent
+- production identity drop-in destination: absent
+- TPM2/systemd credential capability: pass
+- noninteractive sudo: unavailable, rc=1
+
+Authoritative preflight markers:
+phase126_a04_status=Ready protocol_supported=yes
+phase126_a04_production_runtime=pass
+phase126_a04_identity_destinations_absent=pass
+phase126_a04_tpm2_capability=pass
+phase126_a04_sudo_noninteractive=no rc=1
+
+ROLLBACK AND ACTIVATION STAGING
+
+Authoritative staging directory:
+/home/gersi365/.local/state/private-remote-workspace/phase126/staging/1e0b5eec93538bcbf120fa800cf85227eeb32410
+
+The staging directory is user-owned and mode 0700.
+
+Staged activation/preflight material:
+- candidate-prw-agent — mode 0755
+- prw-device-identity-provision — mode 0755
+- phase126-a04-status-probe — mode 0755
+- ACTIVATION-MANIFEST — mode 0600
+- SHA256SUMS — mode 0600
+
+Staged rollback evidence:
+- rollback-prw-agent — exact copy of installed production Agent, mode 0700
+- production-unit.snapshot — exact copy of installed production vendor unit, mode 0600
+
+Staged but NOT INSTALLED systemd identity drop-in:
+20-device-identity-credential.conf — mode 0600
+
+Exact staged drop-in semantic content:
+[Service]
+LoadCredentialEncrypted=prw.device-identity.private-key.v1:/home/gersi365/.local/state/private-remote-workspace/credentials/device-identity-private-key-v1.cred
+
+Staged drop-in SHA-256:
+42c585ea57aed19662260f0e0421139fc5e4eab973195c3b6e4e16ab7b3ecc77
+
+Staged candidate/rollback hashes:
+- candidate Agent: 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+- provisioner: 4ce96901bfa836d8df759fcc6a836394b2a8b1b72b01fdf21fe88e935f4b9e37
+- status probe: f4c0dc6cc3a08baaece15a6be5bdf8ad81be89f8795ea6db699750c7af4b6681
+- activation manifest: 23256ad22a9d3b646462efe52f893dcc46413a8285dd417f80d6159b17d047e2
+- rollback Agent: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+- production unit snapshot: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+- staged drop-in: 42c585ea57aed19662260f0e0421139fc5e4eab973195c3b6e4e16ab7b3ecc77
+
+The stage-local checksum verification passed for every staged file.
+
+POST-STAGING PRODUCTION POSTCONDITIONS
+
+After all staging work, the PowerCode job re-proved:
+- production encrypted identity credential still absent;
+- production identity drop-in still absent;
+- installed production Agent hash unchanged at 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf;
+- production vendor unit hash unchanged at 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909;
+- service still active;
+- service still enabled;
+- Linger still yes;
+- production DropInPaths still empty;
+- production local IPC still Ready with supported protocol.
+
+Authoritative final markers:
+phase126_a04_staging=pass
+phase126_a04_no_production_mutation=pass
+
+PRODUCTION MUTATION STATEMENT
+
+Phase 126-A04 did NOT:
+- execute the provisioner against the real production identity destination;
+- generate the real PowerCode production private device-identity key;
+- create/persist the production encrypted device-identity credential;
+- install the production identity systemd drop-in;
+- replace the root-owned installed production Agent;
+- modify the production vendor unit;
+- call systemctl --user daemon-reload for identity activation;
+- stop, restart, or otherwise cycle the production Agent for identity activation;
+- enroll the PowerCode production identity;
+- enable production authentication or networking cutovers.
+
+PRIVILEGE / TRANSACTION CONSTRAINT
+
+The read-only PowerCode preflight re-proved that noninteractive sudo is not available. Therefore the root-owned installed Agent cannot be replaced by the self-hosted CI runner under the present privilege contract.
+
+No broad NOPASSWD sudo grant and no stored sudo password may be introduced to bypass this constraint.
+
+When explicitly authorized, the real activation transaction must preserve the Phase 126-A00 separation: the root-owned Agent replacement, if still required, is an audited interactive privileged step, while the user-owned encrypted identity/drop-in/systemd-user integration follows its separately bounded transaction and rollback checks.
+
+NEXT BOUNDARY — EXPLICIT MUTATION GATE
+
+Phase 126-A04 completes the safe non-production preparation for the production device-identity activation transaction.
+
+The following remain BLOCKED until the user explicitly authorizes the Phase 124 / Phase 126-A00 real-host production identity activation transaction:
+- production private-key generation;
+- production encrypted credential persistence;
+- production identity drop-in installation;
+- root-owned production Agent replacement;
+- daemon-reload/restart for identity activation;
+- production identity enrollment;
+- authentication/networking cutover.
+
+FINAL AUTHORITY STATEMENT
+
+Phase 126-A04 is PASS.
+
+The activation candidates are reproducibly locked, rollback bytes are staged, the exact not-installed drop-in is staged, and the PowerCode production baseline is re-proved unchanged before and after staging.
+
+No real PowerCode production device identity exists yet as a result of this phase. The explicit production mutation gate remains pending.
