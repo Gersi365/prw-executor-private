@@ -1,0 +1,74 @@
+Private Remote Workspace
+Phase 125-A01 — Explicit Real-Host Production Provisioning Gate Corrective
+
+STATUS:
+PASS / READINESS_SEMANTICS_CORRECTED / PHASE_125_TECHNICAL_PASS_UNCHANGED / PHASE_124_EXPLICIT_REAL_HOST_MUTATION_GATE_RESTORED / NO_SOURCE_CHANGE / NO_HOST_MUTATION / NO_PRODUCTION_PRIVATE_KEY
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 125 authoritative implementation report commit: c01349f58fc9c1ff8ed237965ad3077f00308daf
+Phase 124 governing contract: logs/audits/phase-124-production-device-identity-integration-contract/PRW-PHASE-124-PRODUCTION-DEVICE-IDENTITY-INTEGRATION-CONTRACT.txt
+
+PURPOSE
+
+This corrective resolves one readiness-scope inconsistency in the Phase 125 report. It does not change any Phase 125 implementation, validation result, host evidence, source file, dependency, service state, credential state, or production runtime state.
+
+GOVERNING CONTRACT
+
+The Phase 124 contract explicitly states:
+
+"The first real production-key provisioning / service activation transaction remains outside Phase 125 and requires an explicit real-host mutation gate."
+
+It also limits standing authorization for Phase 125 to disposable/non-production implementation and validation work.
+
+INCONSISTENT PHASE 125 READINESS SENTENCE
+
+The final READY FOR section of the Phase 125 report states that Phase 126 may proceed autonomously under standing authorization in a way that can be read as authorizing the real production identity provisioning/activation transaction.
+
+That interpretation is broader than the governing Phase 124 contract and is therefore corrected here.
+
+CORRECT READINESS SEMANTICS
+
+Phase 126 may proceed autonomously only for non-production preparation such as:
+- authoritative repository and host readiness audits;
+- exact transaction-plan and rollback-plan preparation;
+- deterministic source/tooling preparation;
+- disposable credential and filesystem/systemd validation;
+- preflight guard implementation and verification;
+- audit package preparation.
+
+Phase 126 MUST NOT, without a new explicit user authorization for that real-host mutation transaction:
+- generate the real production PRW device-identity private key on PowerCode;
+- create or persist the production encrypted credential blob;
+- install the production `20-device-identity-credential.conf` drop-in;
+- daemon-reload for that production integration;
+- replace the installed production Agent with the identity-aware candidate;
+- restart the production `prw-agent.service` for identity activation;
+- perform production enrollment or any authentication/networking cutover.
+
+STANDING AUTHORIZATION INTERPRETATION
+
+Standing authorization remains valid for routine, recoverable, non-production PRW work and for safe audits/readiness preparation.
+
+It does not override a narrower explicit gate previously locked for a security-sensitive real-host production mutation.
+
+PHASE 125 TECHNICAL STATUS
+
+Unchanged:
+PASS / IMPLEMENTED_AND_VALIDATED / DISPOSABLE_POWERCODE_PROOF_PASS / PRODUCTION_UNCHANGED / FINAL_PERMANENT_CI_PASS
+
+No Phase 125 technical evidence is invalidated by this corrective.
+
+NEXT BOUNDARY
+
+READY_FOR_PHASE_126_PRODUCTION_IDENTITY_ACTIVATION_READINESS_PREPARATION
+
+The next safe autonomous work is to prepare and validate the complete production activation transaction without executing its security-sensitive real-host mutation steps.
+
+Execution of the real production identity provisioning and Agent activation remains blocked on explicit authorization.
+
+MUTATION STATEMENT
+
+This corrective adds only this audit file.
+No source, Cargo, workflow, systemd unit, production host, credential, enrollment, network, DNS, database, or authentication state is changed.
