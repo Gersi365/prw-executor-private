@@ -8,6 +8,7 @@
 use std::fmt;
 
 use aws_lc_rs::{
+    digest::{SHA256, digest},
     encoding::AsDer,
     rand::SystemRandom,
     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair},
@@ -145,6 +146,19 @@ impl UbuntuEnrollmentSigner {
     #[must_use]
     pub const fn public_identity(&self) -> &PublicIdentityMaterial {
         &self.public_identity
+    }
+
+    /// Returns SHA-256 over the exact canonical public SPKI DER as 64 lowercase hex characters.
+    #[must_use]
+    pub fn public_spki_sha256_hex(&self) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let digest = digest(&SHA256, self.public_identity.as_bytes());
+        let mut encoded = String::with_capacity(64);
+        for &byte in digest.as_ref() {
+            encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+            encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        encoded
     }
 
     /// Signs exactly one typed PRW enrollment proof-of-possession challenge.
