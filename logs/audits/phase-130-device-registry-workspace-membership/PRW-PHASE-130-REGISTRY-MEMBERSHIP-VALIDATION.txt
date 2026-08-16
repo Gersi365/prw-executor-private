@@ -1,0 +1,30 @@
+Private Remote Workspace
+Phase 130 — Device Registry and Workspace Membership Foundation
+
+STATUS:
+PASS / CONTRACT_LOCKED / BOUNDED_REGISTRY_IMPLEMENTED / CURRENT_STATE_REVALIDATION_PASS / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REGISTRY_NOT_POPULATED
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: cf1f2603584c3b457717921c3a47ba6c991179b3
+Authoritative validation run: 31944349064
+Cargo.lock SHA-256: 47abc9c1bdd5c4111e0c06b85b4813cad7e3bc73b1875d8e01cf5f349f7c5b52
+
+CONTRACT
+contracts/DEVICE_REGISTRY_WORKSPACE_MEMBERSHIP_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-registry
+
+SECURITY OUTCOME
+Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities. Insertions use occupied/vacant entry handling rather than post-insert panic assumptions.
+
+VALIDATION
+The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 exposed two post-insert panic lint sites and two redundant test clones. Run 31944241978 applied both test-only fixes but the scope guard detected Cargo mutation of tracked target metadata; target metadata is explicitly restored and excluded from promotion here.
+
+PRODUCTION BOUNDARY
+No production registry was populated. No database, account authentication, capability grant, PowerCode runtime state, or network state was mutated.
+
+FINAL CLASSIFICATION
+PHASE_130_DONE / NO_PRODUCTION_REGISTRY_SIDE_EFFECT / REGISTRY_CURRENT_STATE_REVALIDATION_READY

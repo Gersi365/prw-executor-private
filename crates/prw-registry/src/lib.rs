@@ -4,7 +4,10 @@
 //! membership and device lifecycle state. It deliberately does not authenticate
 //! accounts, map roles to capabilities, persist a database, or select a transport.
 
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    fmt,
+};
 
 use prw_control_plane::{DeviceIdentityBinding, PublicIdentityMaterial};
 use prw_core::{DeviceId, DeviceLifecycle, UserId, WorkspaceId};
@@ -210,23 +213,21 @@ impl WorkspaceDeviceRegistry {
         role: WorkspaceRole,
     ) -> Result<&WorkspaceMembership, RegistryError> {
         let key = (workspace_id.clone(), user_id.clone());
-        if self.memberships.contains_key(&key) {
-            return Err(RegistryError::MembershipAlreadyExists);
+        let at_capacity = self.memberships.len() >= MAX_MEMBERSHIPS;
+        match self.memberships.entry(key) {
+            Entry::Occupied(_) => Err(RegistryError::MembershipAlreadyExists),
+            Entry::Vacant(entry) => {
+                if at_capacity {
+                    return Err(RegistryError::MembershipCapacity);
+                }
+                Ok(entry.insert(WorkspaceMembership {
+                    workspace_id,
+                    user_id,
+                    role,
+                    lifecycle: MembershipLifecycle::Active,
+                }))
+            }
         }
-        if self.memberships.len() >= MAX_MEMBERSHIPS {
-            return Err(RegistryError::MembershipCapacity);
-        }
-        let membership = WorkspaceMembership {
-            workspace_id,
-            user_id,
-            role,
-            lifecycle: MembershipLifecycle::Active,
-        };
-        self.memberships.insert(key.clone(), membership);
-        Ok(self
-            .memberships
-            .get(&key)
-            .expect("membership inserted under exact key"))
     }
 
     /// Returns an exact membership by workspace/user key.
@@ -306,19 +307,17 @@ impl WorkspaceDeviceRegistry {
         if membership.lifecycle != MembershipLifecycle::Active {
             return Err(RegistryError::MembershipNotActive);
         }
-        if self.devices.contains_key(&binding.device_id) {
-            return Err(RegistryError::DeviceAlreadyExists);
-        }
-        if self.devices.len() >= MAX_REGISTERED_DEVICES {
-            return Err(RegistryError::DeviceCapacity);
-        }
+        let at_capacity = self.devices.len() >= MAX_REGISTERED_DEVICES;
         let device_id = binding.device_id.clone();
-        self.devices
-            .insert(device_id.clone(), RegisteredDevice { binding });
-        Ok(self
-            .devices
-            .get(&device_id)
-            .expect("device inserted under exact id"))
+        match self.devices.entry(device_id) {
+            Entry::Occupied(_) => Err(RegistryError::DeviceAlreadyExists),
+            Entry::Vacant(entry) => {
+                if at_capacity {
+                    return Err(RegistryError::DeviceCapacity);
+                }
+                Ok(entry.insert(RegisteredDevice { binding }))
+            }
+        }
     }
 
     /// Returns a registered device by identifier.
@@ -557,8 +556,8 @@ mod tests {
             .expect("membership");
         let original = binding(
             &signer,
-            workspace.clone(),
-            user.clone(),
+            workspace,
+            user,
             "device-1",
             DeviceLifecycle::Enrolled,
         );
@@ -621,9 +620,7 @@ mod tests {
         registry
             .add_membership(workspace.clone(), user.clone(), WorkspaceRole::Admin)
             .expect("membership");
-        registry
-            .register_device(bound)
-            .expect("register device");
+        registry.register_device(bound).expect("register device");
 
         let principal = registry
             .validate_authenticated_session(&session)
@@ -658,9 +655,7 @@ mod tests {
         registry
             .add_membership(workspace.clone(), user.clone(), WorkspaceRole::Member)
             .expect("membership");
-        registry
-            .register_device(bound)
-            .expect("register device");
+        registry.register_device(bound).expect("register device");
         registry
             .revoke_device(session.device_id())
             .expect("revoke device");

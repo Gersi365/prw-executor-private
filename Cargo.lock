@@ -272,6 +272,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-registry"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-control-plane",
+ "prw-core",
+ "prw-device-identity-signer",
+ "prw-session",
+]
+
+[[package]]
 name = "prw-session"
 version = "0.1.0"
 dependencies = [

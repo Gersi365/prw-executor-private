@@ -14,6 +14,7 @@ members = [
     "crates/prw-device-identity-provisioning",
     "crates/prw-enrollment",
     "crates/prw-session",
+    "crates/prw-registry",
     "crates/prw-agent",
 ]
 
