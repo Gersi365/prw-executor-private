@@ -1,0 +1,1309 @@
+name: Phase 147 Android Remote Terminal UX
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-147-android-remote-terminal-ux.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove Phase 147 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-146-android-enrollment-device-management/PRW-PHASE-146-ANDROID-ENROLLMENT-DEVICE-MANAGEMENT-VALIDATION.txt
+          test -f "$report"
+          grep -Fq 'PERMANENT_ANDROID_CI_SUCCESS' "$report"
+          grep -Fq 'READY_FOR_PHASE_147' "$report"
+          test -f contracts/ANDROID_REMOTE_TERMINAL_UX_CONTRACT.md
+          grep -Fq '31968345916' contracts/ANDROID_REMOTE_TERMINAL_UX_CONTRACT.md
+          test -f apps/android/native/Cargo.lock
+          test -f apps/android/native/src/lib.rs
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          test -f .github/workflows/android-validation.yml
+          ! grep -Fq 'prw-remote-bridge' apps/android/native/Cargo.toml
+          cp apps/android/native/Cargo.lock "$RUNNER_TEMP/phase147-native-lock-before"
+          echo phase147_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact validated Android and Rust toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase147_toolchain=pass
+
+      - name: Materialize Phase 147 candidate source in runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('apps/android/native/Cargo.toml')
+          text = cargo.read_text()
+          marker = 'prw-remote-transport = { path = "../../../crates/prw-remote-transport" }\n'
+          replacement = (
+              marker
+              + 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }\n'
+              + 'prw-terminal = { path = "../../../crates/prw-terminal" }\n'
+          )
+          if text.count(marker) != 1:
+              raise SystemExit('Phase 147 native dependency insertion boundary mismatch')
+          cargo.write_text(text.replace(marker, replacement, 1))
+
+          lib = Path('apps/android/native/src/lib.rs')
+          text = lib.read_text()
+          marker = 'use prw_remote_transport::ControlFrame;\n'
+          replacement = marker + '\nmod terminal;\n'
+          if text.count(marker) != 1 or 'mod terminal;' in text:
+              raise SystemExit('Phase 147 native module insertion boundary mismatch')
+          lib.write_text(text.replace(marker, replacement, 1))
+          PY
+
+          cat > apps/android/native/src/terminal.rs <<'EOF'
+          use jni::{
+              EnvUnowned,
+              errors::ThrowRuntimeExAndDefault,
+              objects::{JByteArray, JClass},
+              sys::{jboolean, jint, jlong},
+          };
+          use prw_remote_bridge::{BridgeCommand, MAX_BRIDGE_INLINE_BYTES};
+          use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
+
+          const MAX_ANDROID_TERMINAL_IO_BYTES: usize = MAX_BRIDGE_INLINE_BYTES;
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          enum TerminalAdapterError {
+              InvalidSessionId,
+              InvalidProfile,
+              InvalidGeometry,
+              InvalidInput,
+              InvalidRead,
+              InvalidBridge,
+          }
+
+          fn session_id(value: i64) -> Result<TerminalSessionId, TerminalAdapterError> {
+              let value = u64::try_from(value).map_err(|_| TerminalAdapterError::InvalidSessionId)?;
+              TerminalSessionId::new(value).map_err(|_| TerminalAdapterError::InvalidSessionId)
+          }
+
+          const fn profile(value: i32) -> Result<TerminalProfile, TerminalAdapterError> {
+              match value {
+                  0 => Ok(TerminalProfile::PosixShell),
+                  1 => Ok(TerminalProfile::BashShell),
+                  _ => Err(TerminalAdapterError::InvalidProfile),
+              }
+          }
+
+          fn geometry(columns: i32, rows: i32) -> Result<TerminalGeometry, TerminalAdapterError> {
+              let columns = u16::try_from(columns).map_err(|_| TerminalAdapterError::InvalidGeometry)?;
+              let rows = u16::try_from(rows).map_err(|_| TerminalAdapterError::InvalidGeometry)?;
+              TerminalGeometry::new(columns, rows).map_err(|_| TerminalAdapterError::InvalidGeometry)
+          }
+
+          fn bridge_payload(command: BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {
+              command.encode().map_err(|_| TerminalAdapterError::InvalidBridge)
+          }
+
+          fn encode_terminal_open(
+              session: i64,
+              profile_code: i32,
+              columns: i32,
+              rows: i32,
+          ) -> Result<Vec<u8>, TerminalAdapterError> {
+              bridge_payload(BridgeCommand::TerminalOpen {
+                  session_id: session_id(session)?,
+                  profile: profile(profile_code)?,
+                  geometry: geometry(columns, rows)?,
+              })
+          }
+
+          fn encode_terminal_input(
+              session: i64,
+              input: &[u8],
+          ) -> Result<Vec<u8>, TerminalAdapterError> {
+              if input.is_empty() || input.len() > MAX_ANDROID_TERMINAL_IO_BYTES {
+                  return Err(TerminalAdapterError::InvalidInput);
+              }
+              bridge_payload(BridgeCommand::TerminalInput {
+                  session_id: session_id(session)?,
+                  bytes: input.to_vec(),
+              })
+          }
+
+          fn encode_terminal_resize(
+              session: i64,
+              columns: i32,
+              rows: i32,
+          ) -> Result<Vec<u8>, TerminalAdapterError> {
+              bridge_payload(BridgeCommand::TerminalResize {
+                  session_id: session_id(session)?,
+                  geometry: geometry(columns, rows)?,
+              })
+          }
+
+          fn encode_terminal_read(
+              session: i64,
+              maximum_bytes: i32,
+          ) -> Result<Vec<u8>, TerminalAdapterError> {
+              let maximum_bytes = usize::try_from(maximum_bytes)
+                  .map_err(|_| TerminalAdapterError::InvalidRead)?;
+              if maximum_bytes == 0 || maximum_bytes > MAX_ANDROID_TERMINAL_IO_BYTES {
+                  return Err(TerminalAdapterError::InvalidRead);
+              }
+              bridge_payload(BridgeCommand::TerminalRead {
+                  session_id: session_id(session)?,
+                  maximum_bytes,
+              })
+          }
+
+          fn encode_terminal_close(session: i64) -> Result<Vec<u8>, TerminalAdapterError> {
+              bridge_payload(BridgeCommand::TerminalClose(session_id(session)?))
+          }
+
+          fn is_terminal_payload(payload: &[u8]) -> bool {
+              matches!(
+                  BridgeCommand::decode(payload),
+                  Ok(
+                      BridgeCommand::TerminalOpen { .. }
+                          | BridgeCommand::TerminalInput { .. }
+                          | BridgeCommand::TerminalResize { .. }
+                          | BridgeCommand::TerminalRead { .. }
+                          | BridgeCommand::TerminalClose(_)
+                  )
+              )
+          }
+
+          fn jni_output<'caller>(
+              unowned_env: &mut EnvUnowned<'caller>,
+              operation: impl FnOnce() -> Vec<u8>,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| env.byte_array_from_slice(&operation()))
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_terminalOpenPayload<
+              'caller,
+          >(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              session: jlong,
+              profile_code: jint,
+              columns: jint,
+              rows: jint,
+          ) -> JByteArray<'caller> {
+              jni_output(&mut env, || {
+                  encode_terminal_open(session, profile_code, columns, rows).unwrap_or_default()
+              })
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_terminalInputPayload<
+              'caller,
+          >(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              session: jlong,
+              input: JByteArray<'caller>,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let input = env.convert_byte_array(&input)?;
+                      let payload = encode_terminal_input(session, &input).unwrap_or_default();
+                      env.byte_array_from_slice(&payload)
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_terminalResizePayload<
+              'caller,
+          >(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              session: jlong,
+              columns: jint,
+              rows: jint,
+          ) -> JByteArray<'caller> {
+              jni_output(&mut env, || {
+                  encode_terminal_resize(session, columns, rows).unwrap_or_default()
+              })
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_terminalReadPayload<
+              'caller,
+          >(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              session: jlong,
+              maximum_bytes: jint,
+          ) -> JByteArray<'caller> {
+              jni_output(&mut env, || {
+                  encode_terminal_read(session, maximum_bytes).unwrap_or_default()
+              })
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_terminalClosePayload<
+              'caller,
+          >(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              session: jlong,
+          ) -> JByteArray<'caller> {
+              jni_output(&mut env, || encode_terminal_close(session).unwrap_or_default())
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_isTerminalPayload<
+              'caller,
+          >(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              payload: JByteArray<'caller>,
+          ) -> jboolean {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let payload = env.convert_byte_array(&payload)?;
+                      Ok(is_terminal_payload(&payload))
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use prw_remote_bridge::BridgeCommand;
+              use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
+
+              use super::*;
+
+              #[test]
+              fn all_terminal_payloads_round_trip_through_existing_bridge_codec() {
+                  let id = TerminalSessionId::new(147).expect("terminal id");
+                  let geometry = TerminalGeometry::new(80, 24).expect("geometry");
+
+                  let open = encode_terminal_open(147, 0, 80, 24).expect("open payload");
+                  assert_eq!(
+                      BridgeCommand::decode(&open).expect("decode open"),
+                      BridgeCommand::TerminalOpen {
+                          session_id: id,
+                          profile: TerminalProfile::PosixShell,
+                          geometry,
+                      }
+                  );
+
+                  let input = encode_terminal_input(147, b"printf phase147\\n").expect("input payload");
+                  assert_eq!(
+                      BridgeCommand::decode(&input).expect("decode input"),
+                      BridgeCommand::TerminalInput {
+                          session_id: id,
+                          bytes: b"printf phase147\\n".to_vec(),
+                      }
+                  );
+
+                  let resize = encode_terminal_resize(147, 120, 40).expect("resize payload");
+                  assert_eq!(
+                      BridgeCommand::decode(&resize).expect("decode resize"),
+                      BridgeCommand::TerminalResize {
+                          session_id: id,
+                          geometry: TerminalGeometry::new(120, 40).expect("resize geometry"),
+                      }
+                  );
+
+                  let read = encode_terminal_read(147, 4096).expect("read payload");
+                  assert_eq!(
+                      BridgeCommand::decode(&read).expect("decode read"),
+                      BridgeCommand::TerminalRead {
+                          session_id: id,
+                          maximum_bytes: 4096,
+                      }
+                  );
+
+                  let close = encode_terminal_close(147).expect("close payload");
+                  assert_eq!(
+                      BridgeCommand::decode(&close).expect("decode close"),
+                      BridgeCommand::TerminalClose(id)
+                  );
+
+                  for payload in [&open, &input, &resize, &read, &close] {
+                      assert!(is_terminal_payload(payload));
+                  }
+              }
+
+              #[test]
+              fn invalid_terminal_values_fail_closed() {
+                  assert_eq!(
+                      encode_terminal_open(0, 0, 80, 24),
+                      Err(TerminalAdapterError::InvalidSessionId)
+                  );
+                  assert_eq!(
+                      encode_terminal_open(-1, 0, 80, 24),
+                      Err(TerminalAdapterError::InvalidSessionId)
+                  );
+                  assert_eq!(
+                      encode_terminal_open(1, 2, 80, 24),
+                      Err(TerminalAdapterError::InvalidProfile)
+                  );
+                  assert_eq!(
+                      encode_terminal_open(1, 0, 0, 24),
+                      Err(TerminalAdapterError::InvalidGeometry)
+                  );
+                  assert_eq!(
+                      encode_terminal_resize(1, 1001, 24),
+                      Err(TerminalAdapterError::InvalidGeometry)
+                  );
+                  assert_eq!(
+                      encode_terminal_input(1, b""),
+                      Err(TerminalAdapterError::InvalidInput)
+                  );
+                  assert_eq!(
+                      encode_terminal_input(1, &vec![0; MAX_ANDROID_TERMINAL_IO_BYTES + 1]),
+                      Err(TerminalAdapterError::InvalidInput)
+                  );
+                  assert_eq!(encode_terminal_read(1, 0), Err(TerminalAdapterError::InvalidRead));
+                  assert_eq!(
+                      encode_terminal_read(1, i32::try_from(MAX_ANDROID_TERMINAL_IO_BYTES + 1).expect("bound")),
+                      Err(TerminalAdapterError::InvalidRead)
+                  );
+              }
+
+              #[test]
+              fn terminal_recognizer_rejects_non_terminal_bridge_payload() {
+                  let agent_status = BridgeCommand::AgentStatus.encode().expect("agent status");
+                  assert!(!is_terminal_payload(&agent_status));
+                  assert!(!is_terminal_payload(b"not-prwc"));
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal object NativeBridge {
+              init {
+                  System.loadLibrary("prw_android_adapter")
+              }
+
+              @JvmStatic external fun protocolVersion(): Int
+              @JvmStatic external fun roundTripControlFrame(frame: ByteArray): ByteArray
+              @JvmStatic external fun canonicalSessionMessage(request: ByteArray): ByteArray
+              @JvmStatic external fun verifySessionSignature(request: ByteArray, signature: ByteArray): Boolean
+              @JvmStatic external fun canonicalEnrollmentMessage(request: ByteArray): ByteArray
+              @JvmStatic external fun verifyEnrollmentSignature(request: ByteArray, signature: ByteArray): Boolean
+              @JvmStatic external fun terminalOpenPayload(sessionId: Long, profileCode: Int, columns: Int, rows: Int): ByteArray
+              @JvmStatic external fun terminalInputPayload(sessionId: Long, input: ByteArray): ByteArray
+              @JvmStatic external fun terminalResizePayload(sessionId: Long, columns: Int, rows: Int): ByteArray
+              @JvmStatic external fun terminalReadPayload(sessionId: Long, maximumBytes: Int): ByteArray
+              @JvmStatic external fun terminalClosePayload(sessionId: Long): ByteArray
+              @JvmStatic external fun isTerminalPayload(payload: ByteArray): Boolean
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/TerminalSession.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal const val MAX_REMOTE_TERMINAL_BYTES = 60_000
+          internal const val MAX_TERMINAL_DIMENSION = 1_000
+          internal const val MAX_TERMINAL_TRANSCRIPT_CHARS = 262_144
+
+          internal enum class TerminalProfileView(val nativeCode: Int) {
+              PosixShell(0),
+              BashShell(1),
+          }
+
+          internal enum class TerminalLifecycleView {
+              Closed,
+              Opening,
+              Open,
+              Closing,
+              Failed,
+          }
+
+          internal interface TerminalCommandEncoder {
+              fun open(sessionId: Long, profile: TerminalProfileView, columns: Int, rows: Int): ByteArray
+              fun input(sessionId: Long, bytes: ByteArray): ByteArray
+              fun resize(sessionId: Long, columns: Int, rows: Int): ByteArray
+              fun read(sessionId: Long, maximumBytes: Int): ByteArray
+              fun close(sessionId: Long): ByteArray
+          }
+
+          internal object NativeTerminalCommandEncoder : TerminalCommandEncoder {
+              override fun open(sessionId: Long, profile: TerminalProfileView, columns: Int, rows: Int): ByteArray =
+                  NativeBridge.terminalOpenPayload(sessionId, profile.nativeCode, columns, rows)
+
+              override fun input(sessionId: Long, bytes: ByteArray): ByteArray =
+                  NativeBridge.terminalInputPayload(sessionId, bytes)
+
+              override fun resize(sessionId: Long, columns: Int, rows: Int): ByteArray =
+                  NativeBridge.terminalResizePayload(sessionId, columns, rows)
+
+              override fun read(sessionId: Long, maximumBytes: Int): ByteArray =
+                  NativeBridge.terminalReadPayload(sessionId, maximumBytes)
+
+              override fun close(sessionId: Long): ByteArray = NativeBridge.terminalClosePayload(sessionId)
+          }
+
+          internal data class TerminalUiState(
+              val lifecycle: TerminalLifecycleView = TerminalLifecycleView.Closed,
+              val sessionId: Long? = null,
+              val profile: TerminalProfileView = TerminalProfileView.PosixShell,
+              val columns: Int = 80,
+              val rows: Int = 24,
+              val transcript: String = "",
+              val lastPayloadBytes: Int = 0,
+              val detail: String = "No terminal session",
+          )
+
+          internal class TerminalSessionController(
+              private val encoder: TerminalCommandEncoder,
+              private val transcriptLimitChars: Int = MAX_TERMINAL_TRANSCRIPT_CHARS,
+          ) {
+              private var current = TerminalUiState()
+
+              init {
+                  require(transcriptLimitChars > 0)
+              }
+
+              fun state(): TerminalUiState = current
+
+              fun requestOpen(
+                  sessionId: Long,
+                  profile: TerminalProfileView,
+                  columns: Int,
+                  rows: Int,
+              ): Boolean {
+                  if (current.lifecycle != TerminalLifecycleView.Closed || sessionId <= 0) return false
+                  if (!validGeometry(columns, rows)) return false
+                  val payload = runCatching { encoder.open(sessionId, profile, columns, rows) }.getOrNull()
+                      ?: return false
+                  if (payload.isEmpty()) return false
+                  current = TerminalUiState(
+                      lifecycle = TerminalLifecycleView.Opening,
+                      sessionId = sessionId,
+                      profile = profile,
+                      columns = columns,
+                      rows = rows,
+                      lastPayloadBytes = payload.size,
+                      detail = "Terminal open intent encoded; awaiting authoritative acceptance",
+                  )
+                  return true
+              }
+
+              fun applyAuthoritativeOpen(sessionId: Long): Boolean {
+                  if (current.lifecycle != TerminalLifecycleView.Opening || current.sessionId != sessionId) return false
+                  current = current.copy(
+                      lifecycle = TerminalLifecycleView.Open,
+                      detail = "Disposable authoritative open accepted",
+                  )
+                  return true
+              }
+
+              fun sendInput(bytes: ByteArray): Boolean {
+                  val sessionId = current.sessionId ?: return false
+                  if (current.lifecycle != TerminalLifecycleView.Open) return false
+                  if (bytes.isEmpty() || bytes.size > MAX_REMOTE_TERMINAL_BYTES) return false
+                  val payload = runCatching { encoder.input(sessionId, bytes) }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      lastPayloadBytes = payload.size,
+                      detail = "Terminal input intent encoded; no remote output fabricated locally",
+                  )
+                  return true
+              }
+
+              fun requestRead(maximumBytes: Int): Boolean {
+                  val sessionId = current.sessionId ?: return false
+                  if (current.lifecycle != TerminalLifecycleView.Open) return false
+                  if (maximumBytes !in 1..MAX_REMOTE_TERMINAL_BYTES) return false
+                  val payload = runCatching { encoder.read(sessionId, maximumBytes) }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      lastPayloadBytes = payload.size,
+                      detail = "Terminal output-read intent encoded",
+                  )
+                  return true
+              }
+
+              fun applyAuthoritativeOutput(bytes: ByteArray): Boolean {
+                  if (current.lifecycle != TerminalLifecycleView.Open) return false
+                  if (bytes.size > MAX_REMOTE_TERMINAL_BYTES) return false
+                  val combined = current.transcript + bytes.toString(Charsets.UTF_8)
+                  val bounded = if (combined.length <= transcriptLimitChars) {
+                      combined
+                  } else {
+                      combined.takeLast(transcriptLimitChars)
+                  }
+                  current = current.copy(
+                      transcript = bounded,
+                      detail = "Disposable authoritative terminal output applied",
+                  )
+                  return true
+              }
+
+              fun resize(columns: Int, rows: Int): Boolean {
+                  val sessionId = current.sessionId ?: return false
+                  if (current.lifecycle != TerminalLifecycleView.Open || !validGeometry(columns, rows)) return false
+                  val payload = runCatching { encoder.resize(sessionId, columns, rows) }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      columns = columns,
+                      rows = rows,
+                      lastPayloadBytes = payload.size,
+                      detail = "Terminal resize intent encoded",
+                  )
+                  return true
+              }
+
+              fun requestClose(): Boolean {
+                  val sessionId = current.sessionId ?: return false
+                  if (current.lifecycle != TerminalLifecycleView.Open) return false
+                  val payload = runCatching { encoder.close(sessionId) }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      lifecycle = TerminalLifecycleView.Closing,
+                      lastPayloadBytes = payload.size,
+                      detail = "Terminal close intent encoded; awaiting authoritative completion",
+                  )
+                  return true
+              }
+
+              fun applyAuthoritativeClosed(sessionId: Long): Boolean {
+                  if (current.lifecycle != TerminalLifecycleView.Closing || current.sessionId != sessionId) return false
+                  current = current.copy(
+                      lifecycle = TerminalLifecycleView.Closed,
+                      sessionId = null,
+                      lastPayloadBytes = 0,
+                      detail = "Disposable authoritative close completed",
+                  )
+                  return true
+              }
+
+              fun fail(detail: String): Boolean {
+                  if (current.lifecycle == TerminalLifecycleView.Closed) return false
+                  current = current.copy(lifecycle = TerminalLifecycleView.Failed, detail = detail)
+                  return true
+              }
+
+              private fun validGeometry(columns: Int, rows: Int): Boolean =
+                  columns in 1..MAX_TERMINAL_DIMENSION && rows in 1..MAX_TERMINAL_DIMENSION
+          }
+          EOF
+
+          cat > apps/android/app/src/test/kotlin/com/privateworkspace/prw/TerminalSessionControllerTest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class TerminalSessionControllerTest {
+              private class FakeEncoder : TerminalCommandEncoder {
+                  var inputCalls = 0
+                  override fun open(sessionId: Long, profile: TerminalProfileView, columns: Int, rows: Int) = byteArrayOf(12)
+                  override fun input(sessionId: Long, bytes: ByteArray): ByteArray {
+                      inputCalls += 1
+                      return byteArrayOf(13)
+                  }
+                  override fun resize(sessionId: Long, columns: Int, rows: Int) = byteArrayOf(14)
+                  override fun read(sessionId: Long, maximumBytes: Int) = byteArrayOf(15)
+                  override fun close(sessionId: Long) = byteArrayOf(16)
+              }
+
+              @Test fun open_request_does_not_forge_open_state() {
+                  val controller = TerminalSessionController(FakeEncoder())
+                  assertTrue(controller.requestOpen(147, TerminalProfileView.PosixShell, 80, 24))
+                  assertEquals(TerminalLifecycleView.Opening, controller.state().lifecycle)
+                  assertTrue(controller.applyAuthoritativeOpen(147))
+                  assertEquals(TerminalLifecycleView.Open, controller.state().lifecycle)
+              }
+
+              @Test fun input_is_only_accepted_while_open_and_does_not_fabricate_output() {
+                  val encoder = FakeEncoder()
+                  val controller = TerminalSessionController(encoder)
+                  assertFalse(controller.sendInput("pwd\n".encodeToByteArray()))
+                  assertTrue(controller.requestOpen(147, TerminalProfileView.BashShell, 80, 24))
+                  assertTrue(controller.applyAuthoritativeOpen(147))
+                  assertTrue(controller.sendInput("pwd\n".encodeToByteArray()))
+                  assertEquals(1, encoder.inputCalls)
+                  assertEquals("", controller.state().transcript)
+                  assertFalse(controller.sendInput(byteArrayOf()))
+                  assertFalse(controller.sendInput(ByteArray(MAX_REMOTE_TERMINAL_BYTES + 1)))
+              }
+
+              @Test fun read_resize_and_close_respect_state_and_bounds() {
+                  val controller = TerminalSessionController(FakeEncoder())
+                  assertTrue(controller.requestOpen(147, TerminalProfileView.PosixShell, 80, 24))
+                  assertFalse(controller.requestRead(4096))
+                  assertTrue(controller.applyAuthoritativeOpen(147))
+                  assertFalse(controller.requestRead(0))
+                  assertFalse(controller.requestRead(MAX_REMOTE_TERMINAL_BYTES + 1))
+                  assertTrue(controller.requestRead(4096))
+                  assertFalse(controller.resize(0, 24))
+                  assertFalse(controller.resize(1001, 24))
+                  assertTrue(controller.resize(120, 40))
+                  assertTrue(controller.requestClose())
+                  assertEquals(TerminalLifecycleView.Closing, controller.state().lifecycle)
+                  assertFalse(controller.sendInput("ignored".encodeToByteArray()))
+                  assertTrue(controller.applyAuthoritativeClosed(147))
+                  assertEquals(TerminalLifecycleView.Closed, controller.state().lifecycle)
+              }
+
+              @Test fun transcript_is_bounded_and_only_authoritative_output_is_applied() {
+                  val controller = TerminalSessionController(FakeEncoder(), transcriptLimitChars = 8)
+                  assertTrue(controller.requestOpen(147, TerminalProfileView.PosixShell, 80, 24))
+                  assertTrue(controller.applyAuthoritativeOpen(147))
+                  assertTrue(controller.applyAuthoritativeOutput("123456789".encodeToByteArray()))
+                  assertEquals("23456789", controller.state().transcript)
+                  assertFalse(controller.applyAuthoritativeOutput(ByteArray(MAX_REMOTE_TERMINAL_BYTES + 1)))
+              }
+
+              @Test fun failed_session_does_not_silently_reopen() {
+                  val controller = TerminalSessionController(FakeEncoder())
+                  assertTrue(controller.requestOpen(147, TerminalProfileView.PosixShell, 80, 24))
+                  assertTrue(controller.fail("disposable failure"))
+                  assertEquals(TerminalLifecycleView.Failed, controller.state().lifecycle)
+                  assertFalse(controller.requestOpen(148, TerminalProfileView.BashShell, 80, 24))
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import androidx.lifecycle.ViewModel
+          import java.security.SecureRandom
+          import kotlinx.coroutines.flow.MutableStateFlow
+          import kotlinx.coroutines.flow.StateFlow
+          import kotlinx.coroutines.flow.asStateFlow
+
+          internal enum class EnrollmentPresentationState {
+              NotReady,
+              Ready,
+              ProofValidated,
+              Error,
+          }
+
+          internal data class PrwUiState(
+              val connectionState: ConnectionState = ConnectionState.Disconnected,
+              val identityReady: Boolean = false,
+              val nativeBridgeReady: Boolean = false,
+              val bootstrapValidated: Boolean = false,
+              val enrollmentState: EnrollmentPresentationState = EnrollmentPresentationState.NotReady,
+              val devices: List<DeviceSnapshot> = emptyList(),
+              val pendingRevocationDeviceId: String? = null,
+              val terminal: TerminalUiState = TerminalUiState(),
+              val detail: String = "Development bootstrap only — no production endpoint",
+          )
+
+          internal class MainViewModel(
+              private val custody: AndroidKeyCustody = AndroidKeyCustody(),
+              private val controller: ConnectionController = ConnectionController(),
+              private val deviceManagement: DeviceManagementController = DeviceManagementController(),
+              private val terminalController: TerminalSessionController = TerminalSessionController(NativeTerminalCommandEncoder),
+          ) : ViewModel() {
+              private val mutableUiState = MutableStateFlow(PrwUiState())
+              val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
+
+              fun validateLocalBootstrap() {
+                  if (!controller.transition(ConnectionState.Connecting)) return
+                  publish("Preparing non-exportable Android identity")
+                  runCatching {
+                      check(NativeBridge.protocolVersion() == 1)
+                      val spki = custody.ensureDeviceIdentitySpki()
+                      check(custody.deviceIdentityIsNonExportable())
+                      controller.transition(ConnectionState.Authenticating)
+                      publish("Validating typed local session proof")
+                      val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+                      val request = BootstrapRequest(
+                          workspaceId = "phase145-development-workspace",
+                          userId = "phase145-development-user",
+                          deviceId = "phase145-android-device",
+                          sessionId = "phase145-local-session",
+                          publicSpki = spki,
+                          nonce = nonce,
+                      ).encode()
+                      val canonical = NativeBridge.canonicalSessionMessage(request)
+                      check(canonical.isNotEmpty())
+                      val signature = custody.signCanonicalSessionProof(canonical)
+                      check(NativeBridge.verifySessionSignature(request, signature))
+                      check(controller.transition(ConnectionState.Connected))
+                  }.onSuccess {
+                      mutableUiState.value = mutableUiState.value.copy(
+                          connectionState = ConnectionState.Connected,
+                          identityReady = true,
+                          nativeBridgeReady = true,
+                          bootstrapValidated = true,
+                          detail = "Local authenticated bootstrap validated; remote production networking remains disabled",
+                      )
+                  }.onFailure { error ->
+                      controller.transition(ConnectionState.Error)
+                      mutableUiState.value = mutableUiState.value.copy(
+                          connectionState = ConnectionState.Error,
+                          identityReady = runCatching { custody.deviceIdentityIsNonExportable() }.getOrDefault(false),
+                          nativeBridgeReady = runCatching { NativeBridge.protocolVersion() == 1 }.getOrDefault(false),
+                          bootstrapValidated = false,
+                          detail = error.message ?: "Local bootstrap failed closed",
+                      )
+                  }
+              }
+
+              fun validateLocalEnrollmentProof() {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      enrollmentState = EnrollmentPresentationState.Ready,
+                      detail = "Preparing disposable typed enrollment proof; no enrollment authority is contacted",
+                  )
+                  runCatching {
+                      check(NativeBridge.protocolVersion() == 1)
+                      val spki = custody.ensureDeviceIdentitySpki()
+                      check(custody.deviceIdentityIsNonExportable())
+                      val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+                      val request = EnrollmentProofRequest(
+                          enrollmentId = "phase146-local-enrollment",
+                          workspaceId = "phase146-development-workspace",
+                          userId = "phase146-development-user",
+                          deviceId = "phase146-android-device",
+                          publicSpki = spki,
+                          nonce = nonce,
+                      ).encode()
+                      val canonical = NativeBridge.canonicalEnrollmentMessage(request)
+                      check(canonical.isNotEmpty())
+                      val signature = custody.signCanonicalEnrollmentProof(canonical)
+                      check(NativeBridge.verifyEnrollmentSignature(request, signature))
+                  }.onSuccess {
+                      mutableUiState.value = mutableUiState.value.copy(
+                          identityReady = true,
+                          nativeBridgeReady = true,
+                          enrollmentState = EnrollmentPresentationState.ProofValidated,
+                          detail = "Disposable enrollment proof validated locally; authoritative enrollment remains unchanged",
+                      )
+                  }.onFailure { error ->
+                      mutableUiState.value = mutableUiState.value.copy(
+                          enrollmentState = EnrollmentPresentationState.Error,
+                          detail = error.message ?: "Enrollment proof failed closed",
+                      )
+                  }
+              }
+
+              fun loadDisposableDeviceSnapshots() {
+                  val accepted = deviceManagement.applyAuthoritativeSnapshot(
+                      listOf(
+                          DeviceSnapshot("phase146-android-device", DeviceLifecycleView.Enrolled),
+                          DeviceSnapshot("phase146-pending-device", DeviceLifecycleView.PendingEnrollment),
+                      ),
+                  )
+                  check(accepted)
+                  publishDeviceState("Loaded disposable authoritative device snapshots; no production registry contacted")
+              }
+
+              fun requestRevocation(deviceId: String) {
+                  val accepted = deviceManagement.requestRevocation(deviceId)
+                  publishDeviceState(
+                      if (accepted) {
+                          "Revocation intent pending for $deviceId; authoritative lifecycle remains Enrolled"
+                      } else {
+                          "Revocation intent rejected by current authoritative lifecycle/pending state"
+                      },
+                  )
+              }
+
+              fun requestDisposableTerminal(profile: TerminalProfileView): Boolean {
+                  val accepted = terminalController.requestOpen(DISPOSABLE_TERMINAL_SESSION_ID, profile, 80, 24)
+                  publishTerminalState(
+                      if (accepted) {
+                          "Disposable terminal open intent encoded; no production endpoint contacted"
+                      } else {
+                          "Terminal open intent rejected by local bounded lifecycle"
+                      },
+                  )
+                  return accepted
+              }
+
+              fun acceptDisposableTerminalOpen(): Boolean {
+                  val accepted = terminalController.applyAuthoritativeOpen(DISPOSABLE_TERMINAL_SESSION_ID)
+                  publishTerminalState(
+                      if (accepted) "Disposable terminal open acceptance applied" else "Terminal open acceptance rejected",
+                  )
+                  return accepted
+              }
+
+              fun sendDisposableTerminalInput(text: String): Boolean {
+                  val accepted = terminalController.sendInput(text.encodeToByteArray())
+                  publishTerminalState(
+                      if (accepted) "Terminal input payload encoded through existing PRWC bridge" else "Terminal input rejected",
+                  )
+                  return accepted
+              }
+
+              fun requestDisposableTerminalRead(): Boolean {
+                  val accepted = terminalController.requestRead(4096)
+                  publishTerminalState(
+                      if (accepted) "Bounded terminal read payload encoded" else "Terminal read request rejected",
+                  )
+                  return accepted
+              }
+
+              fun injectDisposableTerminalOutput(): Boolean {
+                  val accepted = terminalController.applyAuthoritativeOutput(
+                      "phase147 disposable remote output\n".encodeToByteArray(),
+                  )
+                  publishTerminalState(
+                      if (accepted) "Disposable authoritative output applied" else "Terminal output rejected",
+                  )
+                  return accepted
+              }
+
+              fun resizeDisposableTerminal(columns: Int, rows: Int): Boolean {
+                  val accepted = terminalController.resize(columns, rows)
+                  publishTerminalState(if (accepted) "Terminal resize payload encoded" else "Terminal resize rejected")
+                  return accepted
+              }
+
+              fun requestDisposableTerminalClose(): Boolean {
+                  val accepted = terminalController.requestClose()
+                  publishTerminalState(
+                      if (accepted) "Terminal close intent encoded; awaiting disposable completion" else "Terminal close rejected",
+                  )
+                  return accepted
+              }
+
+              fun acceptDisposableTerminalClosed(): Boolean {
+                  val accepted = terminalController.applyAuthoritativeClosed(DISPOSABLE_TERMINAL_SESSION_ID)
+                  publishTerminalState(
+                      if (accepted) "Disposable terminal close completed" else "Terminal close completion rejected",
+                  )
+                  return accepted
+              }
+
+              fun disconnect() {
+                  val current = controller.state.value
+                  if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
+                      check(controller.transition(ConnectionState.Disconnecting))
+                      check(controller.transition(ConnectionState.Disconnected))
+                  } else if (current == ConnectionState.Error) {
+                      check(controller.transition(ConnectionState.Disconnected))
+                  }
+                  mutableUiState.value = mutableUiState.value.copy(
+                      connectionState = controller.state.value,
+                      bootstrapValidated = false,
+                      detail = "Development bootstrap only — no production endpoint",
+                  )
+              }
+
+              private fun publish(detail: String) {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      connectionState = controller.state.value,
+                      detail = detail,
+                  )
+              }
+
+              private fun publishDeviceState(detail: String) {
+                  val deviceState = deviceManagement.state()
+                  mutableUiState.value = mutableUiState.value.copy(
+                      devices = deviceState.devices,
+                      pendingRevocationDeviceId = deviceState.pendingRevocationDeviceId,
+                      detail = detail,
+                  )
+              }
+
+              private fun publishTerminalState(detail: String) {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      terminal = terminalController.state(),
+                      detail = detail,
+                  )
+              }
+
+              companion object {
+                  private const val DISPOSABLE_TERMINAL_SESSION_ID = 147_001L
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.Row
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.fillMaxWidth
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.foundation.rememberScrollState
+          import androidx.compose.foundation.verticalScroll
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.OutlinedTextField
+          import androidx.compose.material3.Surface
+          import androidx.compose.material3.Text
+          import androidx.compose.runtime.collectAsState
+          import androidx.compose.runtime.getValue
+          import androidx.compose.runtime.mutableStateOf
+          import androidx.compose.runtime.remember
+          import androidx.compose.runtime.setValue
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.unit.dp
+          import androidx.lifecycle.viewmodel.compose.viewModel
+
+          internal class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          val model: MainViewModel = viewModel()
+                          val state by model.uiState.collectAsState()
+                          var terminalInput by remember { mutableStateOf("") }
+                          Surface(modifier = Modifier.fillMaxSize()) {
+                              Column(
+                                  modifier = Modifier
+                                      .padding(24.dp)
+                                      .verticalScroll(rememberScrollState()),
+                                  verticalArrangement = Arrangement.spacedBy(12.dp),
+                              ) {
+                                  Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
+                                  Text("Phase 147 bounded remote-terminal UX")
+                                  Text("Connection: ${state.connectionState}")
+                                  Text("Identity ready: ${state.identityReady}")
+                                  Text("Native bridge: ${state.nativeBridgeReady}")
+                                  Text("Authenticated bootstrap: ${state.bootstrapValidated}")
+                                  Text("Enrollment proof: ${state.enrollmentState}")
+                                  Text(state.detail)
+                                  Button(onClick = model::validateLocalBootstrap) {
+                                      Text("Validate local bootstrap")
+                                  }
+                                  Button(onClick = model::validateLocalEnrollmentProof) {
+                                      Text("Validate local enrollment proof")
+                                  }
+                                  Button(onClick = model::loadDisposableDeviceSnapshots) {
+                                      Text("Load disposable device snapshots")
+                                  }
+                                  state.devices.forEach { device ->
+                                      Text("${device.deviceId}: ${device.lifecycle}")
+                                      if (device.lifecycle == DeviceLifecycleView.Enrolled) {
+                                          Button(onClick = { model.requestRevocation(device.deviceId) }) {
+                                              Text(
+                                                  if (state.pendingRevocationDeviceId == device.deviceId) {
+                                                      "Revocation pending"
+                                                  } else {
+                                                      "Request revocation"
+                                                  },
+                                              )
+                                          }
+                                      }
+                                  }
+
+                                  Text("Disposable terminal — no production endpoint", style = MaterialTheme.typography.titleMedium)
+                                  Text("Lifecycle: ${state.terminal.lifecycle}")
+                                  Text("Profile: ${state.terminal.profile}")
+                                  Text("Geometry: ${state.terminal.columns}x${state.terminal.rows}")
+                                  Text("Last PRWC payload: ${state.terminal.lastPayloadBytes} bytes")
+
+                                  if (state.terminal.lifecycle == TerminalLifecycleView.Closed) {
+                                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                          Button(onClick = { model.requestDisposableTerminal(TerminalProfileView.PosixShell) }) {
+                                              Text("Open POSIX")
+                                          }
+                                          Button(onClick = { model.requestDisposableTerminal(TerminalProfileView.BashShell) }) {
+                                              Text("Open Bash")
+                                          }
+                                      }
+                                  }
+
+                                  if (state.terminal.lifecycle == TerminalLifecycleView.Opening) {
+                                      Button(onClick = model::acceptDisposableTerminalOpen) {
+                                          Text("Apply disposable open acceptance")
+                                      }
+                                  }
+
+                                  if (state.terminal.lifecycle == TerminalLifecycleView.Open) {
+                                      OutlinedTextField(
+                                          value = terminalInput,
+                                          onValueChange = { terminalInput = it },
+                                          modifier = Modifier.fillMaxWidth(),
+                                          label = { Text("Terminal input") },
+                                      )
+                                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                          Button(onClick = {
+                                              if (model.sendDisposableTerminalInput(terminalInput)) terminalInput = ""
+                                          }) {
+                                              Text("Send input")
+                                          }
+                                          Button(onClick = model::requestDisposableTerminalRead) {
+                                              Text("Request output")
+                                          }
+                                      }
+                                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                          Button(onClick = model::injectDisposableTerminalOutput) {
+                                              Text("Apply disposable output")
+                                          }
+                                          Button(onClick = { model.resizeDisposableTerminal(120, 40) }) {
+                                              Text("Resize 120x40")
+                                          }
+                                      }
+                                      Button(onClick = model::requestDisposableTerminalClose) {
+                                          Text("Close terminal")
+                                      }
+                                  }
+
+                                  if (state.terminal.lifecycle == TerminalLifecycleView.Closing) {
+                                      Button(onClick = model::acceptDisposableTerminalClosed) {
+                                          Text("Apply disposable close completion")
+                                      }
+                                  }
+
+                                  if (state.terminal.transcript.isNotEmpty()) {
+                                      Text("Terminal transcript", style = MaterialTheme.typography.titleSmall)
+                                      Text(state.terminal.transcript)
+                                  }
+
+                                  Button(onClick = model::disconnect) {
+                                      Text("Disconnect")
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/README.md <<'EOF'
+          # PRW Android Application
+
+          Phase 147 builds on the validated Phase 145/146 non-production Android foundation.
+
+          Current development responsibilities:
+
+          - Kotlin + Jetpack Compose UI;
+          - Android Keystore non-exportable P-256 device/transport identity custody;
+          - narrow Rust/JNI adapter reusing authoritative PRW codecs and identity verification;
+          - local typed authenticated bootstrap and enrollment-proof validation;
+          - bounded authoritative/injected device lifecycle projection and revocation intent;
+          - bounded terminal presentation lifecycle;
+          - native terminal open/input/resize/read/close payload projection through the existing Phase 143 `BridgeCommand` codec;
+          - explicit disposable terminal open/output/close callbacks that do not forge remote authority.
+
+          Phase 147 adds no generic run-command API and no production socket, remote shell, PTY activation, account cutover, endpoint publication, or Android release signing/distribution.
+          EOF
+
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 fmt --all
+          cd "$GITHUB_WORKSPACE"
+
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          def registry_packages(path: str):
+              with open(path, 'rb') as handle:
+                  data = tomllib.load(handle)
+              return {
+                  (p['name'], p['version'], p.get('source'), p.get('checksum'))
+                  for p in data.get('package', [])
+                  if p.get('source', '').startswith('registry+')
+              }
+
+          before = registry_packages(Path(__import__('os').environ['RUNNER_TEMP']) / 'phase147-native-lock-before')
+          after = registry_packages('apps/android/native/Cargo.lock')
+          root = registry_packages('Cargo.lock')
+          added = sorted(after - before)
+          missing = [item for item in added if item not in root]
+          if missing:
+              raise SystemExit(f'Phase 147 selected third-party versions absent from root lock: {missing}')
+          Path(__import__('os').environ['RUNNER_TEMP'], 'phase147-added-registry-packages.txt').write_text(
+              '\n'.join(f'{name} {version}' for name, version, _, _ in added) + ('\n' if added else '')
+          )
+          PY
+
+          grep -Fq 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }' apps/android/native/Cargo.toml
+          grep -Fq 'prw-terminal = { path = "../../../crates/prw-terminal" }' apps/android/native/Cargo.toml
+          echo phase147_candidate=pass
+
+      - name: Validate Phase 147 native terminal projection
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+          cargo +1.97.1 tree --locked | grep -Fq 'prw-remote-bridge'
+          cargo +1.97.1 tree --locked | grep -Fq 'prw-terminal'
+          grep -Fq 'BridgeCommand::TerminalOpen' src/terminal.rs
+          grep -Fq 'BridgeCommand::TerminalInput' src/terminal.rs
+          grep -Fq 'BridgeCommand::TerminalResize' src/terminal.rs
+          grep -Fq 'BridgeCommand::TerminalRead' src/terminal.rs
+          grep -Fq 'BridgeCommand::TerminalClose' src/terminal.rs
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -t x86_64 -o "$RUNNER_TEMP/phase147-native-libs" build --locked --release
+          test -s "$RUNNER_TEMP/phase147-native-libs/arm64-v8a/libprw_android_adapter.so"
+          test -s "$RUNNER_TEMP/phase147-native-libs/x86_64/libprw_android_adapter.so"
+          echo phase147_native=pass
+
+      - name: Validate Phase 147 Android terminal UX
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase147-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_adapter.so' "$RUNNER_TEMP/phase147-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_adapter.so' "$RUNNER_TEMP/phase147-apk-list.txt"
+          sha256sum "$apk" | cut -d' ' -f1 > "$RUNNER_TEMP/phase147-apk-sha.txt"
+          echo phase147_android=pass
+
+      - name: Prove Phase 147 security and authority boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          terminal_kotlin=apps/android/app/src/main/kotlin/com/privateworkspace/prw/TerminalSession.kt
+          terminal_rust=apps/android/native/src/terminal.rs
+          grep -Fq 'TerminalLifecycleView.Opening' "$terminal_kotlin"
+          grep -Fq 'applyAuthoritativeOpen' "$terminal_kotlin"
+          grep -Fq 'TerminalLifecycleView.Closing' "$terminal_kotlin"
+          grep -Fq 'applyAuthoritativeClosed' "$terminal_kotlin"
+          grep -Fq 'MAX_REMOTE_TERMINAL_BYTES = 60_000' "$terminal_kotlin"
+          grep -Fq 'MAX_TERMINAL_TRANSCRIPT_CHARS = 262_144' "$terminal_kotlin"
+          grep -Fq 'BridgeCommand::TerminalOpen' "$terminal_rust"
+          grep -Fq 'BridgeCommand::decode' "$terminal_rust"
+          grep -Fq 'Capability::TerminalOpen' crates/prw-remote-bridge/src/lib.rs
+          grep -Fq 'Capability::TerminalExec' crates/prw-remote-bridge/src/lib.rs
+          ! grep -R -E 'runCommand|ProcessBuilder|Runtime\.getRuntime|\.exec\(' apps/android/app/src/main/kotlin apps/android/native/src
+          ! grep -E 'TcpStream|UdpSocket|std::net::|quinn::Endpoint' "$terminal_rust"
+          ! grep -R -E 'https?://|wss?://' apps/android/app/src/main/kotlin apps/android/native/src/terminal.rs
+          git diff --exit-code -- apps/android/app/build.gradle.kts
+          test -f "$RUNNER_TEMP/phase147-added-registry-packages.txt"
+          echo phase147_security=pass
+
+      - name: Revalidate root Rust workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo phase147_root=pass
+
+      - name: Write authoritative Phase 147 validation report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report_dir=logs/audits/phase-147-android-remote-terminal-ux
+          report="$report_dir/PRW-PHASE-147-ANDROID-REMOTE-TERMINAL-UX-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          native_lock_sha=$(sha256sum apps/android/native/Cargo.lock | cut -d' ' -f1)
+          terminal_rust_sha=$(sha256sum apps/android/native/src/terminal.rs | cut -d' ' -f1)
+          terminal_kotlin_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/TerminalSession.kt | cut -d' ' -f1)
+          apk_sha=$(cat "$RUNNER_TEMP/phase147-apk-sha.txt")
+          added_packages=$(tr '\n' ',' < "$RUNNER_TEMP/phase147-added-registry-packages.txt" | sed 's/,$//')
+          if [ -z "$added_packages" ]; then added_packages=NONE; fi
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 147 — Android Remote Terminal UX' \
+            '' \
+            'STATUS:' \
+            'PASS / ANDROID_TYPED_TERMINAL_UX / EXISTING_PRW_REMOTE_BRIDGE_CODEC_REUSED / NO_ARBITRARY_RUN_COMMAND_API / OPEN_CLOSE_AUTHORITY_NOT_FORGED / BOUNDED_TERMINAL_IO_AND_TRANSCRIPT / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            'Initial dependency probe run: 31968272078 — harness failure only (NDK compiler not configured)' \
+            'Corrective NDK dependency probe run: 31968345916 — SUCCESS' \
+            "Native Cargo.lock SHA-256: $native_lock_sha" \
+            "Terminal Rust adapter SHA-256: $terminal_rust_sha" \
+            "Terminal Kotlin controller SHA-256: $terminal_kotlin_sha" \
+            "Validated debug APK SHA-256: $apk_sha" \
+            "New native-lock registry packages relative to Phase 146: $added_packages" \
+            '' \
+            'CONTRACT: contracts/ANDROID_REMOTE_TERMINAL_UX_CONTRACT.md' \
+            'CODEC: native adapter constructs existing prw-terminal typed values and delegates PRWC payload encoding/decoding to Phase 143 prw-remote-bridge BridgeCommand; Kotlin does not duplicate PRWC encoding.' \
+            'LIFECYCLE: local open/close requests produce pending Opening/Closing presentation only; explicit disposable authoritative callbacks are required for Open/Closed.' \
+            'I/O: input/read projection is bounded to the existing narrower Phase 143 60000-byte inline bridge limit; transcript memory is separately bounded.' \
+            'OUTPUT: sending terminal input never fabricates remote output; only explicit disposable authoritative output injection changes transcript.' \
+            'CAPABILITY: Android does not grant TerminalOpen/TerminalExec; current registry/session/transport/capability authority remains in the existing remote bridge.' \
+            'DEPENDENCIES: no Android UI dependency added; native adds only internal prw-remote-bridge and prw-terminal path dependencies; any newly reachable registry package version is already present in the authoritative root Cargo.lock.' \
+            'RENDERING: bounded text transcript only; complete ANSI/VT emulation is not claimed by Phase 147.' \
+            'PRODUCTION BOUNDARY: no production socket/send/receive, production Agent terminal dispatch, PTY/process activation, account/device cutover, release signing/distribution, listener/relay/TUN/TAP/route/firewall/NAT/router/DNS mutation, or Agent replacement/restart.' \
+            '' \
+            'INTERIM CLASSIFICATION: PHASE_147_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION' \
+            > "$report"
+          echo phase147_report=pass
+
+      - name: Stage only validated Phase 147 source and evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-147-android-remote-terminal-ux/PRW-PHASE-147-ANDROID-REMOTE-TERMINAL-UX-VALIDATION.txt
+          git diff --check -- apps/android "$report"
+          git add \
+            apps/android/README.md \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/TerminalSession.kt \
+            apps/android/app/src/test/kotlin/com/privateworkspace/prw/TerminalSessionControllerTest.kt \
+            apps/android/native/Cargo.toml \
+            apps/android/native/Cargo.lock \
+            apps/android/native/src/lib.rs \
+            apps/android/native/src/terminal.rs \
+            "$report"
+          staged="$(git diff --cached --name-only)"
+          test -n "$staged"
+          if printf '%s\n' "$staged" | grep -E '(^|/)(build|target|\.gradle)/'; then
+            echo phase147_generated_output_staged >&2
+            exit 1
+          fi
+          ! printf '%s\n' "$staged" | grep -Fxq 'apps/android/app/build.gradle.kts'
+          grep -Fxq 'apps/android/native/Cargo.toml' <<< "$staged"
+          grep -Fxq 'apps/android/native/Cargo.lock' <<< "$staged"
+          grep -Fxq 'apps/android/native/src/terminal.rs' <<< "$staged"
+          grep -Fxq 'apps/android/app/src/main/kotlin/com/privateworkspace/prw/TerminalSession.kt' <<< "$staged"
+          grep -Fxq "$report" <<< "$staged"
+          echo phase147_staging=pass
+
+      - name: Commit and push validated Phase 147 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 147: validate Android remote terminal UX'
+          git push origin HEAD:main
+          echo phase147_materialization=pass
