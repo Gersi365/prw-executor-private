@@ -1,0 +1,206 @@
+name: Phase 140 A01 Corrective Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-140-a01-corrective-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Phase 140 draft and apply exact first-run correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_CONTRACT.md
+          test -f crates/prw-remote-transport/src/lib.rs
+          test -f crates/prw-remote-transport/tests/loopback.rs
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-remote-transport",\n'
+          if member not in text:
+              needle = '    "crates/prw-private-dns",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('workspace insertion mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-remote-transport/src/lib.rs')
+          text = source.read_text()
+          replacements = [
+              ('fn try_from(value: u16) -> Result<Self, Self::Error> {',
+               'fn try_from(value: u16) -> Result<Self, RemoteTransportError> {'),
+              ('.stream_receive_window(VarInt::from_u32(MAX_CONTROL_PAYLOAD_BYTES as u32))',
+               '.stream_receive_window(VarInt::from_u32(65_536))'),
+          ]
+          for old, new in replacements:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'source corrective count mismatch for {old!r}')
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'corrected source form missing for {new!r}')
+          source.write_text(text)
+
+          test = Path('crates/prw-remote-transport/tests/loopback.rs')
+          text = test.read_text()
+          marker = '#[tokio::test(flavor = "current_thread")]\nasync fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {'
+          corrected = '#[allow(clippy::too_many_lines)]\n#[tokio::test(flavor = "current_thread")]\nasync fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {'
+          if marker in text:
+              if text.count(marker) != 1:
+                  raise SystemExit('loopback lint attribute insertion count mismatch')
+              text = text.replace(marker, corrected)
+          elif corrected not in text:
+              raise SystemExit('loopback corrected marker missing')
+          test.write_text(text)
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo clippy --fix --locked -p prw-remote-transport --all-targets --all-features \
+            --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          git restore --worktree --staged -- target/.rustc_info.json 2>/dev/null || true
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-remote-transport/src/lib.rs|crates/prw-remote-transport/tests/loopback.rs) ;;
+              *) echo "unexpected_phase140_a01_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+          echo 'phase140_a01_corrective_scope=pass'
+
+      - name: Prove locked security boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source='crates/prw-remote-transport/src/lib.rs'
+          ! grep -Fq 'into_0rtt' "$source"
+          ! grep -Fq '.dangerous()' "$source"
+          ! grep -Fq 'with_platform_verifier' "$source"
+          ! grep -Fq 'try_with_platform_verifier' "$source"
+          ! grep -Fq 'send_datagram' "$source"
+          ! grep -Fq 'read_datagram' "$source"
+          ! grep -Fq 'ToSocketAddrs' "$source"
+          ! grep -Fq 'lookup_host' "$source"
+          ! grep -Fq 'std::process::Command' "$source"
+          ! grep -Fq 'Command::new' "$source"
+          ! grep -Fq 'unsafe {' "$source"
+          ! grep -Fq 'prw-remote-transport' crates/prw-agent/Cargo.toml
+          grep -Fq 'MESH_ALPN: &[u8] = b"prw-mesh/1"' "$source"
+          grep -Fq 'MAX_REMOTE_BIDI_STREAMS: u32 = 32' "$source"
+          grep -Fq 'MAX_REMOTE_UNI_STREAMS: u32 = 16' "$source"
+          echo 'phase140_a01_security_boundary=pass'
+
+      - name: Run focused Phase 140 gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-remote-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-remote-transport --all-targets -- --test-threads=1
+          echo 'phase140_a01_focused_validation=pass'
+
+      - name: Run full workspace gates
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          source_sha=$(sha256sum crates/prw-remote-transport/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "phase140_a01_workspace_validation=pass lock_sha=$lock_sha source_sha=$source_sha"
+
+      - name: Record authoritative Phase 140 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+          SOURCE_SHA: ${{ steps.workspace.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-140-disposable-encrypted-remote-transport'
+          report="$report_dir/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 140 — Disposable Encrypted Remote Transport Foundation
+
+          STATUS:
+          PASS / QUIC_V1_TLS13_MTLS_LOOPBACK_VALIDATED / EXPLICIT_PRIVATE_ROOTS / TRANSPORT_IDENTITY_BINDING_VALIDATED / PRWM_FRAME_BOUNDS_VALIDATED / FULL_WORKSPACE_PASS / PRODUCTION_REMOTE_TRANSPORT_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation input head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+          prw-remote-transport source SHA-256: $SOURCE_SHA
+
+          CONTRACT
+          contracts/DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-remote-transport
+
+          DEPENDENCIES
+          Runtime direct pins: Quinn 0.11.11, rustls 0.23.43, Tokio 1.53.1 and aws-lc-rs 1.18.0. Disposable certificate generation: rcgen 0.14.8 dev-only with AWS-LC.
+
+          SECURITY OUTCOME
+          QUIC v1/TLS1.3-only configuration, ALPN prw-mesh/1, explicit-root mTLS, disabled client resumption/early-data, zero server TLS1.3 tickets/early-data, finite idle timeout, 32 remote bidirectional and 16 remote unidirectional stream bounds. Runtime source contains no 0-RTT invocation, dangerous/platform verifier, QUIC datagram application API, DNS lookup, shell execution or Agent integration.
+
+          IDENTITY OUTCOME
+          Leaf SPKI SHA-256 is derived with AWS-LC and converted through the existing TransportIdentity type. Established Quinn/rustls peer certificate chains are extracted and the leaf TransportIdentity is revalidated against an expected identity. SAN/SNI is deterministically derived from the full TransportIdentity and never used for endpoint discovery.
+
+          LOOPBACK OUTCOME
+          Disposable runtime-generated P-256 CA/leaf credentials validate a real loopback QUIC mTLS connection, exact ALPN, both peer identities and bounded PRWM request/response. Wrong server name, wrong CA, missing client certificate and post-handshake expected-identity mismatch fail closed.
+
+          FRAME OUTCOME
+          PRWM v1.0 fixed 24-byte header and 64 KiB payload bound round-trip correctly; bad magic/version/kind/flags/zero request-id/oversize/truncation/trailing bytes fail closed.
+
+          CORRECTIVE HISTORY
+          Initial run 31950119293 passed prerequisite, exact dependency graph normalization and static security boundary checks, then stopped safely before tests on Rust 1.97.1 lint compatibility: ControlMessageKind::Error made Self::Error ambiguous, one constant usize-to-u32 cast was rejected, one redundant test clone remained, and the end-to-end integration test exceeded the workspace line-count lint. This A01 run applies only those mechanical correctives and does not weaken the transport contract.
+
+          VALIDATION
+          This authoritative run passed focused rustfmt, Clippy -D warnings and all-target tests for prw-remote-transport, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+          DEFERRED
+          Phase 141 owns ICE/STUN/TURN traversal. Phase 142 owns relay provider/service. Phase 143 owns authenticated capability bridging and specialized file/terminal/forwarding stream schemas.
+
+          PRODUCTION BOUNDARY
+          No PowerCode or other production UDP listener, transport key/certificate, Agent service, firewall/NAT/router/TUN/TAP/route, DNS state, ICE/STUN/TURN production traffic, relay deployment or Android/Desktop distribution state was created or mutated.
+
+          FINAL CLASSIFICATION
+          PHASE_140_DONE / DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_VALIDATED / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_141
+          EOF
+          git diff --check
+
+      - name: Commit validated graph/fixes/report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock \
+            crates/prw-remote-transport/src/lib.rs \
+            crates/prw-remote-transport/tests/loopback.rs \
+            logs/audits/phase-140-disposable-encrypted-remote-transport/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt
+          git diff --cached --check
+          git commit -m 'phase 140: validate disposable encrypted remote transport'
+          git push origin HEAD:main
+          echo 'phase140_a01_materialization=pass'
