@@ -86,7 +86,7 @@ jobs:
                       ecn: None,
                       transport_protocol: TransportProtocol::UDP,
                   },
-                  message: Vec::<u8>::new().into(),
+                  message: (&b""[..]).into(),
               };
               let _ = agent.handle_read(inbound);
               agent.close()?;
