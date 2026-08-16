@@ -1,0 +1,293 @@
+Private Remote Workspace
+Phase 117 — Ubuntu Device-Identity Custody Capability Proof
+
+STATUS:
+PASS / REAL_HOST_POWERCODE_PROVEN / SYSTEMD_CREDS_USER_HOST_KEY_ENCRYPTION_PROVEN / NAME_BOUND_DIRECT_DECRYPT_PROVEN / AUTHENTICATED_TAMPER_REJECTION_PROVEN / USER_MANAGER_LOADCREDENTIALENCRYPTED_DELIVERY_PROVEN / NO_PERSISTENT_USER_CREDENTIAL_SECRET_CREATED / PRW_AGENT_UNCHANGED_ACTIVE_ENABLED / TEMPORARY_WORKFLOW_REMOVED / PERMANENT_CI_PASS / NO_PRW_PRIVATE_KEY_CREATED / PROVIDER_LOCK_DEFERRED_TO_PHASE_118
+
+AUDIT TYPE: REAL-HOST SECURITY CAPABILITY / CUSTODY PROVIDER READINESS
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting Phase 117 readiness head: b75f664a2a86ea045b4127ce5a88496f1e1bf5ed
+Validated cleanup head: c70e6760bb947ae935b6828c604458462f53fc25
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 117 was limited to a real-host capability proof using disposable non-secret dummy material. It did not create a PRW device-identity private key and did not modify the installed PRW Agent service or its package files.
+
+AUTHORITATIVE PREDECESSOR
+
+Phase 116 locked the private-key custody/signing architecture and required an Ubuntu capability proof before selecting a concrete headless custody provider. The relevant Phase 116 constraints are:
+- no plaintext persistent private key;
+- no private key in environment variables or command-line arguments;
+- no generic signing oracle;
+- headless/background signing must remain possible without an interactive desktop secret-store prompt;
+- provider selection must be supported by real-host evidence;
+- PRW device-identity key creation remains out of scope until a later implementation phase.
+
+A00 READINESS GATE
+
+Phase 117-A00 previously classified the real-host capability proof as BLOCKED_FAIL_SAFE because GitHub App runner inventory access returned HTTP 403 and the PowerCode self-hosted runner could not be independently proven online at that moment.
+
+The user subsequently started the already-registered temporary runner interactively. The successful Phase 117 job metadata then proved:
+- runner name: PowerCode;
+- runner group: Default;
+- labels: self-hosted, prw-host;
+- runner_id: 21;
+- user-scoped execution channel active.
+
+The A00 execution-channel blocker is therefore resolved by direct workflow execution evidence.
+
+HOST BASELINE
+
+Real host evidence from the final successful capability run:
+- hostname: PowerCode;
+- user: gersi365;
+- UID: 1000;
+- GID: 1000;
+- XDG_RUNTIME_DIR: /run/user/1000;
+- systemd-creds: /usr/bin/systemd-creds;
+- systemd-run: /usr/bin/systemd-run;
+- systemctl: /usr/bin/systemctl;
+- systemd: 259 (259.5-0ubuntu3.4);
+- systemd user manager: running.
+
+PRW AGENT PRECONDITION
+
+Before the successful capability probe:
+- /usr/lib/private-remote-workspace/prw-agent SHA-256:
+  8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+- /usr/lib/systemd/user/prw-agent.service SHA-256:
+  24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+- LoadState=loaded
+- ActiveState=active
+- SubState=running
+- FragmentPath=/usr/lib/systemd/user/prw-agent.service
+- UnitFileState=enabled
+
+No pre-existing user-home credential-secret file matched the bounded credential-related file probe.
+
+TEST MATERIAL
+
+The probe used only this disposable non-secret plaintext value:
+PRW-PHASE-117-DUMMY-CREDENTIAL-v1
+
+The plaintext existed only inside the GitHub runner temporary directory for the duration of the job and was deleted by cleanup.
+
+The successful run recorded the plaintext SHA-256:
+d6f260c6f9437a558a4b70ac658f9790f4dd6913b9814ca15e78fbd0946bb0b4
+
+No PRW private key, seed, signing key, account credential, token, password, enrollment secret, or production credential was used.
+
+SYSTEMD-CREDS ENCRYPTION PROOF
+
+The successful probe encrypted the dummy value using the user-scoped host-key mode:
+systemd-creds --user -H encrypt --name=phase117.dummy ...
+
+The final successful run produced a non-plaintext encrypted credential with SHA-256:
+cf4150271a22efabd6777094dfb8f431a92e3266d1fa8c0db8ad1fda921b66d5
+
+The encrypted value differed from the plaintext hash.
+
+The bounded before/after file inventory proved that this operation did not create a persistent user-home credential-secret file matching the probe criteria.
+
+DIRECT DECRYPT AND NAME BINDING
+
+The first capability attempt encrypted successfully but direct decryption failed with:
+Name in credential doesn't match expectations.
+
+That failure was caused by an incomplete probe command that omitted the encrypted credential's expected name during decryption. It was not a provider failure.
+
+The corrective used:
+systemd-creds --user --name=phase117.dummy decrypt ...
+
+The resulting plaintext matched the original disposable dummy bytes exactly.
+
+This establishes both:
+- local decrypt capability under the user scope;
+- fail-closed credential-name binding semantics at the command boundary.
+
+AUTHENTICATED TAMPER REJECTION
+
+The second capability attempt used truncation of the final byte as the tamper operation. The decrypt command still succeeded because the removed byte did not alter the authenticated payload in a meaningful way. This was classified as a defective test mutation, not an authentication failure.
+
+The final corrective flipped one bit in the middle of the encrypted credential bytes and proved the encrypted file hash changed.
+
+Direct decrypt of the modified credential returned non-zero:
+tampered_decrypt_rc=1
+
+Classification:
+PASS / AUTHENTICATED_TAMPER_REJECTION_PROVEN
+
+USER-MANAGER ENCRYPTED CREDENTIAL DELIVERY
+
+The final probe invoked a disposable transient user service through systemd-run with:
+LoadCredentialEncrypted=phase117.dummy:<temporary encrypted credential path>
+
+The transient service read only:
+$CREDENTIALS_DIRECTORY/phase117.dummy
+
+The delivered plaintext matched the original disposable dummy bytes exactly.
+
+Transient unit result:
+- result: success;
+- process exit status: 0/SUCCESS;
+- swap: 0B.
+
+Classification:
+PASS / USER_MANAGER_LOADCREDENTIALENCRYPTED_DELIVERY_PROVEN
+
+This is specifically important because historical systemd 256-era reports documented failures for encrypted credentials in user-manager services. The PowerCode host runs systemd 259 and the actual Phase 117 execution proves that the required user-service path works on this host baseline.
+
+PERSISTENCE / HOST-MUTATION REVIEW
+
+The probe used only runner-temporary files and a transient systemd user service.
+
+Before encryption, immediately after encryption, and after the full successful probe, the bounded user-home credential-related file inventory was unchanged and empty under the probe criteria.
+
+No persistent credential blob or user credential-secret file was left by the test.
+
+The temporary runner directory was removed at job completion.
+
+No mutation was performed to:
+- /usr/lib/private-remote-workspace/prw-agent;
+- /usr/lib/systemd/user/prw-agent.service;
+- prw-agent.service enablement;
+- prw-agent.service runtime state;
+- linger state;
+- networking;
+- firewall;
+- private DNS;
+- enrollment state;
+- database/persistence;
+- Android files;
+- production private-key material.
+
+PRW AGENT POSTCONDITION
+
+After the successful capability probe:
+- Agent executable SHA-256 remained:
+  8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+- systemd unit SHA-256 remained:
+  24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+- LoadState=loaded
+- ActiveState=active
+- SubState=running
+- FragmentPath=/usr/lib/systemd/user/prw-agent.service
+- UnitFileState=enabled
+
+The before/after service snapshot matched exactly.
+
+WORKFLOW HISTORY
+
+Temporary Phase 117 workflow:
+.github/workflows/phase-117-a01-ubuntu-custody-capability.yml
+
+Attempt 1:
+- run: 31932127214
+- job: 95128462980
+- result: failure
+- classification: probe syntax defect; decrypt omitted credential name binding
+- encryption itself succeeded
+
+Attempt 2:
+- run: 31932174184
+- job: 95128577791
+- result: failure
+- classification: defective tamper mutation; removing final byte did not alter authenticated payload
+- name-bound direct decrypt passed
+- no persistent credential file creation passed
+
+Attempt 3:
+- run: 31932201690
+- job: 95128645085
+- result: success
+- final capability proof PASS
+
+TEMPORARY WORKFLOW CLEANUP
+
+The temporary Phase 117 workflow was deleted after successful evidence capture.
+
+Cleanup commit:
+c70e6760bb947ae935b6828c604458462f53fc25
+
+Post-cleanup workflow inventory contains exactly one workflow:
+.github/workflows/phase-001-rust-validation.yml
+
+No self-hosted-runner dependency is introduced into the product or permanent CI architecture by Phase 117.
+
+NET REPOSITORY REVIEW
+
+Compare:
+base b75f664a2a86ea045b4127ce5a88496f1e1bf5ed
+head c70e6760bb947ae935b6828c604458462f53fc25
+
+Result:
+- ahead_by: 4 commits;
+- net changed files: 0.
+
+Therefore all temporary workflow source mutations were completely removed before Phase 117 closure.
+
+PERMANENT CI
+
+Permanent Rust validation run on cleanup head:
+- run: 31932225732
+- job: 95128713343
+- head: c70e6760bb947ae935b6828c604458462f53fc25
+- conclusion: success
+
+Successful steps included:
+- checkout;
+- exact toolchain record;
+- locked dependency graph verification;
+- cargo fmt validation;
+- Clippy;
+- workspace tests;
+- workspace build.
+
+SECURITY INTERPRETATION
+
+The real host has now proven the minimum operating primitives required for a headless Ubuntu custody design based on systemd encrypted credentials:
+- authenticated encryption/decryption of a user-scoped named credential;
+- cryptographic rejection after meaningful ciphertext tampering;
+- decryption/delivery by a transient systemd user service;
+- plaintext exposure only through the service credential directory during service activation/runtime;
+- no requirement for a desktop Secret Service prompt in the proven path;
+- no persistent user-home credential-secret side effect observed in the test.
+
+This proof does NOT by itself create or authorize a PRW production private key.
+
+It also does not yet lock whether production PRW encrypted credentials use host-key-only, TPM2-only, or a combined policy. The Phase 117 proof intentionally used host-key mode (-H) to isolate and prove the headless user-manager delivery mechanism without coupling the proof to TPM availability or PCR policy.
+
+PHASE 118 BOUNDARY
+
+Standing authorization permits Phase 118 to perform the Ubuntu production custody provider/policy lock without another approval request.
+
+Phase 118 may decide:
+- whether systemd encrypted credentials become the Ubuntu device-identity custody provider;
+- the exact encrypted-at-rest credential storage location/ownership/mode;
+- whether the initial supported policy is host-key-only, TPM-backed, or capability-negotiated;
+- credential name and service-delivery contract;
+- fail-closed behavior if decryption/delivery is unavailable;
+- backup/restore and machine-binding semantics;
+- how future signing code consumes the credential without exposing a generic signing API.
+
+Phase 118 must still not:
+- generate the production PRW device-identity private key;
+- persist a PRW private key;
+- change prw-agent.service;
+- implement production signing;
+- add enrollment networking;
+- change enrollment approval/authentication policy;
+- enable public networking or transport cryptography.
+
+FINAL CLASSIFICATION
+
+PASS / REAL_HOST_SYSTEMD259_USER_ENCRYPTED_CREDENTIAL_CAPABILITY_PROVEN / HOST_KEY_ENCRYPT_DECRYPT_PASS / NAME_BINDING_FAIL_CLOSED / AUTHENTICATED_TAMPER_REJECTION_PASS / USER_SERVICE_LOADCREDENTIALENCRYPTED_PASS / NO_PERSISTENT_USER_CREDENTIAL_SECRET_CREATED / PRW_AGENT_BYTE_AND_STATE_INVARIANTS_PRESERVED / TEMP_WORKFLOW_REMOVED / NET_TEMPORARY_MUTATION_ZERO / PERMANENT_CI_SUCCESS / NO_PRW_PRIVATE_KEY_CREATED / PHASE_118_AUTONOMOUSLY_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 117 Ubuntu custody capability report.
