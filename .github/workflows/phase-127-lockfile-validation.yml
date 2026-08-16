@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# Phase 127 A01: rerun after rustfmt corrective.
+# Phase 127 A02: rerun after Clippy documentation corrective.
 jobs:
   validate:
     runs-on: ubuntu-24.04
