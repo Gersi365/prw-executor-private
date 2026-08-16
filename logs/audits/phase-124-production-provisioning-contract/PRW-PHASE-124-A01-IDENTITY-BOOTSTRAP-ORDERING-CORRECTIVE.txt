@@ -1,0 +1,55 @@
+Private Remote Workspace
+Phase 124-A01 — Device-Identity Bootstrap Ordering Corrective
+
+STATUS:
+PASS / CONTRACT_ORDERING_STRENGTHENED / DEVICE_IDENTITY_LOAD_BEFORE_SIGNAL_AND_LISTENER_LIFECYCLE / NO_SOCKET_EXPOSURE_ON_CREDENTIAL_FAILURE / EXISTING_RUNTIME_LOOP_UNCHANGED / NO_HOST_MUTATION
+
+AUDIT TYPE: SECURITY CONTRACT CORRECTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Parent Phase 124 contract commit: 5a4ac35508a96591d8809e1e111bf8b119db4cae
+
+PURPOSE
+
+Source-level integration review found a safer and less invasive ordering than the initial Phase 124 wording.
+
+The existing Phase 098-102 signal-aware lifecycle helper owns signal-mask setup, XDG runtime-root validation, instance lock, Unix socket creation/listen state, runtime wake, workers, cleanup, and exact mask restoration as one already-validated composition.
+
+Injecting a new fallible device-identity hook after that lifecycle assembly would require modifying this mature runtime abstraction solely to allow an error before the first wait.
+
+The stronger fail-closed design is instead:
+1. construct the existing pure private-DNS snapshot;
+2. load the required systemd-delivered device-identity credential through the exact Phase 122 adapter;
+3. retain the resulting signer for the entire Agent runtime lifetime;
+4. only after successful identity load enter the unchanged Phase 098-102 signal/lifecycle assembly;
+5. only that existing runtime may then create the PRW runtime directory/socket and report local Ready state.
+
+SECURITY EFFECT
+
+On missing, malformed, insecure, wrongly owned, wrong-profile, or unavailable device-identity credential:
+- Agent startup returns a bounded `device_identity` failure;
+- no signal mask has been changed;
+- no instance lock is acquired;
+- no PRW runtime socket is bound;
+- no listener becomes reachable;
+- no worker starts;
+- no Ready snapshot can be served.
+
+This is stronger than creating lifecycle resources and then requesting shutdown.
+
+The existing runtime implementation remains unchanged, reducing regression risk to the Phase 095-109 validated lifecycle.
+
+SIGNAL-MASK EVIDENCE
+
+Because identity loading occurs before termination-signal setup, an identity startup failure reports:
+`signal_mask_restore=not_applicable`
+
+No signal mask requires restoration on that path.
+
+SCOPE
+
+This corrective changes only the Phase 124 ordering contract. It does not create a production private key, ciphertext, systemd drop-in, Agent binary deployment, service restart, enrollment, network listener, or host mutation.
+
+Phase 125 is authorized to implement this stronger ordering directly in the narrow `linux_bootstrap` facade while leaving the lower signal-aware runtime unchanged.
