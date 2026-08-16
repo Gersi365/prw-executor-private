@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Require current Phase 129 authority and register Phase 130 crate
+      - name: Require current Phase 129 authority and normalize Phase 130 source
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -24,6 +24,7 @@ jobs:
             logs/audits/phase-129-control-transport/PRW-PHASE-129-A05-RESIDUAL-CLEANUP.txt
           python3 - <<'PY'
           from pathlib import Path
+
           cargo = Path('Cargo.toml')
           text = cargo.read_text()
           member = '    "crates/prw-registry",\n'
@@ -32,6 +33,40 @@ jobs:
               if text.count(needle) != 1:
                   raise SystemExit('registry workspace insertion point mismatch')
               cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-registry/src/lib.rs')
+          text = source.read_text()
+          old = 'use std::{collections::HashMap, fmt};'
+          new = 'use std::{collections::{HashMap, hash_map::Entry}, fmt};'
+          if old in text:
+              text = text.replace(old, new)
+          elif 'hash_map::Entry' not in text:
+              raise SystemExit('registry Entry import shape mismatch')
+
+          old = '''        let key = (workspace_id.clone(), user_id.clone());\n        if self.memberships.contains_key(&key) {\n            return Err(RegistryError::MembershipAlreadyExists);\n        }\n        if self.memberships.len() >= MAX_MEMBERSHIPS {\n            return Err(RegistryError::MembershipCapacity);\n        }\n        let membership = WorkspaceMembership {\n            workspace_id,\n            user_id,\n            role,\n            lifecycle: MembershipLifecycle::Active,\n        };\n        self.memberships.insert(key.clone(), membership);\n        Ok(self\n            .memberships\n            .get(&key)\n            .expect("membership inserted under exact key"))'''
+          new = '''        let key = (workspace_id.clone(), user_id.clone());\n        let at_capacity = self.memberships.len() >= MAX_MEMBERSHIPS;\n        match self.memberships.entry(key) {\n            Entry::Occupied(_) => Err(RegistryError::MembershipAlreadyExists),\n            Entry::Vacant(entry) => {\n                if at_capacity {\n                    return Err(RegistryError::MembershipCapacity);\n                }\n                Ok(entry.insert(WorkspaceMembership {\n                    workspace_id,\n                    user_id,\n                    role,\n                    lifecycle: MembershipLifecycle::Active,\n                }))\n            }\n        }'''
+          if old in text:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('membership corrective shape mismatch')
+
+          old = '''        if self.devices.contains_key(&binding.device_id) {\n            return Err(RegistryError::DeviceAlreadyExists);\n        }\n        if self.devices.len() >= MAX_REGISTERED_DEVICES {\n            return Err(RegistryError::DeviceCapacity);\n        }\n        let device_id = binding.device_id.clone();\n        self.devices\n            .insert(device_id.clone(), RegisteredDevice { binding });\n        Ok(self\n            .devices\n            .get(&device_id)\n            .expect("device inserted under exact id"))'''
+          new = '''        let at_capacity = self.devices.len() >= MAX_REGISTERED_DEVICES;\n        let device_id = binding.device_id.clone();\n        match self.devices.entry(device_id) {\n            Entry::Occupied(_) => Err(RegistryError::DeviceAlreadyExists),\n            Entry::Vacant(entry) => {\n                if at_capacity {\n                    return Err(RegistryError::DeviceCapacity);\n                }\n                Ok(entry.insert(RegisteredDevice { binding }))\n            }\n        }'''
+          if old in text:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('device corrective shape mismatch')
+
+          old = '''            workspace.clone(),\n            user.clone(),\n            "device-1",\n            DeviceLifecycle::Enrolled,'''
+          new = '''            workspace,\n            user,\n            "device-1",\n            DeviceLifecycle::Enrolled,'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('test clone corrective count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('test clone corrected form missing')
+
+          source.write_text(text)
           PY
           cargo fmt --all
           cargo generate-lockfile
@@ -89,10 +124,10 @@ jobs:
           crates/prw-registry
 
           SECURITY OUTCOME
-          Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities.
+          Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities. Insertions use occupied/vacant entry handling rather than post-insert panic assumptions.
 
           VALIDATION
-          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. The original Phase 130 run 31941931216 failed only at an obsolete Phase 129 audit-path prerequisite before any registry validation ran; this run revalidated against the current authoritative Phase 129 A05 evidence.
+          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 reached source and exposed only two post-insert panic lint sites plus two redundant test clones; this run corrected those without weakening registry semantics.
 
           PRODUCTION BOUNDARY
           No production registry was populated. No database, account authentication, capability grant, PowerCode runtime state, or network state was mutated.
