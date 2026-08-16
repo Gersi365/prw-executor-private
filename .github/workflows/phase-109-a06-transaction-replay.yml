@@ -1,0 +1,101 @@
+name: Phase 109 A06 Transaction Replay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-109-a06-transaction-replay.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Replay install transaction in disposable user-owned tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          stage='/home/gersi365/.local/state/private-remote-workspace/phase109/staging/8d283ec53bd37233a929fb720a189748dc7f992c'
+          root="$RUNNER_TEMP/prw-phase109-a06-replay"
+          dir="$root/usr/lib/private-remote-workspace"
+          agent="$dir/prw-agent"
+          unit_parent="$root/usr/lib/systemd/user"
+          unit="$unit_parent/prw-agent.service"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          rm -rf -- "$root"
+          mkdir -p -- "$unit_parent"
+          chmod 0755 "$root" "$root/usr" "$root/usr/lib" "$root/usr/lib/systemd" "$unit_parent"
+
+          tmp_agent="$dir/.prw-agent.phase109.$$.tmp"
+          tmp_unit="$unit_parent/.prw-agent.service.phase109.$$.tmp"
+          created_dir=0
+          installed_agent=0
+          installed_unit=0
+
+          rollback() {
+            rc=$?
+            trap - ERR INT TERM
+            rm -f -- "$tmp_agent" "$tmp_unit" || true
+            if (( installed_unit )); then rm -f -- "$unit" || true; fi
+            if (( installed_agent )); then rm -f -- "$agent" || true; fi
+            if (( created_dir )); then rmdir -- "$dir" 2>/dev/null || true; fi
+            echo "replay_transaction=rolled_back rc=$rc" >&2
+            exit "$rc"
+          }
+          trap rollback ERR INT TERM
+
+          echo '=== A06 DISPOSABLE REPLAY ==='
+          test -d "$stage"
+          test ! -L "$stage"
+          test "$(stat -c '%u:%g:%a' "$stage")" = "1000:1000:700"
+          test "$(stat -c '%u:%g:%a' "$stage/prw-agent")" = "1000:1000:755"
+          test "$(stat -c '%u:%g:%a' "$stage/prw-agent.service")" = "1000:1000:644"
+          test "$(sha256sum "$stage/prw-agent" | cut -d' ' -f1)" = '8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          test "$(sha256sum "$stage/prw-agent.service" | cut -d' ' -f1)" = '24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+          test ! -e "$agent"
+          test ! -L "$agent"
+          test ! -e "$unit"
+          test ! -L "$unit"
+          test -d "$unit_parent"
+          test ! -L "$unit_parent"
+          test "$(stat -c '%u:%g:%a' "$unit_parent")" = "$uid:$gid:755"
+
+          if [[ -e "$dir" || -L "$dir" ]]; then
+            test -d "$dir"
+            test ! -L "$dir"
+            test "$(stat -c '%u:%g:%a' "$dir")" = "$uid:$gid:755"
+            test -z "$(find "$dir" -mindepth 1 -maxdepth 1 -print -quit)"
+          else
+            install -d -o "$uid" -g "$gid" -m 0755 "$dir"
+            created_dir=1
+          fi
+
+          test ! -e "$tmp_agent"
+          test ! -L "$tmp_agent"
+          test ! -e "$tmp_unit"
+          test ! -L "$tmp_unit"
+
+          install -o "$uid" -g "$gid" -m 0755 "$stage/prw-agent" "$tmp_agent"
+          install -o "$uid" -g "$gid" -m 0644 "$stage/prw-agent.service" "$tmp_unit"
+          test "$(sha256sum "$tmp_agent" | cut -d' ' -f1)" = '8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          test "$(sha256sum "$tmp_unit" | cut -d' ' -f1)" = '24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+
+          mv -T -- "$tmp_agent" "$agent"
+          installed_agent=1
+          mv -T -- "$tmp_unit" "$unit"
+          installed_unit=1
+
+          test "$(stat -c '%u:%g:%a' "$agent")" = "$uid:$gid:755"
+          test "$(stat -c '%u:%g:%a' "$unit")" = "$uid:$gid:644"
+          test "$(sha256sum "$agent" | cut -d' ' -f1)" = '8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          test "$(sha256sum "$unit" | cut -d' ' -f1)" = '24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+
+          trap - ERR INT TERM
+          echo 'replay_transaction=success'
+          stat -c '%n mode=%a uid=%u gid=%g' "$agent" "$unit"
+          rm -rf -- "$root"
+          echo 'replay_cleanup=success'
