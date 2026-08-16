@@ -1,0 +1,228 @@
+name: Phase 129 Authoritative Finalization
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-129-authoritative-finalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize exact Phase 129 source correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          lib = Path('crates/prw-control-transport/src/lib.rs')
+          text = lib.read_text()
+          if 'const fn validate_timeout(timeout: Duration) -> Result<(), ControlTransportError> {' not in text:
+              text, count = re.subn(
+                  r'(?m)^fn validate_timeout\(timeout: Duration\) -> Result<\(\), ControlTransportError> \{$',
+                  'const fn validate_timeout(timeout: Duration) -> Result<(), ControlTransportError> {',
+                  text,
+              )
+              if count != 1:
+                  raise SystemExit(f'validate_timeout replacement count={count}')
+              lib.write_text(text)
+
+          test = Path('crates/prw-control-transport/tests/tls_loopback.rs')
+          text = test.read_text()
+          if 'TcpStream' in text:
+              text, count = re.subn(
+                  r'(?m)^\s*net::\{TcpListener, TcpStream\},$',
+                  '    net::TcpListener,',
+                  text,
+              )
+              if count != 1:
+                  raise SystemExit(f'TcpStream import replacement count={count}')
+              test.write_text(text)
+          PY
+          cargo fmt --all
+          grep -Fq 'const fn validate_timeout(timeout: Duration) -> Result<(), ControlTransportError> {' crates/prw-control-transport/src/lib.rs
+          ! grep -Fq 'TcpStream' crates/prw-control-transport/tests/tls_loopback.rs
+
+      - name: Generate and fingerprint exact locked graph
+        id: lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          grep -A3 '^name = "rustls"$' Cargo.lock | grep -Fq 'version = "0.23.43"'
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase129_lock_sha256=$lock_sha"
+
+      - name: Focused frame and TLS validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-control-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-control-transport --all-targets
+          echo 'phase129_focused_validation=pass'
+
+      - name: Full workspace permanent-equivalent validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace
+          echo 'phase129_workspace_validation=pass'
+
+      - name: Write single authoritative Phase 129 report and cleanup temporary workflows
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.lock.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-129-host-control-transport'
+          report="$report_dir/PRW-PHASE-129-CONTROL-TRANSPORT-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 129 — Host Control-Plane Transport Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / OUTBOUND_TLS13_TRANSPORT_IMPLEMENTED / BOUNDED_FRAME_CODEC_IMPLEMENTED / DISPOSABLE_LOOPBACK_TLS_VALIDATION_PASS / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_NETWORK_NOT_ACTIVATED
+
+          AUDIT TYPE: SOURCE IMPLEMENTATION / DISPOSABLE TLS TRANSPORT VALIDATION / DEPENDENCY LOCK / WORKSPACE VALIDATION
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative finalization run: $GITHUB_RUN_ID
+
+          CONTRACT
+
+          contracts/HOST_CONTROL_PLANE_TRANSPORT_CONTRACT.md
+
+          Locked transport profile:
+          - outbound-only TCP/TLS client;
+          - explicit TCP SocketAddr separate from expected TLS ServerName;
+          - basic connectivity does not require DNS resolution;
+          - rustls exactly 0.23.43 with AWS-LC provider;
+          - TLS 1.3 only for the production client configuration;
+          - normal rustls root-certificate verification with explicit trust anchors;
+          - no dangerous custom verifier and no certificate bypass;
+          - no plaintext fallback;
+          - no TLS 1.2 fallback;
+          - no 0-RTT;
+          - no TLS client certificate in Phase 129;
+          - ALPN exactly prw-control/1;
+          - TLS transport identity does not imply PRW device/session authentication or capability authorization.
+
+          FRAME ENVELOPE
+
+          Exact header length: 24 bytes.
+          Magic: PRWC.
+          Protocol: 1.0.
+          Flags: zero.
+          Request identifier: non-zero u64.
+          Payload length: u32 with maximum 65536 bytes.
+          Initial kinds: authentication, command, response, event, heartbeat, error.
+          Header validation occurs before payload allocation.
+
+          SOURCE
+
+          Main crate:
+          crates/prw-control-transport
+
+          Disposable TLS fixtures:
+          crates/prw-control-transport/tests/fixtures/phase129-ca.pem
+          crates/prw-control-transport/tests/fixtures/phase129-server.pem
+          crates/prw-control-transport/tests/fixtures/phase129-server-key.pem
+
+          The fixture CA/private key are test-only material for control.test and are not production trust/key material.
+
+          DISPOSABLE TEST COVERAGE
+
+          Focused validation passed for the complete prw-control-transport target set, including:
+          - frame round trip;
+          - exact locked header layout;
+          - zero request-id rejection;
+          - oversize rejection;
+          - invalid magic/version/kind/flags rejection;
+          - header and payload truncation rejection;
+          - real loopback TLS 1.3 success with expected control.test name and prw-control/1 ALPN;
+          - wrong server name fail-closed;
+          - wrong ALPN fail-closed;
+          - TLS 1.2-only server fail-closed with no fallback;
+          - plaintext peer fail-closed with no fallback.
+
+          The TLS1.2 rustls feature exists only as a dev-dependency feature so the negative TLS1.2-only test server can be constructed. The production client explicitly configures only rustls::version::TLS13.
+
+          DEPENDENCY LOCK
+
+          Cargo.lock SHA-256: $LOCK_SHA
+          rustls locked version: 0.23.43
+          Crypto provider: rustls AWS-LC.
+
+          FULL WORKSPACE VALIDATION
+
+          The authoritative finalization run passed before repository promotion:
+          - cargo metadata --locked;
+          - rustfmt;
+          - full workspace/all-target Clippy with -D warnings;
+          - full workspace/all-target tests;
+          - full workspace build.
+
+          FAIL-SAFE HISTORY
+
+          An earlier diagnostic run 31941532214 / job 95151623102 successfully generated the dependency graph and then stopped safely at rustfmt before Clippy/tests. No production mutation occurred.
+
+          A bounded rustfmt corrective later changed only crates/prw-control-transport/src/lib.rs and was verified as formatter-only.
+
+          Subsequent Clippy diagnostics identified only the const-compatibility classification for validate_timeout() and an unused TcpStream integration-test import. The authoritative finalization normalizes those exact known correctives before validation.
+
+          PRODUCTION BOUNDARY
+
+          Phase 129 did NOT:
+          - provision a production control-plane endpoint or CA;
+          - add a public/inbound Agent listener;
+          - activate a PowerCode Internet connection;
+          - create production enrollment/session state;
+          - grant file/terminal/forwarding capabilities;
+          - mutate PowerCode service/network configuration.
+
+          Production control-plane activation remains causally dependent on the Phase 126 identity-aware Agent/root handoff, real device identity, real Phase 127 enrollment, Phase 128 authenticated-session state, and explicit production endpoint/trust material.
+
+          FINAL CLASSIFICATION
+
+          PHASE_129_SOURCE_AND_DISPOSABLE_TRANSPORT_FOUNDATION_DONE / NO_PRODUCTION_NETWORK_ACTIVATION / READY_FOR_PHASE_130_SOURCE_WORK
+          EOF
+
+          for path in \
+            .github/workflows/phase-129-control-transport-validation.yml \
+            .github/workflows/phase-129-a02-clippy-corrective.yml \
+            .github/workflows/phase-129-a02b-clippy-corrective.yml \
+            .github/workflows/phase-129-finalize-validation.yml \
+            .github/workflows/phase-129-authoritative-finalization.yml; do
+            if [[ -e "$path" ]]; then
+              git rm -f -- "$path"
+            fi
+          done
+
+          git diff --check
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add -A
+          git commit -m 'phase 129: finalize validated control transport'
+          git push origin HEAD:main
+          echo 'phase129_authoritative_finalization=pass'
