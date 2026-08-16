@@ -1,0 +1,161 @@
+name: Phase 131 A01 Bounded Clippy Finalization
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-131-a01-bounded-clippy-finalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect whether Phase 131 is already authoritative
+        id: state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report='logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt'
+          if [[ -f "$report" ]] && grep -Fq 'PHASE_131_SOURCE_AND_DISPOSABLE_FILE_FOUNDATION_DONE' "$report"; then
+            echo 'needed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'needed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Normalize workspace and known source import
+        if: steps.state.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-file-service",\n'
+          if member not in text:
+              needle = '    "crates/prw-files",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('workspace insertion point mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+          source = Path('crates/prw-file-service/src/lib.rs')
+          text = source.read_text()
+          line = 'use std::os::unix::fs::PermissionsExt;\n'
+          if line not in text:
+              needle = 'use rustix::{\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('PermissionsExt insertion point mismatch')
+              source.write_text(text.replace(needle, line + '\n' + needle))
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Apply only machine-applicable Clippy fixes inside prw-file-service
+        if: steps.state.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          before=$(mktemp)
+          git status --short > "$before"
+          cargo clippy --fix --locked -p prw-file-service --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-file-service/src/lib.rs) ;;
+              *) echo "unexpected_phase131_clippy_fix_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+
+      - name: Prove focused and full workspace gates
+        if: steps.state.outputs.needed == 'true'
+        id: lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-file-service --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-file-service --all-targets
+          echo 'phase131_a01_focused_validation=pass'
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase131_a01_workspace_validation=pass lock_sha=$lock_sha"
+
+      - name: Record authoritative report when needed
+        if: steps.state.outputs.needed == 'true'
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.lock.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-131-remote-file-management-foundation'
+          report="$report_dir/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 131 — Remote File Management Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / DESCRIPTOR_ANCHORED_ROOT_IMPLEMENTED / PATH_TRAVERSAL_FAIL_CLOSED / CREATE_ONLY_PRIMITIVES_VALIDATED / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REMOTE_FILES_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative finalization run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+
+          CONTRACT
+          contracts/REMOTE_FILE_MANAGEMENT_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-file-service
+
+          SECURITY OUTCOME
+          Filesystem authority is anchored to an owned root directory descriptor. Descendant resolution is descriptor-relative and rejects symbolic-link traversal. Strict relative UTF-8 paths reject traversal/ambiguous syntax. Reads, writes and listings are bounded. Writes are creation-only, existing destinations are not replaced, file mode is 0600 and directory mode is 0700. Disposable tests include root pathname replacement after descriptor open and symlink escape rejection.
+
+          VALIDATION
+          The authoritative run passed focused prw-file-service rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Machine-applicable Clippy fixes, if any, were constrained to crates/prw-file-service/src/lib.rs; workspace/lockfile changes were limited to registering the new local crate and regenerating the deterministic graph.
+
+          DEFERRED
+          Phase 132 owns resumable/chunked transfer, transfer IDs, content integrity, atomic final commit, interruption recovery and cleanup. Policy/remote transport integration remains deferred.
+
+          PRODUCTION BOUNDARY
+          No arbitrary PowerCode user file or production PRW state was mutated. No remote file capability is active in production.
+
+          FINAL CLASSIFICATION
+          PHASE_131_SOURCE_AND_DISPOSABLE_FILE_FOUNDATION_DONE / NO_PRODUCTION_REMOTE_FILE_SIDE_EFFECT / READY_FOR_PHASE_132_SOURCE_WORK
+          EOF
+
+      - name: Cleanup temporary Phase 131 workflows and commit validated result
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for path in \
+            .github/workflows/phase-131-file-foundation-finalization.yml \
+            .github/workflows/phase-131-authoritative-finalization.yml \
+            .github/workflows/phase-131-a01-bounded-clippy-finalization.yml; do
+            if [[ -e "$path" ]]; then
+              git rm -f -- "$path"
+            fi
+          done
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 0
+          fi
+          git diff --check
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add -A
+          git commit -m 'phase 131: finalize anchored file management foundation'
+          git push origin HEAD:main
+          echo 'phase131_a01_finalization=pass'
