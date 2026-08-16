@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# Phase 128 A03: rerun after redundant test-clone corrective.
+# Phase 128 A04: rerun after final redundant test-clone corrective.
 jobs:
   validate:
     runs-on: ubuntu-24.04
