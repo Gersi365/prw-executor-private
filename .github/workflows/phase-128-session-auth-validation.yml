@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# Phase 128 A02: rerun after const-compatibility Clippy corrective.
+# Phase 128 A03: rerun after redundant test-clone corrective.
 jobs:
   validate:
     runs-on: ubuntu-24.04
