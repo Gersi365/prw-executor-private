@@ -109,10 +109,8 @@ fn rejects_spki_with_trailing_bytes() {
 
     assert!(matches!(
         verify_device_identity_signature(&trailing, MESSAGE, &signature),
-        Err(
-            DeviceIdentityVerificationError::InvalidPublicKey
-                | DeviceIdentityVerificationError::NonCanonicalPublicKeyEncoding
-        )
+        Err(DeviceIdentityVerificationError::InvalidPublicKey
+            | DeviceIdentityVerificationError::NonCanonicalPublicKeyEncoding)
     ));
 }
 
