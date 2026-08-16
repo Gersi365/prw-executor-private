@@ -1,0 +1,226 @@
+Private Remote Workspace
+Phase 110 Cryptographic Provider Comparative Decision Preparation
+
+STATUS: DECISION_PACKAGE_PREPARED / AWS_LC_RS_VALIDATION_SPIKE_RECOMMENDED / NO_PROVIDER_LOCK_YET / NO_DEPENDENCY_MUTATION / NO_PRIVATE_KEY_HANDLING / NO_NETWORK_ACTIVATION
+AUDIT TYPE: SECURITY PROVIDER COMPARATIVE DECISION PREPARATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Starting authoritative head: 024b6f9b9e3f3d2ea8f36c873449c6574d9a7fc4
+Date: 2026-08-16
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Cargo.lock starting blob: 18db6137fc0f4f5bda22ad92425cff5edfb33c73
+
+AUTHORITATIVE PREDECESSOR
+
+Phase 005 cryptographic-provider readiness audit:
+- commit: d58b356de4d7119f34227681b4d0a1b95f822a31
+- report: logs/audits/phase-005-crypto-provider-readiness/PRW-PHASE-005-CRYPTO-PROVIDER-READINESS.txt
+- classification: NOT_READY_FOR_PROVIDER_LOCK / CONTINUE_WITH_PROVIDER_NEUTRAL_WORK
+
+Phase 005 deliberately refused to select a provider without a broader comparative review. Provider-neutral Agent work was allowed to continue. That work has now reached a materially different boundary: the production-local Agent is installed, enabled, active, and independently proven Ready over local authenticated Unix IPC. Before real proof-of-possession, enrollment authentication, or device-identity trust can be implemented, the deferred provider question must be reopened explicitly.
+
+LOCKED DEVICE-IDENTITY CONTRACT
+
+The existing Phase 003/004 contract is unchanged:
+- algorithm: ECDSA over NIST P-256 with SHA-256;
+- public-key representation: DER X.509 SubjectPublicKeyInfo;
+- SPKI algorithm identifier: id-ecPublicKey;
+- named curve: secp256r1 / NIST P-256;
+- signature representation: DER RFC 3279 ECDSA-Sig-Value;
+- user identity, device identity, and transport identity remain distinct;
+- transport-key rotation must not require replacement of device identity;
+- private device-identity keys remain on-device whenever technically possible;
+- control-plane identity contracts contain public identity material only.
+
+The existing control-plane domain types already include strongly typed WorkspaceId, UserId, DeviceId, EnrollmentId, DeviceLifecycle, EnrollmentRequest, EnrollmentState, DeviceRevocation, and transport-neutral enrollment/revocation actions. They still do not authorize a cryptographic provider, private-key backend, proof-of-possession protocol, account authentication implementation, database, HTTP/RPC listener, deployment, or public networking.
+
+DECISION CRITERIA
+
+A preferred Phase 111 validation candidate must be evaluated against all of the following:
+1. exact ECDSA P-256 / SHA-256 support;
+2. exact DER ECDSA-Sig-Value signature interoperability;
+3. strict acceptance and validation of the locked DER SubjectPublicKeyInfo profile;
+4. rejection of malformed DER, wrong algorithm identifiers, wrong curves, and invalid EC points;
+5. maintained security posture and credible assurance evidence;
+6. compatibility with Rust/Cargo 1.97.1;
+7. Ubuntu x86_64 support;
+8. viable Android build/integration path without requiring Android identity private-key export;
+9. deterministic/pinnable dependency graph suitable for PRW audit requirements;
+10. bounded build/runtime deployment implications;
+11. no requirement to reuse device-identity keys as transport keys;
+12. compatibility with the workspace-level unsafe_code = "forbid" policy at PRW source boundaries.
+
+CANDIDATE 1: AWS-LC / aws-lc-rs
+
+Current reviewed release:
+- aws-lc-rs v1.18.0, published 2026-08-07.
+
+Relevant primary-source findings:
+- aws-lc-rs invokes AWS-LC through generated FFI crates and presents a ring-compatible high-level Rust API.
+- AWS-LC is maintained by the AWS Cryptography team and is tested on Linux x86-64 and Android aarch64 among its actively tested platforms.
+- AWS-LC documents positive/negative tests, fuzzing, multiple sanitizers, Valgrind, and formal-verification work in its CI/security process.
+- AWS-LC documents use of formally verified s2n-bignum P-256 routines on x86_64 and aarch64 for selected operations.
+- aws-lc-rs exposes ECDSA P-256/SHA-256 signing and verification variants whose ASN.1 signature form is DER ECDSA-Sig-Value, matching the locked PRW signature representation.
+- the current EC public-key parser first attempts an RFC 5280 public-key parse for an EC key and then falls back to a SEC1 point parse, followed by EC-key validation. This is promising for PRW's SPKI requirement, but source inspection alone is not accepted as proof of exact Phase 004 interoperability.
+- aws-lc-rs v1.18.0 changed its optional FIPS path to AWS-LC-FIPS 4.x; the release notes state that the 4.x module completed accredited-lab testing and was submitted to NIST. PRW currently has no FIPS-compliance requirement, so the first validation spike should not enable the FIPS feature.
+
+Strengths for PRW:
+- strongest current combination of exact ECDSA signature-format fit, promising SPKI parser path, maintained cross-platform support, security engineering evidence, and controlled bundled-provider deployment;
+- does not require Android identity signing keys to leave Android Keystore in a later platform-backed signing design;
+- Rust 1.97.1 is above the project's currently documented minimum compiler requirements.
+
+Costs/risks to validate:
+- native C/assembly plus FFI increases build and supply-chain footprint compared with a pure-Rust provider;
+- the PRW workspace forbids unsafe code in its own crates, but the provider's internal FFI/native implementation is necessarily outside that source-level guarantee;
+- exact SPKI rejection semantics must be empirically tested rather than inferred from internal parser names;
+- Android cross-build mechanics and binary-size impact must be measured in PRW's actual build environment.
+
+Classification:
+PREFERRED CANDIDATE FOR PHASE 111 VALIDATION SPIKE.
+NOT LOCKED AS THE PRW PROVIDER BY PHASE 110.
+
+CANDIDATE 2: RustCrypto p256
+
+Current primary-source review confirms:
+- pure-Rust NIST P-256 implementation;
+- ECDSA support;
+- PKCS#8/SPKI decode/encode support;
+- Rust compiler requirement compatible with PRW 1.97.1.
+
+However, the current upstream README still contains the material Phase 005 warning:
+- the elliptic-curve arithmetic has never been independently audited;
+- generated assembly has not been thoroughly assessed for constant-time behavior on common CPUs.
+
+This means the principal Phase 005 assurance concern remains unresolved as of this Phase 110 review.
+
+Classification:
+TECHNICALLY ATTRACTIVE / NOT PREFERRED UNDER CURRENT PRW AUDIT STANDARD.
+NO CLAIM IS MADE THAT p256 IS INSECURE.
+
+CANDIDATE 3: ring
+
+Current source review confirms:
+- P-256 / SHA-256 ECDSA support;
+- ASN.1 DER ECDSA signatures;
+- active compiler baseline compatible with PRW 1.97.1.
+
+Its public ECDSA verification contract is centered on an uncompressed SEC1 public point rather than the PRW control-plane's locked DER SubjectPublicKeyInfo representation. PRW would therefore need a separate strict SPKI parsing/validation adapter before invoking the verifier, increasing security-sensitive composition surface.
+
+Classification:
+ELIGIBLE / NOT PREFERRED FOR THE FIRST PRW VALIDATION SPIKE DUE TO SPKI ADAPTER COMPLEXITY.
+
+CANDIDATE 4: OpenSSL
+
+Current upstream documentation provides mature EVP public-key validation APIs. The OpenSSL documentation explicitly distinguishes full public-key validation from a quick variant and notes that the FIPS provider applies SP800-56A/SP800-56B validation rules, while the default provider can retain less restrictive checks for some key types for compatibility.
+
+OpenSSL is a credible reference/fallback because it naturally operates in ASN.1/X.509/EVP ecosystems. However, selecting it for PRW would also require an explicit policy for system versus vendored OpenSSL, dynamic versus static linking, Ubuntu package/version lifecycle, Android provider/build strategy, and exact provider configuration. That broadens the deployment trust boundary before PRW has even validated its first proof-of-possession path.
+
+Classification:
+CREDIBLE FALLBACK / NOT PREFERRED FOR THE FIRST PRW VALIDATION SPIKE.
+
+COMPARATIVE DECISION
+
+Phase 110 does not select a production cryptographic provider.
+
+It selects only the next evidence-producing experiment:
+
+AWS-LC / aws-lc-rs is the preferred candidate for a narrowly scoped Phase 111 compatibility and security-boundary validation spike.
+
+This recommendation supersedes no Phase 003/004 contract and does not weaken the Phase 005 audit standard. It is specifically designed to produce the evidence that Phase 005 said was missing.
+
+PHASE 111 REQUIRED PROOFS BEFORE ANY PROVIDER LOCK
+
+A Phase 111 implementation/validation sequence must, at minimum, prove all of the following in an isolated, reviewable source boundary:
+
+A. Dependency and build boundary
+- pin an explicit aws-lc-rs version rather than an unbounded range;
+- capture and review the full Cargo.lock mutation;
+- preserve Rust/Cargo 1.97.1;
+- preserve PRW workspace unsafe_code = "forbid";
+- validate fmt, Clippy -D warnings, all tests, and all builds;
+- prove Ubuntu x86_64 build viability;
+- separately prove the intended Android target/build strategy before Android identity integration;
+- record build-time and binary-size impact.
+
+B. Public-key profile validation
+- accept a known-valid DER SubjectPublicKeyInfo P-256 public key using id-ecPublicKey + secp256r1;
+- reject malformed DER;
+- reject trailing or structurally invalid encoding when the selected API requires exact DER consumption;
+- reject wrong public-key algorithm OID;
+- reject wrong named-curve OID;
+- reject invalid or off-curve EC points;
+- fail closed on unsupported identity-algorithm/encoding combinations.
+
+C. Signature profile validation
+- verify a known-valid ECDSA P-256 / SHA-256 signature encoded as DER ECDSA-Sig-Value;
+- reject a modified message;
+- reject a modified signature;
+- reject malformed signature DER;
+- reject wrong algorithm/profile use;
+- preserve explicit PRW algorithm and encoding identifiers at the domain boundary.
+
+D. Key custody boundary
+- do not add production private-key persistence;
+- do not upload private identity material;
+- do not force Android private-key export;
+- do not reuse device-identity keys as transport keys;
+- any test signing key must be disposable test material only.
+
+E. Scope exclusions
+Phase 111 provider validation must not activate:
+- real enrollment approval/authentication;
+- proof-of-possession wire protocol beyond what is strictly needed for local deterministic test vectors;
+- account authentication;
+- control-plane HTTP/RPC listener;
+- database/persistence;
+- public networking;
+- STUN/ICE/TURN;
+- TUN/private addressing;
+- relay;
+- terminal/SSH/file-transfer activation;
+- DNS mutation;
+- privileged helper;
+- systemd/host deployment mutation.
+
+FIPS POSITION
+
+No FIPS requirement is introduced by Phase 110.
+
+The first Phase 111 spike should use the normal non-FIPS aws-lc-rs path unless a separate compliance requirement is explicitly introduced. FIPS mode, certificate applicability, validated operating environment, and compliance claims are a separate future decision and must not be inferred merely from use of AWS-LC-related code.
+
+MUTATION REVIEW
+
+Phase 110 is decision/audit work only.
+
+Authorized Phase 110 repository mutation:
+- this single authoritative audit report.
+
+Phase 110 does NOT change:
+- Cargo.toml;
+- Cargo.lock;
+- any Rust source file;
+- any Android source/build file;
+- any service unit;
+- any installed host file;
+- any user-manager/systemd state;
+- any private key;
+- any network listener;
+- any DNS/TUN/relay configuration;
+- any deployment state.
+
+NEXT GATE
+
+A new explicit approval is required before Phase 111 introduces aws-lc-rs or any other cryptographic dependency, changes Cargo.lock, or adds cryptographic parsing/verification source.
+
+Recommended next authorization scope:
+"Approve Phase 111 aws-lc-rs compatibility/security-boundary validation spike, limited to pinned dependency integration, exact PRW P-256 SPKI/DER verification test vectors, Ubuntu build validation, Android build-strategy proof, dependency/size review, and no production private-key, enrollment, networking, persistence, or deployment activation."
+
+FINAL CLASSIFICATION
+
+DECISION_PACKAGE_PREPARED / AWS_LC_RS_VALIDATION_SPIKE_RECOMMENDED / PROVIDER_NOT_LOCKED / PHASE_111_APPROVAL_REQUIRED / PHASE_109_ACTIVATED_AGENT_UNCHANGED / NO_DEPENDENCY_MUTATION / NO_PRIVATE_KEY_HANDLING / NO_NETWORK_ACTIVATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 110 cryptographic-provider comparative decision report.
