@@ -1,0 +1,55 @@
+Private Remote Workspace
+Phase 109 — Real-Host Activation
+A04 Privileged Install Preflight
+
+STATUS
+PASS / READY_FOR_INTERACTIVE_SUDO_INSTALL / NO_PRIVILEGED_SYSTEM_MUTATION_YET
+
+WORKFLOW EVIDENCE
+Workflow run: 31927070543
+Runner: PowerCode
+Runner labels: self-hosted, prw-host
+Result: PASS
+
+FIXED STAGING PAYLOAD
+Path:
+/home/gersi365/.local/state/private-remote-workspace/phase109/staging/8d283ec53bd37233a929fb720a189748dc7f992c
+
+Payload SHA-256:
+8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf  prw-agent
+24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909  prw-agent.service
+
+Staging state revalidated immediately before privileged-install handoff:
+- staging directory: mode 0700 uid 1000 gid 1000
+- prw-agent: mode 0755 uid 1000 gid 1000
+- prw-agent.service: mode 0644 uid 1000 gid 1000
+- both payload hashes matched the A03 checkpoint
+
+DESTINATION PREFLIGHT
+- /usr/lib/private-remote-workspace/prw-agent: absent
+- /usr/lib/systemd/user/prw-agent.service: absent
+- /usr/lib/private-remote-workspace parent: absent
+- /usr/lib/systemd/user: present, mode 0755, uid 0, gid 0, directory
+
+USER MANAGER / LINGER READBACK
+- RuntimePath=/run/user/1000
+- State=active
+- Linger=yes
+- prw-agent.service LoadState=not-found
+- ActiveState=inactive
+- SubState=dead
+
+OWNERSHIP RULE
+Linger=yes predates PRW and remains outside PRW rollback ownership.
+
+PRIVILEGE BOUNDARY
+Non-interactive sudo is intentionally unavailable to the GitHub runner. No sudoers mutation will be introduced and the runner will not be run as root.
+
+The next action is a one-time interactive sudo fresh-install transaction initiated by the user from a separate authenticated terminal. That transaction is restricted to:
+- creating /usr/lib/private-remote-workspace if still absent;
+- installing the exact staged prw-agent payload as root:root mode 0755;
+- installing the exact staged prw-agent.service payload as root:root mode 0644;
+- verifying exact post-install SHA-256, ownership, and modes;
+- rolling back newly installed files/directory on failure.
+
+The transaction must not call systemctl, loginctl, enable/start, daemon-reload, change linger, modify sudoers, or activate networking.
