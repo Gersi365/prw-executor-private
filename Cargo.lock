@@ -176,6 +176,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-device-identity-custody"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-device-identity-signer",
+ "rustix",
+ "zeroize",
+]
+
+[[package]]
 name = "prw-device-identity-signer"
 version = "0.1.0"
 dependencies = [
