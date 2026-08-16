@@ -1,0 +1,43 @@
+name: Phase 109 A02 Host Privilege Preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-109-a02-host-privilege-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  privilege-preflight:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Verify host privilege and toolchain readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== PRW PHASE 109 A02 READ-ONLY PRIVILEGE PREFLIGHT ==='
+          printf 'runner_name=%s\n' "${RUNNER_NAME:-<unset>}"
+          printf 'hostname='; hostname
+          printf 'user='; id -un
+          printf 'uid='; id -u
+          printf 'sudo_path='; command -v sudo || true
+          if sudo -n true; then
+            echo 'sudo_noninteractive=yes'
+          else
+            rc=$?
+            echo "sudo_noninteractive=no rc=$rc"
+          fi
+          printf 'git='; git --version || true
+          printf 'rustc='; rustc --version || true
+          printf 'cargo='; cargo --version || true
+          printf 'systemctl='; systemctl --version | head -n 1
+          printf 'loginctl='; loginctl --version | head -n 1
+          echo '--- service destinations ---'
+          test ! -e /usr/lib/private-remote-workspace/prw-agent && echo 'agent_destination=absent' || echo 'agent_destination=present'
+          test ! -e /usr/lib/systemd/user/prw-agent.service && echo 'unit_destination=absent' || echo 'unit_destination=present'
+          echo '--- linger readback ---'
+          loginctl show-user "$(id -un)" -p Linger -p RuntimePath -p State
+          echo '=== END PRIVILEGE PREFLIGHT ==='
