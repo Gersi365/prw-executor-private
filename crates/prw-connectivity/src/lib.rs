@@ -1,0 +1,571 @@
+//! Provider-neutral private-mesh connectivity foundation for Private Remote Workspace.
+//!
+//! Phase 135 models bounded candidates, provider observations and deterministic path
+//! selection. It performs no socket I/O, probing, NAT traversal, tunneling, routing, DNS,
+//! firewall mutation or production-network activation.
+
+use std::{fmt, net::{IpAddr, Ipv4Addr}};
+
+use prw_core::DeviceId;
+
+/// Maximum transport candidates accepted for one peer plan.
+pub const MAX_CONNECTIVITY_CANDIDATES: usize = 16;
+
+/// Stable plan-scoped candidate identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CandidateId(u64);
+
+impl CandidateId {
+    /// Creates a non-zero candidate identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectivityError::InvalidCandidateId`] when `value` is zero.
+    pub const fn new(value: u64) -> Result<Self, ConnectivityError> {
+        if value == 0 {
+            return Err(ConnectivityError::InvalidCandidateId);
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the raw plan-scoped identifier.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Opaque transport/network identity, distinct from logical device identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TransportIdentity([u8; 32]);
+
+impl TransportIdentity {
+    /// Creates an opaque non-zero 32-byte transport identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectivityError::InvalidTransportIdentity`] for the all-zero value.
+    pub fn new(bytes: [u8; 32]) -> Result<Self, ConnectivityError> {
+        if bytes.iter().all(|byte| *byte == 0) {
+            return Err(ConnectivityError::InvalidTransportIdentity);
+        }
+        Ok(Self(bytes))
+    }
+
+    /// Returns the opaque identity bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// Logical peer identity plus an independently rotatable transport identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerConnectivityIdentity {
+    device: DeviceId,
+    transport: TransportIdentity,
+}
+
+impl PeerConnectivityIdentity {
+    /// Creates a peer connectivity identity from already-validated components.
+    #[must_use]
+    pub const fn new(device: DeviceId, transport: TransportIdentity) -> Self {
+        Self { device, transport }
+    }
+
+    /// Returns the logical device identity.
+    #[must_use]
+    pub const fn device_id(&self) -> &DeviceId {
+        &self.device
+    }
+
+    /// Returns the distinct transport identity.
+    #[must_use]
+    pub const fn transport_identity(&self) -> TransportIdentity {
+        self.transport
+    }
+}
+
+/// Explicit IP endpoint used by a candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConnectivityEndpoint {
+    address: IpAddr,
+    port: u16,
+}
+
+impl ConnectivityEndpoint {
+    /// Creates an explicit endpoint with a non-zero port.
+    ///
+    /// # Errors
+    ///
+    /// Rejects zero port, unspecified addresses, multicast addresses and IPv4 limited
+    /// broadcast. No hostname or resolver input exists in this API.
+    pub fn new(address: IpAddr, port: u16) -> Result<Self, ConnectivityError> {
+        if port == 0 {
+            return Err(ConnectivityError::InvalidEndpointPort);
+        }
+        let invalid = match address {
+            IpAddr::V4(ipv4) => {
+                ipv4.is_unspecified() || ipv4.is_multicast() || ipv4 == Ipv4Addr::BROADCAST
+            }
+            IpAddr::V6(ipv6) => ipv6.is_unspecified() || ipv6.is_multicast(),
+        };
+        if invalid {
+            return Err(ConnectivityError::InvalidEndpointAddress);
+        }
+        Ok(Self { address, port })
+    }
+
+    /// Returns the explicit IP address.
+    #[must_use]
+    pub const fn address(self) -> IpAddr {
+        self.address
+    }
+
+    /// Returns the explicit non-zero port.
+    #[must_use]
+    pub const fn port(self) -> u16 {
+        self.port
+    }
+}
+
+/// Product-level connectivity path class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConnectivityPathKind {
+    /// Direct path expected to be local to the peer environment.
+    LocalDirect,
+    /// Direct path across Internet reachability.
+    InternetDirect,
+    /// Relay fallback candidate. Byte relaying is owned by Phase 136.
+    Relay,
+}
+
+impl ConnectivityPathKind {
+    const fn selection_rank(self) -> u8 {
+        match self {
+            Self::LocalDirect => 0,
+            Self::InternetDirect => 1,
+            Self::Relay => 2,
+        }
+    }
+}
+
+/// One validated connectivity candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConnectivityCandidate {
+    id: CandidateId,
+    kind: ConnectivityPathKind,
+    endpoint: ConnectivityEndpoint,
+}
+
+impl ConnectivityCandidate {
+    /// Creates a candidate from validated typed components.
+    #[must_use]
+    pub const fn new(
+        id: CandidateId,
+        kind: ConnectivityPathKind,
+        endpoint: ConnectivityEndpoint,
+    ) -> Self {
+        Self { id, kind, endpoint }
+    }
+
+    /// Returns the candidate identifier.
+    #[must_use]
+    pub const fn id(self) -> CandidateId {
+        self.id
+    }
+
+    /// Returns the path class.
+    #[must_use]
+    pub const fn kind(self) -> ConnectivityPathKind {
+        self.kind
+    }
+
+    /// Returns the explicit endpoint.
+    #[must_use]
+    pub const fn endpoint(self) -> ConnectivityEndpoint {
+        self.endpoint
+    }
+}
+
+/// Provider-owned reachability observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReachabilityObservation {
+    /// Candidate has not been probed or has no usable current observation.
+    Unknown,
+    /// Provider reports that the candidate is currently reachable.
+    Reachable,
+    /// Provider reports that the candidate is currently unreachable.
+    Unreachable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CandidateState {
+    candidate: ConnectivityCandidate,
+    observation: ReachabilityObservation,
+}
+
+/// Deterministic selector result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectedConnectivityPath {
+    /// One reachable candidate selected by the fixed product ordering.
+    Candidate(ConnectivityCandidate),
+    /// No candidate is currently observed reachable.
+    Offline,
+}
+
+/// Bounded peer candidate plan and observation state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerConnectivityPlan {
+    peer: PeerConnectivityIdentity,
+    candidates: Vec<CandidateState>,
+}
+
+impl PeerConnectivityPlan {
+    /// Creates a bounded plan. Initial observations are `Unknown`.
+    ///
+    /// # Errors
+    ///
+    /// Rejects more than 16 candidates, duplicate candidate identifiers and duplicate exact
+    /// `(path kind, endpoint)` candidates.
+    pub fn new(
+        peer: PeerConnectivityIdentity,
+        candidates: Vec<ConnectivityCandidate>,
+    ) -> Result<Self, ConnectivityError> {
+        if candidates.len() > MAX_CONNECTIVITY_CANDIDATES {
+            return Err(ConnectivityError::CandidateCapacity);
+        }
+
+        for (index, candidate) in candidates.iter().enumerate() {
+            for existing in &candidates[..index] {
+                if existing.id == candidate.id {
+                    return Err(ConnectivityError::DuplicateCandidateId);
+                }
+                if existing.kind == candidate.kind && existing.endpoint == candidate.endpoint {
+                    return Err(ConnectivityError::DuplicateCandidateEndpoint);
+                }
+            }
+        }
+
+        let candidates = candidates
+            .into_iter()
+            .map(|candidate| CandidateState {
+                candidate,
+                observation: ReachabilityObservation::Unknown,
+            })
+            .collect();
+        Ok(Self { peer, candidates })
+    }
+
+    /// Returns the logical/transport peer identity.
+    #[must_use]
+    pub const fn peer(&self) -> &PeerConnectivityIdentity {
+        &self.peer
+    }
+
+    /// Returns the number of configured candidates.
+    #[must_use]
+    pub fn candidate_count(&self) -> usize {
+        self.candidates.len()
+    }
+
+    /// Records a provider observation for an existing candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectivityError::UnknownCandidate`] when `id` is not in this plan.
+    pub fn set_observation(
+        &mut self,
+        id: CandidateId,
+        observation: ReachabilityObservation,
+    ) -> Result<(), ConnectivityError> {
+        let state = self
+            .candidates
+            .iter_mut()
+            .find(|state| state.candidate.id == id)
+            .ok_or(ConnectivityError::UnknownCandidate)?;
+        state.observation = observation;
+        Ok(())
+    }
+
+    /// Selects the best currently reachable candidate deterministically.
+    #[must_use]
+    pub fn selected_path(&self) -> SelectedConnectivityPath {
+        self.candidates
+            .iter()
+            .filter(|state| state.observation == ReachabilityObservation::Reachable)
+            .min_by_key(|state| {
+                (
+                    state.candidate.kind.selection_rank(),
+                    state.candidate.id.get(),
+                )
+            })
+            .map_or(SelectedConnectivityPath::Offline, |state| {
+                SelectedConnectivityPath::Candidate(state.candidate)
+            })
+    }
+}
+
+/// Stable Phase 135 validation failure classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConnectivityError {
+    /// Candidate identifier was zero.
+    InvalidCandidateId,
+    /// Transport identity was all zero.
+    InvalidTransportIdentity,
+    /// Endpoint port was zero.
+    InvalidEndpointPort,
+    /// Endpoint address was unspecified, multicast or IPv4 limited broadcast.
+    InvalidEndpointAddress,
+    /// Candidate count exceeded the plan bound.
+    CandidateCapacity,
+    /// Candidate identifier was duplicated.
+    DuplicateCandidateId,
+    /// Exact path-kind and endpoint tuple was duplicated.
+    DuplicateCandidateEndpoint,
+    /// Observation referenced a candidate not in the plan.
+    UnknownCandidate,
+}
+
+impl fmt::Display for ConnectivityError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidCandidateId => "candidate identifier must be non-zero",
+            Self::InvalidTransportIdentity => "transport identity must not be all zero",
+            Self::InvalidEndpointPort => "connectivity endpoint port must be non-zero",
+            Self::InvalidEndpointAddress => "connectivity endpoint address is not allowed",
+            Self::CandidateCapacity => "connectivity candidate capacity exceeded",
+            Self::DuplicateCandidateId => "connectivity candidate identifier is duplicated",
+            Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
+            Self::UnknownCandidate => "connectivity candidate is unknown",
+        })
+    }
+}
+
+impl std::error::Error for ConnectivityError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv6Addr};
+
+    fn transport(seed: u8) -> TransportIdentity {
+        TransportIdentity::new([seed; 32]).expect("non-zero transport identity")
+    }
+
+    fn peer() -> PeerConnectivityIdentity {
+        PeerConnectivityIdentity::new(
+            DeviceId::new("device-1").expect("device"),
+            transport(1),
+        )
+    }
+
+    fn id(value: u64) -> CandidateId {
+        CandidateId::new(value).expect("candidate id")
+    }
+
+    fn endpoint(port: u16) -> ConnectivityEndpoint {
+        ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port).expect("endpoint")
+    }
+
+    fn candidate(value: u64, kind: ConnectivityPathKind, port: u16) -> ConnectivityCandidate {
+        ConnectivityCandidate::new(id(value), kind, endpoint(port))
+    }
+
+    #[test]
+    fn identifiers_transport_and_endpoints_are_bounded() {
+        assert_eq!(CandidateId::new(0), Err(ConnectivityError::InvalidCandidateId));
+        assert_eq!(
+            TransportIdentity::new([0; 32]),
+            Err(ConnectivityError::InvalidTransportIdentity)
+        );
+        assert_eq!(
+            ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
+            Err(ConnectivityError::InvalidEndpointPort)
+        );
+        assert_eq!(
+            ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 1),
+            Err(ConnectivityError::InvalidEndpointAddress)
+        );
+        assert_eq!(
+            ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::BROADCAST), 1),
+            Err(ConnectivityError::InvalidEndpointAddress)
+        );
+        assert_eq!(
+            ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1)), 1),
+            Err(ConnectivityError::InvalidEndpointAddress)
+        );
+        assert_eq!(
+            ConnectivityEndpoint::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 1),
+            Err(ConnectivityError::InvalidEndpointAddress)
+        );
+    }
+
+    #[test]
+    fn candidate_capacity_is_enforced() {
+        let candidates = (1..=17)
+            .map(|value| candidate(value, ConnectivityPathKind::InternetDirect, 2000 + value as u16))
+            .collect();
+        assert_eq!(
+            PeerConnectivityPlan::new(peer(), candidates),
+            Err(ConnectivityError::CandidateCapacity)
+        );
+    }
+
+    #[test]
+    fn duplicate_ids_and_exact_kind_endpoints_are_rejected() {
+        let duplicate_id = vec![
+            candidate(1, ConnectivityPathKind::LocalDirect, 2000),
+            candidate(1, ConnectivityPathKind::InternetDirect, 2001),
+        ];
+        assert_eq!(
+            PeerConnectivityPlan::new(peer(), duplicate_id),
+            Err(ConnectivityError::DuplicateCandidateId)
+        );
+
+        let duplicate_endpoint = vec![
+            candidate(1, ConnectivityPathKind::InternetDirect, 2000),
+            candidate(2, ConnectivityPathKind::InternetDirect, 2000),
+        ];
+        assert_eq!(
+            PeerConnectivityPlan::new(peer(), duplicate_endpoint),
+            Err(ConnectivityError::DuplicateCandidateEndpoint)
+        );
+    }
+
+    #[test]
+    fn unknown_observation_target_fails_closed() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::LocalDirect, 2000)],
+        )
+        .expect("plan");
+        assert_eq!(
+            plan.set_observation(id(2), ReachabilityObservation::Reachable),
+            Err(ConnectivityError::UnknownCandidate)
+        );
+    }
+
+    #[test]
+    fn unknown_and_unreachable_candidates_produce_offline() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                candidate(1, ConnectivityPathKind::LocalDirect, 2000),
+                candidate(2, ConnectivityPathKind::Relay, 2001),
+            ],
+        )
+        .expect("plan");
+        plan.set_observation(id(2), ReachabilityObservation::Unreachable)
+            .expect("observation");
+        assert_eq!(plan.selected_path(), SelectedConnectivityPath::Offline);
+    }
+
+    #[test]
+    fn local_direct_beats_internet_direct_and_relay() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                candidate(3, ConnectivityPathKind::Relay, 2003),
+                candidate(2, ConnectivityPathKind::InternetDirect, 2002),
+                candidate(1, ConnectivityPathKind::LocalDirect, 2001),
+            ],
+        )
+        .expect("plan");
+        for value in 1..=3 {
+            plan.set_observation(id(value), ReachabilityObservation::Reachable)
+                .expect("observation");
+        }
+        assert_eq!(
+            plan.selected_path(),
+            SelectedConnectivityPath::Candidate(candidate(
+                1,
+                ConnectivityPathKind::LocalDirect,
+                2001
+            ))
+        );
+    }
+
+    #[test]
+    fn internet_direct_beats_relay_when_local_is_unavailable() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                candidate(1, ConnectivityPathKind::LocalDirect, 2001),
+                candidate(2, ConnectivityPathKind::InternetDirect, 2002),
+                candidate(3, ConnectivityPathKind::Relay, 2003),
+            ],
+        )
+        .expect("plan");
+        plan.set_observation(id(1), ReachabilityObservation::Unreachable)
+            .expect("local");
+        plan.set_observation(id(2), ReachabilityObservation::Reachable)
+            .expect("internet");
+        plan.set_observation(id(3), ReachabilityObservation::Reachable)
+            .expect("relay");
+        assert_eq!(
+            plan.selected_path(),
+            SelectedConnectivityPath::Candidate(candidate(
+                2,
+                ConnectivityPathKind::InternetDirect,
+                2002
+            ))
+        );
+    }
+
+    #[test]
+    fn relay_is_fallback_only_when_direct_candidates_are_not_reachable() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                candidate(1, ConnectivityPathKind::LocalDirect, 2001),
+                candidate(2, ConnectivityPathKind::InternetDirect, 2002),
+                candidate(3, ConnectivityPathKind::Relay, 2003),
+            ],
+        )
+        .expect("plan");
+        plan.set_observation(id(1), ReachabilityObservation::Unreachable)
+            .expect("local");
+        plan.set_observation(id(2), ReachabilityObservation::Unreachable)
+            .expect("internet");
+        plan.set_observation(id(3), ReachabilityObservation::Reachable)
+            .expect("relay");
+        assert_eq!(
+            plan.selected_path(),
+            SelectedConnectivityPath::Candidate(candidate(3, ConnectivityPathKind::Relay, 2003))
+        );
+    }
+
+    #[test]
+    fn selection_is_insertion_order_independent_and_same_kind_uses_lowest_id() {
+        let candidates_a = vec![
+            candidate(9, ConnectivityPathKind::InternetDirect, 2009),
+            candidate(4, ConnectivityPathKind::InternetDirect, 2004),
+        ];
+        let candidates_b = vec![candidates_a[1], candidates_a[0]];
+        let mut first = PeerConnectivityPlan::new(peer(), candidates_a).expect("first");
+        let mut second = PeerConnectivityPlan::new(peer(), candidates_b).expect("second");
+        for plan in [&mut first, &mut second] {
+            plan.set_observation(id(9), ReachabilityObservation::Reachable)
+                .expect("nine");
+            plan.set_observation(id(4), ReachabilityObservation::Reachable)
+                .expect("four");
+        }
+        let expected = SelectedConnectivityPath::Candidate(candidate(
+            4,
+            ConnectivityPathKind::InternetDirect,
+            2004,
+        ));
+        assert_eq!(first.selected_path(), expected);
+        assert_eq!(second.selected_path(), expected);
+    }
+
+    #[test]
+    fn logical_device_and_transport_identity_are_independent() {
+        let identity = peer();
+        assert_eq!(identity.device_id().as_str(), "device-1");
+        assert_eq!(identity.transport_identity(), transport(1));
+        assert_eq!(identity.transport_identity().as_bytes(), &[1; 32]);
+    }
+}
