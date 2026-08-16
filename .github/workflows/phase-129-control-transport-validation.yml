@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
 
+# Phase 129 A01: rerun after bounded rustfmt corrective.
 jobs:
   validate:
     runs-on: ubuntu-24.04
