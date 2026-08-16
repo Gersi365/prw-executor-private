@@ -44,7 +44,7 @@ fn stun_non_success_message_with_xor_mapping_fails_closed() {
 
     discovery
         .handle_datagram(
-            TraversalDatagram::new(local, server, invalid_response.raw)
+            &TraversalDatagram::new(local, server, invalid_response.raw)
                 .expect("bounded response datagram"),
             Instant::now(),
         )
