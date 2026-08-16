@@ -1,0 +1,343 @@
+Private Remote Workspace
+Phase 113 Production Device-Identity Verification Abstraction
+
+STATUS: PASS / AWS_LC_RS_1_18_0_PRODUCTION_DEVICE_IDENTITY_VERIFIER_IMPLEMENTED / MINIMAL_NON_FIPS_FEATURE_SET_VALIDATED / CANONICAL_SPKI_ENFORCED / ANDROID_AARCH64_PASS / AGENT_PROVIDER_EXCLUSION_PROVEN / NO_PRIVATE_KEY_APIS / NO_RUNTIME_INTEGRATION / NO_NETWORK_OR_HOST_MUTATION
+AUDIT TYPE: SECURITY-SENSITIVE IMPLEMENTATION AND VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 112 authoritative head: b3b7528395e94bf40806544b5b9d8ad199b29b3d
+Clean pre-report Phase 113 head: 86d09f21ea2b69dd72a4174a21143beedcfb7227
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Previous Cargo.lock blob: 21388522416d65d0e7d62205de2af5207ceaf779
+Validated Phase 113 Cargo.lock blob: 0cb5f43bd7516488fd04c8d6ead14270f8496c3e
+Validated Phase 113 Cargo.lock SHA-256: 1ff729abaf5b2135814777c9aa99bce3092efce493bc2a3af58fa7aac4e3e6be
+Validated Phase 113 Cargo.lock size: 5717 bytes
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 113 therefore proceeded autonomously within the Phase 112 locked role and exclusions.
+
+AUTHORITATIVE PREDECESSOR
+
+Phase 112 provider-lock report:
+logs/audits/phase-112-device-identity-provider-lock/PRW-PHASE-112-DEVICE-IDENTITY-PROVIDER-LOCK.txt
+commit: b3b7528395e94bf40806544b5b9d8ad199b29b3d
+classification: PASS / AWS_LC_RS_1_18_0_LOCKED_FOR_DEVICE_IDENTITY_PUBLIC_VERIFICATION_ONLY / GLOBAL_CRYPTO_PROVIDER_NOT_LOCKED / PRW_DEVICE_IDENTITY_CRATE_ARCHITECTURE_LOCKED
+
+Phase 112 locked AWS-LC through aws-lc-rs 1.18.0 only for device-identity public signature verification. Transport cryptography, signing, private-key custody, enrollment authentication, networking, persistence, and deployment remain outside that lock.
+
+PRODUCTION CRATE
+
+Phase 113 introduces:
+
+crates/prw-device-identity
+package: prw-device-identity
+
+The workspace root registers this crate explicitly.
+
+Final dependency direction:
+
+prw-device-identity -> prw-control-plane -> prw-core
+prw-agent -/-> prw-device-identity
+
+The crate's production dependency is exact-pinned and feature-minimized:
+
+aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
+
+This feature set was not assumed. It was compiled and validated directly in Phase 113.
+
+PROVIDER-NEUTRAL PUBLIC API
+
+The production public verification operation is:
+
+verify_device_identity_signature(public_identity, message, signature)
+    -> Result<(), DeviceIdentityVerificationError>
+
+Its public inputs are existing PRW-owned typed values:
+- PublicIdentityMaterial;
+- DeviceIdentitySignature;
+- caller-supplied message bytes.
+
+Its public error boundary is PRW-owned and bounded:
+- UnsupportedProfile;
+- InvalidPublicKey;
+- NonCanonicalPublicKeyEncoding;
+- InvalidSignature.
+
+No AWS-LC type appears in the public function signature or public error type. Provider-specific types remain implementation details inside prw-device-identity.
+
+PRIVATE-KEY BOUNDARY
+
+The production crate is verification-only.
+
+It exposes no production API for:
+- key generation;
+- private-key import;
+- private-key export;
+- signing;
+- persistent private-key storage;
+- Android Keystore extraction;
+- Ubuntu secret storage;
+- backup/recovery;
+- transport key creation.
+
+Disposable ECDSA signing keys exist only inside tests to produce verification vectors.
+
+LOCKED PROFILE IMPLEMENTATION
+
+The production verifier preserves the existing Phase 003/004 profile exactly:
+- ECDSA over NIST P-256 with SHA-256;
+- DER X.509 SubjectPublicKeyInfo public key;
+- id-ecPublicKey algorithm identifier;
+- secp256r1 / NIST P-256 named curve;
+- DER RFC 3279 ECDSA-Sig-Value signature.
+
+The production implementation deliberately narrows provider parser flexibility:
+1. validate explicit PRW algorithm and encoding identifiers;
+2. parse the public key with AWS-LC's P-256/SHA-256 verification profile;
+3. re-serialize the parsed public key as X.509 SubjectPublicKeyInfo DER;
+4. require exact byte-for-byte equality with the original PRW public-key bytes;
+5. only after canonical equality, verify the DER ECDSA signature.
+
+This prevents raw SEC1 or other alternate encodings accepted for provider convenience from becoming valid PRW protocol representations.
+
+PHASE 111 SPIKE RETIREMENT
+
+The prior Phase 111 provider validation harness was removed from:
+crates/prw-control-plane/tests/phase111_aws_lc_identity_profile.rs
+
+The aws-lc-rs dev-dependency was removed from:
+crates/prw-control-plane/Cargo.toml
+
+Therefore prw-control-plane is provider-neutral again. The validated semantics now live against the production public API of prw-device-identity.
+
+MINIMAL FEATURE AND LOCKFILE PROOF
+
+Phase 113 candidate-lock generation locked 23 packages to the latest versions compatible with Rust 1.97.1.
+
+The validated prw-device-identity feature tree proved:
+- aws-lc-rs 1.18.0;
+- features alloc + non-fips;
+- aws-lc-sys 0.44.0;
+- no untrusted package in the provider dependency tree.
+
+This is a measurable reduction from the Phase 111 validation configuration, which used upstream default behavior and carried untrusted through ring-compatible features.
+
+The final candidate Cargo.lock diff proved:
+- aws-lc-rs no longer depends on untrusted;
+- prw-control-plane no longer depends on aws-lc-rs;
+- new prw-device-identity depends on aws-lc-rs + prw-control-plane;
+- untrusted 0.7.1 is removed from the lockfile.
+
+PRODUCTION IDENTITY TESTS
+
+The production test suite contains 12 focused identity-profile cases. All 12 passed:
+1. valid P-256 SPKI + DER ECDSA signature verifies;
+2. raw SEC1 point is rejected as non-canonical;
+3. malformed SPKI DER is rejected;
+4. SPKI with trailing bytes is rejected;
+5. wrong public-key algorithm OID is rejected;
+6. wrong named-curve OID is rejected;
+7. invalid/off-curve EC point is rejected;
+8. P-384 public key is rejected under the P-256 profile;
+9. modified message is rejected;
+10. modified signature is rejected;
+11. malformed signature DER is rejected;
+12. fixed-width ECDSA signature falsely presented as DER is rejected.
+
+The focused production test command was also run independently after the full workspace test pass:
+
+cargo test --locked -p prw-device-identity --test locked_profile
+
+Result: 12 passed / 0 failed.
+
+TEMPORARY VALIDATION HISTORY
+
+Initial Phase 113 validation run:
+- run: 31929119582
+- job: 95121202547
+- result: FAIL only at rustfmt after dependency and boundary proof passed;
+- provider feature set and dependency-boundary checks had already passed;
+- failure was a mechanical rustfmt difference in one matches! expression;
+- no provider/API/cryptographic semantic failure occurred.
+
+Corrected authoritative Phase 113 validation run:
+- run: 31929161131
+- job: 95121300444
+- runner: Ubuntu 24.04.4 / ubuntu-24.04
+- result: PASS.
+
+Toolchain recorded by the successful validation run:
+- rustc 1.97.1 (8bab26f4f 2026-07-14);
+- cargo 1.97.1 (c980f4866 2026-06-30);
+- rustfmt 1.9.0-stable;
+- clippy 0.1.97.
+
+The successful validation run proved:
+- candidate lockfile generation PASS;
+- minimal provider feature boundary PASS;
+- Agent provider exclusion tree PASS;
+- cargo fmt --all -- --check PASS;
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings PASS;
+- cargo test --locked --workspace --all-targets PASS;
+- cargo build --locked --workspace --all-targets PASS;
+- all 350 prw-agent unit tests PASS;
+- Phase 102 standalone binary proof test PASS;
+- all existing control-plane/core/files/network/policy tests PASS;
+- all 12 production device-identity profile tests PASS;
+- focused production verifier test run PASS.
+
+ANDROID AARCH64 PRODUCTION PROOF
+
+The successful Phase 113 run added target:
+aarch64-linux-android
+under Rust 1.97.1 and used the hosted Android NDK LLVM toolchain:
+- aarch64-linux-android24-clang;
+- llvm-ar.
+
+The command:
+
+cargo check --locked -p prw-device-identity --tests --target aarch64-linux-android
+
+completed successfully.
+
+Classification:
+ANDROID_AARCH64_PRODUCTION_CRATE_BUILD_STRATEGY_PROVEN.
+
+This does not implement Android Keystore custody, signing, application integration, or an APK.
+
+AGENT PROVIDER EXCLUSION
+
+The successful Phase 113 run inspected:
+
+cargo tree -p prw-agent
+
+and failed the job if the tree contained any of:
+- aws-lc-rs;
+- aws-lc-sys;
+- prw-device-identity.
+
+Result:
+phase113_agent_provider_exclusion=PASS
+
+A release build of prw-agent then produced:
+- size: 555136 bytes;
+- provider-marker scan: PASS / no aws_lc, AWS-LC, or prw_device_identity marker.
+
+The 555136-byte result exactly matches the Phase 111 Agent release measurement, supporting the intended conclusion that introducing the production verifier crate did not pull AWS-LC into the Agent binary.
+
+FOOTPRINT EVIDENCE
+
+A minimal release consumer that actually calls the production verifier was compared with an empty Rust release binary in the same runner environment:
+- empty probe: 437912 bytes;
+- prw-device-identity consumer: 3111376 bytes;
+- delta: +2673464 bytes.
+
+This remains a material provider footprint cost. The architecture therefore continues to keep device-identity verification out of binaries that do not require it.
+
+ARTIFACT-BOUND LOCKFILE PROMOTION
+
+The successful Phase 113 run uploaded the exact generated Cargo.lock as artifact:
+- artifact name: phase113-cargo-lock;
+- artifact ID: 9258799398;
+- artifact archive size: 1751 bytes;
+- artifact archive digest: sha256:4ef6d5e303f9e32749317a815915343fc378cdf5b37d16672e09ffa2e5f74112.
+
+The extracted Cargo.lock was:
+- size: 5717 bytes;
+- SHA-256: 1ff729abaf5b2135814777c9aa99bce3092efce493bc2a3af58fa7aac4e3e6be.
+
+That exact artifact content was promoted into the repository in commit:
+f53c1d894bae2dbf14a8f251338631269055efda
+
+The resulting Cargo.lock Git blob is:
+0cb5f43bd7516488fd04c8d6ead14270f8496c3e
+
+TEMPORARY WORKFLOW CLEANUP
+
+The temporary Phase 113 workflow was removed after artifact-bound lockfile promotion.
+
+Cleanup commit:
+86d09f21ea2b69dd72a4174a21143beedcfb7227
+
+At the clean pre-report head, .github/workflows contains exactly:
+.github/workflows/phase-001-rust-validation.yml
+
+No temporary Phase 113 workflow remains.
+
+PERMANENT CI
+
+Permanent CI on the promoted-lockfile commit:
+- run: 31929337649
+- job: 95121708318
+- result: PASS.
+
+Permanent CI on the clean pre-report Phase 113 head:
+- run: 31929348253
+- job: 95121827963
+- head: 86d09f21ea2b69dd72a4174a21143beedcfb7227
+- result: PASS.
+
+The final clean-head permanent CI independently proved:
+- locked dependency metadata PASS;
+- rustfmt PASS;
+- Clippy with -D warnings PASS;
+- all workspace/all-target tests PASS;
+- all workspace/all-target builds PASS.
+
+NET MUTATION REVIEW
+
+Compare from the Phase 112 authoritative head b3b7528395e94bf40806544b5b9d8ad199b29b3d to the clean pre-report Phase 113 head 86d09f21ea2b69dd72a4174a21143beedcfb7227 shows only the intended production-verifier boundary:
+- Cargo.lock modified;
+- root Cargo.toml adds prw-device-identity to the workspace;
+- crates/prw-control-plane/Cargo.toml removes the Phase 111 aws-lc-rs dev-dependency;
+- crates/prw-device-identity/Cargo.toml added;
+- crates/prw-device-identity/src/lib.rs added;
+- the Phase 111 control-plane test harness is retired and its semantic test surface is represented by crates/prw-device-identity/tests/locked_profile.rs.
+
+GitHub compare classifies the old/new test paths as a rename with edits, which matches the intended migration from spike validation to production-API validation.
+
+No prw-agent source changed.
+No systemd/service source changed.
+No installed host file changed.
+No Agent process or user-manager state changed.
+No private key was persisted or deployed.
+No enrollment or proof-of-possession wire protocol was activated.
+No account authentication was implemented.
+No HTTP/RPC listener was added.
+No database or persistence was added.
+No public networking, STUN/ICE/TURN, TUN, relay, terminal, SSH, forwarding, file-transfer, DNS mutation, privileged helper, Android runtime, desktop runtime, or deployment activation occurred.
+
+FINAL SECURITY CLASSIFICATION
+
+AWS-LC through aws-lc-rs 1.18.0 is now implemented as the production provider behind a narrow, provider-neutral PRW abstraction for DEVICE IDENTITY PUBLIC SIGNATURE VERIFICATION ONLY.
+
+The provider is not globally selected for PRW cryptography.
+
+The production implementation preserves:
+- exact P-256/SHA-256 identity profile;
+- canonical SPKI enforcement;
+- DER ECDSA signature enforcement;
+- explicit PRW algorithm/encoding identifiers;
+- provider-owned implementation errors contained behind bounded PRW errors;
+- no production private-key API;
+- no Agent dependency;
+- no transport-key reuse;
+- no runtime/network/deployment activation.
+
+STANDING AUTHORIZATION AND NEXT WORK
+
+Standing authorization remains active. No new routine approval request is required.
+
+The next safe security sequence should define the proof-of-possession message semantics and enrollment trust-bootstrap contract before adding any real enrollment wire protocol or private-key signing implementation. That work must preserve device identity / transport identity separation and keep private-key custody platform-specific and non-exporting where possible.
+
+FINAL CLASSIFICATION
+
+PASS / AWS_LC_RS_1_18_0_PRODUCTION_DEVICE_IDENTITY_VERIFIER_IMPLEMENTED / MINIMAL_NON_FIPS_FEATURE_SET_VALIDATED / LOCKED_PRW_P256_SPKI_DER_PROFILE_ENFORCED / ANDROID_AARCH64_PASS / EXACT_LOCKFILE_ARTIFACT_PROMOTED / AGENT_PROVIDER_EXCLUSION_PROVEN / TEMP_WORKFLOW_REMOVED / PERMANENT_CI_PASS / VERIFICATION_ONLY / NO_PRIVATE_KEY_APIS / NO_RUNTIME_INTEGRATION / NO_NETWORK_OR_HOST_MUTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 113 implementation and validation report.
