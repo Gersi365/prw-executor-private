@@ -8,6 +8,7 @@
 use std::fmt;
 
 use aws_lc_rs::{
+    digest::{SHA256, digest},
     encoding::AsDer,
     rand::SystemRandom,
     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair},
@@ -145,6 +146,18 @@ impl UbuntuEnrollmentSigner {
     #[must_use]
     pub const fn public_identity(&self) -> &PublicIdentityMaterial {
         &self.public_identity
+    }
+
+    /// Returns SHA-256 over the exact canonical public `SubjectPublicKeyInfo` DER bytes.
+    ///
+    /// This fingerprint contains no private-key material and is suitable for bounded
+    /// activation evidence that compares provisioning-time and runtime identity.
+    #[must_use]
+    pub fn public_identity_sha256(&self) -> [u8; 32] {
+        let value = digest(&SHA256, self.public_identity.as_bytes());
+        let mut fingerprint = [0_u8; 32];
+        fingerprint.copy_from_slice(value.as_ref());
+        fingerprint
     }
 
     /// Signs exactly one typed PRW enrollment proof-of-possession challenge.
