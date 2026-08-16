@@ -13,10 +13,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!(
-                "prw-device-identity-provision event=failed kind={} exit=failure",
-                error
-            );
+            eprintln!("prw-device-identity-provision event=failed kind={error} exit=failure");
             ExitCode::FAILURE
         }
     }
