@@ -1,0 +1,219 @@
+name: Phase 145 A06 AGP JNI Source Wiring Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-a06-agp-jni-source-wiring-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  correct-validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A06 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          test -f .github/workflows/phase-145-a05-clippy-corrective.yml
+          grep -Fq 'sourceSets["main"].jniLibs.srcDir(generatedJniLibs)' .github/workflows/phase-145-android-client-foundation-validation.yml
+          grep -Fq 'Apply exact A05 Clippy correctives' .github/workflows/phase-145-a05-clippy-corrective.yml
+          echo phase145_a06_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 fmt --version
+          cargo +1.97.1 clippy --version
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase145_a06_toolchain=pass
+
+      - name: Reconstruct A05 validated native source candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def extract_run(source: str, step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          script = extract_run(source, 'Reuse authoritative A04 source construction', 'Apply exact A05 Clippy correctives')
+          script += '\n' + extract_run(source, 'Apply exact A05 Clippy correctives', 'Generate exact native graph')
+          Path('/tmp/phase145-a06-source.sh').write_text(script)
+          PY
+          bash /tmp/phase145-a06-source.sh
+          grep -Fq '#[must_use]' apps/android/native/src/lib.rs
+          grep -Fq 'pub const extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion' apps/android/native/src/lib.rs
+          echo phase145_a06_source=pass
+
+      - name: Apply exact AGP JNI source wiring corrective
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/android/app/build.gradle.kts')
+          text = path.read_text()
+          old = 'sourceSets["main"].jniLibs.srcDir(generatedJniLibs)'
+          new = 'sourceSets["main"].jniLibs.directories.add(generatedJniLibs.get().asFile)'
+          if text.count(old) != 1:
+              raise SystemExit('AGP JNI source wiring corrective boundary mismatch')
+          path.write_text(text.replace(old, new))
+          PY
+          grep -Fq 'sourceSets["main"].jniLibs.directories.add(generatedJniLibs.get().asFile)' apps/android/app/build.gradle.kts
+          ! grep -Fq 'android.sourceset.disallowProvider=false' apps/android/gradle.properties
+          grep -Fq 'dependsOn(buildPrwNative)' apps/android/app/build.gradle.kts
+          echo phase145_a06_agp_wiring=pass
+
+      - name: Reuse A05 native graph validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Generate exact native graph\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Validate native adapter host and Android targets\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-graph.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-graph.sh
+          echo phase145_a06_graph=pass
+
+      - name: Reuse A05 native host and Android target validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Validate native adapter host and Android targets\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Validate Android unit tests lint and APK\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-native.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-native.sh
+          echo phase145_a06_native=pass
+
+      - name: Reuse A05 Android unit lint and APK validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Validate Android unit tests lint and APK\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Prove Android security boundaries\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-android.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-android.sh
+          echo phase145_a06_android=pass
+
+      - name: Reuse A05 security boundary validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Prove Android security boundaries\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Revalidate root Rust workspace\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-security.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-security.sh
+          echo phase145_a06_security=pass
+
+      - name: Reuse A05 root workspace validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Revalidate root Rust workspace\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Materialize permanent Android CI and authoritative report\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-root.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-root.sh
+          echo phase145_a06_root=pass
+
+      - name: Materialize permanent Android CI and authoritative A06 report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          start = source.index('      - name: Materialize permanent Android CI and authoritative report\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Commit only validated Phase 145 state\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a06-finalize.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a06-finalize.sh
+          report=logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt')
+          text = path.read_text()
+          needle = 'A05 applies only those four lint findings, keeps -D warnings unchanged, and repeats every substantive gate.\n'
+          replacement = (
+              'A05 applied only those four lint findings and passed full native validation, then run 31959294810 stopped before Kotlin compilation because AGP 9.3 rejected a Provider instance in legacy JNI source-set wiring.\n'
+              'A06 replaces only that JNI source-directory registration with the AGP-supported directories mutable-set form using the resolved build directory, retains explicit preBuild dependency on buildPrwNative, and does not enable the disallowProvider compatibility escape hatch.\n'
+          )
+          if text.count(needle) != 1:
+              raise SystemExit('A06 report insertion boundary mismatch')
+          path.write_text(text.replace(needle, replacement))
+          PY
+          grep -Fq 'A06 replaces only that JNI source-directory registration' "$report"
+          echo phase145_a06_finalize=pass
+
+      - name: Commit only validated Phase 145 state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!apps/android/**/build'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add apps/android .github/workflows/android-validation.yml logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          git commit -m 'phase 145: validate Android client foundation'
+          git push origin HEAD:main
+          echo phase145_a06_materialization=pass
