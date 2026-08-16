@@ -1,0 +1,155 @@
+Private Remote Workspace
+Phase 109-A01 Real-Host Install Transaction Audit
+
+STATUS: INSTALLED_AND_VERIFIED_WITH_ROLLBACK_SIGNAL_ANOMALY / EXACT_PAYLOAD_PRESENT / ROOT_OWNED / SERVICE_DISABLED_INACTIVE / NO_DAEMON_RELOAD_YET / NO_ENABLE / NO_START / LINGER_PREEXISTING_YES
+AUDIT TYPE: REAL-HOST PRIVILEGED PACKAGE-FILE INSTALL / POSTCONDITION RECONCILIATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Target host: PowerCode
+Target user: gersi365
+Target UID/GID: 1000/1000
+
+APPROVAL
+
+The user previously approved the Phase 109 real-host activation sequence with the install, daemon-reload, enable/start, and linger-state transactions audited separately. This A01 report covers only the real package-file install transaction and its immediate reconciliation evidence.
+
+LOCKED DESTINATIONS
+
+- /usr/lib/private-remote-workspace/prw-agent
+- /usr/lib/systemd/user/prw-agent.service
+
+LOCKED PAYLOAD HASHES
+
+- prw-agent:
+  8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+- prw-agent.service:
+  24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+
+PRE-INSTALL EVIDENCE
+
+Phase 109 A04 final read-only install preflight proved immediately before the privileged operation:
+
+- host = PowerCode;
+- user = gersi365;
+- UID = 1000;
+- staging directory present, mode 0700, UID/GID 1000/1000;
+- staged prw-agent present, mode 0755, UID/GID 1000/1000, exact locked hash;
+- staged prw-agent.service present, mode 0644, UID/GID 1000/1000, exact locked hash;
+- /usr/lib/private-remote-workspace/prw-agent absent;
+- /usr/lib/systemd/user/prw-agent.service absent;
+- /usr/lib/private-remote-workspace parent absent;
+- /usr/lib/systemd/user present, root-owned, mode 0755;
+- prw-agent.service not found / inactive;
+- linger already yes before PRW mutation.
+
+PRIVILEGED MANUAL TRANSACTION RESULT
+
+The user executed the approved bounded sudo transaction from the verified staging path. The visible terminal tail reported:
+
+- prw-agent: OK
+- prw-agent.service: OK
+- phase109_install=rolled_back rc=1
+
+Because that terminal marker claimed rollback, the transaction was not accepted at face value and no daemon-reload, enablement, start, or linger mutation was performed at that point.
+
+MANDATORY POST-ROLLBACK READBACK
+
+GitHub Actions self-hosted runner PowerCode executed the read-only Phase 109 A05 diagnostic.
+
+Run:
+- 31927282938
+- job 95116709290
+- conclusion: success
+- runner: PowerCode
+
+A05 proved:
+
+1. The staging payload remained intact and both staged hashes passed SHA256SUMS validation.
+
+2. The real destination files were PRESENT despite the manual transaction's `rolled_back rc=1` marker.
+
+3. The installed agent state was exactly:
+
+- path: /usr/lib/private-remote-workspace/prw-agent
+- mode: 0755
+- UID/GID: 0/0
+- SHA-256: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+
+4. The installed unit state was exactly:
+
+- path: /usr/lib/systemd/user/prw-agent.service
+- mode: 0644
+- UID/GID: 0/0
+- SHA-256: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+
+5. The installed service remained inert:
+
+- LoadState=loaded
+- ActiveState=inactive
+- SubState=dead
+- UnitFileState=disabled
+
+6. Linger remained:
+
+- Linger=yes
+- this was the pre-existing state captured before PRW installation and was not created or changed by this transaction.
+
+ROLLBACK-SIGNAL ANOMALY
+
+The terminal marker `phase109_install=rolled_back rc=1` is inconsistent with the observed destination state. Therefore this audit MUST NOT claim that a successful real-host rollback occurred.
+
+The actual reconciled state is:
+
+- package files installed exactly as intended;
+- package files root-owned with locked modes;
+- hashes exactly match the staged payload;
+- service disabled and inactive;
+- no activation occurred;
+- rollback behavior for that specific privileged invocation is not proven.
+
+DISPOSABLE TRANSACTION REPLAY
+
+A separate non-privileged, disposable replay of the same install transaction state machine was executed under the self-hosted runner temporary directory.
+
+Run:
+- 31927342153
+- job 95116850521
+- runner: PowerCode
+
+Result:
+
+- replay_transaction=success
+- installed payload modes matched expectations in the disposable tree
+- replay_cleanup=success
+
+This proves the transaction logic can complete normally in an isolated user-owned tree, but it does not erase or reinterpret the real-host privileged rollback-signal anomaly.
+
+FAIL-SAFE DECISION
+
+The real installation postconditions are independently proven and the service remains disabled/inactive. Therefore the filesystem-install objective is materially satisfied, but the transaction is classified with an explicit rollback-signal anomaly rather than a clean transaction PASS.
+
+It is safe to proceed only to the separately audited user-manager daemon-reload transaction because:
+
+- the installed bytes are exact;
+- ownership and modes are exact;
+- no service has been enabled or started;
+- daemon-reload is reversible manager-state refresh and does not itself enable or start the service;
+- linger is pre-existing and remains untouched.
+
+No claim is made that the real-host privileged rollback path was successfully exercised.
+
+NO ACTIVATION CLAIMS
+
+This A01 audit does not authorize or claim completion of:
+
+- service enablement;
+- service start;
+- readiness success under systemd;
+- linger mutation;
+- public networking activation;
+- privileged rollback proof on the real host.
+
+CLASSIFICATION
+
+PHASE_109_A01_INSTALLED_AND_VERIFIED_WITH_ROLLBACK_SIGNAL_ANOMALY / EXACT_ROOT_OWNED_PAYLOAD_PRESENT / SERVICE_DISABLED_INACTIVE / NO_DAEMON_RELOAD_YET / NO_ENABLE / NO_START / LINGER_PREEXISTING_YES
