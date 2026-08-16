@@ -24,7 +24,7 @@ use prw_device_identity::{EnrollmentProofVerificationError, verify_enrollment_pr
 pub enum EnrollmentServiceError {
     /// The cryptographic provider could not generate a challenge nonce.
     ChallengeRandomness,
-    /// The requested challenge lifetime violated the locked PoP bounds.
+    /// The requested challenge lifetime violated the locked `PoP` bounds.
     InvalidChallengeLifetime,
     /// The enrollment identifier is already pending or completed.
     EnrollmentAlreadyExists,
