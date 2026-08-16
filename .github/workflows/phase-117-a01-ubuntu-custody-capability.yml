@@ -28,6 +28,7 @@ jobs:
           command -v systemd-creds
           command -v systemd-run
           command -v systemctl
+          command -v python3
           systemd-creds --version | head -n 1
           systemctl --version | head -n 1
           systemctl --user is-system-running
@@ -85,9 +86,19 @@ jobs:
           echo "direct_decrypt=pass"
 
           cp -- "$encrypted" "$tampered"
-          tampered_size=$(stat -c %s "$tampered")
-          test "$tampered_size" -gt 1
-          truncate -s $((tampered_size - 1)) "$tampered"
+          python3 - "$tampered" <<'PY'
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          data = bytearray(path.read_bytes())
+          if len(data) < 32:
+              raise SystemExit("encrypted credential unexpectedly short")
+          index = len(data) // 2
+          data[index] ^= 0x01
+          path.write_bytes(data)
+          PY
+          test "$(sha256sum "$tampered" | awk '{print $1}')" != "$encrypted_sha"
           set +e
           systemd-creds --user --name=phase117.dummy decrypt "$tampered" "$tampered_out" >/dev/null 2>&1
           tamper_rc=$?
