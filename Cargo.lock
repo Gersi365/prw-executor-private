@@ -172,6 +172,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "prw-control-plane",
+ "prw-core",
 ]
 
 [[package]]
