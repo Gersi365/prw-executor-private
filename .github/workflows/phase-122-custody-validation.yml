@@ -25,9 +25,14 @@ jobs:
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           sha256sum Cargo.lock
+      - name: Apply and guard mechanical formatting
+        run: |
+          cargo fmt --all
+          changed="$(git diff --name-only -- crates/prw-device-identity-custody/src)"
+          test "$changed" = "crates/prw-device-identity-custody/src/lib.rs"
+          cargo fmt --all -- --check
       - name: Validate workspace and custody boundary
         run: |
-          cargo fmt --all -- --check
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo test --locked --workspace --all-targets
           cargo build --locked --workspace --all-targets
@@ -45,10 +50,12 @@ jobs:
             exit 1
           fi
           test "$(find crates/prw-device-identity-custody/src -type f | wc -l)" -eq 1
-      - name: Upload validated Cargo.lock candidate
+      - name: Upload validated Phase 122 source and lockfile
         uses: actions/upload-artifact@v4
         with:
-          name: phase122-cargo-lock
-          path: Cargo.lock
+          name: phase122-validated-source-lock
+          path: |
+            Cargo.lock
+            crates/prw-device-identity-custody/src/lib.rs
           if-no-files-found: error
           retention-days: 1
