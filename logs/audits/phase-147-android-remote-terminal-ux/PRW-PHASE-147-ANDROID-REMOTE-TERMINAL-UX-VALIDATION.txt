@@ -2,13 +2,17 @@ Private Remote Workspace
 Phase 147 — Android Remote Terminal UX
 
 STATUS:
-PASS / ANDROID_TYPED_TERMINAL_UX / EXISTING_PRW_REMOTE_BRIDGE_CODEC_REUSED / NO_ARBITRARY_RUN_COMMAND_API / OPEN_CLOSE_AUTHORITY_NOT_FORGED / BOUNDED_TERMINAL_IO_AND_TRANSCRIPT / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_SIDE_EFFECT
+PASS / ANDROID_TYPED_TERMINAL_UX / EXISTING_PRW_REMOTE_BRIDGE_CODEC_REUSED / NO_ARBITRARY_RUN_COMMAND_API / OPEN_CLOSE_AUTHORITY_NOT_FORGED / BOUNDED_TERMINAL_IO_AND_TRANSCRIPT / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / PERMANENT_ANDROID_CI_PASS / NO_PRODUCTION_SIDE_EFFECT
 
 Repository: Gersi365/prw-executor-private
 Branch: main
 Date: 2026-08-16
 Validation source head: d4e07beb4ae2b18c845608020bb22a1a51b732db
 Authoritative validation run: 31969220908
+Materialized source commit: a16ba4542f52f04826768d299f5b13407b4832cf
+Permanent-CI trigger commit: 2072d06a7cde94e1b9522f84b62bd4ca83a8d1e4
+Permanent Android validation run: 31969781155 — SUCCESS
+Root Rust validation run: 31969781183 — SUCCESS
 Initial dependency probe run: 31968272078 — harness failure only (NDK compiler not configured)
 Corrective NDK dependency probe run: 31968345916 — SUCCESS
 Native Cargo.lock SHA-256: e06261f9a60399b85aa4a3ed456596fdb92e70fbe924bb38f81ee1de7070acd9
@@ -25,11 +29,14 @@ OUTPUT: sending terminal input never fabricates remote output; only explicit dis
 CAPABILITY: Android does not grant TerminalOpen/TerminalExec; current registry/session/transport/capability authority remains in the existing remote bridge.
 DEPENDENCIES: no Android UI dependency added; native adds only internal prw-remote-bridge and prw-terminal path dependencies; any newly reachable registry package version is already present in the authoritative root Cargo.lock.
 RENDERING: bounded text transcript only; complete ANSI/VT emulation is not claimed by Phase 147.
+PERMANENT CI: materialized Phase 147 source was revalidated by .github/workflows/android-validation.yml after a semantics-neutral workflow trigger; native adapter fmt/Clippy/tests and Android unit/lint/debug APK validation passed.
+ROOT RUST: locked dependency graph, fmt, Clippy, tests, and build passed on the permanent-CI trigger head.
 PRODUCTION BOUNDARY: no production socket/send/receive, production Agent terminal dispatch, PTY/process activation, account/device cutover, release signing/distribution, listener/relay/TUN/TAP/route/firewall/NAT/router/DNS mutation, or Agent replacement/restart.
-
-INTERIM CLASSIFICATION: PHASE_147_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION
 
 A01 CLIPPY CORRECTIVE:
 - Initial Phase 147 run 31968679548 reconstructed the candidate successfully and stopped before Android/materialization at native Clippy only.
 - Clippy reported exactly enum_variant_names on TerminalAdapterError and needless_pass_by_value on bridge_payload.
 - A01 removes only the repeated Invalid prefix from the private adapter-error variants and changes bridge_payload to borrow BridgeCommand; terminal protocol, bounds, JNI surface, lifecycle, Kotlin UX, dependencies and production boundary are unchanged.
+- A01 reconstruction corrective restored the Phase 147 native-lock snapshot required by the original candidate dependency audit; a later transform correction changed only the matching strategy from a rustfmt-sensitive whole-function body to the stable function signature plus five BridgeCommand call sites.
+
+FINAL CLASSIFICATION: PHASE_147_FUNCTIONALLY_VALIDATED / MATERIALIZED_ON_MAIN / PERMANENT_ANDROID_CI_SUCCESS / ROOT_RUST_CI_SUCCESS / ANDROID_TYPED_TERMINAL_UX / EXISTING_PRW_REMOTE_BRIDGE_CODEC_REUSED / NO_ARBITRARY_RUN_COMMAND_API / OPEN_CLOSE_AUTHORITY_NOT_FORGED / BOUNDED_TERMINAL_IO_AND_TRANSCRIPT / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_148
