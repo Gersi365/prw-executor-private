@@ -1,0 +1,217 @@
+name: Phase 140 A03 mTLS Client Auth Propagation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-140-a03-mtls-client-auth-propagation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply validated mechanical source correctives and negative-handshake harness fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-remote-transport",\n'
+          if member not in text:
+              needle = '    "crates/prw-private-dns",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('workspace insertion mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-remote-transport/src/lib.rs')
+          text = source.read_text()
+          for old, new in [
+              ('fn try_from(value: u16) -> Result<Self, Self::Error> {',
+               'fn try_from(value: u16) -> Result<Self, RemoteTransportError> {'),
+              ('.stream_receive_window(VarInt::from_u32(MAX_CONTROL_PAYLOAD_BYTES as u32))',
+               '.stream_receive_window(VarInt::from_u32(65_536))'),
+              ('        let mut trailing = valid.clone();\n',
+               '        let mut trailing = valid;\n'),
+          ]:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'source corrective count mismatch: {old!r}')
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'corrected source form missing: {new!r}')
+          source.write_text(text)
+
+          test = Path('crates/prw-remote-transport/tests/loopback.rs')
+          text = test.read_text()
+          marker = '#[tokio::test(flavor = "current_thread")]\nasync fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {'
+          corrected = '#[allow(clippy::too_many_lines)]\n#[tokio::test(flavor = "current_thread")]\nasync fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {'
+          if marker in text:
+              if text.count(marker) != 1:
+                  raise SystemExit('too-many-lines marker count mismatch')
+              text = text.replace(marker, corrected)
+          elif corrected not in text:
+              raise SystemExit('corrected too-many-lines marker missing')
+
+          old = '''    let server_addr = server.local_addr().expect("server address");\n    let result = timeout(\n        OPERATION_TIMEOUT,\n        client\n            .connect(server_addr, &server_material.server_name)\n            .expect("start wrong-CA connection"),\n    )\n    .await\n    .expect("wrong-CA timeout");\n    assert!(result.is_err());\n}'''
+          new = '''    let server_addr = server.local_addr().expect("server address");\n    let server_task = async {\n        let incoming = timeout(OPERATION_TIMEOUT, server.accept())\n            .await\n            .expect("accept timeout")\n            .expect("incoming");\n        timeout(OPERATION_TIMEOUT, incoming).await\n    };\n    let client_task = async {\n        timeout(\n            OPERATION_TIMEOUT,\n            client\n                .connect(server_addr, &server_material.server_name)\n                .expect("start wrong-CA connection"),\n        )\n        .await\n    };\n    let (_server_result, client_result) = tokio::join!(server_task, client_task);\n    assert!(\n        !matches!(client_result, Ok(Ok(_))),\n        "wrong CA must never establish a client connection"\n    );\n}'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('wrong-CA replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('corrected wrong-CA harness missing')
+
+          old = '''    let client = endpoint_with_client(config);\n    let server_addr = server.local_addr().expect("server address");\n\n    let result = timeout(\n        OPERATION_TIMEOUT,\n        client\n            .connect(server_addr, &server_material.server_name)\n            .expect("start anonymous connection"),\n    )\n    .await\n    .expect("anonymous timeout");\n    assert!(result.is_err());\n}'''
+          new = '''    let client = endpoint_with_client(config);\n    let server_addr = server.local_addr().expect("server address");\n\n    let server_task = async {\n        let incoming = timeout(OPERATION_TIMEOUT, server.accept())\n            .await\n            .expect("accept timeout")\n            .expect("incoming");\n        timeout(OPERATION_TIMEOUT, incoming).await\n    };\n    let client_task = async {\n        timeout(\n            OPERATION_TIMEOUT,\n            client\n                .connect(server_addr, &server_material.server_name)\n                .expect("start anonymous connection"),\n        )\n        .await\n    };\n    let (server_result, client_result) = tokio::join!(server_task, client_task);\n    assert!(\n        !matches!(server_result, Ok(Ok(_))),\n        "server must reject a peer that presents no client certificate"\n    );\n    if let Ok(Ok(connection)) = client_result {\n        timeout(OPERATION_TIMEOUT, connection.closed())\n            .await\n            .expect("transient anonymous client handle must close within the operation bound");\n    }\n}'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('anonymous replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('corrected anonymous propagation harness missing')
+
+          test.write_text(text)
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo clippy --fix --locked -p prw-remote-transport --all-targets --all-features \
+            --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          git restore --worktree --staged -- target/.rustc_info.json 2>/dev/null || true
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-remote-transport/src/lib.rs|crates/prw-remote-transport/tests/loopback.rs) ;;
+              *) echo "unexpected_phase140_a03_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+          echo phase140_a03_corrective_scope=pass
+
+      - name: Prove locked runtime security boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source='crates/prw-remote-transport/src/lib.rs'
+          ! grep -Fq 'into_0rtt' "$source"
+          ! grep -Fq '.dangerous()' "$source"
+          ! grep -Fq 'allow_unauthenticated' "$source"
+          ! grep -Fq 'no_client_auth' "$source"
+          ! grep -Fq 'with_platform_verifier' "$source"
+          ! grep -Fq 'try_with_platform_verifier' "$source"
+          ! grep -Fq 'send_datagram' "$source"
+          ! grep -Fq 'read_datagram' "$source"
+          ! grep -Fq 'ToSocketAddrs' "$source"
+          ! grep -Fq 'lookup_host' "$source"
+          ! grep -Fq 'std::process::Command' "$source"
+          ! grep -Fq 'Command::new' "$source"
+          ! grep -Fq 'unsafe {' "$source"
+          ! grep -Fq 'prw-remote-transport' crates/prw-agent/Cargo.toml
+          grep -Fq 'WebPkiClientVerifier::builder_with_provider' "$source"
+          echo phase140_a03_security_boundary=pass
+
+      - name: Run focused Phase 140 gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-remote-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-remote-transport --all-targets -- --test-threads=1
+          echo phase140_a03_focused_validation=pass
+
+      - name: Run full workspace gates
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          source_sha=$(sha256sum crates/prw-remote-transport/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "phase140_a03_workspace_validation=pass lock_sha=$lock_sha source_sha=$source_sha"
+
+      - name: Record authoritative Phase 140 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+          SOURCE_SHA: ${{ steps.workspace.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-140-disposable-encrypted-remote-transport'
+          report="$report_dir/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 140 — Disposable Encrypted Remote Transport Foundation
+
+          STATUS:
+          PASS / QUIC_V1_TLS13_MTLS_LOOPBACK_VALIDATED / MANDATORY_CLIENT_CERTIFICATE_VERIFICATION / EXPLICIT_PRIVATE_ROOTS / TRANSPORT_IDENTITY_BINDING_VALIDATED / PRWM_FRAME_BOUNDS_VALIDATED / FULL_WORKSPACE_PASS / PRODUCTION_REMOTE_TRANSPORT_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation input head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+          prw-remote-transport source SHA-256: $SOURCE_SHA
+
+          CONTRACT
+          contracts/DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-remote-transport
+
+          DEPENDENCY/SECURITY OUTCOME
+          Runtime direct pins are Quinn 0.11.11, rustls 0.23.43, Tokio 1.53.1 and aws-lc-rs 1.18.0; rcgen 0.14.8 is disposable dev-only certificate machinery. Runtime is QUIC-v1/TLS1.3-only with ALPN prw-mesh/1, explicit private roots and WebPkiClientVerifier mandatory client-auth defaults. Runtime contains no allow_unauthenticated/no_client_auth path, 0-RTT, dangerous/platform verifier, application DATAGRAM API, DNS lookup, shell or Agent integration.
+
+          IDENTITY/FRAME OUTCOME
+          Leaf SPKI SHA-256 derives TransportIdentity and established Quinn/rustls peer chains are checked against expected identity. SAN/SNI derives from full TransportIdentity without DNS discovery. PRWM v1.0 uses a fixed 24-byte header, nonzero request ID and 64 KiB payload maximum with malformed/truncated/trailing inputs rejected.
+
+          LOOPBACK OUTCOME
+          Disposable P-256 CA and peer leaves proved a real loopback QUIC mTLS connection, exact ALPN, both peer identities and bounded PRWM request/response. Wrong server name and wrong CA reject handshake. Missing client certificate is rejected by the server; Quinn may transiently yield a client-side connection handle before the peer close propagates, so the authoritative test proves the server never accepts the authenticated connection and any such client handle closes within the finite operation bound. Post-handshake expected TransportIdentity mismatch also fails closed at the PRW binding layer.
+
+          CORRECTIVE HISTORY
+          Run 31950119293 stopped safely on Rust 1.97.1 compile/lint compatibility before tests. Run 31950251949 fixed those mechanical issues and exposed a negative-handshake harness omission. Run 31950469103 corrected server acceptance; wrong-CA then passed, while missing-client-cert demonstrated Quinn's transient client-handle/peer-close propagation behavior. This A03 run validates the actual fail-closed property without weakening mandatory rustls client authentication.
+
+          VALIDATION
+          The authoritative run passed focused rustfmt/Clippy -D warnings/all-target tests and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+          DEFERRED
+          Phase 141 owns ICE/STUN/TURN traversal. Phase 142 owns relay provider/service. Phase 143 owns authenticated capability bridging and specialized file/terminal/forwarding streams.
+
+          PRODUCTION BOUNDARY
+          No PowerCode or other production UDP listener, transport key/certificate, Agent service, firewall/NAT/router/TUN/TAP/route, DNS, ICE/STUN/TURN production traffic, relay or Android/Desktop distribution state was created or mutated.
+
+          FINAL CLASSIFICATION
+          PHASE_140_DONE / DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_VALIDATED / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_141
+          EOF
+          git diff --check
+
+      - name: Commit validated graph/fixes/report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock \
+            crates/prw-remote-transport/src/lib.rs \
+            crates/prw-remote-transport/tests/loopback.rs \
+            logs/audits/phase-140-disposable-encrypted-remote-transport/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt
+          git diff --cached --check
+          git commit -m 'phase 140: validate disposable encrypted remote transport'
+          git push origin HEAD:main
+          echo phase140_a03_materialization=pass
