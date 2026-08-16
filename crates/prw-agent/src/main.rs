@@ -29,7 +29,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    eprintln!(
+    println!(
         "prw-agent event=device_identity_loaded public_spki_sha256={}",
         sha256_hex(device_identity_signer.public_identity_sha256())
     );
