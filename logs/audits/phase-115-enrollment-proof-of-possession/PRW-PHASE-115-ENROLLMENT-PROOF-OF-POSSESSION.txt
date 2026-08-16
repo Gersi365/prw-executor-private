@@ -1,0 +1,333 @@
+Private Remote Workspace
+Phase 115 — Enrollment Proof-of-Possession Implementation and Validation
+
+Status:
+PASS / IMPLEMENTED_AND_VALIDATED / ENROLLMENT_PROOF_OF_POSSESSION_CONTRACT_REALIZED / SERVER_BOUND_IMMUTABLE_SNAPSHOT / SINGLE_USE_CHALLENGE / ANDROID_AARCH64_PASS / AGENT_PROVIDER_EXCLUSION_PRESERVED / NO_PRODUCTION_SIGNING_OR_PRIVATE_KEY_PROVIDER / NO_NETWORK_OR_PERSISTENCE_ACTIVATION
+
+Date: 2026-08-16
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 114 contract-lock base: c5909978ae45e499f90893186110e301d93ab800
+Validated clean pre-report head: 4263ad71c23299d932afdf648bf54213405ad19c
+Rust/Cargo: 1.97.1 exact project pin
+unsafe_code workspace policy: forbid
+
+1. OBJECTIVE
+
+Phase 115 realizes the Phase 114 enrollment proof-of-possession (PoP) trust-bootstrap contract as bounded production-domain code and composes it with the Phase 113 production device-identity verifier.
+
+The phase proves that a device can demonstrate possession of the private key corresponding to the public device identity bound to an immutable server-side enrollment request snapshot, without conflating that proof with enrollment approval, user/account authentication, transport identity, or authorization.
+
+This phase does not implement a production signing/private-key provider, challenge entropy generation, persistence, an enrollment network protocol/listener, account authentication, enrollment approval, cloud deployment, real-host mutation, systemd changes, DNS changes, or public networking.
+
+2. FINAL SOURCE BOUNDARY
+
+Net mutation from the Phase 114 contract-lock commit to the validated clean pre-report head contains exactly these six files:
+
+- Cargo.lock
+- crates/prw-control-plane/src/enrollment_pop.rs
+- crates/prw-control-plane/src/lib.rs
+- crates/prw-device-identity/Cargo.toml
+- crates/prw-device-identity/src/lib.rs
+- crates/prw-device-identity/tests/enrollment_pop.rs
+
+No Phase 115 temporary workflow remains in the final source tree.
+
+3. PROVIDER-NEUTRAL ENROLLMENT PoP DOMAIN
+
+The new control-plane enrollment PoP module defines the following locked constants and bounds:
+
+- domain separator: exact bytes "PRW\0EnrollmentProofOfPossession\0"
+- proof-message version: 1
+- challenge nonce length: exactly 32 bytes / 256 bits
+- maximum UTF-8 identifier length in a proof message: 1024 bytes per identifier
+- maximum public-identity length for the initial profile: 256 bytes
+- maximum canonical proof-message length: 4442 bytes
+- maximum challenge lifetime: 300 seconds
+
+The module defines typed values for:
+
+- EnrollmentProofNonce
+- EnrollmentProofChallenge
+- EnrollmentProofOfPossession
+- EnrollmentProofChallengeState
+
+The proof value submitted by a device contains only:
+
+- EnrollmentId
+- challenge nonce
+- device-identity signature
+
+Security-critical workspace, user, device, algorithm, encoding, and public-key binding data are not accepted as duplicate proof fields. They are reconstructed from the server-owned immutable EnrollmentRequest snapshot.
+
+4. SERVER-OWNED CHALLENGE SEMANTICS
+
+EnrollmentProofChallengeState owns:
+
+- the immutable EnrollmentRequest snapshot;
+- the current active challenge;
+- the consumed state.
+
+Challenge lifetime must be in the inclusive range 1..=300 seconds.
+
+The verifier owns issued_at and expires_at timestamps. Client/device time is not trusted for challenge lifetime, and timestamps are deliberately not included in the signed canonical message.
+
+Submission context validation fails closed in this order:
+
+1. already consumed;
+2. verifier time before issue time;
+3. verifier time at or after expiry;
+4. enrollment identifier mismatch;
+5. nonce mismatch.
+
+A successfully verified challenge is single-use. consume_verified() revalidates the current proof context before committing consumed=true.
+
+Replacing the current challenge:
+
+- preserves the same immutable enrollment request snapshot;
+- replaces the nonce and server-owned lifetime;
+- invalidates the previous nonce;
+- clears consumed state for the replacement challenge.
+
+A future persistent implementation must preserve equivalent compare-and-consume semantics transactionally.
+
+5. CANONICAL SIGNED MESSAGE
+
+The canonical proof message is reconstructed only from:
+
+- the immutable server-side EnrollmentRequest snapshot;
+- the exact current server challenge nonce.
+
+The encoding binds, in order:
+
+- exact domain separator;
+- u16 proof-message version;
+- length-prefixed EnrollmentId;
+- length-prefixed WorkspaceId;
+- length-prefixed UserId;
+- length-prefixed DeviceId;
+- explicit u16 device-identity algorithm code;
+- explicit u16 public-key encoding code;
+- length-prefixed public identity bytes;
+- exact 32-byte nonce.
+
+Length prefixes are bounded and encoded deterministically. Size arithmetic is checked. The exact locked maximum encoded size is 4442 bytes.
+
+Changing any bound field changes the signed message.
+
+6. PRODUCTION VERIFIER COMPOSITION
+
+The Phase 113 production device-identity crate now composes enrollment PoP verification in the following strict sequence:
+
+1. validate server-owned submission context;
+2. canonical-encode the bound snapshot and current nonce;
+3. verify the signature with the locked P-256 / SHA-256 / canonical DER SPKI device-identity verifier;
+4. consume the challenge only after successful cryptographic verification.
+
+Failure classes preserve the boundary between:
+
+- submission/context rejection;
+- canonical-message construction rejection;
+- device-identity cryptographic verification rejection.
+
+Invalid cryptographic proofs do not consume challenge state.
+
+No production EcdsaKeyPair, SystemRandom signing path, .sign() operation, private-key generation/import/export, or private-key persistence surface was added to prw-device-identity.
+
+7. FOCUSED TEST EVIDENCE
+
+Focused Phase 115 validation run:
+31930947128
+Result: SUCCESS
+Runner: GitHub-hosted ubuntu-24.04
+Rust/Cargo: 1.97.1
+
+Control-plane PoP tests:
+11 passed / 0 failed
+
+Covered:
+
+- exact canonical bytes;
+- locked domain separator/version;
+- exact 32-byte nonce length;
+- 1..=300 second challenge lifetime;
+- exact 4442-byte maximum message bound;
+- every bound field affects the message;
+- identifier/public-identity bounds fail closed;
+- enrollment mismatch rejection;
+- nonce mismatch rejection;
+- not-yet-valid and expiry boundaries;
+- single-use consume semantics;
+- replacement challenge supersedes old nonce and resets consumed state.
+
+Device-identity PoP composition tests:
+6 passed / 0 failed
+
+Covered:
+
+- expired challenge rejected without consumption;
+- invalid signature does not consume challenge;
+- replacement challenge invalidates an old proof;
+- signature for a changed enrollment snapshot fails against the server-bound snapshot;
+- valid proof consumes exactly once;
+- wrong nonce is rejected before cryptographic verification and does not consume state.
+
+8. SECURITY-BOUNDARY PROOFS
+
+Focused validation produced:
+
+phase115_production_signing_boundary_absent=PASS
+phase115_agent_provider_exclusion=PASS
+phase115_android_aarch64_check=PASS
+
+The Agent dependency tree contains none of:
+
+- prw-device-identity
+- aws-lc-rs
+- aws-lc-sys
+
+Therefore the currently activated/local-runtime prw-agent binary boundary remains independent of the device-identity crypto provider.
+
+The production prw-device-identity crate and its Phase 115 tests compile for aarch64-linux-android using the GitHub-hosted Android NDK toolchain.
+
+9. LOCKFILE EVIDENCE
+
+The Phase 115 test-only direct use of prw-core required an explicit workspace-local dev-dependency in prw-device-identity.
+
+A deterministic candidate lockfile was generated and validated under Rust/Cargo 1.97.1 in temporary workflow run:
+31930763924
+Result: SUCCESS
+
+Artifact:
+- artifact id: 9259195668
+- archive digest: sha256:93869bae1c61dc4caf98e323fc346af998f313c3f70030ea13c3a9bd9f614fe0
+
+Promoted Cargo.lock content SHA-256:
+f3aedc74ede29653f6af7c7ae192c6a1c4b8ed16c08745c8492aa0afb184a47a
+
+Final Cargo.lock Git blob SHA at the validated clean head:
+56dfed0854363e923a22fe1bf358cfb1138616cf
+
+The lockfile change is bounded to recording prw-core as a dependency of the prw-device-identity package due the local dev-dependency. It does not add a new external package.
+
+10. CORRECTIVE VALIDATION HISTORY
+
+Phase 115 intentionally stopped on each validation defect and corrected it narrowly before proceeding.
+
+A01 — rustfmt corrective
+
+Permanent validation identified mechanical formatting differences. A temporary formatter workflow ran cargo fmt under Rust 1.97.1 and guarded the mutation boundary to the four Phase 115 Rust files only.
+
+Formatting commit:
+7490e0f618b7cf260a27d5307a855ddcf2ef9b7b
+
+The temporary format workflow was removed.
+
+A02 — Clippy const compatibility corrective
+
+Permanent CI run 31930566881 failed safely at Clippy because bounded_identifier() triggered clippy::missing_const_for_fn.
+
+The exact corrective changed only:
+fn bounded_identifier(...)
+into:
+const fn bounded_identifier(...)
+
+Corrective commit:
+bf3946f33aa3c37acdbd43141fb56eeb0f99b002
+
+The temporary corrective workflow was removed.
+
+A03 — integration-test dev-dependency corrective
+
+After A02, permanent CI reached the prw-device-identity integration test and failed safely because the test directly imported prw_core without declaring it as a dev-dependency.
+
+The exact corrective added only the workspace-local test dependency:
+prw-core = { path = "../prw-core" }
+under [dev-dependencies] in crates/prw-device-identity/Cargo.toml.
+
+Source commit:
+ba26a67eb592cf3e2d53dc4eb44696620b5fbf8b
+
+The candidate lockfile was validated before promotion. The temporary lockfile workflow was removed.
+
+No failed validation state was classified as implemented-and-validated.
+
+11. PERMANENT CI EVIDENCE
+
+After the A03 lockfile promotion, permanent Rust validation run:
+31930815545
+Result: SUCCESS
+
+Clean head after temporary lock workflow removal:
+99ad3af1e99d47613f0672301d7c517e87c282ce
+Permanent CI run:
+31930821595
+Result: SUCCESS
+
+After focused Phase 115 validation and removal of the final temporary workflow, final clean pre-report head:
+4263ad71c23299d932afdf648bf54213405ad19c
+Final permanent CI run:
+31931054497
+Result: SUCCESS
+
+The final run passed:
+
+- exact project toolchain record;
+- cargo metadata --locked;
+- cargo fmt --check;
+- workspace/all-target Clippy with -D warnings;
+- workspace/all-target tests;
+- workspace/all-target build.
+
+12. FINAL WORKFLOW INVENTORY
+
+At clean pre-report head 4263ad71c23299d932afdf648bf54213405ad19c, .github/workflows contains exactly:
+
+.github/workflows/phase-001-rust-validation.yml
+
+No Phase 115 temporary format, corrective, lockfile, or focused-validation workflow remains.
+
+13. NON-MUTATION / EXCLUSIONS
+
+Phase 115 performed no:
+
+- production private-key generation;
+- production private-key import/export or persistence;
+- production signing implementation;
+- user/account authentication implementation;
+- enrollment approval implementation;
+- persistent enrollment/challenge database;
+- network enrollment API or listener;
+- public/remote networking activation;
+- TUN, relay, STUN, ICE, SSH, terminal, forwarding, or file-transfer activation;
+- real-host package or service mutation;
+- systemd enable/start/restart/reload mutation;
+- linger mutation;
+- DNS mutation;
+- deployment or cloud infrastructure mutation.
+
+The PowerCode host's already-activated local PRW Agent state was not touched by this phase.
+
+14. PHASE 115 CONCLUSION
+
+The Phase 114 proof-of-possession trust-bootstrap contract is now represented by bounded production-domain code and cryptographically composed with the Phase 113 public device-identity verifier.
+
+The implementation proves:
+
+- immutable server-side enrollment binding;
+- deterministic canonical signing input;
+- exact challenge lifetime and message bounds;
+- replay-resistant single-use challenge state;
+- replacement challenge invalidation;
+- invalid-proof non-consumption;
+- strict separation of PoP from approval/authentication;
+- no production signing/private-key boundary expansion;
+- Agent crypto-provider exclusion;
+- Ubuntu x86_64 and Android aarch64 build compatibility;
+- clean permanent CI after all temporary validation machinery was removed.
+
+Final classification:
+PASS / IMPLEMENTED_AND_VALIDATED / ENROLLMENT_POP_BOUNDARY_COMPLETE_FOR_CURRENT_SCOPE
+
+Next architecture boundary:
+Device-side device-identity private-key custody and signing contract, including platform-specific custody constraints for Android and Ubuntu, should be locked separately before any production signing implementation, enrollment wire protocol, or persistent challenge service is introduced.
