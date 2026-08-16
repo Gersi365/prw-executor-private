@@ -1,0 +1,185 @@
+name: Phase 145 A04 Rust Component Guard Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-a04-rust-component-guard-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  correct-validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A04 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          test -f .github/workflows/phase-145-a03-rust-components-corrective.yml
+          grep -Fq "cargo +1.97.1 fmt --version | grep -Fq 'rustfmt 1.8.0-stable'" .github/workflows/phase-145-a03-rust-components-corrective.yml
+          echo phase145_a04_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact toolchains with executable component proof
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 fmt --version
+          cargo +1.97.1 clippy --version
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase145_a04_toolchain=pass
+
+      - name: Reuse A03 source construction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Extract and run A02 source construction steps\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Generate exact native graph\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-source.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-source.sh
+          echo phase145_a04_source=pass
+
+      - name: Reuse A03 native graph validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Generate exact native graph\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Validate native adapter host and Android targets\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-graph.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-graph.sh
+          echo phase145_a04_graph=pass
+
+      - name: Reuse A03 native host and Android target validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Validate native adapter host and Android targets\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Validate Android unit tests lint and APK\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-native.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-native.sh
+          echo phase145_a04_native=pass
+
+      - name: Reuse A03 Android unit lint and APK validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Validate Android unit tests lint and APK\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Prove Android security boundaries\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-android.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-android.sh
+          echo phase145_a04_android=pass
+
+      - name: Reuse A03 security boundary validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Prove Android security boundaries\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Revalidate root Rust workspace\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-security.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-security.sh
+          echo phase145_a04_security=pass
+
+      - name: Reuse A03 root workspace validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Revalidate root Rust workspace\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Materialize permanent Android CI and authoritative report\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-root.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-root.sh
+          echo phase145_a04_root=pass
+
+      - name: Reuse A03 finalization and add A04 evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a03-rust-components-corrective.yml').read_text()
+          start = source.index('      - name: Materialize permanent Android CI and authoritative report\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Commit only validated Phase 145 state\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a04-finalize.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a04-finalize.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          report = Path('logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt')
+          text = report.read_text()
+          marker = 'A02 run 31958676432 then stopped before native compilation because rustfmt was not installed for the exact 1.97.1 toolchain. A03 explicitly installs rustfmt+clippy on that toolchain before repeating every gate.\n'
+          addition = marker + 'A03 run 31958962374 proved rustfmt+clippy component download but stopped on an over-specific rustfmt version-string guard. A04 verifies executable availability without assuming version display text and repeats every substantive gate.\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Phase145 report A04 insertion boundary mismatch')
+          report.write_text(text.replace(marker, addition))
+          PY
+          grep -Fq 'A04 verifies executable availability' logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          echo phase145_a04_finalize=pass
+
+      - name: Commit only validated Phase 145 state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!apps/android/**/build'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add apps/android .github/workflows/android-validation.yml logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          git commit -m 'phase 145: validate Android client foundation'
+          git push origin HEAD:main
+          echo phase145_a04_materialization=pass
