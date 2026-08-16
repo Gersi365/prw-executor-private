@@ -1,0 +1,301 @@
+Private Remote Workspace
+Phase 116 — Device-Identity Private-Key Custody and Signing Contract
+
+STATUS:
+PASS / DEVICE_IDENTITY_PRIVATE_KEY_CUSTODY_AND_SIGNING_CONTRACT_LOCKED / TYPED_ENROLLMENT_POP_SIGNING_ONLY / ARBITRARY_REMOTE_SIGNING_FORBIDDEN / ANDROID_KEYSTORE_NON_EXPORTABLE_CUSTODY_REQUIRED / STRONGBOX_PREFERRED_NOT_REQUIRED / ANDROID_SECURITY_LEVEL_EXPLICIT / UBUNTU_HEADLESS_CUSTODY_REQUIREMENTS_LOCKED / UBUNTU_PROVIDER_SELECTION_DEFERRED_PENDING_CAPABILITY_PROOF / SECRET_SERVICE_NOT_MANDATORY_BASELINE / PLAINTEXT_PERSISTENT_PRIVATE_KEY_FORBIDDEN / NO_PRODUCTION_SIGNER_IMPLEMENTATION / NO_WIRE_PROTOCOL_OR_PERSISTENCE_ACTIVATION
+
+AUDIT TYPE: SECURITY ARCHITECTURE / PRIVATE-KEY CUSTODY CONTRACT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: 0bc6dffe9a3cc912e637ddb52ca8ded609349374
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Current validated Cargo.lock blob: 56dfed0854363e923a22fe1bf358cfb1138616cf
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW work without repeated routine approval requests. Phase 116 is contract/audit work only. It preserves all standing security constraints and does not authorize host mutation, networking activation, account-authentication changes, enrollment approval, or release deployment.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 113 production verifier:
+- ECDSA P-256 / SHA-256;
+- canonical DER X.509 SubjectPublicKeyInfo public identity;
+- DER ECDSA-Sig-Value signature;
+- verifier-only provider boundary;
+- no production private-key or signing API.
+
+Phase 114 PoP contract:
+- proof demonstrates possession of the private device-identity key corresponding to the exact public identity in one immutable EnrollmentRequest snapshot;
+- proof is separate from user/account authentication, enrollment approval, workspace authorization, and transport identity;
+- canonical message version 1 is reconstructed from typed enrollment state and a server challenge;
+- device signer must not become a generic remote signing oracle.
+
+Phase 115 implementation:
+- canonical PoP encoding and single-use challenge state are implemented and validated;
+- production verifier composition is implemented;
+- Android aarch64 compatibility is proven for the verifier crate;
+- production signing/private-key custody remains absent.
+
+EXISTING REPOSITORY BOUNDARY
+
+The Android application remains a planned client/mesh endpoint with enrollment responsibility but no Android implementation beyond its Phase 001 skeleton.
+
+The current prw-device-identity crate explicitly owns public signature verification only and deliberately exposes no private-key generation, private-key import/export, signing, persistence, or transport-cryptography API.
+
+Phase 116 therefore locks the future signing/custody boundary without changing those existing source APIs.
+
+PRIMARY PLATFORM REFERENCES REVIEWED
+
+Android platform documentation establishes that:
+- Android Keystore can generate EC P-256 signing keys under AndroidKeyStore;
+- key use can be restricted to signing and SHA-256;
+- Android Keystore private-key material is protected from application-level extraction and cryptographic operations occur through the platform provider;
+- KeyInfo exposes actual key security level, including software, trusted-environment, and StrongBox distinctions;
+- StrongBox can support ECDSA P-256 but is not available or appropriate on every device.
+
+Linux/systemd platform documentation establishes that:
+- systemd service credentials can carry cryptographic key material;
+- LoadCredentialEncrypted= can decrypt/authenticate an encrypted credential at service activation;
+- encrypted credentials may be bound to TPM2, the local system credential secret, or both;
+- the consuming service receives plaintext credential bytes through its service-scoped credentials directory;
+- credential paths must not be hard-coded because user-service credential locations differ from system-service locations.
+
+The Freedesktop Secret Service specification establishes that:
+- the service runs in a user's login session;
+- stored secrets may be locked;
+- access may require a user prompt.
+
+These properties are used only to establish Phase 116 custody requirements and candidate-provider boundaries. No Ubuntu provider is selected or implemented by this phase.
+
+CORE SECURITY DECISION
+
+A PRW device-identity private key is a long-lived device credential whose only Phase 116-authorized cryptographic use is the locked PRW device-identity signature profile for typed PRW operations.
+
+For enrollment PoP, the production-facing signer boundary MUST NOT accept arbitrary server-provided bytes for signing.
+
+The intended logical operation is equivalent to:
+
+sign_enrollment_proof(bound_enrollment_request, bound_server_challenge)
+
+The device-side implementation must:
+1. validate that the challenge references the same EnrollmentId as the local request context;
+2. obtain the exact locally held public identity corresponding to the private-key handle;
+3. require that public identity to match the EnrollmentRequest public identity exactly under the locked canonical SPKI profile;
+4. reconstruct the canonical Phase 114/115 PoP message locally from typed fields and the challenge nonce;
+5. invoke the platform signing provider only on that internally constructed message under ECDSA P-256/SHA-256;
+6. return only the DER ECDSA-Sig-Value signature plus already-public metadata required by the caller.
+
+A provider-internal primitive may necessarily accept message bytes, but it must remain private to the trusted platform/provider layer and must not be reachable as a generic RPC, network command, plugin command, or public application signing oracle.
+
+PRIVATE KEY NON-DISCLOSURE
+
+The device-identity private key must never be:
+- transmitted to the PRW server or control plane;
+- embedded in EnrollmentRequest, EnrollmentProofOfPossession, or another wire object;
+- logged;
+- included in diagnostics, crash reports, telemetry, or audit output;
+- stored in Git, Google Drive, application configuration, command-line arguments, or environment variables;
+- copied into transfer payloads or synchronization state;
+- repurposed as a transport-encryption key, transport key-agreement key, SSH host/user key, or generic signing key by this contract.
+
+Public identity bytes and signature bytes are not secret, but their association with workspace/user/device identifiers remains application data and must follow normal privacy/logging policy.
+
+KEY IDENTITY AND ROTATION SEMANTICS
+
+One device-identity private key corresponds to one PRW device identity public key.
+
+For an already enrolled/trusted device identity:
+- missing, invalidated, deleted, or mismatched private-key custody MUST fail closed;
+- the application MUST NOT silently generate a replacement key and continue under the old enrolled public identity;
+- replacement key generation creates a new public device identity and requires a new enrollment/PoP trust-bootstrap flow;
+- local key deletion makes the device unable to produce future proofs/signatures but does not itself revoke the server-side device record;
+- server-side revocation remains a separate authoritative trust-state action.
+
+An alias, credential name, key ID, or platform handle is a locator, not the cryptographic identity. The canonical public SPKI is the cryptographic identity material bound into enrollment.
+
+ANDROID CUSTODY CONTRACT
+
+Android production custody MUST use the Android Keystore system.
+
+Key generation requirements:
+- algorithm: EC;
+- curve: NIST P-256 / secp256r1;
+- purpose: signing;
+- authorized digest: SHA-256 for the locked PRW profile;
+- private key generated by the Android Keystore provider rather than generated as exportable PKCS#8 bytes in application or Rust memory and later imported;
+- PRW-controlled opaque alias with no raw secret/user/workspace data embedded in the alias;
+- exactly one active device-identity alias per local PRW device-identity profile unless a later rotation design explicitly introduces staged keys.
+
+Signing requirements:
+- use SHA256withECDSA semantics over the exact canonical PoP message;
+- do not pre-hash the message and then pass that digest to SHA256withECDSA, which would change the locked signature semantics;
+- return DER ECDSA signature bytes compatible with the Phase 113 verifier;
+- the Android platform layer retains the PrivateKey/Keystore handle; Rust/application-domain code receives public SPKI and signature bytes, not exportable private material.
+
+Non-exportability is mandatory at the PRW application boundary. Android Keystore key material must not be copied into a PRW-owned private-key file.
+
+ANDROID HARDWARE ASSURANCE
+
+StrongBox is preferred when supported and operational for the locked P-256 profile, but StrongBox is not a mandatory device-compatibility requirement in Phase 116.
+
+Required behavior:
+- detect whether StrongBox is available before requesting it;
+- if StrongBox generation is requested and the platform reports it unavailable/unsupported, controlled fallback to ordinary Android Keystore generation is permitted;
+- after generation, query and record the actual Android Keystore security level as non-secret device-security metadata;
+- distinguish at minimum SOFTWARE, TRUSTED_ENVIRONMENT, and STRONGBOX where the platform API exposes them;
+- never claim hardware-backed custody unless the platform metadata proves it.
+
+Hardware-backed status is an assurance attribute only in Phase 116. It does not automatically grant enrollment approval, account trust, workspace permission, or network authorization.
+
+ANDROID USER-AUTHENTICATION AND ATTESTATION BOUNDARIES
+
+Phase 116 does not require biometric, device-unlock, user-presence, or per-signature confirmation for the initial device-identity key profile.
+
+A future product/security policy may add those constraints, but doing so must be an explicit compatibility/UX decision because such requirements can affect background or unattended signing availability.
+
+Remote Android key attestation is also deferred. Phase 116 does not define an attestation challenge, certificate-chain validation policy, revocation policy, or authorization consequence for attestation results.
+
+UBUNTU / HEADLESS CUSTODY CONTRACT
+
+The Ubuntu Agent is a headless systemd user service and may need to operate after boot through the existing user-manager/linger architecture. Therefore the mandatory Ubuntu custody baseline must be usable non-interactively by the service and must not depend on a GUI session or a per-sign user prompt.
+
+Any production Ubuntu provider must satisfy all of the following:
+- encrypted and authenticated protection of private-key material at rest;
+- no persistent plaintext PKCS#8/SEC1 private-key file as the normal storage format;
+- no private key in environment variables, command-line arguments, unit-file plaintext, repository source, or XDG configuration text;
+- access restricted to the intended service/user boundary;
+- no generic remote signing endpoint;
+- deterministic association between the private-key locator and the exact canonical public SPKI;
+- fail-closed behavior if the provider/key is unavailable or the public identity no longer matches;
+- no silent replacement/regeneration under an existing enrollment;
+- plaintext exposure during runtime, if unavoidable for a software provider, minimized to the narrowest process/lifetime possible and cleared/zeroized where the implementation stack permits;
+- storage/provider failure must not downgrade automatically to a plaintext file.
+
+UBUNTU PROVIDER SELECTION — DELIBERATELY NOT LOCKED
+
+Phase 116 does NOT yet select a concrete Ubuntu private-key custody provider.
+
+systemd encrypted service credentials are a serious candidate because they provide encrypted/authenticated at-rest storage and service-scoped delivery, and can bind encryption to local TPM2/system identity. However, the consuming service ultimately receives plaintext credential bytes during activation/runtime, so this is not equivalent to Android hardware non-exportability.
+
+Before systemd encrypted credentials may become the PRW Ubuntu production baseline, a later capability phase must prove on the supported user-service environment:
+- user-manager support for the exact credential directives used;
+- encryption/decryption behavior under the supported systemd baseline;
+- non-interactive operation across real user-manager restart/linger conditions;
+- source/destination permissions and ownership;
+- rollback/recovery behavior;
+- behavior when TPM2 is absent or unavailable;
+- behavior after OS reinstall/machine migration;
+- exact plaintext exposure window and cleanup semantics;
+- compatibility with the existing prw-agent.service hardening contract.
+
+The Freedesktop Secret Service API is permitted only as an optional future desktop/session integration. It is NOT the mandatory headless Agent baseline because its model is tied to a user login session and may require interactive unlock prompting.
+
+TPM2, PKCS#11, HSM, or other provider-specific designs may be considered later. Phase 116 does not mandate them and does not authorize a home-grown encrypted private-key file format as a shortcut.
+
+ASSURANCE ASYMMETRY
+
+Android and Ubuntu custody must not be presented as cryptographically identical assurance classes.
+
+Android Keystore may provide non-exportable secure-hardware custody where the private key never leaves TEE/StrongBox. A software-based Ubuntu provider may necessarily expose plaintext key bytes to the Agent process while signing.
+
+PRW must preserve this distinction as metadata/policy input rather than hiding it behind a single misleading boolean such as "hardware_secure=true".
+
+No custody assurance level automatically changes authorization in Phase 116.
+
+PUBLIC IDENTITY CONSISTENCY
+
+Before every enrollment proof signing operation, the signing side must prove local consistency between:
+- the key handle/provider entry;
+- the canonical DER X.509 SPKI derived from that key;
+- the EnrollmentRequest.public_identity bytes;
+- DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer.
+
+Any mismatch fails closed before signature generation.
+
+The signer must not trust a server-supplied duplicate public key as authority over the locally held key. The server challenge supplies freshness; it does not choose or replace the device's private key.
+
+FAIL-CLOSED REQUIREMENTS
+
+Signing/custody must fail closed on at least:
+- key missing;
+- key invalidated;
+- key deleted;
+- alias/credential resolves to unexpected public identity;
+- unsupported algorithm, curve, digest, signature encoding, or public-key encoding;
+- EnrollmentId/request/challenge mismatch;
+- canonical PoP message construction failure;
+- provider unavailable;
+- signing operation failure;
+- Android Keystore metadata inconsistent with the requested key profile;
+- attempted silent fallback from platform custody to a PRW plaintext private-key file;
+- Ubuntu provider unable to satisfy encrypted-at-rest/non-interactive service requirements;
+- arithmetic/serialization/profile errors inherited from Phase 114/115.
+
+ERROR REPORTING
+
+Errors may expose bounded classifications such as KeyMissing, KeyInvalidated, PublicIdentityMismatch, ProviderUnavailable, UnsupportedProfile, or SigningFailed.
+
+Errors must not expose private-key bytes, secret credential contents, sensitive provider internals, or platform exception material that contains secrets.
+
+OUT-OF-SCOPE / NOT AUTHORIZED BY THIS CONTRACT
+
+Phase 116 does not implement or activate:
+- production private-key generation in Rust;
+- a production signing crate/provider;
+- Android source or Android Keystore code;
+- Ubuntu key files or encrypted credential files;
+- systemd credential directives in prw-agent.service;
+- TPM provisioning;
+- Secret Service integration;
+- hardware attestation;
+- account authentication;
+- enrollment approval policy;
+- enrollment HTTP/RPC/wire protocol;
+- persistence/database state;
+- transport key agreement;
+- remote networking, relay, TUN, SSH, PTY, SFTP, or port forwarding;
+- real-host mutation;
+- deployment/release changes.
+
+NEXT SAFE IMPLEMENTATION BOUNDARIES
+
+The custody contract is intentionally followed by provider-specific proof work rather than an immediate cross-platform signer rollout.
+
+A subsequent Ubuntu custody-provider capability/decision phase should prove the available systemd-user-service credential mechanisms and host requirements without persisting a real PRW private key.
+
+A separate Android implementation phase may then add the Android Keystore-backed P-256 signer with disposable/generated test identities, exact public-SPKI matching, typed PoP-only signing, security-level reporting, and Android platform tests.
+
+Only after those provider boundaries are individually proven should PRW introduce a cross-platform production enrollment signer facade or an enrollment wire protocol.
+
+MUTATION STATEMENT
+
+Phase 116 is decision/audit work only.
+
+Authorized net repository mutation:
+- this single authoritative Phase 116 audit report.
+
+Phase 116 does not change:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- service/systemd source;
+- installed host files;
+- user-manager state;
+- private keys;
+- credential stores;
+- network listeners;
+- persistence/database state;
+- deployment state.
+
+FINAL CLASSIFICATION
+
+PASS / DEVICE_IDENTITY_CUSTODY_CONTRACT_LOCKED / ENROLLMENT_POP_TYPED_SIGNING_ONLY / GENERIC_SIGNING_ORACLE_FORBIDDEN / PRIVATE_KEY_NEVER_TRANSMITTED_OR_LOGGED / NO_SILENT_KEY_REGENERATION / KEY_REPLACEMENT_REQUIRES_REENROLLMENT / ANDROID_KEYSTORE_REQUIRED / ANDROID_P256_SIGN_SHA256 / STRONGBOX_PREFERRED_WITH_CONTROLLED_FALLBACK / ANDROID_SECURITY_LEVEL_RECORDED / ATTESTATION_DEFERRED / UBUNTU_NONINTERACTIVE_ENCRYPTED_AT_REST_REQUIRED / PERSISTENT_PLAINTEXT_PRIVATE_KEY_FORBIDDEN / SECRET_SERVICE_OPTIONAL_NOT_BASELINE / SYSTEMD_ENCRYPTED_CREDENTIALS_CANDIDATE_PENDING_PROOF / PLATFORM_ASSURANCE_ASYMMETRY_EXPLICIT / NO_PRODUCTION_SIGNER / NO_NETWORK_OR_PERSISTENCE_ACTIVATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 116 private-key custody and signing contract report.
