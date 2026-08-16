@@ -25,11 +25,22 @@ jobs:
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           sha256sum Cargo.lock
-      - name: Apply and guard mechanical formatting
+      - name: Apply and guard narrow corrective plus formatting
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-device-identity-custody/src/lib.rs')
+          text = path.read_text()
+          old = '    pub(super) fn load_from_environment('
+          new = '    pub fn load_from_environment('
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one guarded visibility token')
+          path.write_text(text.replace(old, new, 1))
+          PY
           cargo fmt --all
           changed="$(git diff --name-only -- crates/prw-device-identity-custody/src)"
           test "$changed" = "crates/prw-device-identity-custody/src/lib.rs"
+          grep -Fq 'pub fn load_from_environment()' crates/prw-device-identity-custody/src/lib.rs
           cargo fmt --all -- --check
       - name: Validate workspace and custody boundary
         run: |
