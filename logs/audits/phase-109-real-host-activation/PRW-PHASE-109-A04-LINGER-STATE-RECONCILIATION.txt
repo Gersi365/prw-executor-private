@@ -1,0 +1,68 @@
+Private Remote Workspace
+Phase 109-A04 Linger-State Reconciliation Audit
+
+STATUS: PASS / PREEXISTING_LINGER_YES_PRESERVED / NO_LINGER_MUTATION / SERVICE_ENABLED_ACTIVE
+AUDIT TYPE: REAL-HOST LINGER-STATE OWNERSHIP RECONCILIATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Target host: PowerCode
+Target user: gersi365
+Target UID: 1000
+
+PURPOSE
+
+This transaction reconciles the Phase 109 linger-state requirement without changing host state when linger already existed before PRW activation.
+
+PRE-PHASE-109 OWNERSHIP FACT
+
+Read-only Phase 109 host preflight captured:
+
+- Linger=yes
+- RuntimePath=/run/user/1000
+- user manager active
+
+before any PRW package-file installation, daemon-reload, enablement, or start operation.
+
+Therefore linger is external/pre-existing state. PRW must not claim ownership of it and must not disable it during later rollback or uninstall solely because PRW uses it.
+
+RECONCILIATION EVIDENCE
+
+GitHub Actions run:
+- workflow: Phase 109 A09 Linger State Reconciliation
+- run: 31927508593
+- job: 95117240655
+- runner: PowerCode
+
+The read-only reconciliation proved:
+
+- hostname=PowerCode
+- user=gersi365
+- UID=1000
+- prw-agent.service enabled
+- prw-agent.service active
+- linger=yes
+- RuntimePath=/run/user/1000
+- user state=active
+- user bus socket present
+
+The workflow emitted:
+
+- linger_source=pre_existing_before_phase109
+- linger_mutation=none
+- linger_ownership=external_pre_existing
+- phase109_linger_reconciliation=success
+
+MUTATION DECISION
+
+No `loginctl enable-linger` and no `loginctl disable-linger` command was executed.
+
+This is intentional. Re-applying enable-linger would be an unnecessary mutation and could blur ownership. Disabling linger would violate the captured pre-existing host state.
+
+ROLLBACK / UNINSTALL OWNERSHIP RULE
+
+Because PRW did not create linger state in Phase 109, future PRW rollback or uninstall MUST preserve `Linger=yes` unless a separate user-authorized operation explicitly changes that external host setting.
+
+CLASSIFICATION
+
+PHASE_109_A04_PASS / PREEXISTING_LINGER_YES_PRESERVED / NO_LINGER_MUTATION / NO_PRW_OWNERSHIP_OF_LINGER / SERVICE_ENABLED_ACTIVE
