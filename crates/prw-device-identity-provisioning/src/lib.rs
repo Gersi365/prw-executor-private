@@ -205,12 +205,9 @@ pub fn provision_first_ubuntu_device_identity()
         return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
     }
 
-    let final_metadata = match fs::symlink_metadata(&final_ciphertext) {
-        Ok(metadata) => metadata,
-        Err(_) => {
-            let _ = fs::remove_file(&final_ciphertext);
-            return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
-        }
+    let Ok(final_metadata) = fs::symlink_metadata(&final_ciphertext) else {
+        let _ = fs::remove_file(&final_ciphertext);
+        return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
     };
     if validate_ciphertext_metadata(&final_metadata, uid).is_err()
         || final_metadata.dev() != opened_metadata.dev()
@@ -320,12 +317,14 @@ fn encrypt_with_systemd_creds(
         .spawn()
         .map_err(|_| DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
 
-    let write_result = match child.stdin.take() {
-        Some(mut stdin) => stdin
-            .write_all(private_pkcs8.as_slice())
-            .and_then(|()| stdin.flush()),
-        None => Err(io::Error::other("systemd-creds stdin unavailable")),
-    };
+    let write_result = child.stdin.take().map_or_else(
+        || Err(io::Error::other("systemd-creds stdin unavailable")),
+        |mut stdin| {
+            stdin
+                .write_all(private_pkcs8.as_slice())
+                .and_then(|()| stdin.flush())
+        },
+    );
     private_pkcs8.zeroize();
     drop(private_pkcs8);
 
