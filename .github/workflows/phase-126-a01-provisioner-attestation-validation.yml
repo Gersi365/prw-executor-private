@@ -1,0 +1,393 @@
+name: Phase 126 A01 Provisioner and Attestation Validation
+
+on:
+  push:
+    branches:
+      - phase-126-a01-provisioner-attestation
+    paths:
+      - '.github/workflows/phase-126-a01-provisioner-attestation-validation.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate-build-and-promote-branch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout isolated A01 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-126-a01-provisioner-attestation
+          fetch-depth: 0
+
+      - name: Verify authoritative branch base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          test "$(git merge-base HEAD origin/main)" = '7b46aaf1e291113bef2bbbec4535a2951bf90b46'
+
+      - name: Format source and generate deterministic lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+          cargo fmt --all
+          cargo generate-lockfile
+
+      - name: Verify A01 mutation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only 7b46aaf1e291113bef2bbbec4535a2951bf90b46 | sort)
+          printf '%s\n' "${changed[@]}"
+          expected=(
+            .github/workflows/phase-126-a01-provisioner-attestation-validation.yml
+            Cargo.lock
+            Cargo.toml
+            crates/prw-agent/src/main.rs
+            crates/prw-device-identity-provisioning/Cargo.toml
+            crates/prw-device-identity-provisioning/src/lib.rs
+            crates/prw-device-identity-provisioning/src/main.rs
+            crates/prw-device-identity-signer/src/lib.rs
+            crates/prw-device-identity-signer/tests/public_fingerprint.rs
+          )
+          test "${#changed[@]}" -eq "${#expected[@]}"
+          for i in "${!expected[@]}"; do
+            test "${changed[$i]}" = "${expected[$i]}"
+          done
+
+      - name: Verify locked graph and formatting
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run all tests
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        run: cargo build --locked --workspace --all-targets
+
+      - name: Verify Phase 126 A01 source-security guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import tomllib
+
+          workspace = tomllib.loads(Path('Cargo.toml').read_text())
+          assert 'crates/prw-device-identity-provisioning' in workspace['workspace']['members']
+
+          agent = tomllib.loads(Path('crates/prw-agent/Cargo.toml').read_text())
+          assert 'aws-lc-rs' not in agent.get('dependencies', {})
+          assert 'prw-device-identity-signer' not in agent.get('dependencies', {})
+          assert 'prw-device-identity' not in agent.get('dependencies', {})
+          assert 'prw-device-identity-custody' in agent.get('dependencies', {})
+
+          provisioner = Path('crates/prw-device-identity-provisioning/src/lib.rs').read_text()
+          assert 'SYSTEMD_CREDS_BINARY: &str = "/usr/bin/systemd-creds"' in provisioner
+          assert 'Command::new(SYSTEMD_CREDS_BINARY)' in provisioner
+          assert 'SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME' in provisioner
+          assert 'device-identity-private-key-v1.cred' in provisioner
+          assert '.stdin(Stdio::piped())' in provisioner
+          assert 'Zeroizing<Vec<u8>>' in provisioner
+          assert 'hard_link' in provisioner
+          for forbidden in [
+              'Command::new("sh")', 'Command::new("bash")', 'sh -c', 'bash -c',
+              'sign(bytes', 'private_key_path', 'private-key-path', 'credential_name:',
+          ]:
+              assert forbidden not in provisioner, forbidden
+
+          cli = Path('crates/prw-device-identity-provisioning/src/main.rs').read_text()
+          assert 'args_os().nth(1).is_some()' in cli
+          assert 'public_spki_sha256=' in cli
+          assert 'ciphertext_path=' in cli
+
+          signer = Path('crates/prw-device-identity-signer/src/lib.rs').read_text()
+          assert 'public_spki_sha256_hex' in signer
+          assert 'digest(&SHA256, self.public_identity.as_bytes())' in signer
+
+          agent_main = Path('crates/prw-agent/src/main.rs').read_text()
+          custody = agent_main.index('load_ubuntu_enrollment_signer_from_systemd_credential')
+          attestation = agent_main.index('event=device_identity_loaded', custody)
+          runtime = agent_main.index('linux_bootstrap::run()', attestation)
+          assert custody < attestation < runtime
+          assert 'public_spki_sha256=' in agent_main
+          assert 'aws_lc_rs' not in agent_main
+
+          changed = set(Path('/tmp/changed.txt').read_text().splitlines()) if Path('/tmp/changed.txt').exists() else set()
+          protocol_paths = [
+              'crates/prw-agent/src/local_commands.rs',
+              'crates/prw-agent/src/local_commands',
+              'crates/prw-control-plane',
+          ]
+          diff_names = __import__('subprocess').check_output(
+              ['git', 'diff', '--name-only', '7b46aaf1e291113bef2bbbec4535a2951bf90b46']
+          ).decode().splitlines()
+          assert not any(any(name == prefix or name.startswith(prefix + '/') for prefix in protocol_paths) for name in diff_names)
+
+          assert re.search(r'public_spki_sha256=<64-lowercase-hex>', Path('logs/audits/phase-126-production-identity-activation/PRW-PHASE-126-A00-PREACTIVATION-IMPLEMENTATION-CONTRACT.txt').read_text())
+          PY
+          grep -F 'prw-device-identity-provisioning' Cargo.lock
+          grep -F 'prw-device-identity-custody' crates/prw-agent/Cargo.toml
+
+      - name: Run focused fingerprint and fail-closed tests
+        run: |
+          cargo test --locked -p prw-device-identity-signer --test public_fingerprint
+          cargo test --locked -p prw-device-identity-provisioning
+          cargo test --locked -p prw-agent --test phase125_device_identity_bootstrap
+          cargo test --locked -p prw-agent --test phase_102_binary_bootstrap
+
+      - name: Build disposable PowerCode proof payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p crates/prw-agent/examples
+          cat > crates/prw-agent/examples/phase126a01_custody_probe.rs <<'RS'
+          fn main() {
+              let signer = prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential()
+                  .expect("load systemd-delivered disposable signer");
+              println!(
+                  "phase126a01_custody_fingerprint={}",
+                  signer.public_spki_sha256_hex()
+              );
+          }
+          RS
+          cat > crates/prw-agent/examples/phase126a01_status_probe.rs <<'RS'
+          use std::{env, io::Write, os::unix::net::UnixStream};
+          use prw_agent::local_commands::LocalAgentCommand;
+          use prw_agent::local_commands::request_frame::stream::write_local_command_request;
+          use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
+          use prw_agent::local_commands::status_snapshot::response_frame::stream::read_success_status_response;
+          use prw_agent::LocalIpcRequestId;
+
+          fn main() {
+              let socket = env::args().nth(1).expect("socket path argument");
+              let mut stream = UnixStream::connect(socket).expect("connect Agent socket");
+              let request_id = LocalIpcRequestId::new(12601).expect("non-zero request id");
+              write_local_command_request(&mut stream, request_id, LocalAgentCommand::GetAgentStatus)
+                  .expect("write status request");
+              stream.flush().expect("flush request");
+              let response = read_success_status_response(&mut stream).expect("read status response");
+              assert_eq!(response.request_id(), request_id);
+              assert_eq!(response.snapshot().runtime_state(), LocalAgentRuntimeState::Ready);
+              assert!(response.snapshot().protocol_version().is_supported());
+              println!("phase126a01_status=Ready protocol_supported=yes");
+          }
+          RS
+          cargo fmt -- crates/prw-agent/examples/phase126a01_custody_probe.rs crates/prw-agent/examples/phase126a01_status_probe.rs
+          cargo build --release --locked -p prw-agent -p prw-device-identity-provisioning \
+            --example phase126a01_custody_probe --example phase126a01_status_probe
+
+          mkdir -p phase126a01-payload
+          install -m 0755 target/release/prw-agent phase126a01-payload/prw-agent
+          install -m 0755 target/release/prw-device-identity-provisioning phase126a01-payload/prw-device-identity-provisioning
+          install -m 0755 target/release/examples/phase126a01_custody_probe phase126a01-payload/phase126a01-custody-probe
+          install -m 0755 target/release/examples/phase126a01_status_probe phase126a01-payload/phase126a01-status-probe
+          (cd phase126a01-payload && sha256sum prw-agent prw-device-identity-provisioning phase126a01-custody-probe phase126a01-status-probe > SHA256SUMS)
+          cat phase126a01-payload/SHA256SUMS
+          rm -f crates/prw-agent/examples/phase126a01_custody_probe.rs crates/prw-agent/examples/phase126a01_status_probe.rs
+          rmdir crates/prw-agent/examples 2>/dev/null || true
+
+      - name: Upload disposable proof payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase126a01-proof-payload
+          path: phase126a01-payload
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Commit validated formatting and lockfile; remove temporary workflow from branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'PRW Validation Bot'
+          git config user.email 'prw-validation@users.noreply.github.com'
+          git rm .github/workflows/phase-126-a01-provisioner-attestation-validation.yml
+          git add Cargo.lock Cargo.toml \
+            crates/prw-agent/src/main.rs \
+            crates/prw-device-identity-provisioning/Cargo.toml \
+            crates/prw-device-identity-provisioning/src/lib.rs \
+            crates/prw-device-identity-provisioning/src/main.rs \
+            crates/prw-device-identity-signer/src/lib.rs \
+            crates/prw-device-identity-signer/tests/public_fingerprint.rs
+          git diff --cached --check
+          git commit -m 'phase 126 a01: finalize validated provisioner and attestation candidate'
+          git push origin HEAD:phase-126-a01-provisioner-attestation
+
+  prove-disposable-on-powercode:
+    needs: validate-build-and-promote-branch
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download validated disposable payload
+        uses: actions/download-artifact@v4
+        with:
+          name: phase126a01-proof-payload
+          path: phase126a01-payload
+
+      - name: Prove provisioning and attestation without production mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          shopt -s inherit_errexit
+
+          payload="$GITHUB_WORKSPACE/phase126a01-payload"
+          cd "$payload"
+          sha256sum -c SHA256SUMS
+          chmod 0755 prw-agent prw-device-identity-provisioning phase126a01-custody-probe phase126a01-status-probe
+          for file in prw-agent prw-device-identity-provisioning phase126a01-custody-probe phase126a01-status-probe; do
+            test "$(stat -c '%a' "$file")" = '755'
+          done
+
+          test "$(hostname)" = 'PowerCode'
+          test "$(id -un)" = 'gersi365'
+          test "$(id -u)" = '1000'
+          test "${XDG_RUNTIME_DIR:-}" = '/run/user/1000'
+
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+          production_unit='/usr/lib/systemd/user/prw-agent.service'
+          production_socket="$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock"
+          expected_agent_sha='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          expected_unit_sha='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+          before_agent_sha=$(sha256sum "$production_agent" | awk '{print $1}')
+          before_unit_sha=$(sha256sum "$production_unit" | awk '{print $1}')
+          before_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath -p DropInPaths --no-pager)
+          before_linger=$(loginctl show-user "$USER" -p Linger --value)
+          test "$before_agent_sha" = "$expected_agent_sha"
+          test "$before_unit_sha" = "$expected_unit_sha"
+          grep -Fxq 'ActiveState=active' <<<"$before_service"
+          grep -Fxq 'SubState=running' <<<"$before_service"
+          grep -Fxq 'UnitFileState=enabled' <<<"$before_service"
+          test -z "$(systemctl --user show prw-agent.service -p DropInPaths --value)"
+          test "$before_linger" = 'yes'
+          "$payload/phase126a01-status-probe" "$production_socket"
+          echo 'phase126a01_production_preflight=pass'
+
+          root="${RUNNER_TEMP}/prw-phase126-a01-${GITHUB_RUN_ID}"
+          state="$root/state"
+          runtime="$root/runtime"
+          missing_runtime="$root/missing-runtime"
+          symlink_target="$root/symlink-target"
+          symlink_state="$root/symlink-state"
+          unit="prw-phase126-a01-agent-${GITHUB_RUN_ID}"
+          custody_unit="prw-phase126-a01-custody-${GITHUB_RUN_ID}"
+
+          cleanup() {
+            systemctl --user stop "$unit" >/dev/null 2>&1 || true
+            systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+            rm -rf "$root"
+          }
+          trap cleanup EXIT
+
+          test ! -e "$root"
+          install -d -m 0700 "$state" "$runtime" "$missing_runtime" "$symlink_target"
+
+          provision_output=$(XDG_STATE_HOME="$state" "$payload/prw-device-identity-provisioning")
+          printf '%s\n' "$provision_output"
+          fingerprint=$(sed -n 's/.* public_spki_sha256=\([0-9a-f]\{64\}\) .*/\1/p' <<<"$provision_output")
+          test "${#fingerprint}" -eq 64
+          [[ "$fingerprint" =~ ^[0-9a-f]{64}$ ]]
+          ciphertext="$state/private-remote-workspace/credentials/device-identity-private-key-v1.cred"
+          test -f "$ciphertext"
+          test ! -L "$ciphertext"
+          test "$(stat -c '%u' "$ciphertext")" = '1000'
+          test "$(stat -c '%a' "$ciphertext")" = '600'
+          test "$(find "$state" -type f | wc -l)" -eq 1
+          first_cipher_sha=$(sha256sum "$ciphertext" | awk '{print $1}')
+          echo 'phase126a01_first_provisioning=pass'
+
+          set +e
+          second_output=$(XDG_STATE_HOME="$state" "$payload/prw-device-identity-provisioning" 2>&1)
+          second_rc=$?
+          set -e
+          test "$second_rc" -ne 0
+          grep -Fxq 'prw-device-identity-provisioning result=failure kind=identity_already_exists' <<<"$second_output"
+          test "$(sha256sum "$ciphertext" | awk '{print $1}')" = "$first_cipher_sha"
+          echo 'phase126a01_second_provisioning_fail_closed=pass'
+
+          ln -s "$symlink_target" "$symlink_state"
+          set +e
+          symlink_output=$(XDG_STATE_HOME="$symlink_state" "$payload/prw-device-identity-provisioning" 2>&1)
+          symlink_rc=$?
+          set -e
+          test "$symlink_rc" -ne 0
+          grep -Fxq 'prw-device-identity-provisioning result=failure kind=destination_not_secure' <<<"$symlink_output"
+          test -z "$(find "$symlink_target" -mindepth 1 -print -quit)"
+          echo 'phase126a01_symlink_fail_closed=pass'
+
+          custody_output=$(systemd-run --user --quiet --wait --pipe --collect \
+            --unit="$custody_unit" \
+            --property=Type=exec \
+            --property="LoadCredentialEncrypted=prw.device-identity.private-key.v1:$ciphertext" \
+            "$payload/phase126a01-custody-probe")
+          printf '%s\n' "$custody_output"
+          custody_fingerprint=$(sed -n 's/^phase126a01_custody_fingerprint=\([0-9a-f]\{64\}\)$/\1/p' <<<"$custody_output")
+          test "$custody_fingerprint" = "$fingerprint"
+          echo 'phase126a01_custody_fingerprint_match=pass'
+
+          systemd-run --user --quiet --collect \
+            --unit="$unit" \
+            --property=Type=exec \
+            --property="LoadCredentialEncrypted=prw.device-identity.private-key.v1:$ciphertext" \
+            --setenv="XDG_RUNTIME_DIR=$runtime" \
+            "$payload/prw-agent"
+
+          candidate_socket="$runtime/private-remote-workspace/agent.sock"
+          deadline=$((SECONDS + 8))
+          until [[ -S "$candidate_socket" ]]; do
+            test "$SECONDS" -lt "$deadline"
+            systemctl --user is-active --quiet "$unit"
+            sleep 0.1
+          done
+          "$payload/phase126a01-status-probe" "$candidate_socket"
+          attestation=$(journalctl --user -u "$unit" --no-pager -o cat | grep '^prw-agent event=device_identity_loaded public_spki_sha256=' | tail -n 1)
+          test "$attestation" = "prw-agent event=device_identity_loaded public_spki_sha256=$fingerprint"
+          echo 'phase126a01_agent_attestation_match=pass'
+
+          systemctl --user stop "$unit"
+          deadline=$((SECONDS + 8))
+          while [[ -e "$candidate_socket" ]]; do
+            test "$SECONDS" -lt "$deadline"
+            sleep 0.1
+          done
+          echo 'phase126a01_candidate_cleanup=pass'
+
+          set +e
+          env -u CREDENTIALS_DIRECTORY XDG_RUNTIME_DIR="$missing_runtime" \
+            "$payload/prw-agent" >"$root/missing.stdout" 2>"$root/missing.stderr"
+          missing_rc=$?
+          set -e
+          test "$missing_rc" -ne 0
+          test ! -s "$root/missing.stdout"
+          grep -Fxq 'prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable' "$root/missing.stderr"
+          test ! -e "$missing_runtime/private-remote-workspace"
+          echo 'phase126a01_missing_identity_fail_closed=pass'
+
+          after_agent_sha=$(sha256sum "$production_agent" | awk '{print $1}')
+          after_unit_sha=$(sha256sum "$production_unit" | awk '{print $1}')
+          after_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath -p DropInPaths --no-pager)
+          after_linger=$(loginctl show-user "$USER" -p Linger --value)
+          test "$after_agent_sha" = "$before_agent_sha"
+          test "$after_unit_sha" = "$before_unit_sha"
+          test "$after_service" = "$before_service"
+          test "$after_linger" = "$before_linger"
+          "$payload/phase126a01-status-probe" "$production_socket"
+          echo 'phase126a01_production_unchanged=pass'
+          echo 'phase126a01_disposable_proof=pass'
