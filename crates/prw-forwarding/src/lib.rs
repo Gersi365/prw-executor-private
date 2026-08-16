@@ -248,7 +248,11 @@ pub struct PortForwardSession {
 }
 
 impl PortForwardSession {
-    const fn opening(id: PortForwardId, principal: ForwardingPrincipal, spec: TcpForwardSpec) -> Self {
+    const fn opening(
+        id: PortForwardId,
+        principal: ForwardingPrincipal,
+        spec: TcpForwardSpec,
+    ) -> Self {
         Self {
             id,
             principal,
@@ -297,7 +301,7 @@ impl PortForwardSession {
         self.state = ForwardingState::Failed;
     }
 
-    const fn require_active(&self) -> Result<(), ForwardingError> {
+    fn require_active(&self) -> Result<(), ForwardingError> {
         if self.state != ForwardingState::Active {
             return Err(ForwardingError::InvalidState);
         }
@@ -361,17 +365,17 @@ impl<B: PortForwardBackend> PortForwardBroker<B> {
         principal: ForwardingPrincipal,
         spec: TcpForwardSpec,
     ) -> Result<&PortForwardSession, ForwardingError> {
-        if self.sessions.contains_key(&id) {
-            return Err(ForwardingError::DuplicateSession);
-        }
-        if self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS {
-            return Err(ForwardingError::SessionCapacity);
-        }
-
+        let at_capacity = self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS;
         match self.sessions.entry(id) {
             Entry::Occupied(_) => Err(ForwardingError::DuplicateSession),
             Entry::Vacant(entry) => {
-                let handle = self.backend.open(spec).map_err(|_| ForwardingError::Backend)?;
+                if at_capacity {
+                    return Err(ForwardingError::SessionCapacity);
+                }
+                let handle = self
+                    .backend
+                    .open(spec)
+                    .map_err(|_| ForwardingError::Backend)?;
                 let mut record = PortForwardSession::opening(id, principal, spec);
                 record.mark_active();
                 Ok(&entry
@@ -394,7 +398,10 @@ impl<B: PortForwardBackend> PortForwardBroker<B> {
         &mut self,
         id: PortForwardId,
     ) -> Result<PortForwardSession, ForwardingError> {
-        let mut forward = self.sessions.remove(&id).ok_or(ForwardingError::UnknownSession)?;
+        let mut forward = self
+            .sessions
+            .remove(&id)
+            .ok_or(ForwardingError::UnknownSession)?;
         if let Err(error) = forward.record.require_active() {
             self.sessions.insert(id, forward);
             return Err(error);
@@ -464,7 +471,7 @@ impl std::error::Error for ForwardingError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv6Addr};
+    use std::net::Ipv6Addr;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     enum FailureMode {
@@ -525,7 +532,10 @@ mod tests {
 
     #[test]
     fn identifiers_and_ports_are_non_zero() {
-        assert_eq!(PortForwardId::new(0), Err(ForwardingError::InvalidIdentifier));
+        assert_eq!(
+            PortForwardId::new(0),
+            Err(ForwardingError::InvalidIdentifier)
+        );
         assert_eq!(
             LoopbackBind::new(LoopbackFamily::Ipv4, 0),
             Err(ForwardingError::InvalidBindPort)

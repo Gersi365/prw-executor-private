@@ -267,6 +267,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-forwarding"
+version = "0.1.0"
+dependencies = [
+ "prw-core",
+ "prw-registry",
+]
+
+[[package]]
 name = "prw-network"
 version = "0.1.0"
 dependencies = [
