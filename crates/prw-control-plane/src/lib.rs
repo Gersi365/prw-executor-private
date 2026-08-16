@@ -6,8 +6,11 @@
 //! Phase 115 adds provider-neutral enrollment proof-of-possession message and
 //! challenge/replay state semantics without selecting a wire protocol, signing
 //! backend, persistence layer, account-authentication mechanism, or listener.
+//! Phase 128 adds provider-neutral enrolled-device session authentication
+//! challenge, replay, and canonical-message semantics without granting capabilities.
 
 pub mod enrollment_pop;
+pub mod session_auth;
 
 use std::fmt;
 
