@@ -460,7 +460,7 @@ fn validate_challenge_lifetime(
     Ok(())
 }
 
-fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], EnrollmentProofMessageError> {
+const fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], EnrollmentProofMessageError> {
     if bytes.is_empty() || bytes.len() > MAX_ENROLLMENT_PROOF_IDENTIFIER_BYTES {
         return Err(EnrollmentProofMessageError::IdentifierOutOfBounds);
     }
