@@ -1,0 +1,26 @@
+name: Phase 109 A01 Runner Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-109-a01-runner-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runner-diagnostic:
+    runs-on: self-hosted
+    timeout-minutes: 3
+    steps:
+      - name: Identify assigned self-hosted runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== PRW RUNNER DIAGNOSTIC ==='
+          printf 'hostname='; hostname
+          printf 'user='; id -un
+          printf 'uid='; id -u
+          printf 'kernel='; uname -srmo
+          echo '=== END ==='
