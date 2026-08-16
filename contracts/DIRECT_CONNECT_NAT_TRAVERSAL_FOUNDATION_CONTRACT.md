@@ -35,22 +35,31 @@ STUN is discovery/reachability machinery, not authentication or authorization. T
 
 No proprietary hole-punching protocol is introduced.
 
-## Dependency selection gate
+## Exact dependency lock
 
-Phase 139 deliberately deferred the exact ICE/STUN/TURN Rust implementation dependency to Phase 141 and requires a current compatibility/security probe before pinning it.
+Phase 139 deliberately deferred the exact ICE/STUN/TURN Rust implementation dependency to Phase 141 and required a current compatibility probe before pinning it.
 
-The preferred candidate for the Phase 141 protocol engine is `rice-proto` because it provides a sans-I/O ICE RFC 8445 implementation with STUN/TURN integration while leaving socket/runtime ownership outside the protocol state machine.
+The Phase 141 protocol engine is now locked to the following exact direct dependencies:
 
-Before the repository graph is changed, Phase 141 must prove in a disposable scratch workspace:
+```toml
+rtc-ice = { version = "=0.20.2", default-features = false, features = ["aws-lc-rs"] }
+rtc-shared = { version = "=0.20.2", default-features = false }
+sansio = "=1.0.0"
+```
 
-1. exact candidate version resolution under Rust/Cargo 1.97.1;
-2. compilation with default features disabled unless a specific feature is explicitly required;
-3. basic `Agent`, stream and STUN-server APIs compile and execute;
-4. the resolved graph is captured and inspected for unintended platform-verifier/OpenSSL ownership;
-5. the scratch lockfile hash is recorded;
-6. no repository `Cargo.toml` or `Cargo.lock` is changed by the probe.
+`rtc-ice` is used as a Sans-I/O ICE state machine: PRW owns the surrounding product bounds and eventual socket/runtime integration, while the dependency owns ICE/STUN/TURN protocol behavior. This selection does not authorize production network activation.
 
-If the candidate fails this gate, Phase 141 must stop safely or select another vetted standards implementation through a separately evidenced corrective; it must not silently implement ICE/STUN/TURN authentication machinery from scratch.
+Phase 141 dependency probe run `31952085411`, after the bounded A01 harness correction, proved under Rust/Cargo 1.97.1 that:
+
+1. the exact direct versions resolve as `rtc-ice 0.20.2`, `rtc-shared 0.20.2`, `sansio 1.0.0`;
+2. the exact scratch graph compiles successfully;
+3. the exercised `Agent` Sans-I/O API compiles successfully;
+4. the scratch `Cargo.lock` SHA-256 is `ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96`;
+5. the repository `Cargo.toml` and `Cargo.lock` remain unchanged by the scratch probe.
+
+The initial probe failed only in the disposable harness because `BytesMut` does not implement `From<Vec<u8>>`; A01 changed only the probe construction to use a byte slice and the rerun passed. This corrective did not weaken the dependency gate or mutate the repository dependency graph.
+
+Phase 141 must not silently implement ICE/STUN/TURN authentication machinery from scratch.
 
 ## Component ownership
 
@@ -72,7 +81,7 @@ The Phase 141 adapter must normalize traversal results into the existing explici
 Traversal candidate classes map as follows:
 
 - host candidate on a local/private interface -> `LocalDirect` only when the candidate is explicitly classified as local/private and is valid for the peer context;
-- server-reflexive or directly routable non-local candidate -> `InternetDirect`;
+- server-reflexive, peer-reflexive or directly routable non-local candidate -> `InternetDirect`;
 - TURN relayed candidate -> `Relay`;
 - failed, expired or unusable candidate -> observation `Unreachable` or no candidate, never an invented reachable path.
 
@@ -82,7 +91,7 @@ Candidate identifiers remain non-zero and plan-scoped. The existing Phase 135 ca
 
 A candidate becomes `Reachable` only after the traversal engine has evidence of a currently selected/succeeded candidate pair or an equivalent completed reachability check appropriate to the standards implementation.
 
-Merely gathering a host, server-reflexive or relayed address does not make it reachable.
+Merely gathering a host, server-reflexive, peer-reflexive or relayed address does not make it reachable.
 
 Unknown, pending, failed, timed-out and withdrawn checks must not be promoted to `Reachable`.
 
@@ -103,18 +112,18 @@ The Phase 141 source foundation must use explicit finite bounds for at least:
 - number of STUN servers;
 - number of TURN servers;
 - number of local candidates admitted to one traversal session;
+- number of remote candidates admitted to one traversal session;
 - total product candidates exported to `PeerConnectivityPlan` (maximum 16);
-- per-transaction retry count;
-- initial and maximum retransmission intervals;
+- per-pair binding request count;
 - overall gather/check deadline;
 - maximum queued protocol transmits/events exposed by the adapter;
 - credential/string lengths accepted by any PRW-owned wrapper types.
 
-The exact numeric values may be selected by the Phase 141 implementation, but must be finite, tested at the boundary and recorded in the authoritative report.
+The exact numeric values may be selected by the Phase 141 implementation, but must be finite, tested at the boundary and recorded in the authoritative report. PRW must keep `AgentConfig::insecure_skip_verify` false.
 
 ## Credential handling
 
-TURN credentials, when modeled in Phase 141, are secret inputs and must not appear in `Debug`, error text, audit evidence, logs or public state snapshots.
+TURN credentials, when modeled in Phase 141, are secret inputs and must not appear in PRW-owned `Debug`, error text, audit evidence, logs or public state snapshots.
 
 Phase 141 uses only disposable test credentials. No production TURN account, API token, long-term password or production STUN/TURN endpoint is committed to the repository.
 
@@ -125,7 +134,7 @@ Phase 141 must prove at minimum:
 1. the selected exact ICE/STUN/TURN dependency graph compiles under Rust/Cargo 1.97.1;
 2. the repository lockfile is regenerated transactionally only after the candidate dependency passes the scratch gate;
 3. provider-neutral Phase 135 selection semantics remain unchanged;
-4. the traversal adapter can configure standard ICE/STUN inputs through the selected library without production socket activation;
+4. the traversal adapter can configure standard ICE/STUN/TURN inputs through the selected library without production socket activation;
 5. gathered/selected traversal results map deterministically to `LocalDirect`, `InternetDirect` or `Relay` and never bypass the 16-candidate bound;
 6. pending/failed/timed-out traversal state does not become `Reachable`;
 7. selected direct candidate beats relay through the existing Phase 135 selector;
