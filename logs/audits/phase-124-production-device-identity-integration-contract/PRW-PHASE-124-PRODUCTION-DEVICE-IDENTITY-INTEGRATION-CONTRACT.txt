@@ -1,0 +1,309 @@
+Private Remote Workspace
+Phase 124 — Production Device-Identity Provisioning and Agent/systemd Integration Contract Lock
+
+STATUS:
+PASS / PRODUCTION_PROVISIONING_TRANSACTION_LOCKED / EXPLICIT_ONE_SHOT_PROVISIONING_ONLY / NO_AUTOMATIC_KEY_GENERATION_ON_AGENT_START / SYSTEMD_ENCRYPTED_CREDENTIALS_PRESERVED / TPM2_PLUS_HOST_SECRET_REQUIRED_ON_CURRENT_POWERCODE / HOST_KEY_ONLY_NOT_SILENTLY_SELECTED / XDG_STATE_CIPHERTEXT_TARGET_LOCKED / FIXED_CREDENTIAL_NAME_PRESERVED / USER_UNIT_DROP_IN_INTEGRATION_LOCKED / GLOBAL_PACKAGED_UNIT_REMAINS_UNCHANGED / AGENT_CUSTODY_LOAD_BEFORE_READY_LOCKED / FAIL_CLOSED_IDENTITY_STARTUP_LOCKED / ROLLBACK_BEFORE_ENROLLMENT_LOCKED / ROTATION_SEPARATELY_GATED / NO_PRODUCTION_PRIVATE_KEY_CREATED / NO_REAL_HOST_MUTATION / READY_FOR_PHASE_125_DISPOSABLE_SOURCE_AND_TRANSACTION_IMPLEMENTATION
+
+AUDIT TYPE: SECURITY ARCHITECTURE / PRODUCTION PROVISIONING AND SERVICE-INTEGRATION CONTRACT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative Phase 123 head: 23b5c5e88953cd2eb5414376da1d69527d7c4196
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION AND SCOPE
+
+Standing user authorization remains active for continued routine PRW implementation without repeated approval prompts.
+
+This phase is decision-only. It creates no production private key, no encrypted production credential, no service drop-in on PowerCode, no daemon-reload, no Agent restart, no enrollment, no networking change, and no database or authentication mutation.
+
+The production private-key creation / real-host activation step remains a separately sensitive mutation boundary and is not authorized by this decision report alone.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 118 locked:
+- Ubuntu custody provider: systemd encrypted service credentials;
+- logical credential name: prw.device-identity.private-key.v1;
+- encrypted blob root: ${XDG_STATE_HOME:-$HOME/.local/state}/private-remote-workspace/credentials/;
+- encrypted blob filename: device-identity-private-key-v1.cred;
+- preferred policy on capable hosts: TPM2_PLUS_HOST_SECRET;
+- HOST_KEY_ONLY only as an explicit lower-tier fallback;
+- no silent security downgrade;
+- no persistent plaintext private-key file;
+- runtime plaintext only through $CREDENTIALS_DIRECTORY.
+
+Phase 119 locked the Ubuntu plaintext credential payload as canonical P-256 PKCS#8 v1 DER and proved DER ECDSA compatibility with the production verifier.
+
+Phase 120 locked typed enrollment proof signing only and prohibited a generic sign(bytes) API.
+
+Phase 121 implemented the narrow UbuntuEnrollmentSigner.
+
+Phase 122 implemented the narrow systemd custody adapter:
+load_ubuntu_enrollment_signer_from_systemd_credential()
+
+Phase 123 proved on the real PowerCode systemd 259 user manager that:
+- LoadCredentialEncrypted= delivers the exact fixed credential successfully;
+- runtime credential directory is UID/GID 1000/1000 mode 0500;
+- runtime credential file is UID/GID 1000/1000 mode 0400;
+- the exact Phase 122 custody adapter loads the credential successfully;
+- current prw-agent service and executable remained unchanged and active;
+- no production key was created.
+
+PROVISIONING OWNERSHIP
+
+Production Ubuntu device-identity provisioning is an explicit, bounded, one-shot local transaction.
+
+It is NOT an implicit side effect of:
+- normal Agent startup;
+- Agent restart;
+- missing-credential recovery;
+- enrollment request receipt;
+- remote network traffic;
+- systemd service activation.
+
+If no production identity exists, normal Agent startup must not silently create one.
+
+The provisioning implementation must have a narrow local entry point dedicated to device identity. It must not expose arbitrary secret generation, arbitrary file encryption, arbitrary command execution, or generic signing.
+
+CURRENT POWERCODE CUSTODY POLICY
+
+PowerCode has already proven usable TPM2 capability and successful systemd default user-scoped encrypted-credential delivery.
+
+Therefore the first production provisioning transaction on PowerCode is locked to:
+TPM2_PLUS_HOST_SECRET
+
+The implementation must not request HOST_KEY_ONLY on this host as an automatic retry or compatibility fallback.
+
+If the TPM2-capable default encryption path fails, provisioning fails closed before production activation.
+
+HOST_KEY_ONLY remains architecture-supported only as a future explicit lower-tier provisioning decision for a host where TPM2 is not usable and product policy explicitly permits fallback.
+
+KEY GENERATION AND PLAINTEXT LIFETIME
+
+The production private key profile remains:
+- ECDSA P-256;
+- canonical PKCS#8 v1 DER custody payload;
+- canonical X.509 SPKI public identity;
+- SHA-256 / ASN.1 DER ECDSA signature profile already locked by Phases 113-121.
+
+The provisioning transaction must:
+1. generate a fresh P-256 identity using the already locked cryptographic provider;
+2. derive the canonical public identity before activation;
+3. hold any PRW-owned plaintext PKCS#8 bytes in a bounded zeroizing owner;
+4. never log, serialize to audit, return over IPC, or persist the plaintext private bytes as normal PRW state;
+5. hand the bounded payload only to the fixed systemd encrypted-credential creation boundary;
+6. drop/zeroize PRW-owned plaintext buffers immediately after encryption/verification handoff.
+
+Phase 125 must prove a no-persistent-plaintext provisioning path. If the selected systemd interface cannot be used without creating a named persistent plaintext key file, Phase 125 must stop and classify the interface gap rather than silently weakening this contract.
+
+ENCRYPTED CREDENTIAL TARGET
+
+The production ciphertext target remains:
+${XDG_STATE_HOME:-$HOME/.local/state}/private-remote-workspace/credentials/device-identity-private-key-v1.cred
+
+Required transaction properties:
+- resolve the XDG state root for the target user before mutation;
+- credential directory owned by the PRW user and mode 0700;
+- encrypted blob owned by the PRW user and mode 0600;
+- no symlink following for directory/blob creation or replacement;
+- candidate written to a fresh temporary sibling in the same protected directory;
+- candidate fully flushed before activation;
+- final promotion by atomic same-directory replacement only after verification;
+- an unknown or foreign pre-existing final target fails closed;
+- first provisioning must not overwrite an existing production blob;
+- replacement of an existing valid identity belongs to a separate rotation transaction.
+
+CANDIDATE VERIFICATION BEFORE ACTIVATION
+
+Before the candidate becomes authoritative, Phase 125/126 validation must prove with disposable material that the exact encrypted candidate can be delivered through the intended user-service context and loaded by the exact Phase 122 custody adapter.
+
+For a future real production transaction, candidate verification must establish at least:
+- encrypted credential creation succeeded under the selected custody tier;
+- credential-name binding is exactly prw.device-identity.private-key.v1;
+- transient user-service delivery succeeds;
+- exact custody adapter load succeeds;
+- signer-derived canonical public identity equals the public identity derived before encryption.
+
+No production enrollment may occur before this verification passes.
+
+SYSTEMD SERVICE INTEGRATION
+
+The global packaged service remains:
+/usr/lib/systemd/user/prw-agent.service
+
+Its repository source remains:
+packaging/systemd/prw-agent.service
+
+Phase 124 does not add LoadCredentialEncrypted= to the global packaged unit because the encrypted source path is user-specific and may depend on XDG_STATE_HOME.
+
+The locked integration mechanism is an intentionally managed per-user systemd user-unit drop-in.
+
+Logical drop-in path:
+${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/prw-agent.service.d/20-device-identity-credential.conf
+
+The drop-in must contain only the bounded service credential mapping for the resolved absolute ciphertext source path:
+
+[Service]
+LoadCredentialEncrypted=prw.device-identity.private-key.v1:<resolved-absolute-encrypted-blob-path>
+
+No private bytes are present in the drop-in.
+
+The drop-in transaction must:
+- use the intended user identity only;
+- create the drop-in directory/file without following symlinks;
+- reject foreign/unmanaged conflicting content;
+- use atomic replacement;
+- preserve the global unit byte-for-byte;
+- preserve service enablement and linger policy;
+- avoid .socket activation, shell wrappers, User=, DynamicUser=, RuntimeDirectory=, or synthetic XDG_RUNTIME_DIR.
+
+AGENT SOURCE DEPENDENCY INTEGRATION
+
+The separately audited dependency boundary may now advance in a future implementation phase:
+prw-agent -> prw-device-identity-custody -> prw-device-identity-signer
+
+The existing verifier/signer separation remains unchanged.
+
+The Agent must not gain:
+- raw private-key accessors;
+- generic signing APIs;
+- arbitrary credential-path configuration;
+- persistent plaintext fallback;
+- remote secret-export behavior.
+
+AGENT STARTUP / READINESS SEMANTICS
+
+Once the production credential drop-in is activated, the Agent must load the Ubuntu enrollment signer through the exact Phase 122 custody function during bounded startup before publishing normal Ready state.
+
+Locked ordering:
+1. validate existing process/runtime prerequisites;
+2. acquire the existing single-instance ownership boundary;
+3. load the fixed systemd-delivered device-identity signer;
+4. only after successful custody load may the Agent progress to normal listener/readiness publication.
+
+If systemd cannot decrypt/deliver the credential, service activation fails closed before Agent startup.
+
+If the Agent receives the credential but the custody/signer boundary rejects it, the Agent exits with a bounded non-secret identity-custody failure before Ready.
+
+The Agent must not report normal Ready while the configured production identity is unavailable or invalid.
+
+The existing signal/shutdown precedence and local IPC security boundaries remain unchanged.
+
+ERROR AND LOGGING CONTRACT
+
+Provisioning and Agent integration errors must be bounded classifications and must not include:
+- private-key bytes;
+- PKCS#8 payload;
+- encrypted credential contents;
+- systemd host secret material;
+- TPM secret material;
+- complete canonical enrollment proof messages;
+- arbitrary environment values.
+
+Absolute managed ciphertext/drop-in paths may be recorded only where needed for local auditability; they are configuration metadata, not secret material. Private bytes are never audit evidence.
+
+FIRST-PROVISIONING TRANSACTION ORDER
+
+A future real production provisioning transaction must use this high-level order:
+1. capture authoritative repository head and real-host pre-state;
+2. verify current Agent executable/unit hashes, enabled/active state, linger state, XDG roots, systemd user manager, and TPM2-capable custody policy;
+3. prove final production ciphertext target and managed drop-in do not already contain an authoritative identity/configuration;
+4. generate a fresh candidate identity in bounded memory;
+5. derive candidate canonical public identity;
+6. create the candidate systemd encrypted credential under the fixed name and selected policy;
+7. verify candidate delivery/load/public-identity equality through a disposable transient user-service path;
+8. atomically promote the ciphertext candidate to the final protected XDG state path;
+9. atomically install the managed per-user drop-in referencing that exact final absolute path;
+10. systemctl --user daemon-reload;
+11. restart prw-agent.service in a bounded transaction;
+12. verify active/running state and the existing local IPC Ready contract;
+13. verify no plaintext key artifact remains;
+14. only after all preceding checks pass may a later enrollment phase use the signer.
+
+ROLLBACK BEFORE ENROLLMENT
+
+Until the new public identity has been accepted by an enrollment authority, the provisioning transaction is locally reversible.
+
+If any activation check fails after candidate promotion but before enrollment:
+- stop the failed new activation if required;
+- restore the exact pre-transaction drop-in state;
+- remove the newly created un-enrolled ciphertext only if it was created by this transaction and no prior identity existed;
+- daemon-reload;
+- restore the prior Agent service state;
+- verify prior executable/unit hashes, enablement, linger, and local IPC state;
+- preserve bounded audit evidence without preserving private plaintext.
+
+A failed first-provisioning transaction must not leave a partially authoritative device identity.
+
+ROTATION / RE-ENROLLMENT SEPARATION
+
+If a production encrypted identity already exists, first-provisioning logic must fail closed.
+
+Identity replacement is not an overwrite case. It is a separate rotation/re-enrollment lifecycle requiring:
+- old/new public-identity coordination;
+- explicit authorization semantics;
+- atomic authority transition;
+- rollback rules that account for server-side enrollment state.
+
+Phase 124 does not authorize or implement rotation.
+
+ENROLLMENT SEPARATION
+
+Provisioning and service integration do not themselves enroll the device.
+
+The first production identity may exist locally and be service-loaded before enrollment, but no remote enrollment proof is sent until a later explicitly audited enrollment activation phase.
+
+No control-plane persistence or account authentication change is part of Phase 124.
+
+PHASE 125 BOUNDARY
+
+Standing authorization permits Phase 125 to implement and validate the provisioning/source integration using disposable test credentials and non-production filesystem/systemd fixtures only.
+
+Phase 125 may:
+- add the minimum narrow provisioning implementation boundary required by this contract;
+- add the prw-agent -> prw-device-identity-custody dependency in source if guarded by focused tests;
+- implement fail-closed custody load before Ready in testable source form;
+- add deterministic generation/encryption transaction abstractions with fixed credential identity;
+- validate protected XDG ciphertext and managed drop-in candidate behavior in disposable roots;
+- use disposable P-256 credentials only;
+- use temporary CI workflows if required, removing them after evidence capture;
+- update Cargo.lock only for explainable minimal dependency reachability.
+
+Phase 125 must not:
+- generate the real production PRW private key on PowerCode;
+- persist a production encrypted credential;
+- install the real production drop-in;
+- daemon-reload or restart the real prw-agent service;
+- perform production enrollment;
+- activate public networking, DNS, SSH, forwarding, file transfer, or control-plane persistence;
+- implement rotation;
+- select HOST_KEY_ONLY silently.
+
+The first real production-key provisioning / service activation transaction remains outside Phase 125 and requires an explicit real-host mutation gate.
+
+MUTATION STATEMENT
+
+Phase 124 net mutation is this single authoritative decision report only.
+
+No Phase 124 mutation to:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- packaged systemd unit;
+- installed Agent binary;
+- user-systemd configuration;
+- production credential state;
+- service manager state;
+- enrollment state;
+- network/DNS/firewall/database state.
+
+FINAL CLASSIFICATION
+
+PASS / PHASE_124_CONTRACT_LOCKED / EXPLICIT_LOCAL_FIRST_PROVISIONING / P256_PKCS8_V1_DER / SYSTEMD_ENCRYPTED_CREDENTIALS / POWER_CODE_TPM2_PLUS_HOST_SECRET / NO_SILENT_HOST_KEY_DOWNGRADE / PROTECTED_XDG_CIPHERTEXT / USER_SPECIFIC_SYSTEMD_DROP_IN / GLOBAL_UNIT_PRESERVED / CUSTODY_LOAD_BEFORE_READY / FAIL_CLOSED_IDENTITY_STARTUP / PRE_ENROLLMENT_ROLLBACK / ROTATION_SEPARATE / NO_PRODUCTION_PRIVATE_KEY / NO_REAL_HOST_MUTATION / PHASE_125_DISPOSABLE_IMPLEMENTATION_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 124 production provisioning and Agent/systemd integration contract report.
