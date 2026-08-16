@@ -1,0 +1,210 @@
+name: Phase 142 Disposable Relay Service Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-142-relay-service-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove Phase 142 prerequisites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/DISPOSABLE_RELAY_PROTOCOL_SERVICE_CONTRACT.md
+          test -f logs/audits/phase-141-nat-traversal-connectivity-checks/PRW-PHASE-141-NAT-TRAVERSAL-CONNECTIVITY-CHECKS-VALIDATION.txt
+          grep -Fq 'PHASE_141_DONE' logs/audits/phase-141-nat-traversal-connectivity-checks/PRW-PHASE-141-NAT-TRAVERSAL-CONNECTIVITY-CHECKS-VALIDATION.txt
+          test -f crates/prw-relay-service/Cargo.toml
+          test -f crates/prw-relay-service/src/lib.rs
+          test -f crates/prw-relay-service/tests/security_boundaries.rs
+          rustc --version | grep -Fq 'rustc 1.97.1'
+          cargo --version | grep -Fq 'cargo 1.97.1'
+          echo phase142_prerequisite=pass
+
+      - name: Apply exact dependency and token-debug correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > crates/prw-relay-service/Cargo.toml <<'EOF'
+          [package]
+          name = "prw-relay-service"
+          version.workspace = true
+          edition.workspace = true
+          license.workspace = true
+          authors.workspace = true
+
+          [dependencies]
+          prw-connectivity = { path = "../prw-connectivity" }
+          prw-relay = { path = "../prw-relay" }
+
+          [dev-dependencies]
+          prw-core = { path = "../prw-core" }
+
+          [lints]
+          workspace = true
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-relay/src/lib.rs')
+          text = path.read_text()
+          old = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RelayRouteToken([u8; 32]);
+
+impl RelayRouteToken {'''
+          new = '''#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RelayRouteToken([u8; 32]);
+
+impl fmt::Debug for RelayRouteToken {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("RelayRouteToken(<redacted>)")
+    }
+}
+
+impl RelayRouteToken {'''
+          if text.count(old) != 1:
+              raise SystemExit('RelayRouteToken corrective boundary mismatch')
+          path.write_text(text.replace(old, new))
+
+          root = Path('Cargo.toml')
+          text = root.read_text()
+          member = '    "crates/prw-relay-service",\n'
+          if member not in text:
+              anchor = '    "crates/prw-relay",\n'
+              if text.count(anchor) != 1:
+                  raise SystemExit('workspace relay member anchor mismatch')
+              root.write_text(text.replace(anchor, anchor + member))
+          PY
+          grep -Fq 'RelayRouteToken(<redacted>)' crates/prw-relay/src/lib.rs
+          grep -Fq '"crates/prw-relay-service"' Cargo.toml
+          echo phase142_correctives=pass
+
+      - name: Lock and inspect exact workspace graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 > /tmp/phase142-metadata.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open('/tmp/phase142-metadata.json'))
+          root = next(p for p in data['packages'] if p['name'] == 'prw-relay-service')
+          direct = {d['name']: d['req'] for d in root['dependencies']}
+          expected = {'prw-connectivity': '*', 'prw-core': '*', 'prw-relay': '*'}
+          if direct != expected:
+              raise SystemExit(f'Phase 142 direct dependency mismatch: {direct!r}')
+          external = [d for d in root['dependencies'] if d.get('source') is not None]
+          if external:
+              raise SystemExit(f'Phase 142 unexpectedly owns external dependencies: {external!r}')
+          print('phase142_exact_graph=pass')
+          PY
+          echo "phase142_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+
+      - name: Prove static opacity and no-network boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source=crates/prw-relay-service/src/lib.rs
+          for forbidden in 'UdpSocket' 'TcpStream' 'TcpListener' 'ToSocketAddrs' 'lookup_host' 'tokio::' 'std::process' 'Command::new' '/dev/net/tun' 'iptables' 'nftables' 'quinn::' 'rustls::'; do
+            if grep -Fq "$forbidden" "$source"; then
+              echo "phase142_forbidden_runtime_token=$forbidden" >&2
+              exit 1
+            fi
+          done
+          grep -Fq 'RELAY_HEADER_BYTES: usize = 48' "$source"
+          grep -Fq 'MAX_DISPOSABLE_RELAY_ROUTES: usize = 32' "$source"
+          grep -Fq 'MAX_QUEUED_RELAY_FRAMES: usize = 64' "$source"
+          grep -Fq 'MAX_QUEUED_RELAY_BYTES: usize = 1024 * 1024' "$source"
+          grep -Fq '.field("route_token", &"<redacted>")' "$source"
+          grep -Fq 'RelayRouteToken(<redacted>)' crates/prw-relay/src/lib.rs
+          echo phase142_static_boundary=pass
+
+      - name: Focused Phase 142 validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all
+          git diff --check -- . ':!target'
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-relay -p prw-relay-service --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-relay -p prw-relay-service --all-targets
+          cargo build --locked -p prw-relay-service --all-targets
+          echo phase142_focused_validation=pass
+
+      - name: Full workspace validation
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          relay_sha=$(sha256sum crates/prw-relay/src/lib.rs | cut -d' ' -f1)
+          service_sha=$(sha256sum crates/prw-relay-service/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "relay_sha=$relay_sha" >> "$GITHUB_OUTPUT"
+          echo "service_sha=$service_sha" >> "$GITHUB_OUTPUT"
+          echo "phase142_workspace_validation=pass lock_sha=$lock_sha relay_sha=$relay_sha service_sha=$service_sha"
+
+      - name: Write authoritative Phase 142 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+          RELAY_SHA: ${{ steps.workspace.outputs.relay_sha }}
+          SERVICE_SHA: ${{ steps.workspace.outputs.service_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir=logs/audits/phase-142-disposable-relay-protocol-service
+          report="$report_dir/PRW-PHASE-142-DISPOSABLE-RELAY-PROTOCOL-SERVICE-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 142 — Disposable Relay Protocol and Service' \
+            '' \
+            'STATUS:' \
+            'PASS / FALLBACK_ONLY / OPAQUE_PAYLOAD_FORWARDING / ROUTE_TOKEN_DEBUG_REDACTED / BOUNDED_IN_MEMORY_SERVICE / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_RELAY_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            "Cargo.lock SHA-256: $LOCK_SHA" \
+            "prw-relay/src/lib.rs SHA-256: $RELAY_SHA" \
+            "prw-relay-service/src/lib.rs SHA-256: $SERVICE_SHA" \
+            '' \
+            'CONTRACT: contracts/DISPOSABLE_RELAY_PROTOCOL_SERVICE_CONTRACT.md' \
+            'IMPLEMENTATION: crates/prw-relay-service plus bounded RelayRouteToken Debug hardening in crates/prw-relay' \
+            '' \
+            'ARCHITECTURE: the disposable PRW relay service is dependency-local and in-memory. It owns no sockets, DNS, async runtime, process/shell, TUN/TAP, firewall, route, QUIC or TLS implementation. It forwards only Phase 136 OpaqueRelayFrame bytes through a 48-byte PRWR routing envelope and never terminates the peer-to-peer Phase 140 QUIC/TLS association.' \
+            '' \
+            'BOUNDS: 32 active routes, two participants per route, 64 queued frames and 1 MiB queued opaque payload per participant, with the existing Phase 136 65,536-byte single-frame ceiling. Route endpoint mismatch, token mismatch, unpaired forwarding, third participant, route/queue capacity, malformed envelope and unknown participant all fail closed.' \
+            '' \
+            'SECURITY CORRECTIVES: prw-relay-service directly declares prw-connectivity because runtime source owns the typed endpoint reference. RelayRouteToken now has a redacted custom Debug implementation, so nested RelaySessionSpec Debug cannot expose raw token bytes. RelayRoutingPacket Debug already redacts route token and opaque payload bytes.' \
+            '' \
+            'VALIDATION: focused rustfmt, Clippy -D warnings, relay/service all-target tests and service build passed. Regression tests prove route-token/session Debug redaction, routing-packet redaction, queue byte-capacity behavior, malformed envelope rejection, route isolation, third-participant rejection, token mismatch, unpaired failure and bidirectional byte-identical forwarding. Full locked workspace Clippy, tests and build passed.' \
+            '' \
+            'PRODUCTION BOUNDARY: no production relay endpoint/listener, TURN allocation, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS or Android/Desktop distribution state changed.' \
+            '' \
+            'FINAL CLASSIFICATION: PHASE_142_DONE / DISPOSABLE_RELAY_PROVIDER_VALIDATED / OPAQUE_END_TO_END_PAYLOAD / READY_FOR_PHASE_143' \
+            > "$report"
+
+      - name: Commit validated Phase 142 state only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!target'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock crates/prw-relay/src/lib.rs crates/prw-relay-service logs/audits/phase-142-disposable-relay-protocol-service/PRW-PHASE-142-DISPOSABLE-RELAY-PROTOCOL-SERVICE-VALIDATION.txt
+          git commit -m 'phase 142: validate disposable relay protocol and service'
+          git push origin HEAD:main
+          echo phase142_materialization=pass
