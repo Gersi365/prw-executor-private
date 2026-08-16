@@ -1,0 +1,136 @@
+name: Phase 130 Registry Finalization
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-130-registry-finalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require completed Phase 129 authority
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f logs/audits/phase-129-host-control-transport/PRW-PHASE-129-CONTROL-TRANSPORT-VALIDATION.txt
+          grep -Fq 'PHASE_129_SOURCE_AND_DISPOSABLE_TRANSPORT_FOUNDATION_DONE' \
+            logs/audits/phase-129-host-control-transport/PRW-PHASE-129-CONTROL-TRANSPORT-VALIDATION.txt
+          grep -A3 '^name = "rustls"$' Cargo.lock | grep -Fq 'version = "0.23.43"'
+          echo 'phase130_phase129_prerequisite=pass'
+
+      - name: Format new registry source and lock dependency graph
+        id: lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all
+          mapfile -t formatted < <(git diff --name-only -- crates)
+          for path in "${formatted[@]}"; do
+            case "$path" in
+              crates/prw-registry/src/lib.rs) ;;
+              *) echo "unexpected_phase130_format_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase130_lock_sha256=$lock_sha"
+
+      - name: Run focused registry gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-registry --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-registry --all-targets
+          echo 'phase130_focused_validation=pass'
+
+      - name: Run full workspace gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace
+          echo 'phase130_workspace_validation=pass'
+
+      - name: Record authoritative Phase 130 report and self-clean
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.lock.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-130-device-registry-workspace-membership'
+          report="$report_dir/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 130 — Device Registry and Workspace Membership Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / BOUNDED_REGISTRY_IMPLEMENTED / CURRENT_STATE_REVALIDATION_PASS / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REGISTRY_NOT_POPULATED
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative finalization run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+
+          CONTRACT
+          contracts/DEVICE_REGISTRY_WORKSPACE_MEMBERSHIP_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-registry
+
+          The Phase 130 registry implements:
+          - exact (WorkspaceId, UserId) membership uniqueness;
+          - Owner/Admin/Member role metadata with no implicit capability grant;
+          - Active/Suspended/Removed membership lifecycle with terminal removal;
+          - exact DeviceId uniqueness;
+          - registration only for DeviceLifecycle::Enrolled under an active exact membership;
+          - immutable workspace/user/device/public-identity binding;
+          - terminal device revocation while retaining identity evidence;
+          - revalidation of Phase 128 AuthenticatedDeviceSession against current membership/device state;
+          - RegistryValidatedPrincipal identity+role snapshot with no capability set;
+          - hard bounds of 4096 memberships and 4096 registered devices per in-memory authority.
+
+          VALIDATION
+          The authoritative run passed before promotion:
+          - rustfmt;
+          - focused prw-registry Clippy with -D warnings;
+          - focused prw-registry tests;
+          - full workspace/all-target Clippy with -D warnings;
+          - full workspace/all-target tests;
+          - full workspace build;
+          - locked dependency metadata.
+
+          Security-relevant tested behavior includes duplicate-key fail-closed semantics, capacity-before-insertion, active-membership requirement, enrolled-device requirement, duplicate DeviceId non-rebinding, current-registry revalidation after membership suspension, and invalidation after device revocation/removal.
+
+          PRODUCTION BOUNDARY
+          Phase 130 did not populate a production registry, select a database, authenticate an account, grant remote capabilities, or mutate PowerCode/network state.
+
+          Real production registry population remains causally dependent on real Phase 126 device identity activation, real Phase 127 enrollment, and a later durable registry persistence/deployment decision.
+
+          FINAL CLASSIFICATION
+          PHASE_130_SOURCE_AND_DISPOSABLE_REGISTRY_FOUNDATION_DONE / NO_PRODUCTION_REGISTRY_SIDE_EFFECT / READY_FOR_PHASE_131_SOURCE_WORK
+          EOF
+
+          git rm -f -- .github/workflows/phase-130-registry-finalization.yml
+          git diff --check
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add -A
+          git commit -m 'phase 130: finalize registry and membership foundation'
+          git push origin HEAD:main
+          echo 'phase130_finalization=pass'
