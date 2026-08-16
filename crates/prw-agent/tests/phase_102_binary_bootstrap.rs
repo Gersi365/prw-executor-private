@@ -10,6 +10,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use aws_lc_rs::{
+    rand::SystemRandom,
+    signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
+};
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use prw_agent::local_commands::LocalAgentCommand;
@@ -17,6 +21,7 @@ use prw_agent::local_commands::request_frame::stream::write_local_command_reques
 use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
 use prw_agent::local_commands::status_snapshot::response_frame::stream::read_success_status_response;
 use prw_agent::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME, LocalIpcRequestId};
+use prw_device_identity_custody::SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 const STARTUP_DEADLINE: Duration = Duration::from_secs(5);
@@ -56,29 +61,79 @@ impl Drop for TempRuntimeRoot {
     }
 }
 
+struct TempCredentialDirectory {
+    path: PathBuf,
+}
+
+impl TempCredentialDirectory {
+    fn new() -> Self {
+        let sequence = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "prw-phase-125-binary-credential-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir(&path).expect("Phase 125 temporary credential directory creates");
+        fs::set_permissions(&path, Permissions::from_mode(0o700))
+            .expect("Phase 125 temporary credential directory mode sets");
+
+        let key = EcdsaKeyPair::generate_pkcs8(
+            &ECDSA_P256_SHA256_ASN1_SIGNING,
+            &SystemRandom::new(),
+        )
+        .expect("Phase 125 disposable P-256 credential generates");
+        let credential = path.join(SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME);
+        fs::write(&credential, key.as_ref()).expect("Phase 125 disposable credential writes");
+        fs::set_permissions(&credential, Permissions::from_mode(0o400))
+            .expect("Phase 125 disposable credential mode sets");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempCredentialDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 struct AgentChild {
     child: Option<Child>,
+    _credential: TempCredentialDirectory,
 }
 
 impl AgentChild {
     fn spawn(root: &Path) -> Self {
+        let credential = TempCredentialDirectory::new();
         let child = Command::new(env!("CARGO_BIN_EXE_prw-agent"))
             .env("XDG_RUNTIME_DIR", root)
+            .env("CREDENTIALS_DIRECTORY", credential.path())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .expect("Phase 102 Agent binary spawns");
-        Self { child: Some(child) }
+        Self {
+            child: Some(child),
+            _credential: credential,
+        }
     }
 
     fn spawn_without_runtime_env() -> Self {
+        let credential = TempCredentialDirectory::new();
         let child = Command::new(env!("CARGO_BIN_EXE_prw-agent"))
             .env_remove("XDG_RUNTIME_DIR")
+            .env("CREDENTIALS_DIRECTORY", credential.path())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .expect("Phase 102 Agent binary spawns without XDG runtime env");
-        Self { child: Some(child) }
+        Self {
+            child: Some(child),
+            _credential: credential,
+        }
     }
 
     const fn child_mut(&mut self) -> &mut Child {
