@@ -69,3 +69,4 @@ jobs:
           systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState 2>&1 || true
           loginctl show-user gersi365 -p Linger -p RuntimePath -p State
           echo '=== END A05 DIAGNOSTIC ==='
+          # Trigger marker: diagnostic content unchanged.
