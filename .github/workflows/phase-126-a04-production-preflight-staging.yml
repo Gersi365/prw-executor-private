@@ -11,21 +11,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Build exact locked activation candidates
+      - name: Build reproducible locked activation candidates
         shell: bash
         run: |
           set -Eeuo pipefail
           rustc --version
           cargo --version
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          test "$(sha256sum Cargo.lock | cut -d' ' -f1)" = 'aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424'
           cargo fmt --all -- --check
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo test --locked --workspace --all-targets
-          cargo build --release --locked -p prw-agent --bin prw-agent
-          cargo build --release --locked -p prw-device-identity-provisioning --bin prw-device-identity-provision
 
           mkdir -p crates/prw-agent/examples
           cat > crates/prw-agent/examples/phase126_a04_status_probe.rs <<'RS'
@@ -50,18 +49,72 @@ jobs:
               println!("phase126_a04_status=Ready protocol_supported=yes");
           }
           RS
-          cargo build --release --locked -p prw-agent --example phase126_a04_status_probe
+
+          rm -rf \
+            target-phase126-a04-agent-1 \
+            target-phase126-a04-agent-2 \
+            target-phase126-a04-provisioner-1 \
+            target-phase126-a04-provisioner-2 \
+            target-phase126-a04-probe
+
+          CARGO_TARGET_DIR="$PWD/target-phase126-a04-agent-1" \
+            cargo build --release --locked -p prw-agent --bin prw-agent
+          CARGO_TARGET_DIR="$PWD/target-phase126-a04-agent-2" \
+            cargo build --release --locked -p prw-agent --bin prw-agent
+          CARGO_TARGET_DIR="$PWD/target-phase126-a04-provisioner-1" \
+            cargo build --release --locked -p prw-device-identity-provisioning --bin prw-device-identity-provision
+          CARGO_TARGET_DIR="$PWD/target-phase126-a04-provisioner-2" \
+            cargo build --release --locked -p prw-device-identity-provisioning --bin prw-device-identity-provision
+          CARGO_TARGET_DIR="$PWD/target-phase126-a04-probe" \
+            cargo build --release --locked -p prw-agent --example phase126_a04_status_probe
+
+          cmp -s \
+            target-phase126-a04-agent-1/release/prw-agent \
+            target-phase126-a04-agent-2/release/prw-agent
+          cmp -s \
+            target-phase126-a04-provisioner-1/release/prw-device-identity-provision \
+            target-phase126-a04-provisioner-2/release/prw-device-identity-provision
+          echo 'phase126_a04_agent_reproducibility=byte_identical'
+          echo 'phase126_a04_provisioner_reproducibility=byte_identical'
 
           mkdir -p phase126-a04-payload
-          install -m 0755 target/release/prw-agent phase126-a04-payload/prw-agent
-          install -m 0755 target/release/prw-device-identity-provision phase126-a04-payload/prw-device-identity-provision
-          install -m 0755 target/release/examples/phase126_a04_status_probe phase126-a04-payload/phase126-a04-status-probe
+          install -m 0755 target-phase126-a04-agent-1/release/prw-agent phase126-a04-payload/prw-agent
+          install -m 0755 target-phase126-a04-provisioner-1/release/prw-device-identity-provision phase126-a04-payload/prw-device-identity-provision
+          install -m 0755 target-phase126-a04-probe/release/examples/phase126_a04_status_probe phase126-a04-payload/phase126-a04-status-probe
           cp Cargo.lock phase126-a04-payload/Cargo.lock
-          (cd phase126-a04-payload && sha256sum prw-agent prw-device-identity-provision phase126-a04-status-probe Cargo.lock > SHA256SUMS)
-          cat phase126-a04-payload/SHA256SUMS
 
-          test "$(sha256sum phase126-a04-payload/prw-agent | cut -d' ' -f1)" = '4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
-          test "$(sha256sum phase126-a04-payload/prw-device-identity-provision | cut -d' ' -f1)" = 'a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b'
+          agent_sha=$(sha256sum phase126-a04-payload/prw-agent | cut -d' ' -f1)
+          provisioner_sha=$(sha256sum phase126-a04-payload/prw-device-identity-provision | cut -d' ' -f1)
+          probe_sha=$(sha256sum phase126-a04-payload/phase126-a04-status-probe | cut -d' ' -f1)
+          lock_sha=$(sha256sum phase126-a04-payload/Cargo.lock | cut -d' ' -f1)
+
+          test "$agent_sha" = '4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
+          test "$lock_sha" = 'aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424'
+          [[ "$provisioner_sha" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$probe_sha" =~ ^[0-9a-f]{64}$ ]]
+
+          {
+            printf 'source_commit=%s\n' "$GITHUB_SHA"
+            printf 'cargo_lock_sha256=%s\n' "$lock_sha"
+            printf 'candidate_agent_sha256=%s\n' "$agent_sha"
+            printf 'provisioner_sha256=%s\n' "$provisioner_sha"
+            printf 'status_probe_sha256=%s\n' "$probe_sha"
+            printf 'rustc_version=%s\n' "$(rustc --version)"
+            printf 'cargo_version=%s\n' "$(cargo --version)"
+            printf 'build_contract=independent_clean_targets_repeat_twice\n'
+          } > phase126-a04-payload/ACTIVATION-MANIFEST
+
+          (cd phase126-a04-payload && sha256sum \
+            prw-agent \
+            prw-device-identity-provision \
+            phase126-a04-status-probe \
+            Cargo.lock \
+            ACTIVATION-MANIFEST \
+            > SHA256SUMS)
+          (cd phase126-a04-payload && sha256sum -c SHA256SUMS)
+          cat phase126-a04-payload/ACTIVATION-MANIFEST
+          cat phase126-a04-payload/SHA256SUMS
+          echo 'phase126_a04_hosted_candidate_build=pass'
       - uses: actions/upload-artifact@v4
         with:
           name: phase126-a04-activation-candidates
@@ -88,10 +141,24 @@ jobs:
           sha256sum -c SHA256SUMS
           chmod 0755 prw-agent prw-device-identity-provision phase126-a04-status-probe
 
+          manifest_value() {
+            key="$1"
+            awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; found=1 } END { if (!found) exit 1 }' ACTIVATION-MANIFEST
+          }
+
           expected_installed_agent='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
           expected_installed_unit='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
           expected_candidate_agent='4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
-          expected_candidate_provisioner='a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b'
+          expected_lock='aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424'
+          expected_candidate_provisioner=$(manifest_value provisioner_sha256)
+          expected_probe=$(manifest_value status_probe_sha256)
+
+          test "$(manifest_value source_commit)" = "$GITHUB_SHA"
+          test "$(manifest_value cargo_lock_sha256)" = "$expected_lock"
+          test "$(manifest_value candidate_agent_sha256)" = "$expected_candidate_agent"
+          test "$(manifest_value build_contract)" = 'independent_clean_targets_repeat_twice'
+          [[ "$expected_candidate_provisioner" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$expected_probe" =~ ^[0-9a-f]{64}$ ]]
 
           production_agent='/usr/lib/private-remote-workspace/prw-agent'
           production_unit='/usr/lib/systemd/user/prw-agent.service'
@@ -163,6 +230,8 @@ jobs:
 
           test "$(sha256sum "$payload/prw-agent" | cut -d' ' -f1)" = "$expected_candidate_agent"
           test "$(sha256sum "$payload/prw-device-identity-provision" | cut -d' ' -f1)" = "$expected_candidate_provisioner"
+          test "$(sha256sum "$payload/phase126-a04-status-probe" | cut -d' ' -f1)" = "$expected_probe"
+          test "$(sha256sum "$payload/Cargo.lock" | cut -d' ' -f1)" = "$expected_lock"
 
           install -d -m 0700 "$stage_parent"
           test ! -e "$stage"
@@ -172,6 +241,7 @@ jobs:
           install -m 0755 "$payload/prw-agent" "$stage/candidate-prw-agent"
           install -m 0755 "$payload/prw-device-identity-provision" "$stage/prw-device-identity-provision"
           install -m 0755 "$payload/phase126-a04-status-probe" "$stage/phase126-a04-status-probe"
+          install -m 0600 "$payload/ACTIVATION-MANIFEST" "$stage/ACTIVATION-MANIFEST"
           install -m 0700 "$production_agent" "$stage/rollback-prw-agent"
           install -m 0600 "$production_unit" "$stage/production-unit.snapshot"
 
@@ -184,11 +254,13 @@ jobs:
           test "$(stat -c '%u:%g:%a' "$stage")" = '1000:1000:700'
           test "$(sha256sum "$stage/candidate-prw-agent" | cut -d' ' -f1)" = "$expected_candidate_agent"
           test "$(sha256sum "$stage/prw-device-identity-provision" | cut -d' ' -f1)" = "$expected_candidate_provisioner"
+          test "$(sha256sum "$stage/phase126-a04-status-probe" | cut -d' ' -f1)" = "$expected_probe"
           test "$(sha256sum "$stage/rollback-prw-agent" | cut -d' ' -f1)" = "$expected_installed_agent"
           test "$(sha256sum "$stage/production-unit.snapshot" | cut -d' ' -f1)" = "$expected_installed_unit"
           test "$(stat -c '%u:%g:%a' "$stage/candidate-prw-agent")" = '1000:1000:755'
           test "$(stat -c '%u:%g:%a' "$stage/prw-device-identity-provision")" = '1000:1000:755'
           test "$(stat -c '%u:%g:%a' "$stage/rollback-prw-agent")" = '1000:1000:700'
+          test "$(stat -c '%u:%g:%a' "$stage/ACTIVATION-MANIFEST")" = '1000:1000:600'
           test "$(stat -c '%u:%g:%a' "$stage/20-device-identity-credential.conf")" = '1000:1000:600'
 
           expected_dropin=$(printf '[Service]\nLoadCredentialEncrypted=prw.device-identity.private-key.v1:%s\n' "$production_cipher")
@@ -199,6 +271,7 @@ jobs:
             "$stage/candidate-prw-agent" \
             "$stage/prw-device-identity-provision" \
             "$stage/phase126-a04-status-probe" \
+            "$stage/ACTIVATION-MANIFEST" \
             "$stage/rollback-prw-agent" \
             "$stage/production-unit.snapshot" \
             "$stage/20-device-identity-credential.conf" \
@@ -206,17 +279,26 @@ jobs:
           chmod 0600 "$stage/SHA256SUMS"
           (cd "$stage" && sha256sum -c SHA256SUMS)
 
+          dropin_sha=$(sha256sum "$stage/20-device-identity-credential.conf" | cut -d' ' -f1)
+          manifest_sha=$(sha256sum "$stage/ACTIVATION-MANIFEST" | cut -d' ' -f1)
+
           test ! -e "$production_cipher"
           test ! -e "$production_dropin"
           test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_installed_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_installed_unit"
           test "$(systemctl --user is-active prw-agent.service)" = 'active'
           test "$(systemctl --user is-enabled prw-agent.service)" = 'enabled'
           test "$(loginctl show-user "$USER" -p Linger --value)" = 'yes'
+          test -z "$(systemctl --user show prw-agent.service -p DropInPaths --value)"
           "$payload/phase126-a04-status-probe" "$production_socket"
 
           echo "phase126_a04_stage=$stage"
           echo "phase126_a04_candidate_agent_sha256=$expected_candidate_agent"
           echo "phase126_a04_provisioner_sha256=$expected_candidate_provisioner"
+          echo "phase126_a04_status_probe_sha256=$expected_probe"
+          echo "phase126_a04_manifest_sha256=$manifest_sha"
+          echo "phase126_a04_dropin_sha256=$dropin_sha"
           echo "phase126_a04_rollback_agent_sha256=$expected_installed_agent"
-          echo "phase126_a04_staging=pass"
+          echo "phase126_a04_rollback_unit_sha256=$expected_installed_unit"
+          echo 'phase126_a04_staging=pass'
           echo 'phase126_a04_no_production_mutation=pass'
