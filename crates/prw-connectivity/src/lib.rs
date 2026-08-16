@@ -4,7 +4,10 @@
 //! selection. It performs no socket I/O, probing, NAT traversal, tunneling, routing, DNS,
 //! firewall mutation or production-network activation.
 
-use std::{fmt, net::{IpAddr, Ipv4Addr}};
+use std::{
+    fmt,
+    net::{IpAddr, Ipv4Addr},
+};
 
 use prw_core::DeviceId;
 
@@ -265,7 +268,7 @@ impl PeerConnectivityPlan {
 
     /// Returns the number of configured candidates.
     #[must_use]
-    pub fn candidate_count(&self) -> usize {
+    pub const fn candidate_count(&self) -> usize {
         self.candidates.len()
     }
 
@@ -348,17 +351,14 @@ impl std::error::Error for ConnectivityError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv6Addr};
+    use std::net::Ipv6Addr;
 
     fn transport(seed: u8) -> TransportIdentity {
         TransportIdentity::new([seed; 32]).expect("non-zero transport identity")
     }
 
     fn peer() -> PeerConnectivityIdentity {
-        PeerConnectivityIdentity::new(
-            DeviceId::new("device-1").expect("device"),
-            transport(1),
-        )
+        PeerConnectivityIdentity::new(DeviceId::new("device-1").expect("device"), transport(1))
     }
 
     fn id(value: u64) -> CandidateId {
@@ -375,7 +375,10 @@ mod tests {
 
     #[test]
     fn identifiers_transport_and_endpoints_are_bounded() {
-        assert_eq!(CandidateId::new(0), Err(ConnectivityError::InvalidCandidateId));
+        assert_eq!(
+            CandidateId::new(0),
+            Err(ConnectivityError::InvalidCandidateId)
+        );
         assert_eq!(
             TransportIdentity::new([0; 32]),
             Err(ConnectivityError::InvalidTransportIdentity)
@@ -405,7 +408,13 @@ mod tests {
     #[test]
     fn candidate_capacity_is_enforced() {
         let candidates = (1..=17)
-            .map(|value| candidate(value, ConnectivityPathKind::InternetDirect, 2000 + value as u16))
+            .map(|value| {
+                candidate(
+                    value,
+                    ConnectivityPathKind::InternetDirect,
+                    2000 + u16::try_from(value).expect("capacity test value fits u16"),
+                )
+            })
             .collect();
         assert_eq!(
             PeerConnectivityPlan::new(peer(), candidates),

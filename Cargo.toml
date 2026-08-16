@@ -18,6 +18,7 @@ members = [
     "crates/prw-registry",
     "crates/prw-terminal",
     "crates/prw-forwarding",
+    "crates/prw-connectivity",
     "crates/prw-agent",
 ]
 

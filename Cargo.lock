@@ -175,6 +175,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-connectivity"
+version = "0.1.0"
+dependencies = [
+ "prw-core",
+]
+
+[[package]]
 name = "prw-control-plane"
 version = "0.1.0"
 dependencies = [

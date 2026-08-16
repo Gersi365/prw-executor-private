@@ -1,0 +1,37 @@
+Private Remote Workspace
+Phase 135 — Private Mesh Connectivity Foundation
+
+STATUS:
+PASS / CONTRACT_LOCKED / BOUNDED_CANDIDATE_PLAN_IMPLEMENTED / DIRECT_BEFORE_RELAY_SELECTION_VALIDATED / DEVICE_AND_TRANSPORT_IDENTITY_SEPARATED / DNS_INDEPENDENT / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_MESH_NOT_ACTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation input head: 300c095291bfcb7fd5fc1072349a49400c14a16f
+Authoritative validation run: 31947443353
+Cargo.lock SHA-256: e56f21179c1a8077d665d93821a5ab1f8254922de2c644f80d992f37c90e6bee
+prw-connectivity source SHA-256: 7d4d91936a2d0b932ee79ad08761769876da1f5054d6a75986fababd4b82798c
+
+CONTRACT
+contracts/PRIVATE_MESH_CONNECTIVITY_FOUNDATION_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-connectivity
+
+CONNECTIVITY OUTCOME
+One peer plan accepts at most 16 explicit-IP/non-zero-port candidates. Candidate identifiers are non-zero and duplicate IDs or exact kind+endpoint duplicates fail closed. Provider observations are Unknown, Reachable or Unreachable; Phase 135 performs no probes itself. Selection is deterministic and insertion-order independent: reachable LocalDirect beats InternetDirect, reachable InternetDirect beats Relay, Relay is fallback only when no direct candidate is reachable, and no reachable candidate produces Offline. Same-kind ties use the lowest CandidateId.
+
+IDENTITY/DNS OUTCOME
+Logical DeviceId is distinct from an opaque non-zero 32-byte TransportIdentity. Phase 135 does not derive cryptographic identity and stores no private key. Candidate endpoints are explicit IP addresses, not hostnames, so basic path selection has no DNS dependency. Unspecified, multicast and IPv4 limited-broadcast endpoints fail closed.
+
+VALIDATION
+Initial run 31947289728 passed graph normalization and the static no-network/no-DNS boundary, then stopped safely on one test-only possible-truncation lint in the 17-candidate capacity fixture. Run 31947367610 stopped before compile because its corrective guard assumed formatter-specific line layout. This authoritative corrective replaces the exact cast substring independent of layout, then requires focused and full-workspace PASS.
+
+DEFERRED
+Real discovery, STUN, ICE, NAT traversal traffic, dialing, tunnels, TUN, route/firewall mutation, private address assignment, endpoint publication and path-health scheduling remain deferred. Phase 136 owns relay transport fallback. Phase 137 owns optional private DNS.
+
+PRODUCTION BOUNDARY
+No PowerCode socket, route, firewall rule, tunnel, TUN device, endpoint publication, DNS setting or user-impacting production network state was created or mutated.
+
+FINAL CLASSIFICATION
+PHASE_135_DONE / NO_PRODUCTION_MESH_SIDE_EFFECT / READY_FOR_PHASE_136_SOURCE_WORK
