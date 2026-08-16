@@ -1,0 +1,106 @@
+Private Remote Workspace
+Phase 109-A00 Real-Host Activation Access / Readiness Audit
+
+STATUS: BLOCKED_FAIL_SAFE / NO_REAL_HOST_CHANNEL_PROVEN / NO_HOST_MUTATION / NO_INSTALL / NO_DAEMON_RELOAD / NO_ENABLE / NO_START / NO_LINGER_MUTATION
+AUDIT TYPE: READ-ONLY ACCESS / EXECUTION-CHANNEL READINESS
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Phase 108 authoritative report commit: d76836500d833cadee4cd1156fbe043816599569
+User approval: Phase 109 real-host activation sequence approved, with install, daemon-reload, enable/start, and linger-state transaction audited separately.
+
+PURPOSE
+
+This audit is the mandatory fail-safe checkpoint before any real-host mutation. It determines whether the current ChatGPT execution environment has an authenticated, attributable, and verifiable command channel to the intended Ubuntu host.
+
+APPROVED MUTATION SCOPE AFTER READINESS
+
+The user authorization permits a later controlled sequence covering:
+
+1. real package-file installation into the locked system locations;
+2. user-manager daemon-reload;
+3. service enablement and start;
+4. linger-state transaction;
+5. each operation with separate preflight, evidence, postconditions, and rollback.
+
+This approval does not permit pretending that a GitHub-hosted runner is the user's Ubuntu host or targeting an unidentified self-hosted runner.
+
+READINESS FINDINGS
+
+1. The connected GitHub repository is available and authoritative.
+
+2. Repository code search found no current workflow declaring `runs-on: self-hosted` and no repository activation/deployment workflow that establishes an execution channel to the intended Ubuntu host.
+
+3. A direct GitHub REST read of the repository self-hosted runner inventory endpoint returned:
+
+`403 Resource not accessible by integration`
+
+Therefore the current GitHub App cannot prove whether any self-hosted runner exists, which host it represents, which account it runs as, or what privilege boundary it has.
+
+4. Plugin discovery for SSH / remote terminal / Linux host / server-management connectivity returned no available installable plugin in the current environment.
+
+5. No SSH connector, remote-shell connector, device-management connector, or other authenticated host-control tool is present in the current tool surface.
+
+6. The local container available to ChatGPT is not the user's Ubuntu host and must not be used as evidence of real-host activation.
+
+7. Google Drive and GitHub connectors provide repository/document operations, not shell access to the intended Ubuntu host.
+
+PRIMARY-SOURCE SYSTEMD FACTS RECONFIRMED
+
+Before activation, current upstream systemd documentation was rechecked:
+
+- `loginctl enable-linger USER` causes the user's manager to be spawned at boot and retained after logout, enabling long-running user services without an active login;
+- linger state is persistently stored and changing it is an authorization-controlled host-state mutation;
+- `$XDG_RUNTIME_DIR` is the per-user runtime location and must be user-owned with mode 0700.
+
+These facts remain consistent with the Phase 104-108 user-service architecture, but they do not provide a command channel to the host.
+
+HARD FAIL-SAFE DECISION
+
+Phase 109 real-host mutation MUST NOT begin until an execution channel is proven to target the intended Ubuntu host and can provide, before mutation, at minimum:
+
+- host identity / hostname;
+- current user and numeric UID;
+- Ubuntu release;
+- systemd version;
+- `$XDG_RUNTIME_DIR` path, ownership, and mode;
+- current `loginctl show-user` linger state;
+- current presence/hash/mode/ownership of the two locked package destinations;
+- current user-unit load/enable/active state;
+- ability to perform the required privileged file transaction and reversible linger transaction under an attributable authorization boundary.
+
+The channel must also support post-mutation readback and rollback evidence.
+
+NO BLIND SELF-HOSTED WORKFLOW
+
+A new `runs-on: self-hosted` workflow is explicitly not created by this audit. Without runner inventory/identity evidence, such a workflow could run on an unintended machine or execute with an unknown privilege boundary. That would violate the project audit and rollback model.
+
+NO REAL-HOST CLAIMS
+
+This audit performed none of the following:
+
+- no file copy into real `/usr`;
+- no ownership/mode mutation on a real host;
+- no `systemctl --user daemon-reload`;
+- no enable/disable;
+- no start/stop/restart;
+- no `loginctl enable-linger` or `disable-linger`;
+- no enablement symlink creation;
+- no host deployment;
+- no remote/public networking activation.
+
+NEXT REQUIRED CONDITION
+
+The Phase 109 authorization remains valid, but execution is blocked on a proven real-host command channel.
+
+Once such a channel is available and identifiable, resume with a read-only real-host preflight before the first mutation. The subsequent mutation sequence must remain separated into audited transactions:
+
+A. install transaction;
+B. user-manager daemon-reload transaction;
+C. enable/start transaction;
+D. linger-state transaction;
+E. final activation/rollback review.
+
+CLASSIFICATION
+
+PHASE_109_A00_BLOCKED_FAIL_SAFE / AUTHORIZATION_PRESENT / EXECUTION_CHANNEL_ABSENT_OR_UNPROVEN / NO_HOST_MUTATION / NO_INSTALL / NO_DAEMON_RELOAD / NO_ENABLE / NO_START / NO_LINGER_MUTATION / NO_DEPLOYMENT
