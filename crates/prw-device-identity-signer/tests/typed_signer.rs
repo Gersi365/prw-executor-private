@@ -1,9 +1,7 @@
 use aws_lc_rs::{
     encoding::AsDer,
     rand::SystemRandom,
-    signature::{
-        ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair,
-    },
+    signature::{ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair},
 };
 use prw_control_plane::{
     EnrollmentRequest,
@@ -14,8 +12,7 @@ use prw_device_identity::{
     DeviceIdentityVerificationError, EnrollmentProofVerificationError, verify_enrollment_proof,
 };
 use prw_device_identity_signer::{
-    MAX_UBUNTU_DEVICE_IDENTITY_PKCS8_BYTES, UbuntuEnrollmentSigner,
-    UbuntuEnrollmentSignerError,
+    MAX_UBUNTU_DEVICE_IDENTITY_PKCS8_BYTES, UbuntuEnrollmentSigner, UbuntuEnrollmentSignerError,
 };
 
 fn generate_p256_pkcs8() -> Vec<u8> {
@@ -80,11 +77,8 @@ fn malformed_truncated_wrong_curve_and_non_pkcs8_credentials_are_rejected() {
         UbuntuEnrollmentSignerError::InvalidPrivateCredential
     );
 
-    let p256 = EcdsaKeyPair::from_pkcs8(
-        &ECDSA_P256_SHA256_ASN1_SIGNING,
-        &generate_p256_pkcs8(),
-    )
-    .expect("load disposable P-256 key");
+    let p256 = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &generate_p256_pkcs8())
+        .expect("load disposable P-256 key");
     let rfc5915 = p256
         .private_key()
         .as_der()
@@ -97,8 +91,8 @@ fn malformed_truncated_wrong_curve_and_non_pkcs8_credentials_are_rejected() {
 
 #[test]
 fn enrollment_id_mismatch_is_rejected() {
-    let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8())
-        .expect("load signer");
+    let signer =
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8()).expect("load signer");
     let request = request_for(&signer, "phase121-enrollment-a", "phase121-device");
     let other_request = request_for(&signer, "phase121-enrollment-b", "phase121-device");
     let state = EnrollmentProofChallengeState::new(
@@ -119,10 +113,10 @@ fn enrollment_id_mismatch_is_rejected() {
 
 #[test]
 fn request_public_identity_mismatch_is_rejected() {
-    let signer_a = UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8())
-        .expect("load signer A");
-    let signer_b = UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8())
-        .expect("load signer B");
+    let signer_a =
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8()).expect("load signer A");
+    let signer_b =
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8()).expect("load signer B");
     let request = request_for(&signer_b, "phase121-enrollment", "phase121-device");
     let state = EnrollmentProofChallengeState::new(
         request.clone(),
@@ -142,8 +136,8 @@ fn request_public_identity_mismatch_is_rejected() {
 
 #[test]
 fn typed_signing_produces_proof_accepted_and_consumed_by_production_verifier() {
-    let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8())
-        .expect("load signer");
+    let signer =
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8()).expect("load signer");
     let request = request_for(&signer, "phase121-enrollment", "phase121-device");
     let nonce = EnrollmentProofNonce::new([0x53; 32]);
     let mut state = EnrollmentProofChallengeState::new(request.clone(), nonce, 3_000, 3_200)
@@ -158,8 +152,8 @@ fn typed_signing_produces_proof_accepted_and_consumed_by_production_verifier() {
 
 #[test]
 fn changed_snapshot_rejects_previously_signed_proof_without_consumption() {
-    let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8())
-        .expect("load signer");
+    let signer =
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(&generate_p256_pkcs8()).expect("load signer");
     let original = request_for(&signer, "phase121-enrollment", "phase121-device-a");
     let nonce = EnrollmentProofNonce::new([0x54; 32]);
     let original_state = EnrollmentProofChallengeState::new(original.clone(), nonce, 4_000, 4_200)
