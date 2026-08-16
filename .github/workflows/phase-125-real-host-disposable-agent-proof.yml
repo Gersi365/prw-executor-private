@@ -1,0 +1,196 @@
+name: Phase 125 Disposable Real-Host Agent Proof
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-125-real-host-disposable-agent-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked candidate and disposable helpers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo build --release --locked -p prw-agent --bin prw-agent
+
+          mkdir -p crates/prw-device-identity-signer/examples crates/prw-agent/examples
+          cat > crates/prw-device-identity-signer/examples/phase125_keygen.rs <<'RS'
+          use std::io::{self, Write};
+          use aws_lc_rs::{
+              rand::SystemRandom,
+              signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
+          };
+
+          fn main() {
+              let key = EcdsaKeyPair::generate_pkcs8(
+                  &ECDSA_P256_SHA256_ASN1_SIGNING,
+                  &SystemRandom::new(),
+              )
+              .expect("generate disposable P-256 key");
+              io::stdout()
+                  .write_all(key.as_ref())
+                  .expect("write disposable PKCS#8 to pipe");
+          }
+          RS
+
+          cat > crates/prw-agent/examples/phase125_status_probe.rs <<'RS'
+          use std::{
+              env,
+              io::Write,
+              os::unix::net::UnixStream,
+          };
+          use prw_agent::local_commands::LocalAgentCommand;
+          use prw_agent::local_commands::request_frame::stream::write_local_command_request;
+          use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
+          use prw_agent::local_commands::status_snapshot::response_frame::stream::read_success_status_response;
+          use prw_agent::LocalIpcRequestId;
+
+          fn main() {
+              let socket = env::args().nth(1).expect("socket path argument");
+              let mut stream = UnixStream::connect(socket).expect("connect Agent socket");
+              let request_id = LocalIpcRequestId::new(125).expect("non-zero request id");
+              write_local_command_request(&mut stream, request_id, LocalAgentCommand::GetAgentStatus)
+                  .expect("write status request");
+              stream.flush().expect("flush request");
+              let response = read_success_status_response(&mut stream).expect("read status response");
+              assert_eq!(response.request_id(), request_id);
+              assert_eq!(response.snapshot().runtime_state(), LocalAgentRuntimeState::Ready);
+              assert!(response.snapshot().protocol_version().is_supported());
+              println!("phase125_status=Ready protocol_supported=yes");
+          }
+          RS
+
+          cargo build --release --locked -p prw-device-identity-signer --example phase125_keygen
+          cargo build --release --locked -p prw-agent --example phase125_status_probe
+
+          mkdir -p phase125-payload
+          install -m 0755 target/release/prw-agent phase125-payload/prw-agent
+          install -m 0755 target/release/examples/phase125_keygen phase125-payload/phase125-keygen
+          install -m 0755 target/release/examples/phase125_status_probe phase125-payload/phase125-status-probe
+          (cd phase125-payload && sha256sum prw-agent phase125-keygen phase125-status-probe > SHA256SUMS)
+          cat phase125-payload/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase125-real-host-payload
+          path: phase125-payload
+          if-no-files-found: error
+          retention-days: 1
+
+  prove:
+    needs: build
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase125-real-host-payload
+          path: phase125-payload
+      - name: Prove identity-aware candidate without production mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          shopt -s inherit_errexit
+
+          payload="$GITHUB_WORKSPACE/phase125-payload"
+          cd "$payload"
+          sha256sum -c SHA256SUMS
+
+          expected_installed_agent='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          expected_installed_unit='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+          production_unit='/usr/lib/systemd/user/prw-agent.service'
+          production_socket="$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock"
+          credential_name='prw.device-identity.private-key.v1'
+          transient_unit="prw-phase125-candidate-${GITHUB_RUN_ID}.service"
+          proof_root="$XDG_RUNTIME_DIR/prw-phase125-candidate-${GITHUB_RUN_ID}"
+          missing_root="$XDG_RUNTIME_DIR/prw-phase125-missing-${GITHUB_RUN_ID}"
+          cipher_dir="$RUNNER_TEMP/prw-phase125-cipher-${GITHUB_RUN_ID}"
+          cipher="$cipher_dir/device-identity.cred"
+
+          cleanup() {
+            set +e
+            systemctl --user stop "$transient_unit" >/dev/null 2>&1 || true
+            systemctl --user reset-failed "$transient_unit" >/dev/null 2>&1 || true
+            rm -rf -- "$proof_root" "$missing_root" "$cipher_dir"
+          }
+          trap cleanup EXIT INT TERM
+
+          echo 'phase125_preflight=begin'
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_installed_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_installed_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = 'active'
+          test "$(systemctl --user is-enabled prw-agent.service)" = 'enabled'
+          test "$(loginctl show-user "$USER" -p Linger --value)" = 'yes'
+          "$payload/phase125-status-probe" "$production_socket"
+          echo 'phase125_preflight=pass'
+
+          install -d -m 0700 "$proof_root" "$missing_root" "$cipher_dir"
+          test ! -e "$cipher"
+
+          echo 'phase125_memory_only_encrypt=begin'
+          "$payload/phase125-keygen" |
+            systemd-creds --user encrypt --name="$credential_name" - "$cipher" >/dev/null
+          test -s "$cipher"
+          chmod 0600 "$cipher"
+          test "$(stat -c '%u:%g:%a' "$cipher")" = "$(id -u):$(id -g):600"
+          echo 'phase125_memory_only_encrypt=pass'
+
+          systemd-run --user \
+            --unit="$transient_unit" \
+            --property=Type=exec \
+            --property=Restart=no \
+            --property="LoadCredentialEncrypted=$credential_name:$cipher" \
+            --setenv="XDG_RUNTIME_DIR=$proof_root" \
+            "$payload/prw-agent"
+
+          candidate_socket="$proof_root/private-remote-workspace/agent.sock"
+          for _ in $(seq 1 100); do
+            if [[ -S "$candidate_socket" ]]; then
+              break
+            fi
+            if ! systemctl --user is-active --quiet "$transient_unit"; then
+              systemctl --user status "$transient_unit" --no-pager || true
+              journalctl --user -u "$transient_unit" -n 20 --no-pager || true
+              exit 1
+            fi
+            sleep 0.05
+          done
+          test -S "$candidate_socket"
+          test "$(systemctl --user is-active "$transient_unit")" = 'active'
+          "$payload/phase125-status-probe" "$candidate_socket"
+          echo 'phase125_candidate_ready=pass'
+
+          systemctl --user stop "$transient_unit"
+          for _ in $(seq 1 100); do
+            [[ ! -e "$candidate_socket" ]] && break
+            sleep 0.05
+          done
+          test ! -e "$candidate_socket"
+          echo 'phase125_candidate_cleanup=pass'
+
+          set +e
+          missing_output=$(env -u CREDENTIALS_DIRECTORY XDG_RUNTIME_DIR="$missing_root" "$payload/prw-agent" 2>&1)
+          missing_rc=$?
+          set -e
+          test "$missing_rc" -ne 0
+          test "$missing_output" = 'prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable'
+          test ! -e "$missing_root/private-remote-workspace"
+          echo 'phase125_missing_identity_fail_closed=pass'
+
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_installed_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_installed_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = 'active'
+          test "$(systemctl --user is-enabled prw-agent.service)" = 'enabled'
+          test "$(loginctl show-user "$USER" -p Linger --value)" = 'yes'
+          "$payload/phase125-status-probe" "$production_socket"
+          echo 'phase125_production_unchanged=pass'
