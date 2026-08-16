@@ -1,0 +1,60 @@
+name: Phase 118 A00 TPM Custody Policy Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-118-a00-tpm-policy-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  tpm-policy-probe:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Probe TPM-backed user credential delivery
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "phase118_tpm_probe=begin"
+          echo "hostname=$(hostname)"
+          echo "user=$(id -un)"
+          systemd-creds --version | head -n 1
+
+          set +e
+          tpm_output=$(systemd-creds has-tpm2 2>&1)
+          tpm_rc=$?
+          set -e
+          echo "has_tpm2_rc=$tpm_rc"
+          printf '%s\n' "$tpm_output"
+
+          tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/prw-phase118.XXXXXX")
+          chmod 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT INT TERM
+
+          plain="$tmp/plain.txt"
+          encrypted="$tmp/default-policy.cred"
+          delivered="$tmp/delivered.txt"
+          printf 'PRW-PHASE-118-DUMMY-CREDENTIAL-v1\n' > "$plain"
+          chmod 600 "$plain"
+
+          if [ "$tpm_rc" -eq 0 ]; then
+            echo "tpm2_usable=yes"
+            systemd-creds --user encrypt --name=phase118.dummy "$plain" "$encrypted"
+            test -s "$encrypted"
+            systemd-run --user --wait --pipe --collect \
+              -p "LoadCredentialEncrypted=phase118.dummy:$encrypted" \
+              -- /bin/sh -ceu 'cat "$CREDENTIALS_DIRECTORY/phase118.dummy"' \
+              > "$delivered"
+            cmp -s "$plain" "$delivered"
+            echo "default_policy_user_service_delivery=pass"
+          else
+            echo "tpm2_usable=no"
+            echo "default_policy_user_service_delivery=not_attempted"
+          fi
+
+          rm -rf -- "$tmp"
+          trap - EXIT INT TERM
+          echo "phase118_tpm_probe=success"
