@@ -1,0 +1,47 @@
+name: Phase 115 A02 Clippy Corrective
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-115-a02-clippy-corrective
+  cancel-in-progress: false
+
+jobs:
+  corrective:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact const corrective
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-control-plane/src/enrollment_pop.rs')
+          text = path.read_text()
+          old = 'fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], EnrollmentProofMessageError> {'
+          new = 'const fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], EnrollmentProofMessageError> {'
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one bounded_identifier signature')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          changed="$(git diff --name-only)"
+          test "$changed" = 'crates/prw-control-plane/src/enrollment_pop.rs'
+          git diff --check
+          grep -F 'const fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], EnrollmentProofMessageError> {' crates/prw-control-plane/src/enrollment_pop.rs
+
+      - name: Commit exact corrective
+        run: |
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add crates/prw-control-plane/src/enrollment_pop.rs
+          git commit -m 'phase 115 a02: make bounded identifier const'
+          git push origin HEAD:main
