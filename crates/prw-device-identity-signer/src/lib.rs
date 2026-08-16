@@ -78,7 +78,7 @@ impl fmt::Display for UbuntuEnrollmentSignerError {
 
 impl std::error::Error for UbuntuEnrollmentSignerError {}
 
-/// Loaded Ubuntu device-identity signer restricted to typed enrollment PoP signing.
+/// Loaded Ubuntu device-identity signer restricted to typed enrollment `PoP` signing.
 pub struct UbuntuEnrollmentSigner {
     key_pair: EcdsaKeyPair,
     public_identity: PublicIdentityMaterial,
