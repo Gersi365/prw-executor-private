@@ -355,12 +355,15 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "jni",
+ "prw-connectivity",
  "prw-control-plane",
  "prw-core",
  "prw-device-identity",
  "prw-device-identity-signer",
  "prw-file-service",
  "prw-file-transfer",
+ "prw-forwarding",
+ "prw-private-dns",
  "prw-remote-bridge",
  "prw-remote-transport",
  "prw-terminal",
@@ -452,6 +455,10 @@ version = "0.1.0"
 dependencies = [
  "prw-core",
 ]
+
+[[package]]
+name = "prw-private-dns"
+version = "0.1.0"
 
 [[package]]
 name = "prw-registry"

@@ -1,15 +1,15 @@
 # PRW Android Application
 
-Phase 148 builds on the validated Phase 145–147 non-production Android foundation.
+Phase 149 completes the currently planned non-production Android functional-client slices.
 
 Current development responsibilities include:
 
-- Android Keystore identity custody and typed authenticated bootstrap;
+- non-exportable Android Keystore identity custody and typed authenticated bootstrap;
 - enrollment/device-management presentation;
 - bounded terminal UX through existing PRWC terminal commands;
-- bounded remote-file browser requests and authoritative/disposable directory snapshots;
-- resumable upload begin/resume/chunk/finalize/abort presentation with acknowledged progress only;
-- bounded download requests with authoritative/disposable bytes and EOF handling;
-- native reuse of existing `RemotePath`, `TransferId`, `UploadPlan`, and Phase 143 `BridgeCommand` encoding.
+- bounded remote-file browser and resumable upload/download presentation;
+- loopback-only TCP forwarding intent encoding through existing `prw-forwarding` and Phase 143 `BridgeCommand` authority;
+- private-network selected-path presentation through existing `prw-connectivity` authority;
+- optional private-DNS draft validation through existing `prw-private-dns` authority.
 
-Phase 148 does not use terminal commands as a filesystem API and does not activate a production file endpoint, production Android storage destination, overwrite/delete/move/rename semantics, release signing/distribution, or production networking.
+Phase 149 remains non-production. It opens no forwarding socket, performs no network discovery/probe, mutates no route/firewall/NAT/TUN/TAP or OS resolver state, and does not sign/distribute a production Android application.

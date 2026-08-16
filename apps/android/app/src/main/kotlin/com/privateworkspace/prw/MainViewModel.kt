@@ -23,6 +23,7 @@ internal data class PrwUiState(
     val pendingRevocationDeviceId: String? = null,
     val terminal: TerminalUiState = TerminalUiState(),
     val files: RemoteFilesUiState = RemoteFilesUiState(),
+    val network: NetworkManagementUiState = NetworkManagementUiState(),
     val detail: String = "Development bootstrap only — no production endpoint",
 )
 
@@ -32,6 +33,7 @@ internal class MainViewModel(
     private val deviceManagement: DeviceManagementController = DeviceManagementController(),
     private val terminalController: TerminalSessionController = TerminalSessionController(NativeTerminalCommandEncoder),
     private val fileController: RemoteFilesController = RemoteFilesController(NativeFileCommandEncoder),
+    private val networkController: NetworkManagementController = NetworkManagementController(NativeNetworkCommandEncoder),
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(PrwUiState())
     val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
@@ -298,6 +300,72 @@ internal class MainViewModel(
         return accepted
     }
 
+    fun requestDisposableForwardOpen(): Boolean {
+        val accepted = networkController.requestForwardOpen(
+            DISPOSABLE_FORWARD_ID,
+            LoopbackFamilyView.Ipv4,
+            41_149,
+            "127.0.0.1",
+            22,
+        )
+        publishNetworkState(if (accepted) "Forward-open intent encoded; no socket opened" else "Forward-open intent rejected")
+        return accepted
+    }
+
+    fun applyDisposableForwardOpen(): Boolean {
+        val accepted = networkController.applyAuthoritativeForwardOpen(DISPOSABLE_FORWARD_ID)
+        publishNetworkState(if (accepted) "Disposable authoritative forward-open acknowledgement applied" else "Forward-open acknowledgement rejected")
+        return accepted
+    }
+
+    fun requestDisposableForwardClose(): Boolean {
+        val accepted = networkController.requestForwardClose()
+        publishNetworkState(if (accepted) "Forward-close intent encoded; completion not forged" else "Forward-close intent rejected")
+        return accepted
+    }
+
+    fun applyDisposableForwardClosed(): Boolean {
+        val accepted = networkController.applyAuthoritativeForwardClosed(DISPOSABLE_FORWARD_ID)
+        publishNetworkState(if (accepted) "Disposable authoritative forward-close acknowledgement applied" else "Forward-close acknowledgement rejected")
+        return accepted
+    }
+
+    fun applyDisposableConnectivitySnapshot(): Boolean {
+        val accepted = networkController.applyAuthoritativeConnectivitySnapshot(
+            ReachabilityView.Unreachable,
+            ReachabilityView.Reachable,
+            ReachabilityView.Reachable,
+        )
+        publishNetworkState(if (accepted) "Disposable authoritative connectivity snapshot selected existing path" else "Connectivity snapshot rejected")
+        return accepted
+    }
+
+    fun validateDisposablePrivateDns(): Boolean {
+        val accepted = networkController.validatePrivateDnsDraft(
+            enabled = true,
+            deviceNaming = true,
+            deviceDomain = "prw.internal",
+            resolverAddress = "127.0.0.1",
+            resolverPort = 53,
+            splitDomain = "dev.internal",
+        )
+        publishNetworkState(if (accepted) "Private-DNS draft validated; OS resolver remains unchanged" else "Private-DNS draft rejected")
+        return accepted
+    }
+
+    fun validateDisabledPrivateDns(): Boolean {
+        val accepted = networkController.validatePrivateDnsDraft(
+            enabled = false,
+            deviceNaming = false,
+            deviceDomain = "",
+            resolverAddress = "",
+            resolverPort = 0,
+            splitDomain = "",
+        )
+        publishNetworkState(if (accepted) "Private-DNS disabled draft validated; connectivity remains independent" else "Disabled DNS draft rejected")
+        return accepted
+    }
+
     fun disconnect() {
         val current = controller.state.value
         if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
@@ -333,6 +401,13 @@ internal class MainViewModel(
         mutableUiState.value = mutableUiState.value.copy(files = fileController.state(), detail = detail)
     }
 
+    private fun publishNetworkState(detail: String) {
+        mutableUiState.value = mutableUiState.value.copy(
+            network = networkController.state(),
+            detail = detail,
+        )
+    }
+
     private fun publishTerminalState(detail: String) {
         mutableUiState.value = mutableUiState.value.copy(
             terminal = terminalController.state(),
@@ -342,5 +417,6 @@ internal class MainViewModel(
 
     companion object {
         private const val DISPOSABLE_TERMINAL_SESSION_ID = 147_001L
+        private const val DISPOSABLE_FORWARD_ID = 149_001L
     }
 }

@@ -19,6 +19,9 @@ prw-remote-transport = { path = "../../../crates/prw-remote-transport" }
 prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }
 prw-file-service = { path = "../../../crates/prw-file-service" }
 prw-file-transfer = { path = "../../../crates/prw-file-transfer" }
+prw-forwarding = { path = "../../../crates/prw-forwarding" }
+prw-connectivity = { path = "../../../crates/prw-connectivity" }
+prw-private-dns = { path = "../../../crates/prw-private-dns" }
 prw-terminal = { path = "../../../crates/prw-terminal" }
 
 [dev-dependencies]

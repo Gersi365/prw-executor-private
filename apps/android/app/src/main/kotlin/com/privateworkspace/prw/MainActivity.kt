@@ -41,7 +41,7 @@ internal class MainActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
-                        Text("Phase 148 remote files + transfers UX")
+                        Text("Phase 149 forwarding + network + optional DNS UX")
                         Text("Connection: ${state.connectionState}")
                         Text("Identity ready: ${state.identityReady}")
                         Text("Native bridge: ${state.nativeBridgeReady}")
@@ -170,6 +170,39 @@ internal class MainActivity : ComponentActivity() {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = model::applyDisposableDownloadChunk) { Text("Apply bytes") }
                     Button(onClick = model::applyDisposableDownloadEof) { Text("Apply EOF") }
+                }
+
+                        Text("Disposable forwarding — no production socket", style = MaterialTheme.typography.titleMedium)
+                Text("Forward lifecycle: ${state.network.forwarding.lifecycle}")
+                Text("Forward payload: ${state.network.forwarding.lastPayloadBytes} bytes")
+                when (state.network.forwarding.lifecycle) {
+                    ForwardLifecycleView.Closed, ForwardLifecycleView.Failed -> {
+                        Button(onClick = model::requestDisposableForwardOpen) { Text("Request loopback forward") }
+                    }
+                    ForwardLifecycleView.Opening -> {
+                        Button(onClick = model::applyDisposableForwardOpen) { Text("Apply disposable open acknowledgement") }
+                    }
+                    ForwardLifecycleView.Active -> {
+                        Button(onClick = model::requestDisposableForwardClose) { Text("Request forward close") }
+                    }
+                    ForwardLifecycleView.Closing -> {
+                        Button(onClick = model::applyDisposableForwardClosed) { Text("Apply disposable close acknowledgement") }
+                    }
+                }
+
+                Text("Private-network status", style = MaterialTheme.typography.titleMedium)
+                Text("Selected path: ${state.network.selectedPath}")
+                Button(onClick = model::applyDisposableConnectivitySnapshot) {
+                    Text("Apply disposable connectivity snapshot")
+                }
+
+                Text("Optional private DNS", style = MaterialTheme.typography.titleMedium)
+                Text("Requested enabled: ${state.network.privateDns.requestedEnabled}")
+                Text("Validated: ${state.network.privateDns.validated}")
+                Text("OS applied: ${state.network.privateDns.osApplied}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::validateDisposablePrivateDns) { Text("Validate DNS draft") }
+                    Button(onClick = model::validateDisabledPrivateDns) { Text("Validate DNS disabled") }
                 }
 
                         Button(onClick = model::disconnect) {

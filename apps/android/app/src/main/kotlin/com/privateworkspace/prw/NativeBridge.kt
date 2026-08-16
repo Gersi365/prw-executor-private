@@ -26,4 +26,9 @@ internal object NativeBridge {
     @JvmStatic external fun uploadAbortPayload(transferId: ByteArray): ByteArray
     @JvmStatic external fun downloadChunkPayload(path: ByteArray, offset: Long, requestedBytes: Int): ByteArray
     @JvmStatic external fun isFileTransferPayload(payload: ByteArray): Boolean
+    @JvmStatic external fun forwardOpenPayload(forwardId: Long, familyCode: Int, bindPort: Int, targetAddress: ByteArray, targetPort: Int): ByteArray
+    @JvmStatic external fun forwardClosePayload(forwardId: Long): ByteArray
+    @JvmStatic external fun isForwardingPayload(payload: ByteArray): Boolean
+    @JvmStatic external fun connectivitySelectedPath(localObservation: Int, internetObservation: Int, relayObservation: Int): Int
+    @JvmStatic external fun validatePrivateDnsConfig(enabled: Boolean, deviceNaming: Boolean, deviceDomain: ByteArray, resolverAddress: ByteArray, resolverPort: Int, splitDomain: ByteArray): Boolean
 }
