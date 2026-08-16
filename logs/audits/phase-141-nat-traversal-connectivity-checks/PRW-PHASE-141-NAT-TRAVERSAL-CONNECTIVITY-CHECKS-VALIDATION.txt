@@ -1,0 +1,28 @@
+Private Remote Workspace
+Phase 141 — NAT Traversal and Connectivity Checks
+
+STATUS:
+PASS / STANDARD_ICE_STUN / SANS_IO_BOUNDARY / PHASE135_SELECTOR_PRESERVED / CREDENTIAL_DEBUG_REDACTED / STUN_BINDING_SUCCESS_REQUIRED / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_NETWORK_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: 64414eba91292696f7016e0a21ce73b273bab3c5
+Authoritative validation run: 31952977724
+Cargo.lock SHA-256: d947c9950832933d27b397e2c411724c92c486150c0386180126e93767bb540d
+prw-nat-traversal/src/lib.rs SHA-256: ac0433c9b94edee8d6c061af0a16becf5c99c622c1006a93c47154964c36a76b
+
+CONTRACT: contracts/NAT_TRAVERSAL_CONNECTIVITY_CHECKS_CONTRACT.md
+IMPLEMENTATION: crates/prw-nat-traversal
+
+DEPENDENCY DECISION: exact rtc-ice 0.20.2, rtc-stun 0.20.2, rtc-shared 0.20.2 and sansio 1.0.0. Scratch compatibility A01 run 31952085411 passed under Rust/Cargo 1.97.1; scratch Cargo.lock SHA-256 ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96.
+
+CORRECTIVE HISTORY: initial validation stopped on tracked target metadata; the next validation stopped on two needless-pass-by-value Clippy findings; A03 stopped before source mutation on an indentation-sensitive STUN matcher; A04 was workflow-syntax invalid before runner allocation; A05 proved the three main-source patch boundaries and stopped because the security regression test was already correctly borrowing its datagram; A06 preserves that test and applies only the remaining audited source corrections.
+
+SECURITY/ARCHITECTURE OUTCOME: no socket, async runtime, DNS resolver, process, TUN/TAP, route or firewall ownership. Traversal datagrams are capped at 2048 bytes. STUN requires explicit source and Binding success. ICE uses UDP4/UDP6 with mDNS disabled; relay allocation remains Phase 142. ICE credential password Debug is redacted. Selected ICE reachability is correlated to existing Phase 135 CandidateId and Phase 135 remains the path selector.
+
+VALIDATION: focused rustfmt, Clippy -D warnings and all-target tests passed, including redaction and non-success-STUN negative tests. Full locked workspace Clippy, tests and build passed.
+
+PRODUCTION BOUNDARY: no production Agent, socket/listener, STUN/ICE/TURN activity, relay, credential, firewall/NAT/router/TUN/TAP/route or DNS state changed or activated.
+
+FINAL CLASSIFICATION: PHASE_141_DONE / READY_FOR_PHASE_142_SOURCE_DISPOSABLE_RELAY_PROVIDER_WORK

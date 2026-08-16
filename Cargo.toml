@@ -19,6 +19,7 @@ members = [
     "crates/prw-terminal",
     "crates/prw-forwarding",
     "crates/prw-connectivity",
+    "crates/prw-nat-traversal",
     "crates/prw-relay",
     "crates/prw-private-dns",
     "crates/prw-remote-transport",

@@ -28,7 +28,7 @@ use rtc_shared::{TaggedBytesMut, TransportContext, TransportMessage, TransportPr
 use rtc_stun::{
     agent::StunEvent,
     client::{Client, ClientBuilder},
-    message::{BINDING_REQUEST, Getter, Message, TransactionId},
+    message::{BINDING_REQUEST, BINDING_SUCCESS, Getter, Message, TransactionId},
     xoraddr::XorMappedAddress,
 };
 use sansio::Protocol;
@@ -99,10 +99,20 @@ impl TraversalDatagram {
 }
 
 /// Validated ICE credentials used only for traversal checks.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct IceCredentials {
     ufrag: String,
     password: String,
+}
+
+impl fmt::Debug for IceCredentials {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("IceCredentials")
+            .field("ufrag", &self.ufrag)
+            .field("password", &"<redacted>")
+            .finish()
+    }
 }
 
 impl IceCredentials {
@@ -204,10 +214,7 @@ impl StunDiscovery {
             .map_err(|_| TraversalError::StunProtocol)?;
         let mut request = Message::new();
         request
-            .build(&[
-                Box::new(TransactionId::new()),
-                Box::new(BINDING_REQUEST),
-            ])
+            .build(&[Box::new(TransactionId::new()), Box::new(BINDING_REQUEST)])
             .map_err(|_| TraversalError::StunProtocol)?;
         client
             .handle_write(request)
@@ -264,7 +271,7 @@ impl StunDiscovery {
     /// STUN server before passing bytes to the protocol engine.
     pub fn handle_datagram(
         &mut self,
-        datagram: TraversalDatagram,
+        datagram: &TraversalDatagram,
         now: Instant,
     ) -> Result<(), TraversalError> {
         if datagram.local != self.local {
@@ -302,6 +309,9 @@ impl StunDiscovery {
             let StunEvent::Message(message) = event else {
                 return Err(TraversalError::StunTransactionFailed);
             };
+            if message.typ != BINDING_SUCCESS {
+                return Err(TraversalError::StunTransactionFailed);
+            }
             let mut mapped = XorMappedAddress::default();
             mapped
                 .get_from(&message)
@@ -422,11 +432,9 @@ impl IceConnectivitySession {
             return Err(TraversalError::CandidateCapacity);
         }
         let endpoint = connectivity_socket(candidate.endpoint());
-        if self
-            .remote_candidates
-            .iter()
-            .any(|existing| existing.candidate.id() == candidate.id() || existing.endpoint == endpoint)
-        {
+        if self.remote_candidates.iter().any(|existing| {
+            existing.candidate.id() == candidate.id() || existing.endpoint == endpoint
+        }) {
             return Err(TraversalError::DuplicateCandidate);
         }
         let upstream = build_ice_candidate(
@@ -459,11 +467,7 @@ impl IceConnectivitySession {
             return Err(TraversalError::AlreadyStarted);
         }
         self.agent
-            .start_connectivity_checks(
-                controlling,
-                remote.ufrag.clone(),
-                remote.password.clone(),
-            )
+            .start_connectivity_checks(controlling, remote.ufrag.clone(), remote.password.clone())
             .map_err(|_| TraversalError::IceProtocol)?;
         self.started = true;
         Ok(())
@@ -482,7 +486,10 @@ impl IceConnectivitySession {
         self.agent
             .poll_write()
             .map(|transmit| {
-                if !self.local_endpoints.contains(&transmit.transport.local_addr) {
+                if !self
+                    .local_endpoints
+                    .contains(&transmit.transport.local_addr)
+                {
                     return Err(TraversalError::UnexpectedDatagramLocal);
                 }
                 if !self
@@ -508,7 +515,7 @@ impl IceConnectivitySession {
     /// Endpoint attribution is checked before protocol processing.
     pub fn handle_datagram(
         &mut self,
-        datagram: TraversalDatagram,
+        datagram: &TraversalDatagram,
         now: Instant,
     ) -> Result<(), TraversalError> {
         if !self.started {
@@ -727,9 +734,7 @@ impl std::error::Error for TraversalError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prw_connectivity::{
-        PeerConnectivityIdentity, SelectedConnectivityPath, TransportIdentity,
-    };
+    use prw_connectivity::{PeerConnectivityIdentity, SelectedConnectivityPath, TransportIdentity};
     use prw_core::DeviceId;
     use rtc_stun::message::{BINDING_SUCCESS, Message};
 
@@ -793,7 +798,7 @@ mod tests {
             .expect("binding response");
         discovery
             .handle_datagram(
-                TraversalDatagram::new(local, server, response.raw).expect("response datagram"),
+                &TraversalDatagram::new(local, server, response.raw).expect("response datagram"),
                 Instant::now(),
             )
             .expect("handle response");
@@ -813,7 +818,7 @@ mod tests {
         let mut discovery = StunDiscovery::new(local, server).expect("discovery");
         assert_eq!(
             discovery.handle_datagram(
-                TraversalDatagram::new(local, attacker, vec![1]).expect("datagram"),
+                &TraversalDatagram::new(local, attacker, vec![1]).expect("datagram"),
                 Instant::now(),
             ),
             Err(TraversalError::UnexpectedDatagramSource)
@@ -882,10 +887,16 @@ mod tests {
         for step in 0..steps {
             let millis = u64::try_from(step).expect("bounded test step") * 100;
             let now = base + Duration::from_millis(millis);
-            if a.poll_timeout().expect("a timeout").is_some_and(|deadline| deadline <= now) {
+            if a.poll_timeout()
+                .expect("a timeout")
+                .is_some_and(|deadline| deadline <= now)
+            {
                 let _ = a.handle_timeout(now);
             }
-            if b.poll_timeout().expect("b timeout").is_some_and(|deadline| deadline <= now) {
+            if b.poll_timeout()
+                .expect("b timeout")
+                .is_some_and(|deadline| deadline <= now)
+            {
                 let _ = b.handle_timeout(now);
             }
 
@@ -899,7 +910,7 @@ mod tests {
                     outbound.payload().to_vec(),
                 )
                 .expect("invert a datagram");
-                let _ = b.handle_datagram(inbound, now);
+                let _ = b.handle_datagram(&inbound, now);
             }
             for _ in 0..8 {
                 let Some(outbound) = b.poll_transmit().expect("b transmit") else {
@@ -911,7 +922,7 @@ mod tests {
                     outbound.payload().to_vec(),
                 )
                 .expect("invert b datagram");
-                let _ = a.handle_datagram(inbound, now);
+                let _ = a.handle_datagram(&inbound, now);
             }
 
             if a_update.is_none() {
