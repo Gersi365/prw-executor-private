@@ -127,11 +127,11 @@ jobs:
           test -f "$report"
           cat >> "$report" <<'EOF'
 
-A01 NATIVE DEAD-CODE CORRECTIVE:
-- Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
-- Clippy reported exactly one source defect: the private helper byte_array in apps/android/native/src/files.rs was unused under -D warnings.
-- A01 removes only that unused private helper after reconstructing the exact Phase 148 candidate. File/transfer protocol encoding, JNI exports, Kotlin lifecycle semantics, acknowledged-progress authority, dependency selection and production boundaries are unchanged.
-EOF
+          A01 NATIVE DEAD-CODE CORRECTIVE:
+          - Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
+          - Clippy reported exactly one source defect: the private helper byte_array in apps/android/native/src/files.rs was unused under -D warnings.
+          - A01 removes only that unused private helper after reconstructing the exact Phase 148 candidate. File/transfer protocol encoding, JNI exports, Kotlin lifecycle semantics, acknowledged-progress authority, dependency selection and production boundaries are unchanged.
+          EOF
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-8.sh)
           echo phase148_a01_revalidation_and_staging=pass
 
