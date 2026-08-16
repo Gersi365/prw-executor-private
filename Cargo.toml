@@ -16,6 +16,7 @@ members = [
     "crates/prw-enrollment",
     "crates/prw-session",
     "crates/prw-registry",
+    "crates/prw-terminal",
     "crates/prw-agent",
 ]
 
