@@ -6,6 +6,7 @@ members = [
     "crates/prw-files",
     "crates/prw-network",
     "crates/prw-control-plane",
+    "crates/prw-device-identity",
     "crates/prw-agent",
 ]
 
