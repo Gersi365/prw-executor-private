@@ -1,4 +1,4 @@
-name: Phase 132 Transfer Finalization
+name: Phase 132 A01 Transfer Finalization
 
 on:
   push:
@@ -11,17 +11,20 @@ permissions:
 jobs:
   finalize:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
-      - name: Require Phase 131 and normalize Phase 132 integration
+      - name: Require current Phase 130 and 131 authority and normalize integration
         shell: bash
         run: |
           set -Eeuo pipefail
-          report='logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt'
-          test -f "$report"
-          grep -Fq 'PHASE_131_SOURCE_AND_DISPOSABLE_FILE_FOUNDATION_DONE' "$report"
+          report130='logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt'
+          report131='logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt'
+          test -f "$report130"
+          test -f "$report131"
+          grep -Fq 'PHASE_130_DONE / NO_PRODUCTION_REGISTRY_SIDE_EFFECT / REGISTRY_CURRENT_STATE_REVALIDATION_READY' "$report130"
+          grep -Fq 'PHASE_131_DONE / READY_FOR_PHASE_132_VALIDATION' "$report131"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -50,7 +53,6 @@ jobs:
           text = lib.read_text()
           marker = 'mod transfer_storage;\npub use transfer_storage::{\n    MAX_TRANSFER_CHUNK_BYTES, StagedUploadFile, TransferStorageError, transfer_staging_name,\n};\n'
           if 'mod transfer_storage;' not in text:
-              needle = '//! Phase 131 intentionally implements only bounded list/stat/read and creation-only\n'
               idx = text.find('\n\nuse std::{')
               if idx == -1:
                   raise SystemExit('file-service module insertion point missing')
@@ -58,31 +60,22 @@ jobs:
               lib.write_text(text)
           PY
           cargo fmt --all
-
-      - name: Generate exact locked graph
-        id: lock
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rustc --version
-          cargo --version
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           grep -A3 '^name = "rustix"$' Cargo.lock | grep -Fq 'version = "1.1.4"'
           grep -A3 '^name = "aws-lc-rs"$' Cargo.lock | grep -Fq 'version = "1.18.0"'
-          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
-          echo "sha=$lock_sha" >> "$GITHUB_OUTPUT"
-          echo "phase132_lock_sha256=$lock_sha"
+          git restore --worktree -- target 2>/dev/null || true
+          git diff --check
 
-      - name: Apply machine-applicable Phase 132 Clippy fixes only
+      - name: Apply machine-applicable Phase 132 lints only
         shell: bash
         run: |
           set -Eeuo pipefail
-          cargo clippy --fix --locked \
-            -p prw-file-service -p prw-file-transfer \
+          cargo clippy --fix --locked -p prw-file-service -p prw-file-transfer \
             --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
           cargo fmt --all
-          mapfile -t changed < <(git status --short | sed -E 's/^.. //')
+          git restore --worktree -- target 2>/dev/null || true
+          mapfile -t changed < <(git diff --name-only)
           for path in "${changed[@]}"; do
             case "$path" in
               Cargo.toml|Cargo.lock|\
@@ -101,37 +94,27 @@ jobs:
         run: |
           set -Eeuo pipefail
           cargo fmt --all -- --check
-          cargo clippy --locked -p prw-file-service -p prw-file-transfer --all-targets --all-features -- -D warnings 2>&1 | tee phase132-clippy.log
-          cargo test --locked -p prw-file-service -p prw-file-transfer --all-targets 2>&1 | tee phase132-tests.log
-          echo 'phase132_focused_validation=pass'
+          cargo clippy --locked -p prw-file-service -p prw-file-transfer --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-file-service -p prw-file-transfer --all-targets
+          echo 'phase132_a01_focused=pass'
 
       - name: Run full workspace gates
+        id: workspace
         shell: bash
         run: |
           set -Eeuo pipefail
-          cargo metadata --locked --no-deps --format-version 1 >/dev/null
-          cargo fmt --all -- --check
-          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings 2>&1 | tee phase132-workspace-clippy.log
-          cargo test --locked --workspace --all-targets 2>&1 | tee phase132-workspace-tests.log
-          cargo build --locked --workspace 2>&1 | tee phase132-workspace-build.log
-          echo 'phase132_workspace_validation=pass'
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          git restore --worktree -- target 2>/dev/null || true
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase132_a01_workspace=pass lock_sha=$lock_sha"
 
-      - name: Preserve failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase132-failure-diagnostics
-          path: |
-            Cargo.lock
-            phase132-*.log
-          if-no-files-found: ignore
-          retention-days: 1
-
-      - name: Record authoritative Phase 132 report and self-clean
-        if: success()
+      - name: Record authoritative Phase 132 report
         shell: bash
         env:
-          LOCK_SHA: ${{ steps.lock.outputs.sha }}
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
         run: |
           set -Eeuo pipefail
           report_dir='logs/audits/phase-132-file-transfer-hardening'
@@ -148,7 +131,7 @@ jobs:
           Branch: main
           Date: 2026-08-16
           Validation source head: $GITHUB_SHA
-          Authoritative finalization run: $GITHUB_RUN_ID
+          Authoritative validation run: $GITHUB_RUN_ID
           Cargo.lock SHA-256: $LOCK_SHA
 
           CONTRACT
@@ -159,39 +142,35 @@ jobs:
           crates/prw-file-transfer
 
           SECURITY/TRANSACTION OUTCOME
-          - TransferId is exactly 128 bits / 32 lowercase hex externally.
-          - Maximum transfer is 1 GiB; maximum chunk is 1 MiB; active manager bound is 128 uploads.
-          - Staging filename is generated by PRW and lives in the descriptor-validated final parent directory.
-          - First begin is creation-only 0600 regular file; resume reopens exact NOFOLLOW staging.
-          - Chunks are strict sequential offset writes and are synced before offset acknowledgement.
-          - Final staged length must equal plan total.
-          - SHA-256 is streamed through AWS-LC and must equal the plan digest before publication.
-          - Final publication uses same-directory atomic Linux NOREPLACE; existing final files are never overwritten.
-          - Parent directory is synced after commit/abort.
-          - Abort removes only the exact staging inode/path identity.
-          - Download chunks are descriptor-anchored, NOFOLLOW, regular-file-only, offset-bounded and at most 1 MiB.
+          TransferId is 128 bits / 32 lowercase hex externally. Maximum transfer is 1 GiB, maximum chunk 1 MiB, and the manager bound is 128 active uploads. Staging is PRW-generated in the descriptor-validated final parent. Resume reopens the exact NOFOLLOW staging file. Chunks require strict sequential offsets. Final length and AWS-LC SHA-256 must match the plan before same-directory Linux NOREPLACE publication. Existing final files are never overwritten. Parent directory sync follows commit/abort. Abort removes only the exact staging inode/path identity. Download is descriptor-anchored, regular-file-only and bounded to one chunk.
 
           VALIDATION
-          The authoritative run passed machine-applicable Clippy correction constrained to Phase 132 files, focused rustfmt/Clippy/tests for file-service+file-transfer, then full workspace/all-target Clippy, tests and build under the locked graph.
-
-          Disposable tests cover transfer-id encoding, plan/chunk bounds, sequential offsets, resume after handle drop, digest/size failure without publication, NOREPLACE behavior, staging symlink substitution, abort, final content/mode, and bounded download/EOF behavior.
+          The authoritative run passed bounded machine-applicable correction within Phase 132 files, focused file-service+file-transfer rustfmt/Clippy/tests, then full workspace/all-target Clippy, tests and build under the locked graph.
 
           INITIAL OVERWRITE POLICY
-          Final overwrite/replace is intentionally disabled in Phase 132. Existing destinations fail closed. Any later replacement feature requires a separate versioned rollback contract.
+          Final overwrite/replace is disabled. Existing destinations fail closed.
 
           PRODUCTION BOUNDARY
-          No production remote-file transport, capability policy, or arbitrary PowerCode file was activated or mutated by Phase 132 tests. Production transfer remains dependent on authenticated transport, current registry validation, explicit file capability policy, and a deployed validated Agent build.
+          No production remote-file transport, capability policy, or arbitrary PowerCode file was activated or mutated. Production transfer remains dependent on authenticated transport, current registry validation, explicit file capability policy, and a deployed validated Agent build.
 
           FINAL CLASSIFICATION
-          PHASE_132_SOURCE_AND_DISPOSABLE_TRANSFER_HARDENING_DONE / NO_PRODUCTION_TRANSFER_SIDE_EFFECT / READY_FOR_PHASE_133_SOURCE_WORK
+          PHASE_132_DONE / NO_PRODUCTION_TRANSFER_SIDE_EFFECT / READY_FOR_PHASE_133_SOURCE_WORK
           EOF
 
-          git rm -f -- .github/workflows/phase-132-transfer-finalization.yml
-          rm -f phase132-*.log
+      - name: Commit validated Phase 132 source graph and report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
           git diff --check
-          git config user.name 'Gersi365'
-          git config user.email 'Gersi365@outlook.com'
-          git add -A
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock \
+            crates/prw-file-service/Cargo.toml \
+            crates/prw-file-service/src/lib.rs \
+            crates/prw-file-service/src/transfer_storage.rs \
+            crates/prw-file-transfer/Cargo.toml \
+            crates/prw-file-transfer/src/lib.rs \
+            logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
           git commit -m 'phase 132: finalize resumable file transfer hardening'
           git push origin HEAD:main
-          echo 'phase132_finalization=pass'
+          echo 'phase132_a01_materialization=pass'
