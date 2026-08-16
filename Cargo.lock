@@ -1084,6 +1084,7 @@ name = "prw-registry"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
+ "prw-connectivity",
  "prw-control-plane",
  "prw-core",
  "prw-device-identity-signer",
@@ -1105,6 +1106,26 @@ dependencies = [
  "prw-connectivity",
  "prw-core",
  "prw-relay",
+]
+
+[[package]]
+name = "prw-remote-bridge"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-agent",
+ "prw-connectivity",
+ "prw-control-plane",
+ "prw-core",
+ "prw-device-identity-signer",
+ "prw-file-service",
+ "prw-file-transfer",
+ "prw-forwarding",
+ "prw-policy",
+ "prw-registry",
+ "prw-remote-transport",
+ "prw-session",
+ "prw-terminal",
 ]
 
 [[package]]

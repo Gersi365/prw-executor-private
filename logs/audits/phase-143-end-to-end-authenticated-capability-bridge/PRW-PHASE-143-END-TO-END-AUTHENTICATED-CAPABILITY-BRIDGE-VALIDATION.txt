@@ -1,0 +1,32 @@
+Private Remote Workspace
+Phase 143 — End-to-End Authenticated Capability Bridge
+
+STATUS:
+PASS / CURRENT_REGISTRY_REVALIDATION / CURRENT_TRANSPORT_IDENTITY_BINDING / BOUNDED_REMOTE_SESSION_LEASE / PER_CAPABILITY_POLICY / TYPED_CAPABILITY_COMMANDS / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: 62b3bcbf2147387ccc56e2ef2a9a6b03ec9ba204
+Authoritative validation run: 31955891966
+Cargo.lock SHA-256: 301edae7f01eec5e3c092ceadd24c1495620102807370ea0c3203fde1442faa8
+prw-registry/src/lib.rs SHA-256: 6ee1f002f76ae506f0cfb7e3049ef1707cdb07ce6c8694dae7eb09848dce1c54
+prw-remote-bridge/src/lib.rs SHA-256: 24e6a0121e79a7ce519bee4db9efa9335d6eb4798ddb876741e4fc6a3eaff1ca
+end_to_end.rs SHA-256: 44cd13ae7f1d173fe85ed9262c9dd2e2af73fe2d07656787f41522b267dc1752
+
+CONTRACT: contracts/END_TO_END_AUTHENTICATED_CAPABILITY_BRIDGE_CONTRACT.md
+IMPLEMENTATION: crates/prw-remote-bridge plus the Phase 139-required current TransportIdentity metadata in prw-registry.
+
+AUTHORIZATION CHAIN: PRWM Request -> bounded remote lease -> current authenticated-session registry revalidation -> current DeviceId/TransportIdentity validation -> PRWC typed operation decode -> exact policy Capability -> typed dispatcher. Transport, relay and WorkspaceRole never grant capability implicitly.
+
+OPERATIONS: Agent status; file list/stat/create/create-directory; upload begin/resume/chunk/finalize/abort; download chunk; terminal open/input/resize/read/close; loopback-to-explicit-IP forward open/close. No generic shell, arbitrary executable, FilesDelete, role-derived grant, DNS hostname target or unrestricted bind.
+
+BOUNDS: remote session lease <= 3,600 seconds; PRWC header 12 bytes; inline data <= 60,000 bytes under Phase 140 65,536-byte PRWM control ceiling.
+
+VALIDATION: all 18 operation codes round-trip to existing typed domain values and exact capability mappings. Disposable tests use real signed Phase 128 proof and Phase 130 current registry. Expiry/future time, membership suspension, device revocation, stale transport, malformed codec and policy denial prevent dispatch. Valid dispatch returns correlated Response; oversized response fails closed. Focused and full locked workspace validation passed.
+
+CORRECTIVE HISTORY: initial run passed prerequisites, registry materialization, exact graph and static boundary, then stopped on five const-eligible Clippy findings and one missing dispatcher # Errors section. A01 corrected those and reached test compilation, which exposed one regression-only local fixture name shadowing the fixture constructor. A02 renames only that local fixture variable and re-runs the same validated source correctives.
+
+PRODUCTION BOUNDARY: no production QUIC listener, ICE/STUN/TURN/relay activation, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS or client distribution state changed.
+
+FINAL CLASSIFICATION: PHASE_143_DONE / E2E_AUTHENTICATED_CAPABILITY_BRIDGE_VALIDATED / CURRENT_REGISTRY_AND_TRANSPORT_REVALIDATION / PER_CAPABILITY_POLICY_ENFORCED / READY_FOR_EXPLICIT_PHASE_144_ARCHITECTURE_DECISION

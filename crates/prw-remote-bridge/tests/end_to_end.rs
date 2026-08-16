@@ -10,9 +10,7 @@ use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
 use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use prw_file_service::RemotePath;
 use prw_file_transfer::{TransferId, UploadPlan};
-use prw_forwarding::{
-    ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec,
-};
+use prw_forwarding::{ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec};
 use prw_policy::{Capability, Decision, PolicyEvaluator};
 use prw_registry::{WorkspaceDeviceRegistry, WorkspaceRole};
 use prw_remote_bridge::{
@@ -196,8 +194,7 @@ fn commands() -> Vec<BridgeCommand> {
             forward_id: forward_id(17),
             spec: TcpForwardSpec::new(
                 LoopbackBind::new(LoopbackFamily::Ipv4, 8080).expect("bind"),
-                ForwardTarget::new(IpAddr::V4(Ipv4Addr::new(10, 2, 3, 4)), 443)
-                    .expect("target"),
+                ForwardTarget::new(IpAddr::V4(Ipv4Addr::new(10, 2, 3, 4)), 443).expect("target"),
             ),
         },
         BridgeCommand::ForwardClose(forward_id(17)),
@@ -229,7 +226,10 @@ fn all_operation_codes_round_trip_and_map_to_exact_capabilities() {
     let commands = commands();
     assert_eq!(commands.len(), expected.len());
     for (index, (command, capability)) in commands.iter().zip(expected).enumerate() {
-        assert_eq!(command.operation_code(), u16::try_from(index + 1).expect("code"));
+        assert_eq!(
+            command.operation_code(),
+            u16::try_from(index + 1).expect("code")
+        );
         assert_eq!(command.required_capability(), capability);
         let encoded = command.encode().expect("encode");
         assert!(encoded.len() <= MAX_CONTROL_PAYLOAD_BYTES);
@@ -246,22 +246,28 @@ fn current_transport_binding_is_single_bind_compare_and_rotate() {
     let mut fixture = fixture(WorkspaceRole::Member);
     let device = fixture.lease.session().device_id().clone();
     let replacement = TransportIdentity::new([0x32; 32]).expect("replacement");
-    assert!(fixture
-        .registry
-        .bind_transport_identity(&device, replacement)
-        .is_err());
-    assert!(fixture
-        .registry
-        .rotate_transport_identity(&device, replacement, fixture.transport)
-        .is_err());
+    assert!(
+        fixture
+            .registry
+            .bind_transport_identity(&device, replacement)
+            .is_err()
+    );
+    assert!(
+        fixture
+            .registry
+            .rotate_transport_identity(&device, replacement, fixture.transport)
+            .is_err()
+    );
     fixture
         .registry
         .rotate_transport_identity(&device, fixture.transport, replacement)
         .expect("compare and rotate");
-    assert!(fixture
-        .registry
-        .validate_transport_identity(&device, fixture.transport)
-        .is_err());
+    assert!(
+        fixture
+            .registry
+            .validate_transport_identity(&device, fixture.transport)
+            .is_err()
+    );
     fixture
         .registry
         .validate_transport_identity(&device, replacement)
@@ -282,7 +288,13 @@ fn valid_full_chain_dispatches_and_correlates_response() {
         ..SpyDispatcher::default()
     };
     let response = bridge
-        .process_request(fixture.transport, &fixture.lease, 1_100, &frame, &mut dispatcher)
+        .process_request(
+            fixture.transport,
+            &fixture.lease,
+            1_100,
+            &frame,
+            &mut dispatcher,
+        )
         .expect("authorized dispatch");
     assert_eq!(dispatcher.calls, 1);
     assert_eq!(response.kind(), ControlMessageKind::Response);
@@ -298,7 +310,13 @@ fn denied_capability_and_owner_role_never_dispatch() {
     let bridge = CapabilityBridge::new(&fixture.registry, &policy);
     let mut dispatcher = SpyDispatcher::default();
     assert_eq!(
-        bridge.process_request(fixture.transport, &fixture.lease, 1_100, &frame, &mut dispatcher),
+        bridge.process_request(
+            fixture.transport,
+            &fixture.lease,
+            1_100,
+            &frame,
+            &mut dispatcher
+        ),
         Err(RemoteBridgeError::CapabilityDenied)
     );
     assert_eq!(dispatcher.calls, 0);
@@ -319,11 +337,23 @@ fn stale_transport_expired_or_future_session_never_dispatches() {
         Err(RemoteBridgeError::TransportIdentityRejected)
     );
     assert_eq!(
-        bridge.process_request(fixture.transport, &fixture.lease, 999, &frame, &mut dispatcher),
+        bridge.process_request(
+            fixture.transport,
+            &fixture.lease,
+            999,
+            &frame,
+            &mut dispatcher
+        ),
         Err(RemoteBridgeError::SessionNotYetValid)
     );
     assert_eq!(
-        bridge.process_request(fixture.transport, &fixture.lease, 1_200, &frame, &mut dispatcher),
+        bridge.process_request(
+            fixture.transport,
+            &fixture.lease,
+            1_200,
+            &frame,
+            &mut dispatcher
+        ),
         Err(RemoteBridgeError::SessionExpired)
     );
     assert_eq!(dispatcher.calls, 0);

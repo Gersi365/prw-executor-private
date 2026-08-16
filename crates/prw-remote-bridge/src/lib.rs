@@ -14,9 +14,7 @@ use prw_agent::local_commands::LocalAgentCommand;
 use prw_connectivity::TransportIdentity;
 use prw_file_service::RemotePath;
 use prw_file_transfer::{TransferId, UploadPlan};
-use prw_forwarding::{
-    ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec,
-};
+use prw_forwarding::{ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec};
 use prw_policy::{Capability, Decision, PolicyEvaluator};
 use prw_registry::{RegistryValidatedPrincipal, WorkspaceDeviceRegistry};
 use prw_remote_transport::{
@@ -88,7 +86,7 @@ impl RemoteSessionLease {
         self.expires_at_unix_seconds
     }
 
-    fn validate_time(&self, now_unix_seconds: u64) -> Result<(), RemoteBridgeError> {
+    const fn validate_time(&self, now_unix_seconds: u64) -> Result<(), RemoteBridgeError> {
         if now_unix_seconds < self.issued_at_unix_seconds {
             return Err(RemoteBridgeError::SessionNotYetValid);
         }
@@ -481,10 +479,11 @@ pub trait CapabilityDispatcher {
     type Error;
 
     /// Dispatches one already-authorized typed request.
-    fn dispatch(
-        &mut self,
-        request: &AuthorizedCapabilityRequest,
-    ) -> Result<Vec<u8>, Self::Error>;
+    ///
+    /// # Errors
+    ///
+    /// Returns the backend-specific bounded dispatch error without weakening bridge authorization.
+    fn dispatch(&mut self, request: &AuthorizedCapabilityRequest) -> Result<Vec<u8>, Self::Error>;
 }
 
 /// Current-registry and policy gate around Phase 140 remote control frames.
@@ -552,20 +551,20 @@ impl<'a, P: PolicyEvaluator> CapabilityBridge<'a, P> {
         frame: &ControlFrame,
         dispatcher: &mut D,
     ) -> Result<ControlFrame, RemoteBridgeError> {
-        let authorized = self.authorize(
-            presented_transport_identity,
-            lease,
-            now_unix_seconds,
-            frame,
-        )?;
+        let authorized =
+            self.authorize(presented_transport_identity, lease, now_unix_seconds, frame)?;
         let response = dispatcher
             .dispatch(&authorized)
             .map_err(|_| RemoteBridgeError::DispatchFailed)?;
         if response.len() > MAX_CONTROL_PAYLOAD_BYTES {
             return Err(RemoteBridgeError::DispatchResponseTooLarge);
         }
-        ControlFrame::new(ControlMessageKind::Response, authorized.request_id(), response)
-            .map_err(map_transport_error)
+        ControlFrame::new(
+            ControlMessageKind::Response,
+            authorized.request_id(),
+            response,
+        )
+        .map_err(map_transport_error)
     }
 }
 
@@ -617,11 +616,11 @@ impl fmt::Display for RemoteBridgeError {
 
 impl std::error::Error for RemoteBridgeError {}
 
-fn map_transport_error(_error: RemoteTransportError) -> RemoteBridgeError {
+const fn map_transport_error(_error: RemoteTransportError) -> RemoteBridgeError {
     RemoteBridgeError::ResponseFrameRejected
 }
 
-fn validate_nonzero_inline_length(length: usize) -> Result<(), RemoteBridgeError> {
+const fn validate_nonzero_inline_length(length: usize) -> Result<(), RemoteBridgeError> {
     if length == 0 || length > MAX_BRIDGE_INLINE_BYTES {
         return Err(RemoteBridgeError::InvalidRequestPayload);
     }
@@ -647,7 +646,8 @@ fn write_inline_bytes(
 
 fn write_path(output: &mut Vec<u8>, path: &RemotePath) -> Result<(), RemoteBridgeError> {
     let encoded = path.components().join("/");
-    let length = u16::try_from(encoded.len()).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
+    let length =
+        u16::try_from(encoded.len()).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
     output.extend_from_slice(&length.to_be_bytes());
     output.extend_from_slice(encoded.as_bytes());
     Ok(())
@@ -660,7 +660,7 @@ const fn terminal_profile_code(profile: TerminalProfile) -> u8 {
     }
 }
 
-fn decode_terminal_profile(value: u8) -> Result<TerminalProfile, RemoteBridgeError> {
+const fn decode_terminal_profile(value: u8) -> Result<TerminalProfile, RemoteBridgeError> {
     match value {
         1 => Ok(TerminalProfile::PosixShell),
         2 => Ok(TerminalProfile::BashShell),
@@ -767,21 +767,22 @@ impl<'a> Reader<'a> {
             .input
             .get(self.offset..end)
             .ok_or(RemoteBridgeError::InvalidRequestPayload)?;
-        let encoded = std::str::from_utf8(bytes).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
+        let encoded =
+            std::str::from_utf8(bytes).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
         self.offset = end;
         RemotePath::parse(encoded).map_err(|_| RemoteBridgeError::InvalidRequestPayload)
     }
 
     fn inline_length(&mut self) -> Result<usize, RemoteBridgeError> {
-        let length = usize::try_from(self.u32()?)
-            .map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
+        let length =
+            usize::try_from(self.u32()?).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
         validate_nonzero_inline_length(length)?;
         Ok(length)
     }
 
     fn inline_bytes(&mut self, allow_empty: bool) -> Result<Vec<u8>, RemoteBridgeError> {
-        let length = usize::try_from(self.u32()?)
-            .map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
+        let length =
+            usize::try_from(self.u32()?).map_err(|_| RemoteBridgeError::InvalidRequestPayload)?;
         if length > MAX_BRIDGE_INLINE_BYTES || (!allow_empty && length == 0) {
             return Err(RemoteBridgeError::InvalidRequestPayload);
         }
@@ -797,7 +798,7 @@ impl<'a> Reader<'a> {
         Ok(bytes.to_vec())
     }
 
-    fn finish(self) -> Result<(), RemoteBridgeError> {
+    const fn finish(self) -> Result<(), RemoteBridgeError> {
         if self.offset == self.input.len() {
             Ok(())
         } else {

@@ -9,6 +9,7 @@ use std::{
     fmt,
 };
 
+use prw_connectivity::TransportIdentity;
 use prw_control_plane::{DeviceIdentityBinding, PublicIdentityMaterial};
 use prw_core::{DeviceId, DeviceLifecycle, UserId, WorkspaceId};
 use prw_session::AuthenticatedDeviceSession;
@@ -81,6 +82,7 @@ impl WorkspaceMembership {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisteredDevice {
     binding: DeviceIdentityBinding,
+    transport_identity: Option<TransportIdentity>,
 }
 
 impl RegisteredDevice {
@@ -88,6 +90,12 @@ impl RegisteredDevice {
     #[must_use]
     pub const fn binding(&self) -> &DeviceIdentityBinding {
         &self.binding
+    }
+
+    /// Returns the current separately rotatable transport identity, when bound.
+    #[must_use]
+    pub const fn transport_identity(&self) -> Option<TransportIdentity> {
+        self.transport_identity
     }
 }
 
@@ -163,6 +171,14 @@ pub enum RegistryError {
     DeviceRevoked,
     /// Authenticated session identity differs from current registry identity.
     SessionBindingMismatch,
+    /// A current transport identity is already bound for this device.
+    TransportIdentityAlreadyBound,
+    /// No current transport identity is bound for this device.
+    TransportIdentityMissing,
+    /// Presented/expected transport identity differs from the current binding.
+    TransportIdentityMismatch,
+    /// Transport rotation supplied the same identity as replacement.
+    TransportIdentityUnchanged,
 }
 
 impl fmt::Display for RegistryError {
@@ -180,6 +196,12 @@ impl fmt::Display for RegistryError {
             Self::DeviceUnknown => "device not found",
             Self::DeviceRevoked => "device is revoked",
             Self::SessionBindingMismatch => "authenticated session binding mismatch",
+            Self::TransportIdentityAlreadyBound => "transport identity already bound",
+            Self::TransportIdentityMissing => "transport identity is not bound",
+            Self::TransportIdentityMismatch => "transport identity does not match current binding",
+            Self::TransportIdentityUnchanged => {
+                "transport identity rotation requires a distinct replacement"
+            }
         };
         formatter.write_str(message)
     }
@@ -315,7 +337,10 @@ impl WorkspaceDeviceRegistry {
                 if at_capacity {
                     return Err(RegistryError::DeviceCapacity);
                 }
-                Ok(entry.insert(RegisteredDevice { binding }))
+                Ok(entry.insert(RegisteredDevice {
+                    binding,
+                    transport_identity: None,
+                }))
             }
         }
     }
@@ -324,6 +349,87 @@ impl WorkspaceDeviceRegistry {
     #[must_use]
     pub fn device(&self, device_id: &DeviceId) -> Option<&RegisteredDevice> {
         self.devices.get(device_id)
+    }
+
+    /// Binds the first current mesh transport identity to one enrolled registered device.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown/revoked devices and a second initial bind.
+    pub fn bind_transport_identity(
+        &mut self,
+        device_id: &DeviceId,
+        identity: TransportIdentity,
+    ) -> Result<(), RegistryError> {
+        let device = self
+            .devices
+            .get_mut(device_id)
+            .ok_or(RegistryError::DeviceUnknown)?;
+        if device.binding.lifecycle != DeviceLifecycle::Enrolled {
+            return Err(RegistryError::DeviceRevoked);
+        }
+        if device.transport_identity.is_some() {
+            return Err(RegistryError::TransportIdentityAlreadyBound);
+        }
+        device.transport_identity = Some(identity);
+        Ok(())
+    }
+
+    /// Atomically compare-and-rotates one current mesh transport identity.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown/revoked/unbound devices, stale expected identity or an unchanged replacement.
+    pub fn rotate_transport_identity(
+        &mut self,
+        device_id: &DeviceId,
+        expected_current: TransportIdentity,
+        replacement: TransportIdentity,
+    ) -> Result<(), RegistryError> {
+        if expected_current == replacement {
+            return Err(RegistryError::TransportIdentityUnchanged);
+        }
+        let device = self
+            .devices
+            .get_mut(device_id)
+            .ok_or(RegistryError::DeviceUnknown)?;
+        if device.binding.lifecycle != DeviceLifecycle::Enrolled {
+            return Err(RegistryError::DeviceRevoked);
+        }
+        let current = device
+            .transport_identity
+            .ok_or(RegistryError::TransportIdentityMissing)?;
+        if current != expected_current {
+            return Err(RegistryError::TransportIdentityMismatch);
+        }
+        device.transport_identity = Some(replacement);
+        Ok(())
+    }
+
+    /// Validates one presented mesh transport identity against current device state.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown/revoked/unbound devices and stale or mismatched identities.
+    pub fn validate_transport_identity(
+        &self,
+        device_id: &DeviceId,
+        presented: TransportIdentity,
+    ) -> Result<(), RegistryError> {
+        let device = self
+            .devices
+            .get(device_id)
+            .ok_or(RegistryError::DeviceUnknown)?;
+        if device.binding.lifecycle != DeviceLifecycle::Enrolled {
+            return Err(RegistryError::DeviceRevoked);
+        }
+        let current = device
+            .transport_identity
+            .ok_or(RegistryError::TransportIdentityMissing)?;
+        if current != presented {
+            return Err(RegistryError::TransportIdentityMismatch);
+        }
+        Ok(())
     }
 
     /// Revokes one enrolled device terminally while retaining its immutable tuple.

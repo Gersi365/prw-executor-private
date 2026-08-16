@@ -17,5 +17,11 @@ prw-remote-transport = { path = "../prw-remote-transport" }
 prw-session = { path = "../prw-session" }
 prw-terminal = { path = "../prw-terminal" }
 
+[dev-dependencies]
+aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
+prw-control-plane = { path = "../prw-control-plane" }
+prw-core = { path = "../prw-core" }
+prw-device-identity-signer = { path = "../prw-device-identity-signer" }
+
 [lints]
 workspace = true

@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+prw-connectivity = { path = "../prw-connectivity" }
 prw-control-plane = { path = "../prw-control-plane" }
 prw-core = { path = "../prw-core" }
 prw-session = { path = "../prw-session" }
