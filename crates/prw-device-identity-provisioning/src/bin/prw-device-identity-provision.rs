@@ -1,8 +1,6 @@
 use std::process::ExitCode;
 
-use prw_device_identity_provisioning::{
-    provision_first_ubuntu_device_identity, sha256_hex,
-};
+use prw_device_identity_provisioning::{provision_first_ubuntu_device_identity, sha256_hex};
 
 fn main() -> ExitCode {
     match provision_first_ubuntu_device_identity() {
