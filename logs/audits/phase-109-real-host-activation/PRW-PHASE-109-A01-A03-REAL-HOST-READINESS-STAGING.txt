@@ -1,0 +1,119 @@
+Private Remote Workspace
+Phase 109 — Real-Host Activation
+A01-A03 Readiness and Staging Checkpoint
+
+STATUS
+PASS / REAL_HOST_CHANNEL_PROVEN / READ_ONLY_PREFLIGHT_PASS / PAYLOAD_BUILT_AND_STAGED / READY_FOR_PRIVILEGED_INSTALL / NO_PRIVILEGED_SYSTEM_MUTATION_YET
+
+AUTHORIZATION
+The user explicitly approved Phase 109 real-host activation with separately audited install, user-manager daemon-reload, enable/start, and linger-state transactions.
+
+REAL HOST CHANNEL
+Repository: Gersi365/prw-executor-private
+Runner labels: self-hosted, prw-host
+Runner name: PowerCode
+Runner version: 2.336.0
+Machine name: PowerCode
+Host user: gersi365
+UID: 1000
+GID: 1000
+
+A01 READ-ONLY HOST PREFLIGHT
+Workflow run: 31926742241
+Result: PASS
+
+Observed host baseline:
+- hostname: PowerCode
+- Ubuntu: 26.04 LTS (Resolute Raccoon)
+- kernel: Linux 7.0.0-29-generic x86_64 GNU/Linux
+- systemd: 259 (259.5-0ubuntu3.4)
+- XDG_RUNTIME_DIR: /run/user/1000
+- runtime directory: mode 0700, uid 1000, gid 1000, directory
+- user bus socket: present
+- user manager: running
+- pre-existing linger: yes
+
+Initial package/service state:
+- /usr/lib/private-remote-workspace/prw-agent: absent
+- /usr/lib/systemd/user/prw-agent.service: absent
+- prw-agent.service LoadState: not-found
+- prw-agent.service ActiveState: inactive
+- prw-agent.service SubState: dead
+
+Linger ownership rule:
+Linger=yes existed before PRW activation. PRW must not claim ownership of that state and must not disable linger during rollback/uninstall merely because PRW was activated.
+
+A02 READ-ONLY PRIVILEGE PREFLIGHT
+Workflow run: 31926888498
+Result: PASS / EXPECTED_MANUAL_PRIVILEGE_BOUNDARY_IDENTIFIED
+
+Observed:
+- sudo path: /usr/bin/sudo
+- non-interactive sudo: unavailable (interactive authentication required)
+- git: 2.53.0
+- rustc/cargo are not in the self-hosted runner PATH
+- systemd/loginctl: 259
+- package destinations remain absent
+- linger remains yes
+
+Decision:
+Do not modify sudoers and do not run the GitHub self-hosted runner as root. Build the payload on a GitHub-hosted Ubuntu runner with the repository's exact Rust toolchain pin, then stage it on PowerCode as uid 1000. The only privileged boundary will be a user-entered one-time sudo install command with fixed destinations. User-level daemon-reload and enable/start remain separate later transactions.
+
+A03 BUILD AND NON-PRIVILEGED STAGING
+Workflow run: 31926992156
+Result: PASS
+Source/workflow commit: 8d283ec53bd37233a929fb720a189748dc7f992c
+
+Build job:
+- runner: ubuntu-24.04
+- repository rust-toolchain.toml pin: 1.97.1
+- locked dependency graph verified
+- release build: cargo build --release --locked --package prw-agent --bin prw-agent
+- immutable artifact uploaded successfully
+
+Artifact transport:
+- artifact name: prw-phase109-8d283ec53bd37233a929fb720a189748dc7f992c
+- artifact ID: 9258133223
+- artifact archive SHA-256 digest: 34a674cce17a00aa0682a28865a776c30950ec258b6a62fee2bdfcce88d9a014
+
+PowerCode staging path:
+/home/gersi365/.local/state/private-remote-workspace/phase109/staging/8d283ec53bd37233a929fb720a189748dc7f992c
+
+Staging ownership/modes:
+- staging directory: mode 0700 uid 1000 gid 1000
+- prw-agent: mode 0755 uid 1000 gid 1000
+- prw-agent.service: mode 0644 uid 1000 gid 1000
+- SHA256SUMS: mode 0600 uid 1000 gid 1000
+
+Payload SHA-256:
+8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf  prw-agent
+24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909  prw-agent.service
+
+Both payload files passed sha256sum verification before and after staging.
+
+BOUNDARY AT THIS CHECKPOINT
+Performed:
+- authenticated self-hosted runner connection
+- read-only real-host identity/runtime/service preflight
+- read-only privilege preflight
+- pinned release build on GitHub-hosted runner
+- artifact transfer to PowerCode
+- non-privileged staging under the user's XDG-style state tree
+
+Not performed yet:
+- privileged creation of /usr/lib/private-remote-workspace
+- privileged installation of prw-agent
+- privileged installation of prw-agent.service
+- root ownership mutation of package files
+- systemctl --user daemon-reload
+- enable/start
+- service stop/restart
+- loginctl enable-linger or disable-linger
+- any linger mutation
+- public networking activation
+
+NEXT TRANSACTION
+A04 privileged fresh-install transaction only.
+The package destinations were proven absent before staging. The install must preserve the locked modes and fixed destinations, verify post-install hashes/ownership, and fail/rollback if an unexpected destination appears before installation.
+
+No sudoers modification is authorized or required.
