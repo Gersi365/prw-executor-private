@@ -1,3 +1,4 @@
+# Phase 146 materialized-source validation trigger; workflow semantics unchanged.
 name: PRW Android Validation
 
 on:
