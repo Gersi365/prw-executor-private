@@ -1,0 +1,41 @@
+name: Phase 109 A09 Linger State Reconciliation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-109-a09-linger-state-reconciliation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linger-reconcile:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Reconcile pre-existing linger state without mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '=== PRW PHASE 109 LINGER STATE RECONCILIATION ==='
+          test "$(hostname)" = 'PowerCode'
+          test "$(id -un)" = 'gersi365'
+          test "$(id -u)" = '1000'
+          test "$(systemctl --user is-enabled prw-agent.service)" = 'enabled'
+          test "$(systemctl --user is-active prw-agent.service)" = 'active'
+
+          linger="$(loginctl show-user gersi365 -p Linger --value)"
+          runtime_path="$(loginctl show-user gersi365 -p RuntimePath --value)"
+          user_state="$(loginctl show-user gersi365 -p State --value)"
+          echo "linger=$linger"
+          echo "runtime_path=$runtime_path"
+          echo "user_state=$user_state"
+          test "$linger" = 'yes'
+          test "$runtime_path" = '/run/user/1000'
+          test -S /run/user/1000/bus
+
+          echo 'linger_source=pre_existing_before_phase109'
+          echo 'linger_mutation=none'
+          echo 'linger_ownership=external_pre_existing'
+          echo 'phase109_linger_reconciliation=success'
