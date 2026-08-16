@@ -8,9 +8,9 @@
 
 use std::{
     env, fmt,
-    fs::{self, File, OpenOptions, Permissions},
-    io::Write,
-    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
+    fs::{self, File, Permissions},
+    io::{self, Write},
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -22,10 +22,10 @@ use aws_lc_rs::{
 use prw_device_identity_custody::SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME;
 use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use rustix::{
-    fs::{CWD, RenameFlags, renameat_with},
+    fs::{CWD, Mode, OFlags, RenameFlags, open, renameat_with},
     process::getuid,
 };
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Relative location of the persistent encrypted device-identity credential.
 pub const DEVICE_IDENTITY_CIPHERTEXT_RELATIVE_PATH: &str =
@@ -36,7 +36,7 @@ pub const DEVICE_IDENTITY_DROPIN_RELATIVE_PATH: &str =
     "systemd/user/prw-agent.service.d/20-device-identity-credential.conf";
 
 const SYSTEMD_CREDS_PATH: &str = "/usr/bin/systemd-creds";
-const MAX_ENCRYPTED_CREDENTIAL_BYTES: usize = 65_536;
+const MAX_ENCRYPTED_CREDENTIAL_BYTES: u64 = 65_536;
 const PRIVATE_DIRECTORY_MODE: u32 = 0o700;
 const CIPHERTEXT_MODE: u32 = 0o600;
 
@@ -165,12 +165,10 @@ pub fn provision_first_ubuntu_device_identity()
         EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
             .map_err(|_| DeviceIdentityProvisioningError::KeyGenerationFailed)?;
     let private_pkcs8 = Zeroizing::new(generated.as_ref().to_vec());
+    drop(generated);
     let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(private_pkcs8.as_slice())
         .map_err(|_| DeviceIdentityProvisioningError::GeneratedIdentityInvalid)?;
     let public_spki_sha256 = signer.public_identity_sha256();
-
-    let ciphertext = encrypt_with_systemd_creds(private_pkcs8.as_slice())?;
-    drop(private_pkcs8);
 
     let temp_ciphertext = credential_dir.join(format!(
         ".device-identity-private-key-v1.cred.phase126.{}.tmp",
@@ -179,10 +177,21 @@ pub fn provision_first_ubuntu_device_identity()
     require_absent(&temp_ciphertext)
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
 
-    if let Err(error) = write_ciphertext_temp(&temp_ciphertext, &ciphertext, uid) {
+    if let Err(error) = encrypt_with_systemd_creds(&temp_ciphertext, private_pkcs8) {
         let _ = fs::remove_file(&temp_ciphertext);
         return Err(error);
     }
+
+    let opened_temp = match validate_and_sync_ciphertext_temp(&temp_ciphertext, uid) {
+        Ok(file) => file,
+        Err(error) => {
+            let _ = fs::remove_file(&temp_ciphertext);
+            return Err(error);
+        }
+    };
+    let opened_metadata = opened_temp
+        .metadata()
+        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
 
     let commit_result = renameat_with(
         CWD,
@@ -193,6 +202,22 @@ pub fn provision_first_ubuntu_device_identity()
     );
     if commit_result.is_err() {
         let _ = fs::remove_file(&temp_ciphertext);
+        return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
+    }
+
+    let final_metadata = match fs::symlink_metadata(&final_ciphertext) {
+        Ok(metadata) => metadata,
+        Err(_) => {
+            let _ = fs::remove_file(&final_ciphertext);
+            return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
+        }
+    };
+    if validate_ciphertext_metadata(&final_metadata, uid).is_err()
+        || final_metadata.dev() != opened_metadata.dev()
+        || final_metadata.ino() != opened_metadata.ino()
+    {
+        let _ = fs::remove_file(&final_ciphertext);
+        let _ = sync_directory(&credential_dir);
         return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
     }
 
@@ -252,7 +277,7 @@ fn ensure_private_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityP
                 return Err(DeviceIdentityProvisioningError::InsecureDirectory);
             }
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
             fs::create_dir(path)
                 .map_err(|_| DeviceIdentityProvisioningError::DirectoryCreationFailed)?;
             fs::set_permissions(path, Permissions::from_mode(PRIVATE_DIRECTORY_MODE))
@@ -274,67 +299,82 @@ fn ensure_private_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityP
 
 fn require_absent(path: &Path) -> Result<(), DeviceIdentityProvisioningError> {
     match fs::symlink_metadata(path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Ok(_) | Err(_) => Err(DeviceIdentityProvisioningError::AlreadyProvisioned),
     }
 }
 
 fn encrypt_with_systemd_creds(
-    private_pkcs8: &[u8],
-) -> Result<Vec<u8>, DeviceIdentityProvisioningError> {
+    temp_ciphertext: &Path,
+    mut private_pkcs8: Zeroizing<Vec<u8>>,
+) -> Result<(), DeviceIdentityProvisioningError> {
     let mut child = Command::new(SYSTEMD_CREDS_PATH)
         .arg("--user")
         .arg("encrypt")
         .arg(format!("--name={SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME}"))
         .arg("-")
-        .arg("-")
+        .arg(temp_ciphertext)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .map_err(|_| DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
 
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or(DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
-    stdin
-        .write_all(private_pkcs8)
-        .map_err(|_| DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
-    drop(stdin);
+    let write_result = match child.stdin.take() {
+        Some(mut stdin) => stdin
+            .write_all(private_pkcs8.as_slice())
+            .and_then(|()| stdin.flush()),
+        None => Err(io::Error::other("systemd-creds stdin unavailable")),
+    };
+    private_pkcs8.zeroize();
+    drop(private_pkcs8);
 
-    let output = child
-        .wait_with_output()
-        .map_err(|_| DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
-    if !output.status.success() {
+    if write_result.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
         return Err(DeviceIdentityProvisioningError::CredentialEncryptionFailed);
     }
-    if output.stdout.is_empty() || output.stdout.len() > MAX_ENCRYPTED_CREDENTIAL_BYTES {
-        return Err(DeviceIdentityProvisioningError::EncryptedCredentialOutOfBounds);
+
+    let status = child
+        .wait()
+        .map_err(|_| DeviceIdentityProvisioningError::CredentialEncryptionFailed)?;
+    if !status.success() {
+        return Err(DeviceIdentityProvisioningError::CredentialEncryptionFailed);
     }
-    Ok(output.stdout)
+    Ok(())
 }
 
-fn write_ciphertext_temp(
+fn validate_and_sync_ciphertext_temp(
     path: &Path,
-    ciphertext: &[u8],
     uid: u32,
-) -> Result<(), DeviceIdentityProvisioningError> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(CIPHERTEXT_MODE)
-        .open(path)
+) -> Result<File, DeviceIdentityProvisioningError> {
+    let before = fs::symlink_metadata(path)
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
-    file.write_all(ciphertext)
+    validate_ciphertext_metadata(&before, uid)?;
+
+    let owned_fd = open(
+        path,
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )
+    .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    let file = File::from(owned_fd);
+    let opened = file
+        .metadata()
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    validate_ciphertext_metadata(&opened, uid)?;
+    if before.dev() != opened.dev() || before.ino() != opened.ino() {
+        return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
+    }
     file.sync_all()
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
-    fs::set_permissions(path, Permissions::from_mode(CIPHERTEXT_MODE))
-        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    Ok(file)
+}
 
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+fn validate_ciphertext_metadata(
+    metadata: &fs::Metadata,
+    uid: u32,
+) -> Result<(), DeviceIdentityProvisioningError> {
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
         || metadata.uid() != uid
@@ -342,10 +382,13 @@ fn write_ciphertext_temp(
     {
         return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
     }
+    if metadata.len() == 0 || metadata.len() > MAX_ENCRYPTED_CREDENTIAL_BYTES {
+        return Err(DeviceIdentityProvisioningError::EncryptedCredentialOutOfBounds);
+    }
     Ok(())
 }
 
-fn sync_directory(path: &Path) -> std::io::Result<()> {
+fn sync_directory(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
 }
 
