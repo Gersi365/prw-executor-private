@@ -1,0 +1,309 @@
+Private Remote Workspace
+Phase 119 — Ubuntu Device-Identity Signer Compatibility and Security-Boundary Spike
+
+STATUS:
+PASS / AWS_LC_P256_SIGNER_COMPATIBILITY_PROVEN / PKCS8_V1_DER_PRIVATE_PAYLOAD_LOCKED / PKCS8_GENERATE_IMPORT_RESERIALIZE_PASS / CANONICAL_X509_SPKI_DERIVED / ASN1_DER_ECDSA_SIGNATURE_VERIFIED_BY_PRODUCTION_VERIFIER / FULL_ENROLLMENT_POP_SIGN_VERIFY_CONSUME_PASS / WRONG_KEY_AND_MUTATED_MESSAGE_REJECTED_WITHOUT_CONSUMPTION / TRUNCATED_PKCS8_REJECTED / PRODUCTION_ARBITRARY_SIGNING_API_STILL_ABSENT / CARGO_LOCK_UNCHANGED / NO_PRODUCTION_PRIVATE_KEY_OR_CREDENTIAL_WRITE / PHASE_120_AUTONOMOUSLY_AUTHORIZED
+
+AUDIT TYPE: CRYPTOGRAPHIC SIGNER COMPATIBILITY / PRIVATE-PAYLOAD FORMAT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: a2ad9ff59e31ea7f6b9dad2e88b19eb66b7cedfe
+Validated implementation head: 854cc71b519507a5663842add61d68ddcfefd49e
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Cargo.lock blob before/after: 56dfed0854363e923a22fe1bf358cfb1138616cf
+AWS-LC provider: aws-lc-rs 1.18.0 / aws-lc-sys 0.44.0
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 119 is a compatibility/security-boundary spike using disposable test-only key material. It does not create or persist the production PRW device identity and does not mutate the real host, systemd service, credential store, enrollment state, or networking.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 113 locked the production verification profile:
+- ECDSA P-256 with SHA-256;
+- canonical DER X.509 SubjectPublicKeyInfo public identity;
+- DER ASN.1 ECDSA-Sig-Value signatures;
+- aws-lc-rs 1.18.0 scoped to the device-identity provider boundary.
+
+Phase 114/115 locked and implemented the enrollment proof-of-possession message and replay contract:
+- exact immutable EnrollmentRequest snapshot;
+- exact 32-byte server nonce;
+- canonical binary message version 1;
+- signature verification before single-use challenge consumption;
+- invalid signatures do not consume the challenge.
+
+Phase 116 locked the device-side signing safety boundary:
+- typed enrollment PoP signing only;
+- no generic remote signing oracle;
+- no private-key export through PRW public APIs.
+
+Phase 118 locked Ubuntu custody:
+- systemd encrypted service credentials;
+- logical credential name prw.device-identity.private-key.v1;
+- TPM2_PLUS_HOST_SECRET default on capable hosts;
+- HOST_KEY_ONLY explicit fallback;
+- encrypted blob in protected XDG state;
+- plaintext delivered only through $CREDENTIALS_DIRECTORY;
+- private-key plaintext serialization deferred until this compatibility proof.
+
+PRIMARY PROVIDER EVIDENCE
+
+The pinned aws-lc-rs 1.18.0 API provides the exact primitives required by this spike:
+- EcdsaKeyPair::generate_pkcs8 for ECDSA P-256 signing keys;
+- EcdsaKeyPair::from_pkcs8 for reloading the serialized private key;
+- EcdsaKeyPair::to_pkcs8v1 for PKCS#8 v1 serialization;
+- EcdsaKeyPair::sign with ECDSA_P256_SHA256_ASN1_SIGNING;
+- EC public_key().as_der() for X.509 SubjectPublicKeyInfo DER;
+- ASN.1 ECDSA signing output compatible with the existing production verifier profile.
+
+The Phase 119 test harness exercises these APIs only with disposable in-memory test keys.
+
+IMPLEMENTATION SURFACE
+
+Added integration-test-only file:
+crates/prw-device-identity/tests/phase119_ubuntu_signer_spike.rs
+
+No production Rust module or public signing function was added.
+
+No manifest dependency was added because aws-lc-rs 1.18.0 is already the exact-pinned production verification provider dependency of prw-device-identity.
+
+No Cargo.lock mutation occurred.
+
+TEST PROFILE
+
+The Phase 119 harness contains exactly six focused tests.
+
+1. pkcs8_v1_round_trip_preserves_canonical_public_identity
+- generates a disposable P-256 private key as PKCS#8;
+- reloads it with the locked P-256/SHA-256 ASN.1 signing algorithm;
+- derives canonical X.509 SPKI DER;
+- reserializes as PKCS#8 v1;
+- reloads again;
+- proves the canonical public identity is unchanged.
+
+2. asn1_der_signature_verifies_through_production_verifier
+- signs a disposable test message with the reloaded P-256 key;
+- wraps the provider signature in the existing typed DeviceIdentitySignature profile;
+- proves the output is ASN.1 DER shaped;
+- verifies through verify_device_identity_signature, the existing production verifier.
+
+3. full_enrollment_pop_from_reloaded_pkcs8_verifies_and_consumes_once
+- constructs an actual typed EnrollmentRequest;
+- constructs the exact Phase 115 canonical PoP message;
+- signs it with the reloaded disposable PKCS#8 key;
+- verifies through verify_enrollment_proof;
+- proves successful verification consumes the challenge;
+- proves the same proof cannot be accepted a second time.
+
+4. signature_from_different_private_key_is_rejected_without_consuming_challenge
+- binds the enrollment request to key A;
+- signs the exact canonical message with independent key B;
+- requires InvalidSignature;
+- proves the challenge remains unconsumed.
+
+5. signature_over_mutated_canonical_message_is_rejected_without_consuming_challenge
+- constructs the correct canonical message;
+- mutates one message byte before signing;
+- submits the resulting signature against the unmodified server-side snapshot;
+- requires InvalidSignature;
+- proves the challenge remains unconsumed.
+
+6. truncated_pkcs8_is_rejected
+- truncates a generated PKCS#8 private-key document;
+- requires aws-lc-rs private-key import to fail closed.
+
+VALIDATION HISTORY
+
+Initial test-source commit:
+6a455ec48debadad69324227cba95e2fdea63246
+
+Permanent CI run:
+31932746147
+job:
+95129935333
+result:
+FAIL_SAFE at cargo fmt --check only.
+
+The first run passed the locked dependency graph check and stopped because rustfmt requested four purely mechanical formatting changes in the new test file. Clippy/tests/build did not execute after the formatting gate failed.
+
+Corrective commit:
+854cc71b519507a5663842add61d68ddcfefd49e
+
+Corrective scope:
+- formatting only inside crates/prw-device-identity/tests/phase119_ubuntu_signer_spike.rs;
+- no semantic test change;
+- no production source change.
+
+FINAL PERMANENT CI
+
+Run:
+31932795523
+
+Job:
+95130056369
+
+Runner image:
+Ubuntu 24.04.4 LTS / ubuntu-24.04
+
+Conclusion:
+SUCCESS
+
+Validated stages:
+- Rust 1.97.1 exact toolchain record;
+- cargo metadata --locked;
+- cargo fmt --all -- --check;
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings;
+- cargo test --locked --workspace --all-targets;
+- cargo build --locked --workspace --all-targets.
+
+PHASE 119 TEST RESULT
+
+Focused integration-test result:
+- 6 passed;
+- 0 failed;
+- 0 ignored.
+
+Exact passing tests:
+- full_enrollment_pop_from_reloaded_pkcs8_verifies_and_consumes_once;
+- asn1_der_signature_verifies_through_production_verifier;
+- pkcs8_v1_round_trip_preserves_canonical_public_identity;
+- signature_over_mutated_canonical_message_is_rejected_without_consuming_challenge;
+- signature_from_different_private_key_is_rejected_without_consuming_challenge;
+- truncated_pkcs8_is_rejected.
+
+Existing Phase 113 locked-profile tests also remained green:
+- 12 passed;
+- 0 failed.
+
+Existing Phase 115 enrollment PoP composition tests also remained green:
+- 6 passed;
+- 0 failed.
+
+PRIVATE PAYLOAD FORMAT LOCK
+
+Phase 119 locks the initial Ubuntu plaintext device-identity private credential payload as:
+
+PKCS#8 v1 DER
+
+The payload contains an ECDSA P-256 private key compatible with:
+ECDSA_P256_SHA256_ASN1_SIGNING
+
+This PKCS#8 DER payload is the plaintext value protected by the outer systemd encrypted credential container locked in Phase 118.
+
+The persistent file is therefore not plaintext PKCS#8. The persistent PRW file remains a systemd encrypted credential blob. PKCS#8 bytes are exposed only inside the custody/signing boundary after successful systemd credential decryption/delivery.
+
+PUBLIC IDENTITY DERIVATION
+
+The public identity associated with the private credential is derived from the reloaded key as canonical X.509 SubjectPublicKeyInfo DER.
+
+It must be wrapped as:
+- DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer.
+
+The Phase 119 round-trip proves the public identity is stable across PKCS#8 v1 serialization and reload.
+
+SIGNATURE FORMAT LOCK CONFIRMATION
+
+The signer algorithm remains:
+ECDSA_P256_SHA256_ASN1_SIGNING
+
+The produced signature is represented through:
+- DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- DeviceIdentitySignatureEncoding::EcdsaSigValueDer.
+
+The existing production verifier accepts the signature directly. No transcoding from a fixed-width r||s format is required or permitted at the PRW signing boundary.
+
+SIGNING SAFETY BOUNDARY
+
+Phase 119 does not expose provider EcdsaKeyPair::sign as a PRW production public API.
+
+The provider's generic message-sign function is exercised only inside this compatibility test harness.
+
+The production PRW signer remains required to expose only a typed enrollment-PoP operation that:
+1. accepts typed enrollment/challenge context;
+2. constructs the canonical Phase 115 message internally;
+3. signs that internally constructed message;
+4. returns the typed public identity/proof signature result;
+5. never accepts arbitrary caller-provided bytes through its public interface.
+
+CARGO / DEPENDENCY REVIEW
+
+Cargo.lock before Phase 119:
+blob 56dfed0854363e923a22fe1bf358cfb1138616cf
+
+Cargo.lock after validated Phase 119 implementation:
+blob 56dfed0854363e923a22fe1bf358cfb1138616cf
+
+Result:
+BYTE-IDENTICAL / NO DEPENDENCY GRAPH CHANGE
+
+NET REPOSITORY MUTATION
+
+Compare:
+base a2ad9ff59e31ea7f6b9dad2e88b19eb66b7cedfe
+head 854cc71b519507a5663842add61d68ddcfefd49e
+
+Result:
+- ahead_by: 2 commits;
+- exactly one net changed file:
+  crates/prw-device-identity/tests/phase119_ubuntu_signer_spike.rs
+
+No temporary workflow was introduced for Phase 119.
+
+Workflow inventory remains exactly:
+.github/workflows/phase-001-rust-validation.yml
+
+HOST / PRODUCTION MUTATION REVIEW
+
+Phase 119 did not use the PowerCode self-hosted runner and did not modify the real host.
+
+No production mutation occurred to:
+- /usr/lib/private-remote-workspace/prw-agent;
+- /usr/lib/systemd/user/prw-agent.service;
+- systemd user-manager state;
+- linger;
+- PRW credential directory;
+- systemd credential blob;
+- production private key;
+- enrollment state;
+- networking;
+- firewall;
+- private DNS;
+- database/persistence;
+- Android Keystore.
+
+PHASE 120 BOUNDARY
+
+Standing authorization permits Phase 120 to lock the production typed signer API and source boundary without another approval request.
+
+Phase 120 should decide, before production implementation:
+- whether signing lives in a separate narrow crate or a private module behind the device-identity boundary;
+- the exact typed constructor/load boundary for a PKCS#8 credential supplied by the trusted custody adapter;
+- the exact enrollment-PoP signing method signature;
+- public-identity derivation/consistency checks;
+- error taxonomy without private material leakage;
+- zeroization/lifetime expectations for loaded credential bytes and key objects;
+- prohibition of generic sign(bytes) APIs;
+- separation between signer core and systemd credential file access;
+- Android signer interface compatibility without forcing Android to use exportable PKCS#8.
+
+Phase 120 must not yet:
+- generate/persist a production PRW private key;
+- write the Phase 118 encrypted credential blob;
+- change prw-agent.service;
+- deploy a new Agent binary;
+- implement enrollment networking;
+- approve enrollment;
+- change account authentication;
+- expose arbitrary signing.
+
+FINAL CLASSIFICATION
+
+PASS / AWS_LC_1_18_P256_SIGNER_COMPATIBLE / PKCS8_V1_DER_PRIVATE_PAYLOAD_LOCKED / CANONICAL_SPKI_ROUND_TRIP_PASS / ASN1_DER_SIGNATURE_PRODUCTION_VERIFIER_PASS / FULL_ENROLLMENT_POP_PASS / NEGATIVE_KEY_AND_MESSAGE_BINDING_PASS / MALFORMED_PRIVATE_KEY_REJECTED / CARGO_LOCK_UNCHANGED / TEST_ONLY_PROVIDER_SIGNING_USAGE / NO_PRODUCTION_PRIVATE_KEY_OR_CREDENTIAL_MUTATION / PHASE_120_AUTONOMOUSLY_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 119 signer compatibility report.
