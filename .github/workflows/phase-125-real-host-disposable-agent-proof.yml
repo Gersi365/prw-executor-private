@@ -104,6 +104,10 @@ jobs:
           payload="$GITHUB_WORKSPACE/phase125-payload"
           cd "$payload"
           sha256sum -c SHA256SUMS
+          chmod 0755 prw-agent phase125-keygen phase125-status-probe
+          test "$(stat -c '%a' prw-agent)" = '755'
+          test "$(stat -c '%a' phase125-keygen)" = '755'
+          test "$(stat -c '%a' phase125-status-probe)" = '755'
 
           expected_installed_agent='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
           expected_installed_unit='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
