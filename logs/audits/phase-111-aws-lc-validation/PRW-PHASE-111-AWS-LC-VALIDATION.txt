@@ -1,0 +1,249 @@
+Private Remote Workspace
+Phase 111 AWS-LC Compatibility and Security-Boundary Validation
+
+STATUS: PASS / AWS_LC_RS_COMPATIBILITY_PROVEN_FOR_LOCKED_IDENTITY_PROFILE / ANDROID_AARCH64_BUILD_STRATEGY_PROVEN / PROVIDER_NOT_YET_PRODUCTION_LOCKED / DEV_DEPENDENCY_ONLY / NO_RUNTIME_OR_HOST_MUTATION
+AUDIT TYPE: SECURITY PROVIDER COMPATIBILITY VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 110 starting authoritative head: 190ff3478d86fbeae694c761ca836b82903784dc
+Pre-report Phase 111 cleanup head: dd17acf689f7aa0b89f5e8f076281ae8f3bdf009
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Previous Cargo.lock blob: 18db6137fc0f4f5bda22ad92425cff5edfb33c73
+Validated Phase 111 Cargo.lock blob: 21388522416d65d0e7d62205de2af5207ceaf779
+Validated Phase 111 Cargo.lock SHA-256: a00915be4d7a0f1c14c63ca94fa78aaa75c0f11a27ad764923cc086e6f2f97d7
+Validated Phase 111 Cargo.lock size: 5823 bytes
+
+AUTHORIZATION
+
+The user explicitly approved the Phase 111 aws-lc-rs compatibility/security-boundary validation spike according to the Phase 110 scope and additionally granted standing authorization for continued PRW project work without repeated routine approval requests.
+
+This Phase 111 execution still preserved the previously locked security exclusions: no production private-key persistence, no real enrollment authentication, no public networking, no control-plane listener, no database/persistence, no DNS/TUN/relay activation, and no deployment or systemd/host mutation.
+
+AUTHORITATIVE PREDECESSOR
+
+Phase 110 comparative decision report:
+logs/audits/phase-110-crypto-provider-comparative-decision/PRW-PHASE-110-CRYPTO-PROVIDER-COMPARATIVE-DECISION.txt
+commit: 190ff3478d86fbeae694c761ca836b82903784dc
+classification: DECISION_PACKAGE_PREPARED / AWS_LC_RS_VALIDATION_SPIKE_RECOMMENDED / PROVIDER_NOT_LOCKED
+
+LOCKED IDENTITY PROFILE UNDER TEST
+
+Phase 111 did not change the existing Phase 003/004 identity contract:
+- algorithm: ECDSA over NIST P-256 with SHA-256;
+- public-key representation: DER X.509 SubjectPublicKeyInfo;
+- public-key algorithm: id-ecPublicKey;
+- named curve: secp256r1 / NIST P-256;
+- signature representation: DER RFC 3279 ECDSA-Sig-Value;
+- device identity remains separate from transport identity;
+- private device identity keys remain on-device whenever technically possible;
+- control-plane identity material remains public-only.
+
+DEPENDENCY BOUNDARY
+
+Phase 111 pins:
+
+aws-lc-rs = { version = "=1.18.0", features = ["non-fips"] }
+
+The dependency is deliberately under [dev-dependencies] in crates/prw-control-plane/Cargo.toml.
+
+This is material: aws-lc-rs is not yet part of the production prw-control-plane library dependency set and is not in the production prw-agent dependency graph. Phase 111 is an evidence-producing compatibility spike, not a production-provider lock.
+
+The validated dependency tree contains:
+- aws-lc-rs 1.18.0;
+- aws-lc-sys 0.44.0;
+- untrusted 0.7.1;
+- zeroize 1.9.0;
+- native/build support including cc 1.4.3, cmake 0.1.58, dunce 1.0.5, fs_extra 1.3.0, pkg-config 0.3.34, find-msvc-tools 0.1.11, jobserver 0.1.35, shlex 2.0.1, getrandom 0.4.3, and r-efi 6.0.0 where selected by the resolved graph.
+
+Cargo generated a version-4 lockfile and reported 24 packages locked to the latest versions compatible with the exact Rust 1.97.1 environment.
+
+PUBLIC-KEY VALIDATION STRATEGY
+
+The Phase 111 test harness uses aws-lc-rs ParsedPublicKey with ECDSA_P256_SHA256_ASN1, then re-serializes the parsed key as PublicKeyX509Der and requires exact byte-for-byte equality with the original PRW public-key bytes.
+
+This canonical round-trip guard is deliberate. The provider may accept an alternate EC public-key representation such as a raw SEC1 point as an input convenience. PRW's locked control-plane profile does not. Requiring canonical X.509 SubjectPublicKeyInfo DER equality prevents provider input flexibility from silently broadening the PRW protocol contract.
+
+The harness remains test-only and is located at:
+crates/prw-control-plane/tests/phase111_aws_lc_identity_profile.rs
+
+IDENTITY-PROFILE PROOFS
+
+The successful Phase 111 validation executed 12 focused tests. All 12 passed:
+1. known-valid P-256 SPKI plus DER ECDSA signature verifies;
+2. raw SEC1 public point is rejected as a non-canonical PRW SPKI representation;
+3. malformed SPKI DER is rejected;
+4. SPKI with trailing bytes is rejected;
+5. wrong public-key algorithm OID is rejected;
+6. wrong named-curve OID is rejected;
+7. invalid/off-curve public point is rejected;
+8. P-384 public key is rejected under the P-256 profile;
+9. modified message is rejected;
+10. modified signature is rejected;
+11. malformed signature DER is rejected;
+12. fixed-width ECDSA signature falsely presented under the DER signature profile is rejected.
+
+Test signing keys were generated only as disposable test material. No production private key was generated, persisted, exported, uploaded, enrolled, or deployed.
+
+VALIDATION HARNESS HISTORY
+
+Temporary validation workflows were used only to produce reproducible evidence and were removed from the final repository state.
+
+Initial workflow attempt:
+- run: 31928284387
+- result: FAIL before job creation / 0 jobs
+- classification: workflow harness/permission setup failure, not provider or source failure
+- no validated source state was inferred from this run.
+
+First read-only validation run:
+- run: 31928307040
+- result: FAIL only at rustfmt
+- dependency resolution and lock generation had already succeeded;
+- no cryptographic semantic failure occurred;
+- only mechanical rustfmt corrections were required.
+
+Primary successful validation run:
+- run: 31928341789
+- job: 95119297110
+- result: PASS
+- runner: Ubuntu 24.04.4 / ubuntu-24.04
+- rustc: 1.97.1 (8bab26f4f 2026-07-14)
+- cargo: 1.97.1 (c980f4866 2026-06-30)
+- rustfmt: 1.9.0-stable
+- clippy: 0.1.97
+
+The primary successful run proved:
+- cargo generate-lockfile PASS;
+- dependency-tree review PASS;
+- cargo fmt --all -- --check PASS;
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings PASS;
+- cargo test --locked --workspace --all-targets PASS;
+- cargo build --locked --workspace --all-targets PASS;
+- all 350 prw-agent unit tests PASS;
+- Phase 102 standalone binary test PASS;
+- all existing prw-control-plane tests PASS;
+- all 12 Phase 111 identity-profile tests PASS;
+- remaining workspace tests PASS.
+
+ARTIFACT-BOUND LOCKFILE PROMOTION
+
+A second successful read-only Phase 111 run exported the exact validated Cargo.lock as a GitHub Actions artifact:
+- run: 31928549197
+- job: 95119824891
+- result: PASS
+- artifact name: phase111-cargo-lock
+- artifact ID: 9258622272
+- artifact archive digest: sha256:1ebbd6296170ade6f41e1ca8bd712e7f9d52cc80f0cfec9272020a54f6f03fba
+
+The extracted Cargo.lock was 5823 bytes with SHA-256:
+a00915be4d7a0f1c14c63ca94fa78aaa75c0f11a27ad764923cc086e6f2f97d7
+
+That exact artifact content was promoted into the repository. No hand-reconstructed lockfile was accepted as authoritative evidence.
+
+ANDROID BUILD-STRATEGY PROOF
+
+The successful Phase 111 validation added the Rust target aarch64-linux-android under the exact 1.97.1 toolchain and used the hosted Android NDK LLVM toolchain, including:
+- aarch64-linux-android24-clang;
+- llvm-ar.
+
+The command:
+cargo check --locked -p prw-control-plane --tests --target aarch64-linux-android
+
+completed successfully.
+
+Classification:
+ANDROID_AARCH64_BUILD_STRATEGY_PROVEN_FOR_THE_PHASE_111_TEST_BOUNDARY.
+
+This does not claim Android Keystore integration, Android private-key custody implementation, APK integration, or production Android identity support. Those remain separate future implementation work.
+
+BUILD AND SIZE EVIDENCE
+
+Ubuntu release build measurement from the primary successful run:
+- cargo build --locked --release -p prw-agent: PASS;
+- measured build interval: 7677 ms in that CI environment;
+- resulting prw-agent release binary: 555136 bytes.
+
+Because aws-lc-rs is a dev-dependency only, this confirms the current production prw-agent release binary is not carrying the Phase 111 crypto provider.
+
+An isolated release footprint probe measured:
+- empty Rust probe: 437912 bytes;
+- aws-lc-rs P-256 parsing probe: 3108832 bytes;
+- measured binary delta: +2670920 bytes.
+
+This is a material footprint cost and must be treated as an explicit production-provider tradeoff rather than ignored. It is not a reason by itself to reject AWS-LC, but it is evidence that a future production lock should be intentional and should keep the provider in the narrowest crate/runtime boundary possible.
+
+CLEANUP AND FINAL PERMANENT CI
+
+The temporary Phase 111 workflow was removed before final validation.
+
+The final .github/workflows directory contains exactly one workflow:
+.github/workflows/phase-001-rust-validation.yml
+
+Permanent CI on the promoted lockfile commit:
+- run: 31928707602
+- result: PASS.
+
+Permanent CI on the clean pre-report Phase 111 head after temporary-workflow removal:
+- run: 31928714877
+- job: 95120340160
+- head: dd17acf689f7aa0b89f5e8f076281ae8f3bdf009
+- result: PASS.
+
+The final clean-head permanent CI independently proved:
+- rustc 1.97.1;
+- cargo 1.97.1;
+- cargo metadata --locked PASS;
+- rustfmt PASS;
+- Clippy with -D warnings PASS;
+- all workspace/all-target tests PASS;
+- all workspace/all-target builds PASS;
+- all 12 Phase 111 identity-profile tests PASS.
+
+NET MUTATION REVIEW
+
+Compare from Phase 110 authoritative head 190ff3478d86fbeae694c761ca836b82903784dc to the clean pre-report Phase 111 head dd17acf689f7aa0b89f5e8f076281ae8f3bdf009 contains exactly three net file mutations:
+1. Cargo.lock — modified;
+2. crates/prw-control-plane/Cargo.toml — modified;
+3. crates/prw-control-plane/tests/phase111_aws_lc_identity_profile.rs — added.
+
+No production Rust source file remains changed by Phase 111.
+No temporary workflow remains.
+No Agent source or service unit changed.
+No installed host file changed.
+No user-manager/systemd state changed.
+No private key was persisted.
+No network listener was added.
+No control-plane server was added.
+No database or persistence was added.
+No DNS, TUN, STUN/ICE/TURN, relay, terminal, SSH, forwarding, file-transfer, Android runtime, desktop runtime, or deployment activation occurred.
+
+PROVIDER CLASSIFICATION
+
+Phase 111 establishes that aws-lc-rs 1.18.0 can satisfy the locked PRW device-identity verification profile within a narrow test boundary on Ubuntu x86_64 and can compile that test boundary for Android aarch64.
+
+Phase 111 does NOT yet move aws-lc-rs into production dependencies or production source. Therefore it does not, by itself, declare the provider permanently locked for all PRW cryptography.
+
+The evidence is sufficient to support a subsequent production device-identity verification provider lock, subject to preserving these boundaries:
+- use AWS-LC only for the device-identity role selected by the existing contract;
+- keep transport cryptography separately selected;
+- keep Android private identity keys compatible with platform-backed custody and non-export;
+- keep provider-specific code behind a narrow PRW abstraction;
+- retain canonical SPKI enforcement rather than relying on provider parser flexibility;
+- retain exact version/dependency pinning and locked CI;
+- treat the native build and approximately 2.67 MB isolated footprint delta as an explicit engineering cost.
+
+STANDING AUTHORIZATION AND NEXT WORK
+
+The user has granted standing authorization to continue PRW implementation without repeated routine approval gates. Phase 111 therefore closes without requesting another approval.
+
+The next safe sequence may proceed autonomously into a production device-identity provider lock/abstraction design before any real proof-of-possession or enrollment wire protocol is implemented.
+
+FINAL CLASSIFICATION
+
+PASS / AWS_LC_RS_1_18_0_COMPATIBILITY_PROVEN / LOCKED_PRW_P256_SPKI_DER_PROFILE_PROVEN / ANDROID_AARCH64_BUILD_STRATEGY_PROVEN / EXACT_LOCKFILE_PROMOTED / DEV_DEPENDENCY_ONLY / PRODUCTION_PROVIDER_NOT_YET_LOCKED / TEMP_WORKFLOW_REMOVED / PERMANENT_CI_PASS / NO_PRIVATE_KEY_PERSISTENCE / NO_NETWORK_ACTIVATION / NO_HOST_MUTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 111 validation report.
