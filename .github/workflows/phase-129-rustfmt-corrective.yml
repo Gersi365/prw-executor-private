@@ -1,0 +1,41 @@
+name: Phase 129 Rustfmt Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-129-rustfmt-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply rustfmt within exact Phase 129 source boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              crates/prw-control-transport/src/lib.rs|\
+              crates/prw-control-transport/examples/phase129_tls_probe.rs|\
+              crates/prw-control-transport/tests/tls_loopback.rs) ;;
+              *) echo "unexpected_rustfmt_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          if [[ ${#changed[@]} -eq 0 ]]; then
+            echo 'phase129_rustfmt=no_changes'
+            exit 0
+          fi
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add -- "${changed[@]}"
+          git diff --cached --check
+          git commit -m 'phase 129 a01: apply rustfmt corrective'
+          git push origin HEAD:main
+          echo 'phase129_rustfmt=committed'
