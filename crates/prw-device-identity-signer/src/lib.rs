@@ -236,8 +236,9 @@ impl UbuntuEnrollmentSigner {
             return Err(UbuntuEnrollmentSignerError::PublicIdentityMismatch);
         }
 
-        let message = encode_session_auth_message(binding, challenge.session_id(), challenge.nonce())
-            .map_err(UbuntuEnrollmentSignerError::SessionMessageConstruction)?;
+        let message =
+            encode_session_auth_message(binding, challenge.session_id(), challenge.nonce())
+                .map_err(UbuntuEnrollmentSignerError::SessionMessageConstruction)?;
         let signature = self.sign_typed_message(&message)?;
 
         Ok(SessionAuthProof::new(
