@@ -39,6 +39,7 @@ const SYSTEMD_CREDS_PATH: &str = "/usr/bin/systemd-creds";
 const MAX_ENCRYPTED_CREDENTIAL_BYTES: u64 = 65_536;
 const PRIVATE_DIRECTORY_MODE: u32 = 0o700;
 const CIPHERTEXT_MODE: u32 = 0o600;
+const FORBIDDEN_INITIAL_CIPHERTEXT_MODE_BITS: u32 = 0o133;
 
 /// Successful creation-only identity provisioning result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,16 +183,14 @@ pub fn provision_first_ubuntu_device_identity()
         return Err(error);
     }
 
-    let opened_temp = match validate_and_sync_ciphertext_temp(&temp_ciphertext, uid) {
-        Ok(file) => file,
-        Err(error) => {
-            let _ = fs::remove_file(&temp_ciphertext);
-            return Err(error);
-        }
-    };
-    let opened_metadata = opened_temp
-        .metadata()
-        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    let (opened_temp, opened_metadata) =
+        match harden_validate_and_sync_ciphertext_temp(&temp_ciphertext, uid) {
+            Ok(validated) => validated,
+            Err(error) => {
+                let _ = fs::remove_file(&temp_ciphertext);
+                return Err(error);
+            }
+        };
 
     let commit_result = renameat_with(
         CWD,
@@ -217,6 +216,7 @@ pub fn provision_first_ubuntu_device_identity()
         let _ = sync_directory(&credential_dir);
         return Err(DeviceIdentityProvisioningError::CiphertextCommitFailed);
     }
+    drop(opened_temp);
 
     if sync_directory(&credential_dir).is_err() {
         let _ = fs::remove_file(&final_ciphertext);
@@ -343,13 +343,13 @@ fn encrypt_with_systemd_creds(
     Ok(())
 }
 
-fn validate_and_sync_ciphertext_temp(
+fn harden_validate_and_sync_ciphertext_temp(
     path: &Path,
     uid: u32,
-) -> Result<File, DeviceIdentityProvisioningError> {
+) -> Result<(File, fs::Metadata), DeviceIdentityProvisioningError> {
     let before = fs::symlink_metadata(path)
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
-    validate_ciphertext_metadata(&before, uid)?;
+    validate_initial_ciphertext_metadata(&before, uid)?;
 
     let owned_fd = open(
         path,
@@ -361,13 +361,37 @@ fn validate_and_sync_ciphertext_temp(
     let opened = file
         .metadata()
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
-    validate_ciphertext_metadata(&opened, uid)?;
+    validate_initial_ciphertext_metadata(&opened, uid)?;
     if before.dev() != opened.dev() || before.ino() != opened.ino() {
+        return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
+    }
+
+    file.set_permissions(Permissions::from_mode(CIPHERTEXT_MODE))
+        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    let hardened = file
+        .metadata()
+        .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
+    validate_ciphertext_metadata(&hardened, uid)?;
+    if hardened.dev() != opened.dev() || hardened.ino() != opened.ino() {
         return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
     }
     file.sync_all()
         .map_err(|_| DeviceIdentityProvisioningError::CiphertextWriteFailed)?;
-    Ok(file)
+    Ok((file, hardened))
+}
+
+fn validate_initial_ciphertext_metadata(
+    metadata: &fs::Metadata,
+    uid: u32,
+) -> Result<(), DeviceIdentityProvisioningError> {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.uid() != uid
+        || metadata.mode() & FORBIDDEN_INITIAL_CIPHERTEXT_MODE_BITS != 0
+    {
+        return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
+    }
+    validate_ciphertext_size(metadata)
 }
 
 fn validate_ciphertext_metadata(
@@ -381,6 +405,12 @@ fn validate_ciphertext_metadata(
     {
         return Err(DeviceIdentityProvisioningError::CiphertextWriteFailed);
     }
+    validate_ciphertext_size(metadata)
+}
+
+fn validate_ciphertext_size(
+    metadata: &fs::Metadata,
+) -> Result<(), DeviceIdentityProvisioningError> {
     if metadata.len() == 0 || metadata.len() > MAX_ENCRYPTED_CREDENTIAL_BYTES {
         return Err(DeviceIdentityProvisioningError::EncryptedCredentialOutOfBounds);
     }
