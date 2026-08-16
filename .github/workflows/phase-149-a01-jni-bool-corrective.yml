@@ -31,6 +31,7 @@ jobs:
           ! grep -Fq 'prw-forwarding = ' apps/android/native/Cargo.toml
           ! grep -Fq 'prw-connectivity = ' apps/android/native/Cargo.toml
           ! grep -Fq 'prw-private-dns = ' apps/android/native/Cargo.toml
+          cp apps/android/native/Cargo.lock "$RUNNER_TEMP/phase149-native-lock-before"
           echo phase149_a01_baseline=pass
 
       - uses: actions/setup-java@v4
@@ -132,6 +133,7 @@ jobs:
           A01 JNI BOOLEAN CORRECTIVE EVIDENCE:
           - Initial Phase 149 run 31973839629 proved the Phase 148 closure baseline, exact toolchain preparation and complete candidate reconstruction before stopping at native compilation.
           - Rust 1.97.1 with jni 0.22.4 reported exactly two E0308 type mismatches in apps/android/native/src/network.rs: jboolean parameters enabled and device_naming are already Rust bool values, so comparisons against integer zero were invalid.
+          - Initial A01 replay run 31974033507 stopped before source correction because the replay harness had not preserved the original pre-candidate native Cargo.lock snapshot required by the exact candidate body; no Phase 149 source was committed.
           - A01 reconstructs the exact Phase 149 candidate and replaces only `enabled != 0` with `enabled` and `device_naming != 0` with `device_naming`, each under an exact one-occurrence boundary check.
           - Forwarding encoding, connectivity selection, private-DNS validation semantics, Kotlin lifecycle state, dependency selection and production-network boundaries remain unchanged.
           EOF
