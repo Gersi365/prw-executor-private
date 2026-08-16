@@ -1,0 +1,38 @@
+name: Phase 145 A11 Source Materialization Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-a11-source-materialization-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-validated-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A11 split-materialization baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f .github/scripts/phase-145-a11-source-materialization.sh
+          test -f .github/workflows/phase-145-a10-step-isolated-materialization-corrective.yml
+          test ! -f .github/workflows/android-validation.yml
+          echo phase145_a11_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Revalidate and materialize only non-workflow Phase 145 source
+        shell: bash
+        run: bash .github/scripts/phase-145-a11-source-materialization.sh
