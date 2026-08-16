@@ -1,0 +1,173 @@
+name: Phase 135 Private Mesh Connectivity Foundation Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-135-connectivity-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Phase 134 authority and Phase 135 contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f logs/audits/phase-134-port-forwarding-foundation/PRW-PHASE-134-PORT-FORWARDING-FOUNDATION-VALIDATION.txt
+          grep -Fq 'PHASE_134_DONE' \
+            logs/audits/phase-134-port-forwarding-foundation/PRW-PHASE-134-PORT-FORWARDING-FOUNDATION-VALIDATION.txt
+          test -f contracts/PRIVATE_MESH_CONNECTIVITY_FOUNDATION_CONTRACT.md
+          grep -Fq 'Status: Phase 135 implementation lock' contracts/PRIVATE_MESH_CONNECTIVITY_FOUNDATION_CONTRACT.md
+          test -f crates/prw-connectivity/Cargo.toml
+          test -f crates/prw-connectivity/src/lib.rs
+          echo 'phase135_prerequisites=pass'
+
+      - name: Register crate and normalize exact locked graph
+        id: graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-connectivity",\n'
+          if member not in text:
+              needle = '    "crates/prw-forwarding",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('connectivity workspace insertion point mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+          PY
+          rustc --version
+          cargo --version
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo clippy --fix --locked -p prw-connectivity --all-targets --all-features \
+            --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          git restore --worktree --staged -- target/.rustc_info.json 2>/dev/null || true
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-connectivity/src/lib.rs) ;;
+              *) echo "unexpected_phase135_fix_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          source_sha=$(sha256sum crates/prw-connectivity/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "phase135_lock_sha256=$lock_sha"
+          echo "phase135_source_sha256=$source_sha"
+
+      - name: Prove no-network no-DNS implementation boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source='crates/prw-connectivity/src/lib.rs'
+          ! grep -Fq 'TcpListener' "$source"
+          ! grep -Fq 'TcpStream' "$source"
+          ! grep -Fq 'UdpSocket' "$source"
+          ! grep -Fq 'ToSocketAddrs' "$source"
+          ! grep -Fq 'lookup_host' "$source"
+          ! grep -Fq 'std::process::Command' "$source"
+          ! grep -Fq 'Command::new' "$source"
+          ! grep -Fq 'unsafe {' "$source"
+          grep -Fq 'MAX_CONNECTIVITY_CANDIDATES: usize = 16' "$source"
+          grep -Fq 'pub struct TransportIdentity' "$source"
+          grep -Fq 'pub enum ConnectivityPathKind' "$source"
+          grep -Fq 'pub enum ReachabilityObservation' "$source"
+          grep -Fq 'pub fn selected_path' "$source"
+          echo 'phase135_typed_boundary=pass'
+
+      - name: Run focused Phase 135 gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-connectivity --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-connectivity --all-targets
+          echo 'phase135_focused_validation=pass'
+
+      - name: Run full workspace gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo 'phase135_workspace_validation=pass'
+
+      - name: Record authoritative Phase 135 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.graph.outputs.lock_sha }}
+          SOURCE_SHA: ${{ steps.graph.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-135-private-mesh-connectivity-foundation'
+          report="$report_dir/PRW-PHASE-135-PRIVATE-MESH-CONNECTIVITY-FOUNDATION-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 135 — Private Mesh Connectivity Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / BOUNDED_CANDIDATE_PLAN_IMPLEMENTED / DIRECT_BEFORE_RELAY_SELECTION_VALIDATED / DEVICE_AND_TRANSPORT_IDENTITY_SEPARATED / DNS_INDEPENDENT / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_MESH_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation input head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+          prw-connectivity source SHA-256: $SOURCE_SHA
+
+          CONTRACT
+          contracts/PRIVATE_MESH_CONNECTIVITY_FOUNDATION_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-connectivity
+
+          CONNECTIVITY OUTCOME
+          One peer plan accepts at most 16 explicit-IP/non-zero-port candidates. Candidate identifiers are non-zero and duplicate IDs or exact kind+endpoint duplicates fail closed. Provider observations are Unknown, Reachable or Unreachable; Phase 135 performs no probes itself. Selection is deterministic and insertion-order independent: reachable LocalDirect beats InternetDirect, reachable InternetDirect beats Relay, Relay is fallback only when no direct candidate is reachable, and no reachable candidate produces Offline. Same-kind ties use the lowest CandidateId.
+
+          IDENTITY/DNS OUTCOME
+          Logical DeviceId is distinct from an opaque non-zero 32-byte TransportIdentity. Phase 135 does not derive cryptographic identity and stores no private key. Candidate endpoints are explicit IP addresses, not hostnames, so basic path selection has no DNS dependency. Unspecified, multicast and IPv4 limited-broadcast endpoints fail closed.
+
+          VALIDATION
+          The authoritative run passed static no-socket/no-DNS/no-shell checks, focused prw-connectivity rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+          DEFERRED
+          Real discovery, STUN, ICE, NAT traversal traffic, dialing, tunnels, TUN, route/firewall mutation, private address assignment, endpoint publication and path-health scheduling remain deferred. Phase 136 owns relay transport fallback. Phase 137 owns optional private DNS.
+
+          PRODUCTION BOUNDARY
+          No PowerCode socket, route, firewall rule, tunnel, TUN device, endpoint publication, DNS setting or user-impacting production network state was created or mutated.
+
+          FINAL CLASSIFICATION
+          PHASE_135_DONE / NO_PRODUCTION_MESH_SIDE_EFFECT / READY_FOR_PHASE_136_SOURCE_WORK
+          EOF
+          git diff --check
+
+      - name: Commit validated connectivity graph and report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock crates/prw-connectivity/src/lib.rs \
+            logs/audits/phase-135-private-mesh-connectivity-foundation/PRW-PHASE-135-PRIVATE-MESH-CONNECTIVITY-FOUNDATION-VALIDATION.txt
+          git diff --cached --check
+          git commit -m 'phase 135: validate private mesh connectivity foundation'
+          git push origin HEAD:main
+          echo 'phase135_materialization=pass'
