@@ -1,0 +1,71 @@
+Private Remote Workspace
+Phase 144 — Android Client Architecture Decision
+
+STATUS:
+PASS / EXPLICIT_USER_APPROVAL_RECORDED / NATIVE_KOTLIN_COMPOSE / ANDROID_KEYSTORE_NON_EXPORTABLE_P256 / RUST_PRW_CORE_REUSE / NARROW_ANDROID_NATIVE_ADAPTER / API29_MIN_API36_TARGET / AGP_9_3_GRADLE_9_5_JDK17 / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Decision input baseline: 5ab3521db0e30401ab5a1e5179265b71435d4153
+Decision contract: contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md
+
+APPROVAL:
+The user explicitly approved the complete Phase 144 recommendation on 2026-08-16 and authorized continuation through the remaining roadmap at the same deliberate audit-first pace.
+
+LOCKED ANDROID ARCHITECTURE:
+- Native Kotlin application.
+- Jetpack Compose UI.
+- Kotlin/Android owns Activity/Application lifecycle, Compose/ViewModel state, foreground/background policy, notifications, Android Keystore handles, Android permissions and platform service orchestration.
+- Existing Rust PRW workspace remains authoritative for protocol/domain/security rules already validated through Phase 143.
+- Android integrates those Rust components only through a narrow Android-specific native adapter; no generic eval/shell/filesystem/socket command bridge is authorized.
+- Existing core workspace unsafe_code=forbid remains in force; any unavoidable JNI/native unsafe is isolated to the adapter boundary behind audited safe wrappers.
+
+KEY CUSTODY:
+- Android device and transport private keys are EC P-256 keys generated inside Android Keystore and are non-exportable.
+- Public SPKI material may be exported for enrollment/registry use.
+- StrongBox is requested when supported; fallback is normal Android Keystore, never plaintext/exportable PRW private-key storage.
+- Typed PRW signing only; no generic arbitrary-message signing API.
+- Key invalidation fails closed and requires recovery/re-enrollment.
+- Device identity and transport identity remain separately rotatable.
+
+TRANSPORT:
+- Existing PRW QUIC v1 / TLS 1.3 / prw-mesh/1 / SPKI-SHA256 TransportIdentity profile remains authoritative.
+- Android MUST NOT export a Keystore private key merely to satisfy the current disposable PrivateKeyDer helper.
+- Phase 145+ must use a platform-backed signing path or equivalent audited integration that retains private signing in Android Keystore.
+- No alternate Android-only PRW wire protocol is authorized.
+
+EXECUTION MODEL:
+- UI emits typed intents and observes immutable presentation state.
+- A connection controller owns one explicit PRW connection state machine.
+- A user-visible foreground service owns persistent active remote connectivity where Android policy requires it.
+- No hidden always-on daemon and no boot-time remote activation.
+- Process death/restart does not silently resurrect an authenticated session.
+
+TOOLCHAIN LOCK:
+- minSdk: 29
+- compileSdk: 36
+- targetSdk: 36
+- Android Gradle Plugin: 9.3.0
+- Gradle: 9.5.0
+- JDK: 17
+- SDK Build Tools baseline: 36.0.0
+- NDK baseline: 28.2.13676358
+- Compose BOM: 2026.06.00 stable
+- AGP built-in Kotlin; no org.jetbrains.kotlin.android / kotlin-android plugin.
+
+OFFICIAL SOURCE CHECKS AT DECISION DATE:
+- Android Developers AGP 9.3.0 release notes document maximum supported API 37, Gradle 9.5.0, Build Tools 36.0.0, NDK 28.2.13676358 and JDK 17.
+- Android Developers Google Play target-API requirements state that from 2026-08-31 new mobile apps/updates must target API 36 or higher.
+- Android Developers Compose BOM documentation lists stable BOM 2026.06.00.
+- Android Developers documents AGP 9.0+ built-in Kotlin and removal of the need for org.jetbrains.kotlin.android.
+- Android Keystore KeyGenParameterSpec is available from API 23; StrongBox controls are available from API 28. The selected minSdk 29 is therefore a product decision rather than a Keystore minimum.
+
+PHASE 145 AUTHORIZATION BOUNDARY:
+Phase 145 may create the non-production Android shell, deterministic debug-build baseline, Compose state model, Android Keystore custody adapter, narrow Kotlin/Rust binding foundation and disposable authenticated connection bootstrap. Any new native/binding dependency must be probed/pinned before adoption.
+
+PRODUCTION BOUNDARY:
+No Android distribution signing, Play/external distribution, real production account/device cutover, production STUN/ICE/TURN/relay activation, Agent replacement/restart, credential provisioning, firewall/NAT/router/TUN/TAP/route/DNS mutation or production data-plane listener was performed or authorized by this phase.
+
+FINAL CLASSIFICATION:
+PHASE_144_DONE / NATIVE_KOTLIN_COMPOSE_ANDROID_ARCHITECTURE_LOCKED / ANDROID_KEYSTORE_NON_EXPORTABLE_P256 / RUST_PRW_CORE_REUSED_THROUGH_NARROW_ADAPTER / API29_MIN_API36_TARGET / AGP_9_3_GRADLE_9_5_JDK17 / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_145
