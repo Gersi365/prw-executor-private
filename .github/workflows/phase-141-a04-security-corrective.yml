@@ -1,0 +1,229 @@
+name: Phase 141 A04 Security Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-141-a04-security-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply bounded API and security correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('crates/prw-nat-traversal/src/lib.rs')
+          text = source.read_text()
+
+          old = '        datagram: TraversalDatagram,\n'
+          new = '        datagram: &TraversalDatagram,\n'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected exactly 2 by-value datagram signatures, got {text.count(old)}')
+          text = text.replace(old, new)
+
+          old = '.handle_datagram(\n                TraversalDatagram::new('
+          new = '.handle_datagram(\n                &TraversalDatagram::new('
+          if text.count(old) != 2:
+              raise SystemExit(f'expected exactly 2 inline datagram call sites, got {text.count(old)}')
+          text = text.replace(old, new)
+
+          for old, new in {
+              'b.handle_datagram(inbound, now)': 'b.handle_datagram(&inbound, now)',
+              'a.handle_datagram(inbound, now)': 'a.handle_datagram(&inbound, now)',
+          }.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one call site for {old!r}, got {text.count(old)}')
+              text = text.replace(old, new)
+
+          old = '    message::{BINDING_REQUEST, Getter, Message, TransactionId},\n'
+          new = '    message::{BINDING_REQUEST, BINDING_SUCCESS, Getter, Message, TransactionId},\n'
+          if text.count(old) != 1:
+              raise SystemExit('STUN success import insertion point mismatch')
+          text = text.replace(old, new)
+
+          old = '#[derive(Debug, Clone, PartialEq, Eq)]\npub struct IceCredentials {'
+          new = '#[derive(Clone, PartialEq, Eq)]\npub struct IceCredentials {'
+          if text.count(old) != 1:
+              raise SystemExit('IceCredentials derive shape mismatch')
+          text = text.replace(old, new)
+
+          marker = '''pub struct IceCredentials {\n    ufrag: String,\n    password: String,\n}\n\nimpl IceCredentials {'''
+          replacement = '''pub struct IceCredentials {\n    ufrag: String,\n    password: String,\n}\n\nimpl fmt::Debug for IceCredentials {\n    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {\n        formatter\n            .debug_struct("IceCredentials")\n            .field("ufrag", &self.ufrag)\n            .field("password", &"<redacted>")\n            .finish()\n    }\n}\n\nimpl IceCredentials {'''
+          if text.count(marker) != 1:
+              raise SystemExit('IceCredentials Debug insertion point mismatch')
+          text = text.replace(marker, replacement)
+
+          old = '''            let StunEvent::Message(message) = event else {\n                return Err(TraversalError::StunTransactionFailed);\n            };\n            let mut mapped = XorMappedAddress::default();'''
+          new = '''            let StunEvent::Message(message) = event else {\n                return Err(TraversalError::StunTransactionFailed);\n            };\n            if message.typ != BINDING_SUCCESS {\n                return Err(TraversalError::StunTransactionFailed);\n            }\n            let mut mapped = XorMappedAddress::default();'''
+          if text.count(old) != 1:
+              raise SystemExit('STUN terminal-event guard insertion point mismatch')
+          text = text.replace(old, new)
+
+          source.write_text(text)
+          PY
+          git diff --check -- crates/prw-nat-traversal/src/lib.rs
+          echo phase141_a04_security_corrective=pass
+
+      - name: Register crate and reproduce exact graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-nat-traversal",\n'
+          if member not in text:
+              needle = '    "crates/prw-connectivity",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('Phase 141 workspace insertion point mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+          PY
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 > /tmp/phase141-metadata.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/phase141-metadata.json'))
+          root=next(p for p in data['packages'] if p['name']=='prw-nat-traversal')
+          direct={d['name']: d['req'] for d in root['dependencies']}
+          expected={
+            'prw-connectivity':'*',
+            'prw-core':'*',
+            'rtc-ice':'=0.20.2',
+            'rtc-shared':'=0.20.2',
+            'rtc-stun':'=0.20.2',
+            'sansio':'=1.0.0',
+          }
+          if direct != expected:
+              raise SystemExit(f'Phase 141 direct dependency mismatch: {direct!r}')
+          versions={p['name']:p['version'] for p in data['packages'] if p['name'] in {'rtc-ice','rtc-shared','rtc-stun','sansio'}}
+          expected_versions={'rtc-ice':'0.20.2','rtc-shared':'0.20.2','rtc-stun':'0.20.2','sansio':'1.0.0'}
+          if versions != expected_versions:
+              raise SystemExit(f'Phase 141 exact version mismatch: {versions!r}')
+          print('phase141_a04_exact_graph=pass')
+          PY
+          echo "phase141_a04_candidate_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+
+      - name: Re-prove static boundary and format scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source=crates/prw-nat-traversal/src/lib.rs
+          for forbidden in \
+            'UdpSocket' 'TcpStream' 'TcpListener' 'ToSocketAddrs' 'lookup_host' \
+            'tokio::' 'std::process' 'Command::new' '/dev/net/tun' 'iptables' 'nftables'; do
+            if grep -Fq "$forbidden" "$source"; then
+              echo "phase141_forbidden_runtime_token=$forbidden" >&2
+              exit 1
+            fi
+          done
+          grep -Fq 'MulticastDnsMode::Disabled' "$source"
+          grep -Fq 'BINDING_SUCCESS' "$source"
+          grep -Fq '<redacted>' "$source"
+          grep -Fq 'RelayDeferred' "$source"
+          cargo fmt --all
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-nat-traversal/src/lib.rs) ;;
+              *) echo "phase141_a04_unexpected_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check -- . ':!target'
+          echo phase141_a04_static_boundary=pass
+
+      - name: Focused Phase 141 validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-nat-traversal --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-nat-traversal --all-targets
+          echo phase141_a04_focused_validation=pass
+
+      - name: Full workspace validation
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          source_sha=$(sha256sum crates/prw-nat-traversal/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "phase141_a04_workspace_validation=pass lock_sha=$lock_sha source_sha=$source_sha"
+
+      - name: Record authoritative Phase 141 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+          SOURCE_SHA: ${{ steps.workspace.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir=logs/audits/phase-141-nat-traversal-connectivity-checks
+          report="$report_dir/PRW-PHASE-141-NAT-TRAVERSAL-CONNECTIVITY-CHECKS-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 141 — NAT Traversal and Connectivity Checks
+
+          STATUS:
+          PASS / STANDARD_ICE_STUN / SANS_IO_BOUNDARY / CREDENTIAL_DEBUG_REDACTED / STUN_SUCCESS_CLASS_ENFORCED / PHASE135_SELECTOR_PRESERVED / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_NETWORK_SIDE_EFFECT
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+          prw-nat-traversal/src/lib.rs SHA-256: $SOURCE_SHA
+
+          CONTRACT
+          contracts/NAT_TRAVERSAL_CONNECTIVITY_CHECKS_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-nat-traversal
+
+          DEPENDENCY DECISION
+          Stable rtc-ice 0.20.2, rtc-stun 0.20.2, rtc-shared 0.20.2 and sansio 1.0.0, with default features disabled and AWS-LC selected for ICE/STUN cryptographic integrity paths.
+
+          PROBE/CORRECTIVE HISTORY
+          Run 31951951887 resolved exact versions but stopped on a scratch-harness conversion error; repository unchanged. Run 31952085411 / job 95177012142 passed exact-version compile and repository immutability; scratch lock SHA-256 ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96.
+          Run 31952482522 stopped only on target build-metadata path-guard noise. Run 31952566378 then reached Clippy and exposed two needless-pass-by-value datagram inputs. Run 31952747630 corrected those inputs and reached integration-test compilation, which exposed one remaining borrowed call site. Review of that security-boundary test also identified two required fail-closed guards: ICE credential Debug output must redact the password, and STUN discovery must accept only a Binding Success response class before reading XOR-MAPPED-ADDRESS. A04 applies all three security/API corrections before revalidation.
+
+          SECURITY/ARCHITECTURE OUTCOME
+          The PRW traversal crate owns no socket, async runtime, DNS resolver, process, TUN/TAP, route or firewall API. It emits/consumes typed datagrams no larger than 2048 bytes. ICE credential passwords are redacted from Debug. STUN discovery accepts only an explicit server SocketAddr, rejects wrong-source responses, and requires BINDING_SUCCESS before accepting XOR-MAPPED-ADDRESS. ICE is UDP4/UDP6 only with mDNS disabled and relay allocation deferred to Phase 142. Successful ICE selection yields only a candidate reachability observation correlated to an existing Phase 135 CandidateId; Phase 135 remains the authoritative LocalDirect -> InternetDirect -> Relay -> Offline selector.
+
+          VALIDATION
+          Focused rustfmt, Clippy -D warnings and all-target tests passed, including security-boundary integration tests. Full workspace/all-target Clippy, tests and build then passed under the locked graph.
+
+          PRODUCTION BOUNDARY
+          No PowerCode production socket, service, Agent, key/certificate, firewall/NAT/router/TUN/TAP/route/DNS, persistent STUN/ICE/TURN traffic or relay was changed or activated.
+
+          FINAL CLASSIFICATION
+          PHASE_141_DONE / READY_FOR_PHASE_142_SOURCE_DISPOSABLE_RELAY_PROVIDER_WORK
+          EOF
+
+      - name: Commit only validated graph source and report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!target'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock crates/prw-nat-traversal \
+            logs/audits/phase-141-nat-traversal-connectivity-checks/PRW-PHASE-141-NAT-TRAVERSAL-CONNECTIVITY-CHECKS-VALIDATION.txt
+          git commit -m 'phase 141: validate NAT traversal and connectivity checks'
+          git push origin HEAD:main
+          echo phase141_a04_materialization=pass
