@@ -307,6 +307,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-relay"
+version = "0.1.0"
+dependencies = [
+ "prw-connectivity",
+ "prw-core",
+]
+
+[[package]]
 name = "prw-session"
 version = "0.1.0"
 dependencies = [

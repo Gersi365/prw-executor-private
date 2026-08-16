@@ -78,7 +78,7 @@ pub struct RelayPeerIdentity {
 impl RelayPeerIdentity {
     /// Creates a relay peer identity from already-validated components.
     #[must_use]
-    pub fn new(device: DeviceId, transport: TransportIdentity) -> Self {
+    pub const fn new(device: DeviceId, transport: TransportIdentity) -> Self {
         Self { device, transport }
     }
 
@@ -242,7 +242,7 @@ pub struct RelaySession {
 }
 
 impl RelaySession {
-    fn opening(id: RelaySessionId, spec: RelaySessionSpec) -> Self {
+    const fn opening(id: RelaySessionId, spec: RelaySessionSpec) -> Self {
         Self {
             id,
             spec,
@@ -393,7 +393,10 @@ impl<B: RelayBackend> RelayBroker<B> {
     /// Provider close failure retains a `Failed` record. Successful close returns `Closed` and
     /// removes the record from the broker.
     pub fn close_session(&mut self, id: RelaySessionId) -> Result<RelaySession, RelayError> {
-        let mut relay = self.sessions.remove(&id).ok_or(RelayError::UnknownSession)?;
+        let mut relay = self
+            .sessions
+            .remove(&id)
+            .ok_or(RelayError::UnknownSession)?;
         if let Err(error) = relay.record.require_active() {
             self.sessions.insert(id, relay);
             return Err(error);
@@ -562,8 +565,14 @@ mod tests {
     #[test]
     fn identifiers_tokens_and_frames_are_bounded() {
         assert_eq!(RelaySessionId::new(0), Err(RelayError::InvalidSessionId));
-        assert_eq!(RelayRouteToken::new([0; 32]), Err(RelayError::InvalidRouteToken));
-        assert_eq!(OpaqueRelayFrame::new(Vec::new()), Err(RelayError::EmptyFrame));
+        assert_eq!(
+            RelayRouteToken::new([0; 32]),
+            Err(RelayError::InvalidRouteToken)
+        );
+        assert_eq!(
+            OpaqueRelayFrame::new(Vec::new()),
+            Err(RelayError::EmptyFrame)
+        );
         assert_eq!(
             OpaqueRelayFrame::new(vec![0; MAX_RELAY_FRAME_BYTES + 1]),
             Err(RelayError::FrameTooLarge)
@@ -589,7 +598,11 @@ mod tests {
             Err(RelayError::RelayNotSelected)
         );
         assert_eq!(
-            RelaySessionSpec::from_selected_path(peer(), token(), SelectedConnectivityPath::Offline),
+            RelaySessionSpec::from_selected_path(
+                peer(),
+                token(),
+                SelectedConnectivityPath::Offline
+            ),
             Err(RelayError::RelayNotSelected)
         );
         let spec = relay_spec(3);
@@ -608,7 +621,9 @@ mod tests {
     #[test]
     fn duplicate_and_capacity_fail_before_backend_open() {
         let mut broker = RelayBroker::new(SpyBackend::default());
-        broker.open_session(session_id(1), relay_spec(1)).expect("first");
+        broker
+            .open_session(session_id(1), relay_spec(1))
+            .expect("first");
         assert!(matches!(
             broker.open_session(session_id(1), relay_spec(2)),
             Err(RelayError::DuplicateSession)
@@ -644,7 +659,9 @@ mod tests {
     #[test]
     fn opaque_frame_reaches_backend_byte_for_byte() {
         let mut broker = RelayBroker::new(SpyBackend::default());
-        broker.open_session(session_id(1), relay_spec(1)).expect("open");
+        broker
+            .open_session(session_id(1), relay_spec(1))
+            .expect("open");
         let frame = OpaqueRelayFrame::new(vec![0x10, 0x22, 0x7f, 0x00, 0xff]).expect("frame");
         broker.transmit(session_id(1), &frame).expect("transmit");
         assert_eq!(broker.backend.last_frame, frame.as_bytes());
@@ -657,9 +674,14 @@ mod tests {
             failure: FailureMode::Transmit,
             ..SpyBackend::default()
         });
-        broker.open_session(session_id(1), relay_spec(1)).expect("open");
+        broker
+            .open_session(session_id(1), relay_spec(1))
+            .expect("open");
         let frame = OpaqueRelayFrame::new(vec![1]).expect("frame");
-        assert_eq!(broker.transmit(session_id(1), &frame), Err(RelayError::Backend));
+        assert_eq!(
+            broker.transmit(session_id(1), &frame),
+            Err(RelayError::Backend)
+        );
         assert_eq!(
             broker.session(session_id(1)).expect("retained").state(),
             RelayState::Failed
@@ -673,7 +695,9 @@ mod tests {
     #[test]
     fn successful_close_returns_closed_and_removes_record() {
         let mut broker = RelayBroker::new(SpyBackend::default());
-        broker.open_session(session_id(1), relay_spec(1)).expect("open");
+        broker
+            .open_session(session_id(1), relay_spec(1))
+            .expect("open");
         let closed = broker.close_session(session_id(1)).expect("close");
         assert_eq!(closed.state(), RelayState::Closed);
         assert!(broker.session(session_id(1)).is_none());
@@ -686,8 +710,13 @@ mod tests {
             failure: FailureMode::Close,
             ..SpyBackend::default()
         });
-        broker.open_session(session_id(1), relay_spec(1)).expect("open");
-        assert_eq!(broker.close_session(session_id(1)), Err(RelayError::Backend));
+        broker
+            .open_session(session_id(1), relay_spec(1))
+            .expect("open");
+        assert_eq!(
+            broker.close_session(session_id(1)),
+            Err(RelayError::Backend)
+        );
         assert_eq!(
             broker.session(session_id(1)).expect("retained").state(),
             RelayState::Failed

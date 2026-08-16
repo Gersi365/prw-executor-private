@@ -1,0 +1,40 @@
+Private Remote Workspace
+Phase 136 — Relay Fallback Foundation
+
+STATUS:
+PASS / CONTRACT_LOCKED / FALLBACK_ONLY_RELAY_SPEC_VALIDATED / OPAQUE_FRAME_BOUNDARY_VALIDATED / SESSION_BOUNDS_FAIL_CLOSED / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_RELAY_NOT_ACTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation input head: fd9ed0521de91cc7ca81aeb1e9f36da1818872a6
+Authoritative validation run: 31947740673
+Cargo.lock SHA-256: 39600faf7b3530aa7052143663167513f2dee3ef23670204d021303180959ec4
+prw-relay source SHA-256: 606edadd0a37c5dd6b414275630faa719ceb842961878d6f2d9993c1c3247e0b
+
+CONTRACT
+contracts/RELAY_FALLBACK_FOUNDATION_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-relay
+
+FALLBACK OUTCOME
+A relay session specification can be created only from a Phase 135 selected candidate whose kind is Relay. LocalDirect, InternetDirect and Offline selections fail closed. RelayRouteToken is opaque non-zero 32-byte routing metadata and is not a cryptographic private key.
+
+OPAQUE PAYLOAD OUTCOME
+OpaqueRelayFrame is non-empty and bounded to 64 KiB. The provider boundary exposes no payload parser or decrypt/private-key API. Tests prove exact frame bytes reach the backend unchanged. This is an architectural opacity boundary; Phase 136 does not claim arbitrary bytes are cryptographically valid ciphertext and does not invent encryption.
+
+LIFECYCLE/BOUNDS
+One broker tracks at most 32 sessions. Duplicate IDs and capacity fail before backend open. Provider open failure creates no record; transmit/close failure retains Failed; successful close returns Closed and removes the record. Logical DeviceId remains distinct from TransportIdentity.
+
+VALIDATION
+The authoritative run passed static fallback-only/no-socket/no-decrypt/no-shell checks, focused prw-relay rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+DEFERRED
+Relay server deployment, real dialing/sockets, route-token issuance, bandwidth/rate limiting, multi-region selection, reconnect/migration, end-to-end transport encryption integration and production capability policy remain deferred. Phase 137 owns optional private DNS.
+
+PRODUCTION BOUNDARY
+No relay server, connection, public endpoint, production route token, PowerCode network state, firewall rule or user-impacting production networking change was created or mutated.
+
+FINAL CLASSIFICATION
+PHASE_136_DONE / NO_PRODUCTION_RELAY_SIDE_EFFECT / READY_FOR_PHASE_137_SOURCE_WORK
