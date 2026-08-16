@@ -1,0 +1,33 @@
+name: Phase 115 Format Export
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  format-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+          rustup override set 1.97.1
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Export formatted Phase 115 files
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase115-formatted-files
+          path: |
+            crates/prw-control-plane/src/enrollment_pop.rs
+            crates/prw-control-plane/src/lib.rs
+            crates/prw-device-identity/src/lib.rs
+            crates/prw-device-identity/tests/enrollment_pop.rs
+          if-no-files-found: error
+          retention-days: 1
