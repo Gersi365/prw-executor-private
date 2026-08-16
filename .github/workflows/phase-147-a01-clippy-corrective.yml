@@ -125,7 +125,7 @@ jobs:
           ! grep -Fq 'InvalidSessionId' src/terminal.rs
           echo phase147_a01_clippy_correction=pass
 
-      - name: Re-run exact Phase 147 validation bodies
+      - name: Re-run exact Phase 147 validation and staging bodies
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -133,13 +133,7 @@ jobs:
             (cd "$GITHUB_WORKSPACE" && bash "$step_script")
           done
           report=logs/audits/phase-147-android-remote-terminal-ux/PRW-PHASE-147-ANDROID-REMOTE-TERMINAL-UX-VALIDATION.txt
-          cat >> "$report" <<'EOF'
-
-A01 CLIPPY CORRECTIVE:
-- Initial Phase 147 run 31968679548 reconstructed the candidate successfully and stopped before Android/materialization at native Clippy only.
-- Clippy reported exactly enum_variant_names on TerminalAdapterError and needless_pass_by_value on bridge_payload.
-- A01 removes only the repeated Invalid prefix from the private adapter-error variants and changes bridge_payload to borrow BridgeCommand; terminal protocol, bounds, JNI surface, lifecycle, Kotlin UX, dependencies and production boundary are unchanged.
-EOF
+          printf '%s\n' '' 'A01 CLIPPY CORRECTIVE:' '- Initial Phase 147 run 31968679548 reconstructed the candidate successfully and stopped before Android/materialization at native Clippy only.' '- Clippy reported exactly enum_variant_names on TerminalAdapterError and needless_pass_by_value on bridge_payload.' '- A01 removes only the repeated Invalid prefix from the private adapter-error variants and changes bridge_payload to borrow BridgeCommand; terminal protocol, bounds, JNI surface, lifecycle, Kotlin UX, dependencies and production boundary are unchanged.' >> "$report"
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-8.sh)
           echo phase147_a01_revalidation_and_staging=pass
 
