@@ -1,0 +1,134 @@
+name: Phase 131 A05 Source Materialization
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-131-a05-source-materialization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply already validated Phase 129 and 131 source correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-file-service",\n'
+          if member not in text:
+              needle = '    "crates/prw-files",\n'
+              if text.count(needle) != 1: raise SystemExit('workspace insertion mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-file-service/src/lib.rs')
+          text = source.read_text()
+          if '    os::unix::fs::PermissionsExt,\n' not in text:
+              needle = '    os::fd::OwnedFd,\n'
+              if text.count(needle) != 1: raise SystemExit('PermissionsExt insertion mismatch')
+              text = text.replace(needle, needle + '    os::unix::fs::PermissionsExt,\n')
+          for old, new in [
+              ('        file.by_ref()\n', '        std::io::Read::by_ref(&mut file)\n'),
+              ('    fn open_parent(&self, path: &RemotePath) -> Result<(OwnedFd, &str), FileServiceError> {', "    fn open_parent<'a>(&self, path: &'a RemotePath) -> Result<(OwnedFd, &'a str), FileServiceError> {"),
+              ('    pub fn is_root(&self) -> bool {', '    pub const fn is_root(&self) -> bool {'),
+              ('fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {', 'const fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {'),
+          ]:
+              if old in text: text = text.replace(old, new)
+              elif new not in text: raise SystemExit(f'missing Phase131 form {new!r}')
+          source.write_text(text)
+
+          transport = Path('crates/prw-control-transport/src/lib.rs')
+          text = transport.read_text()
+          for old, new in [
+              ('pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_secs(60);', 'pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_mins(1);'),
+              ('''    let request_id = u64::from_be_bytes(\n        header[12..20]\n            .try_into()\n            .expect("fixed eight-byte request identifier slice"),\n    );''', '''    let request_id = u64::from_be_bytes([\n        header[12], header[13], header[14], header[15], header[16], header[17], header[18],\n        header[19],\n    ]);'''),
+              ('''    let payload_len = u32::from_be_bytes(\n        header[20..24]\n            .try_into()\n            .expect("fixed four-byte payload length slice"),\n    ) as usize;''', '''    let payload_len =\n        u32::from_be_bytes([header[20], header[21], header[22], header[23]]) as usize;'''),
+              ('        invalid[20..24].copy_from_slice(&((MAX_CONTROL_PAYLOAD_BYTES as u32) + 1).to_be_bytes());', '''        let oversized_payload =\n            u32::try_from(MAX_CONTROL_PAYLOAD_BYTES + 1).unwrap_or(u32::MAX);\n        invalid[20..24].copy_from_slice(&oversized_payload.to_be_bytes());'''),
+              ('''            Err(ControlTransportError::InvalidTrustAnchor)\n                | Err(ControlTransportError::InvalidServerName)''', '''            Err(\n                ControlTransportError::InvalidTrustAnchor | ControlTransportError::InvalidServerName\n            )'''),
+          ]:
+              if old in text: text = text.replace(old, new)
+              elif new not in text: raise SystemExit(f'missing Phase129 form {new!r}')
+          transport.write_text(text)
+
+          tls = Path('crates/prw-control-transport/tests/tls_loopback.rs')
+          text = tls.read_text()
+          for old, new in [
+              ('    net::{TcpListener, TcpStream},\n', '    net::TcpListener,\n'),
+              ('        Err(ControlTransportError::TlsHandshake) | Err(ControlTransportError::WrongAlpn)', '        Err(ControlTransportError::TlsHandshake | ControlTransportError::WrongAlpn)'),
+          ]:
+              if old in text: text = text.replace(old, new)
+              elif new not in text: raise SystemExit(f'missing TLS test form {new!r}')
+          tls.write_text(text)
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --check
+
+      - name: Reprove focused and full workspace gates
+        id: validate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --locked -p prw-control-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-control-transport --all-targets
+          cargo clippy --locked -p prw-file-service --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-file-service --all-targets
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase131_a05_validation=pass lock_sha=$lock_sha"
+
+      - name: Write source-grounded reports
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.validate.outputs.lock_sha }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p logs/audits/phase-129-control-transport
+          cat > logs/audits/phase-129-control-transport/PRW-PHASE-129-A05-RESIDUAL-CLEANUP.txt <<EOF
+          Private Remote Workspace — Phase 129 A05
+          STATUS: PASS / RESIDUAL_CLIPPY_AND_TEST_LINT_DEBT_CLOSED / TRANSPORT_SEMANTICS_UNCHANGED / FULL_WORKSPACE_PASS
+          Run: $GITHUB_RUN_ID
+          Source head: $GITHUB_SHA
+          Cargo.lock SHA-256: $LOCK_SHA
+          TLS remains 1.3-only, ALPN remains prw-control/1, explicit trust roots/server name remain required, frame layout and bounds are unchanged, and no production network state was mutated.
+          EOF
+          mkdir -p logs/audits/phase-131-remote-file-management-foundation
+          cat > logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt <<EOF
+          Private Remote Workspace — Phase 131
+          STATUS: PASS / DESCRIPTOR_ANCHORED_ROOT / OPENAT_NOFOLLOW / STRICT_RELATIVE_PATHS / CREATE_ONLY / BOUNDED_READ_LIST / FULL_WORKSPACE_PASS / PRODUCTION_REMOTE_FILES_NOT_ACTIVE
+          Run: $GITHUB_RUN_ID
+          Source head: $GITHUB_SHA
+          Cargo.lock SHA-256: $LOCK_SHA
+          Contract: contracts/REMOTE_FILE_MANAGEMENT_CONTRACT.md
+          Implementation: crates/prw-file-service
+          Seven focused file-service tests cover traversal/symlink rejection, descriptor-root replacement resistance, bounded reads/listing, create-only behavior and 0600/0700 modes. Focused and full workspace Clippy -D warnings, all-target tests and all-target build passed. No arbitrary PowerCode user file or production PRW runtime file capability was activated.
+          FINAL: PHASE_131_DONE / READY_FOR_PHASE_132_VALIDATION
+          EOF
+
+      - name: Commit only validated source lockfile and reports
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock \
+            crates/prw-control-transport/src/lib.rs \
+            crates/prw-control-transport/tests/tls_loopback.rs \
+            crates/prw-file-service/src/lib.rs \
+            logs/audits/phase-129-control-transport/PRW-PHASE-129-A05-RESIDUAL-CLEANUP.txt \
+            logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt
+          git commit -m 'phase 131: materialize validated file foundation source'
+          git push origin HEAD:main
+          echo phase131_a05_materialization=pass
