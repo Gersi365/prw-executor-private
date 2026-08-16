@@ -1,0 +1,155 @@
+name: Phase 147 A01 Native Terminal Clippy Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-147-a01-clippy-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  revalidate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A01 corrective baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f .github/workflows/phase-147-android-remote-terminal-ux.yml
+          test -f contracts/ANDROID_REMOTE_TERMINAL_UX_CONTRACT.md
+          test ! -f apps/android/native/src/terminal.rs
+          ! grep -Fq 'prw-remote-bridge' apps/android/native/Cargo.toml
+          echo phase147_a01_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Extract exact Phase 147 step bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/phase-147-android-remote-terminal-ux.yml').read_text()
+
+          def extract_run(step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          pairs = [
+              ('Prepare exact validated Android and Rust toolchains', 'Materialize Phase 147 candidate source in runner'),
+              ('Materialize Phase 147 candidate source in runner', 'Validate Phase 147 native terminal projection'),
+              ('Validate Phase 147 native terminal projection', 'Validate Phase 147 Android terminal UX'),
+              ('Validate Phase 147 Android terminal UX', 'Prove Phase 147 security and authority boundaries'),
+              ('Prove Phase 147 security and authority boundaries', 'Revalidate root Rust workspace'),
+              ('Revalidate root Rust workspace', 'Write authoritative Phase 147 validation report'),
+              ('Write authoritative Phase 147 validation report', 'Stage only validated Phase 147 source and evidence'),
+              ('Stage only validated Phase 147 source and evidence', 'Commit and push validated Phase 147 source'),
+          ]
+          for index, pair in enumerate(pairs, 1):
+              Path(f'/tmp/phase147-a01-step-{index}.sh').write_text(extract_run(*pair))
+          PY
+          echo phase147_a01_extraction=pass
+
+      - name: Reconstruct exact Phase 147 candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-1.sh)
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-2.sh)
+          echo phase147_a01_reconstruction=pass
+
+      - name: Apply only proven native Clippy corrections
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          path=apps/android/native/src/terminal.rs
+          test -f "$path"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/android/native/src/terminal.rs')
+          text = path.read_text()
+          replacements = {
+              'InvalidSessionId': 'SessionId',
+              'InvalidProfile': 'Profile',
+              'InvalidGeometry': 'Geometry',
+              'InvalidInput': 'Input',
+              'InvalidRead': 'Read',
+              'InvalidBridge': 'Bridge',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected A01 enum token: {old}')
+              text = text.replace(old, new)
+
+          old = 'fn bridge_payload(command: BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {\n    command.encode().map_err(|_| TerminalAdapterError::Bridge)\n}'
+          new = 'fn bridge_payload(command: &BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {\n    command.encode().map_err(|_| TerminalAdapterError::Bridge)\n}'
+          if text.count(old) != 1:
+              raise SystemExit('A01 bridge_payload signature boundary mismatch')
+          text = text.replace(old, new, 1)
+
+          for variant in ('TerminalOpen', 'TerminalInput', 'TerminalResize', 'TerminalRead'):
+              old = f'bridge_payload(BridgeCommand::{variant} {{'
+              new = f'bridge_payload(&BridgeCommand::{variant} {{'
+              if text.count(old) != 1:
+                  raise SystemExit(f'A01 {variant} call boundary mismatch')
+              text = text.replace(old, new, 1)
+
+          old = 'bridge_payload(BridgeCommand::TerminalClose(session_id(session)?))'
+          new = 'bridge_payload(&BridgeCommand::TerminalClose(session_id(session)?))'
+          if text.count(old) != 1:
+              raise SystemExit('A01 TerminalClose call boundary mismatch')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          cd apps/android/native
+          cargo +1.97.1 fmt --all
+          grep -Fq 'fn bridge_payload(command: &BridgeCommand)' src/terminal.rs
+          ! grep -Fq 'InvalidSessionId' src/terminal.rs
+          echo phase147_a01_clippy_correction=pass
+
+      - name: Re-run exact Phase 147 validation bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for step_script in /tmp/phase147-a01-step-{3..7}.sh; do
+            (cd "$GITHUB_WORKSPACE" && bash "$step_script")
+          done
+          report=logs/audits/phase-147-android-remote-terminal-ux/PRW-PHASE-147-ANDROID-REMOTE-TERMINAL-UX-VALIDATION.txt
+          cat >> "$report" <<'EOF'
+
+A01 CLIPPY CORRECTIVE:
+- Initial Phase 147 run 31968679548 reconstructed the candidate successfully and stopped before Android/materialization at native Clippy only.
+- Clippy reported exactly enum_variant_names on TerminalAdapterError and needless_pass_by_value on bridge_payload.
+- A01 removes only the repeated Invalid prefix from the private adapter-error variants and changes bridge_payload to borrow BridgeCommand; terminal protocol, bounds, JNI surface, lifecycle, Kotlin UX, dependencies and production boundary are unchanged.
+EOF
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-8.sh)
+          echo phase147_a01_revalidation_and_staging=pass
+
+      - name: Commit and push A01-validated Phase 147 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --cached --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 147 a01: materialize validated Android remote terminal UX'
+          git push origin HEAD:main
+          echo phase147_a01_materialization=pass
