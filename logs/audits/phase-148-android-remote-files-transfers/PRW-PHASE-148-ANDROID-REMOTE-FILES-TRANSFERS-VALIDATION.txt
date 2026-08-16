@@ -1,0 +1,36 @@
+Private Remote Workspace
+Phase 148 — Android Remote Files and Transfers
+
+STATUS:
+PASS / ANDROID_TYPED_REMOTE_FILE_BROWSER / RESUMABLE_UPLOAD_DOWNLOAD_UX / EXISTING_REMOTE_PATH_TRANSFER_AND_PRWC_AUTHORITIES_REUSED / ACKNOWLEDGED_PROGRESS_ONLY / NO_TERMINAL_AS_FILESYSTEM_API / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: 1f91991dcac70ef3ae33996aac786e6b2cbfd835
+Authoritative validation run: 31972461283
+Native Cargo.lock SHA-256: d821bd3ca5d25a43e8781fe38762b273eb5eb2c3f5e1fd35ae917399d70fb006
+File Rust adapter SHA-256: 1f3352132688c52967ff288470f206388325d5e474bbeebc75c2559ca8978ca2
+RemoteFiles Kotlin SHA-256: 3b0f8a94bd956145aef0d6696cbc11dbcc427d2c6d4f9fc92aabef7405663976
+Validated debug APK SHA-256: fa1a3bde1094972841f0ef9f22caf508f2d27bf0998f2c3b06cb10d1fc1394df
+New native-lock registry packages relative to Phase147: NONE
+
+CONTRACT: contracts/ANDROID_REMOTE_FILES_TRANSFERS_CONTRACT.md
+PATHS: native adapter delegates relative path validation to existing RemotePath::parse.
+TRANSFERS: native adapter delegates TransferId parsing, UploadPlan validation and PRWC encoding to existing Rust authorities.
+PROGRESS: browser entries and upload/download acknowledged bytes change only from explicit disposable authoritative callbacks; request emission does not fabricate progress.
+BOUNDS: routed chunks/read requests are capped at the narrower Phase143 60000-byte bridge bound; transfer total remains bounded by the existing 1 GiB plan authority.
+INTEGRITY: upload plan carries exact SHA-256; finalize completion is not claimed until authoritative success.
+FILESYSTEM API: no terminal/shell command path is used for browse/upload/download.
+DEPENDENCIES: no Android dependency added; native adds only internal prw-file-service and prw-file-transfer path dependencies.
+PRODUCTION BOUNDARY: no production file endpoint, Android arbitrary-storage write, Agent filesystem dispatch, overwrite/delete/move/rename, release signing/distribution, listener/relay/TUN/TAP/route/firewall/NAT/router/DNS mutation, or Agent replacement/restart.
+
+INTERIM CLASSIFICATION: PHASE_148_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION
+
+A01 CORRECTIVE EVIDENCE:
+- Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
+- Clippy reported exactly one source defect: the private helper byte_array in apps/android/native/src/files.rs was unused under -D warnings.
+- A01 run 31971936812 proved the dead-code correction, native Clippy, all 11 native tests, and arm64-v8a plus x86_64 Android native builds before stopping at Kotlin compilation.
+- Kotlin compilation exposed exactly three Python-materialized newline literals in MainViewModel.kt: one disposable upload payload and two disposable download payload uses. Python had converted the intended Kotlin backslash-n escape into a physical newline inside the string literal.
+- A01 preserves the intended literal newline byte semantics by restoring only those three Kotlin backslash-n escapes after exact candidate reconstruction.
+- File/transfer protocol encoding, JNI exports, controller lifecycle semantics, acknowledged-progress authority, dependency selection, production boundaries, and Phase 148 scope remain unchanged.

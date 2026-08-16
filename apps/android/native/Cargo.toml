@@ -17,6 +17,8 @@ prw-core = { path = "../../../crates/prw-core" }
 prw-device-identity = { path = "../../../crates/prw-device-identity" }
 prw-remote-transport = { path = "../../../crates/prw-remote-transport" }
 prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }
+prw-file-service = { path = "../../../crates/prw-file-service" }
+prw-file-transfer = { path = "../../../crates/prw-file-transfer" }
 prw-terminal = { path = "../../../crates/prw-terminal" }
 
 [dev-dependencies]

@@ -41,7 +41,7 @@ internal class MainActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
-                        Text("Phase 147 bounded remote-terminal UX")
+                        Text("Phase 148 remote files + transfers UX")
                         Text("Connection: ${state.connectionState}")
                         Text("Identity ready: ${state.identityReady}")
                         Text("Native bridge: ${state.nativeBridgeReady}")
@@ -135,6 +135,42 @@ internal class MainActivity : ComponentActivity() {
                             Text("Terminal transcript", style = MaterialTheme.typography.titleSmall)
                             Text(state.terminal.transcript)
                         }
+
+                        Text("Disposable remote files — no production endpoint", style = MaterialTheme.typography.titleMedium)
+                Text("Browser path: ${state.files.browser.path.ifEmpty { "/" }}")
+                Text("Browser entries: ${state.files.browser.entries.size}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::requestDisposableRootFiles) { Text("Request root list") }
+                    Button(onClick = model::applyDisposableRootFiles) { Text("Apply root snapshot") }
+                }
+                state.files.browser.entries.forEach { entry -> Text("${entry.name}: ${entry.type}") }
+
+                Text("Upload: ${state.files.upload.lifecycle}")
+                Text("Upload progress: ${state.files.upload.acknowledgedBytes}/${state.files.upload.totalBytes} bytes")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::prepareDisposableUpload) { Text("Prepare upload") }
+                    Button(onClick = { model.requestDisposableUploadBegin(false) }) { Text("Begin upload") }
+                    Button(onClick = model::acknowledgeDisposableUploadPlan) { Text("Apply offset ack") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::sendDisposableUploadChunk) { Text("Send chunk") }
+                    Button(onClick = model::acknowledgeDisposableUploadChunk) { Text("Apply chunk ack") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::finalizeDisposableUpload) { Text("Finalize upload") }
+                    Button(onClick = model::completeDisposableUpload) { Text("Apply finalize ack") }
+                }
+
+                Text("Download: ${state.files.download.lifecycle}")
+                Text("Download progress: ${state.files.download.acknowledgedBytes}/${state.files.download.expectedBytes ?: "?"} bytes")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::prepareDisposableDownload) { Text("Prepare download") }
+                    Button(onClick = model::requestDisposableDownloadChunk) { Text("Request chunk") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = model::applyDisposableDownloadChunk) { Text("Apply bytes") }
+                    Button(onClick = model::applyDisposableDownloadEof) { Text("Apply EOF") }
+                }
 
                         Button(onClick = model::disconnect) {
                             Text("Disconnect")

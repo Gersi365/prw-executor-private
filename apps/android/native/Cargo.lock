@@ -359,6 +359,8 @@ dependencies = [
  "prw-core",
  "prw-device-identity",
  "prw-device-identity-signer",
+ "prw-file-service",
+ "prw-file-transfer",
  "prw-remote-bridge",
  "prw-remote-transport",
  "prw-terminal",

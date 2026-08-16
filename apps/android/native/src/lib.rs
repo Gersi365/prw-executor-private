@@ -23,6 +23,7 @@ use prw_core::{DeviceId, DeviceLifecycle, EnrollmentId, SessionId, UserId, Works
 use prw_device_identity::verify_device_identity_signature;
 use prw_remote_transport::ControlFrame;
 
+mod files;
 mod terminal;
 
 pub const ANDROID_ADAPTER_PROTOCOL_VERSION: i32 = 1;

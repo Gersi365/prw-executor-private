@@ -22,6 +22,7 @@ internal data class PrwUiState(
     val devices: List<DeviceSnapshot> = emptyList(),
     val pendingRevocationDeviceId: String? = null,
     val terminal: TerminalUiState = TerminalUiState(),
+    val files: RemoteFilesUiState = RemoteFilesUiState(),
     val detail: String = "Development bootstrap only — no production endpoint",
 )
 
@@ -30,6 +31,7 @@ internal class MainViewModel(
     private val controller: ConnectionController = ConnectionController(),
     private val deviceManagement: DeviceManagementController = DeviceManagementController(),
     private val terminalController: TerminalSessionController = TerminalSessionController(NativeTerminalCommandEncoder),
+    private val fileController: RemoteFilesController = RemoteFilesController(NativeFileCommandEncoder),
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(PrwUiState())
     val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
@@ -204,6 +206,98 @@ internal class MainViewModel(
         return accepted
     }
 
+    fun requestDisposableRootFiles(): Boolean {
+        val accepted = fileController.requestList("")
+        publishFilesState(if (accepted) "Root file-list intent encoded; no entries fabricated" else "File-list intent rejected")
+        return accepted
+    }
+
+    fun applyDisposableRootFiles(): Boolean {
+        val accepted = fileController.applyAuthoritativeDirectorySnapshot(
+            "",
+            listOf(
+                RemoteDirectoryEntryView("Documents", RemoteEntryTypeView.Directory),
+                RemoteDirectoryEntryView("example.txt", RemoteEntryTypeView.RegularFile),
+                RemoteDirectoryEntryView("link-visible-not-followed", RemoteEntryTypeView.SymbolicLink),
+            ),
+        )
+        publishFilesState(if (accepted) "Disposable authoritative directory snapshot applied" else "Directory snapshot rejected")
+        return accepted
+    }
+
+    fun prepareDisposableUpload(): Boolean {
+        val accepted = fileController.prepareUpload(
+            "abababababababababababababababab",
+            "uploads/phase148-demo.txt",
+            "phase148 disposable upload payload\n".encodeToByteArray(),
+        )
+        publishFilesState(if (accepted) "Disposable upload plan prepared" else "Upload plan rejected")
+        return accepted
+    }
+
+    fun requestDisposableUploadBegin(resume: Boolean = false): Boolean {
+        val accepted = fileController.requestUploadBegin(resume)
+        publishFilesState(if (accepted) "Upload begin/resume intent encoded; progress unchanged" else "Upload begin/resume rejected")
+        return accepted
+    }
+
+    fun acknowledgeDisposableUploadPlan(): Boolean {
+        val offset = if (fileController.state().upload.lifecycle == UploadLifecycleView.Planning) fileController.state().upload.acknowledgedBytes else 0L
+        val accepted = fileController.applyAuthoritativeUploadOffset(offset)
+        publishFilesState(if (accepted) "Disposable authoritative upload offset applied" else "Upload offset acknowledgement rejected")
+        return accepted
+    }
+
+    fun sendDisposableUploadChunk(): Boolean {
+        val accepted = fileController.sendNextUploadChunk()
+        publishFilesState(if (accepted) "Upload chunk intent encoded; acknowledged progress unchanged" else "Upload chunk rejected")
+        return accepted
+    }
+
+    fun acknowledgeDisposableUploadChunk(): Boolean {
+        val upload = fileController.state().upload
+        val accepted = fileController.applyAuthoritativeUploadChunkOffset(upload.acknowledgedBytes + upload.pendingChunkBytes)
+        publishFilesState(if (accepted) "Disposable authoritative upload chunk acknowledgement applied" else "Upload chunk acknowledgement rejected")
+        return accepted
+    }
+
+    fun finalizeDisposableUpload(): Boolean {
+        val accepted = fileController.requestUploadFinalize()
+        publishFilesState(if (accepted) "Upload finalize intent encoded; completion not forged" else "Upload finalize rejected")
+        return accepted
+    }
+
+    fun completeDisposableUpload(): Boolean {
+        val accepted = fileController.applyAuthoritativeUploadFinalized()
+        publishFilesState(if (accepted) "Disposable authoritative upload finalize applied" else "Upload finalize acknowledgement rejected")
+        return accepted
+    }
+
+    fun prepareDisposableDownload(): Boolean {
+        val expected = "phase148 disposable download\n".encodeToByteArray().size.toLong()
+        val accepted = fileController.prepareDownload("downloads/phase148-demo.txt", expected)
+        publishFilesState(if (accepted) "Disposable download prepared" else "Download plan rejected")
+        return accepted
+    }
+
+    fun requestDisposableDownloadChunk(): Boolean {
+        val accepted = fileController.requestDownloadChunk()
+        publishFilesState(if (accepted) "Download chunk intent encoded; progress unchanged" else "Download request rejected")
+        return accepted
+    }
+
+    fun applyDisposableDownloadChunk(): Boolean {
+        val accepted = fileController.applyAuthoritativeDownloadChunk("phase148 disposable download\n".encodeToByteArray())
+        publishFilesState(if (accepted) "Disposable authoritative download bytes applied" else "Download chunk rejected")
+        return accepted
+    }
+
+    fun applyDisposableDownloadEof(): Boolean {
+        val accepted = fileController.applyAuthoritativeDownloadChunk(byteArrayOf())
+        publishFilesState(if (accepted) "Disposable authoritative EOF completed download" else "Download EOF rejected")
+        return accepted
+    }
+
     fun disconnect() {
         val current = controller.state.value
         if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
@@ -233,6 +327,10 @@ internal class MainViewModel(
             pendingRevocationDeviceId = deviceState.pendingRevocationDeviceId,
             detail = detail,
         )
+    }
+
+    private fun publishFilesState(detail: String) {
+        mutableUiState.value = mutableUiState.value.copy(files = fileController.state(), detail = detail)
     }
 
     private fun publishTerminalState(detail: String) {

@@ -1,16 +1,15 @@
 # PRW Android Application
 
-Phase 147 builds on the validated Phase 145/146 non-production Android foundation.
+Phase 148 builds on the validated Phase 145–147 non-production Android foundation.
 
-Current development responsibilities:
+Current development responsibilities include:
 
-- Kotlin + Jetpack Compose UI;
-- Android Keystore non-exportable P-256 device/transport identity custody;
-- narrow Rust/JNI adapter reusing authoritative PRW codecs and identity verification;
-- local typed authenticated bootstrap and enrollment-proof validation;
-- bounded authoritative/injected device lifecycle projection and revocation intent;
-- bounded terminal presentation lifecycle;
-- native terminal open/input/resize/read/close payload projection through the existing Phase 143 `BridgeCommand` codec;
-- explicit disposable terminal open/output/close callbacks that do not forge remote authority.
+- Android Keystore identity custody and typed authenticated bootstrap;
+- enrollment/device-management presentation;
+- bounded terminal UX through existing PRWC terminal commands;
+- bounded remote-file browser requests and authoritative/disposable directory snapshots;
+- resumable upload begin/resume/chunk/finalize/abort presentation with acknowledged progress only;
+- bounded download requests with authoritative/disposable bytes and EOF handling;
+- native reuse of existing `RemotePath`, `TransferId`, `UploadPlan`, and Phase 143 `BridgeCommand` encoding.
 
-Phase 147 adds no generic run-command API and no production socket, remote shell, PTY activation, account cutover, endpoint publication, or Android release signing/distribution.
+Phase 148 does not use terminal commands as a filesystem API and does not activate a production file endpoint, production Android storage destination, overwrite/delete/move/rename semantics, release signing/distribution, or production networking.

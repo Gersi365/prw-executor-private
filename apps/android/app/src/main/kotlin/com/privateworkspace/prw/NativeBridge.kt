@@ -17,4 +17,13 @@ internal object NativeBridge {
     @JvmStatic external fun terminalReadPayload(sessionId: Long, maximumBytes: Int): ByteArray
     @JvmStatic external fun terminalClosePayload(sessionId: Long): ByteArray
     @JvmStatic external fun isTerminalPayload(payload: ByteArray): Boolean
+    @JvmStatic external fun fileListPayload(path: ByteArray): ByteArray
+    @JvmStatic external fun fileStatPayload(path: ByteArray): ByteArray
+    @JvmStatic external fun uploadBeginPayload(transferId: ByteArray, destination: ByteArray, totalBytes: Long, sha256: ByteArray): ByteArray
+    @JvmStatic external fun uploadResumePayload(transferId: ByteArray, destination: ByteArray, totalBytes: Long, sha256: ByteArray): ByteArray
+    @JvmStatic external fun uploadChunkPayload(transferId: ByteArray, offset: Long, chunk: ByteArray): ByteArray
+    @JvmStatic external fun uploadFinalizePayload(transferId: ByteArray): ByteArray
+    @JvmStatic external fun uploadAbortPayload(transferId: ByteArray): ByteArray
+    @JvmStatic external fun downloadChunkPayload(path: ByteArray, offset: Long, requestedBytes: Int): ByteArray
+    @JvmStatic external fun isFileTransferPayload(payload: ByteArray): Boolean
 }
