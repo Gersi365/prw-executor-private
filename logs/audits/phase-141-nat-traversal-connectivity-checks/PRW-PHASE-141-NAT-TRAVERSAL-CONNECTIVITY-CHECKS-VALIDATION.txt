@@ -2,27 +2,35 @@ Private Remote Workspace
 Phase 141 — NAT Traversal and Connectivity Checks
 
 STATUS:
-PASS / STANDARD_ICE_STUN / SANS_IO_BOUNDARY / PHASE135_SELECTOR_PRESERVED / CREDENTIAL_DEBUG_REDACTED / STUN_BINDING_SUCCESS_REQUIRED / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_NETWORK_SIDE_EFFECT
+PASS / STANDARD_ICE_STUN / SANS_IO_BOUNDARY / CREDENTIAL_DEBUG_REDACTED / STUN_SUCCESS_CLASS_ENFORCED / PHASE135_SELECTOR_PRESERVED / FULL_WORKSPACE_VALIDATION_PASS / VALIDATED_STATE_MATERIALIZED / NO_PRODUCTION_NETWORK_SIDE_EFFECT
 
 Repository: Gersi365/prw-executor-private
 Branch: main
 Date: 2026-08-16
-Validation source head: 64414eba91292696f7016e0a21ce73b273bab3c5
-Authoritative validation run: 31952977724
+Materialization source head: 2ed7f37f77f5312dd9fbbe981a570eaa062d38a6
+Authoritative materialization run: 31953203695
 Cargo.lock SHA-256: d947c9950832933d27b397e2c411724c92c486150c0386180126e93767bb540d
 prw-nat-traversal/src/lib.rs SHA-256: ac0433c9b94edee8d6c061af0a16becf5c99c622c1006a93c47154964c36a76b
 
-CONTRACT: contracts/NAT_TRAVERSAL_CONNECTIVITY_CHECKS_CONTRACT.md
-IMPLEMENTATION: crates/prw-nat-traversal
+CONTRACT
+contracts/NAT_TRAVERSAL_CONNECTIVITY_CHECKS_CONTRACT.md
 
-DEPENDENCY DECISION: exact rtc-ice 0.20.2, rtc-stun 0.20.2, rtc-shared 0.20.2 and sansio 1.0.0. Scratch compatibility A01 run 31952085411 passed under Rust/Cargo 1.97.1; scratch Cargo.lock SHA-256 ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96.
+IMPLEMENTATION
+crates/prw-nat-traversal
 
-CORRECTIVE HISTORY: initial validation stopped on tracked target metadata; the next validation stopped on two needless-pass-by-value Clippy findings; A03 stopped before source mutation on an indentation-sensitive STUN matcher; A04 was workflow-syntax invalid before runner allocation; A05 proved the three main-source patch boundaries and stopped because the security regression test was already correctly borrowing its datagram; A06 preserves that test and applies only the remaining audited source corrections.
+DEPENDENCIES
+rtc-ice 0.20.2, rtc-stun 0.20.2, rtc-shared 0.20.2 and sansio 1.0.0 under Rust/Cargo 1.97.1. Corrective dependency probe run 31952085411 / job 95177012142 passed; scratch lock SHA-256 ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96.
 
-SECURITY/ARCHITECTURE OUTCOME: no socket, async runtime, DNS resolver, process, TUN/TAP, route or firewall ownership. Traversal datagrams are capped at 2048 bytes. STUN requires explicit source and Binding success. ICE uses UDP4/UDP6 with mDNS disabled; relay allocation remains Phase 142. ICE credential password Debug is redacted. Selected ICE reachability is correlated to existing Phase 135 CandidateId and Phase 135 remains the path selector.
+VALIDATION HISTORY
+Run 31952956070 / job 95179162831 passed exact graph, static security boundary, focused Clippy/tests and full workspace Clippy/tests/build. It proved 7 Phase 141 unit tests plus 2 security integration tests, including ICE credential Debug redaction and rejection of non-Binding-Success STUN responses carrying XOR-MAPPED-ADDRESS. It produced the exact validated Cargo.lock SHA-256 d947c9950832933d27b397e2c411724c92c486150c0386180126e93767bb540d and source SHA-256 ac0433c9b94edee8d6c061af0a16becf5c99c622c1006a93c47154964c36a76b. Its final push was rejected only because main advanced concurrently; no validation gate failed.
 
-VALIDATION: focused rustfmt, Clippy -D warnings and all-target tests passed, including redaction and non-success-STUN negative tests. Full locked workspace Clippy, tests and build passed.
+This materialization run reapplied that exact validated state onto the current main head, verified both authoritative hashes before and after revalidation, reran focused Phase 141 validation and full workspace/all-target Clippy, tests and build, then committed only the validated workspace graph/source/report.
 
-PRODUCTION BOUNDARY: no production Agent, socket/listener, STUN/ICE/TURN activity, relay, credential, firewall/NAT/router/TUN/TAP/route or DNS state changed or activated.
+SECURITY/ARCHITECTURE OUTCOME
+The traversal crate owns no socket, async runtime, DNS resolver, process, TUN/TAP, route or firewall API. Traversal datagrams are bounded to 2048 bytes. ICE credentials redact passwords from Debug. STUN discovery accepts an explicit SocketAddr only, rejects wrong-source input and requires BINDING_SUCCESS before XOR-MAPPED-ADDRESS. ICE is UDP4/UDP6 only with mDNS disabled and relay allocation deferred to Phase 142. Successful ICE selection yields only a reachability observation correlated to an existing Phase 135 CandidateId; Phase 135 remains the authoritative LocalDirect -> InternetDirect -> Relay -> Offline selector.
 
-FINAL CLASSIFICATION: PHASE_141_DONE / READY_FOR_PHASE_142_SOURCE_DISPOSABLE_RELAY_PROVIDER_WORK
+PRODUCTION BOUNDARY
+No PowerCode production socket, service, Agent, key/certificate, firewall/NAT/router/TUN/TAP/route/DNS, persistent STUN/ICE/TURN traffic or relay was changed or activated.
+
+FINAL CLASSIFICATION
+PHASE_141_DONE / VALIDATED_STATE_MATERIALIZED / READY_FOR_PHASE_142_SOURCE_DISPOSABLE_RELAY_PROVIDER_WORK
