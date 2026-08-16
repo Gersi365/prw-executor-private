@@ -1,0 +1,59 @@
+Private Remote Workspace
+Phase 139 A02 — Duplicate Decision Reconciliation
+
+STATUS:
+PASS / NON_DESTRUCTIVE_RECONCILIATION / ORIGINAL_PHASE139_AUTHORITY_PRESERVED / VALIDATED_PHASE140_PROFILE_RETAINED / NO_PRODUCTION_MUTATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Reconciliation source commit: 147b8b698c4e03e47471d814f9679a1cebe5a58c
+
+CAUSE
+During a connection interruption, Phase 140 implementation and validation had already advanced on top of the previously approved Phase 139 architecture. A later duplicate documentation path, contracts/REMOTE_TRANSPORT_STANDARDS_DEPENDENCY_DECISION.md, was then created and accidentally restated several protocol values differently from the earlier authoritative decision and validated Phase 140 implementation.
+
+AUTHORITY PRESERVED
+No historical Phase 139 or Phase 140 report was deleted or rewritten. Normative authority remains:
+1. contracts/REMOTE_TRANSPORT_ARCHITECTURE_DECISION.md
+2. contracts/REMOTE_TRANSPORT_ARCHITECTURE_DECISION_A01.md
+3. PRW-PHASE-139-REMOTE-TRANSPORT-ARCHITECTURE-DECISION.txt
+4. PRW-PHASE-139-A01-TRANSPORT-IDENTITY-DIGEST-CLARIFICATION.txt
+5. Phase 140 source/authoritative validation where it proves conformance.
+
+RECONCILED VALUES
+- ALPN: prw-mesh/1
+- data transport owner: crates/prw-remote-transport
+- QUIC: v1 only
+- TLS: 1.3 mTLS, explicit private PRW roots
+- runtime direct deps: quinn 0.11.11, rustls 0.23.43, tokio 1.53.1, aws-lc-rs 1.18.0 narrowly scoped by A01
+- TransportIdentity: SHA-256 of canonical leaf SPKI DER
+- synthetic SNI/SAN: t-<first32hex>.<last32hex>.mesh.prw.invalid
+- mesh application magic: PRWM
+- application protocol: 1.0
+- header: 24 bytes
+- maximum control payload: 65,536 bytes
+- remote stream limits: 32 bidirectional / 16 unidirectional
+- 0-RTT/resumption disabled; no application QUIC DATAGRAM API
+- Phase 141 traversal standards: ICE RFC 8445 / STUN RFC 8489 / TURN RFC 8656
+- production remote-network activation remains gated at Phase 154.
+
+WITHDRAWN LATE-DUPLICATE VALUES
+The late duplicate values prw-data/1, PRWD, 2 MiB control ceiling, zero remote unidirectional streams, provisional prw-data-transport owner, and certificate-DER fingerprint binding have no normative force.
+
+EVIDENCE
+Phase 139 dependency probe run 31949211214 / job 95169943036: PASS.
+Scratch lock SHA-256: b1a4be15f6036967971334f8ac7536c0a987e10aff0f38bdc49ca8286743c332.
+
+Phase 139 A01 SPKI/provider probe run 31949682590 / job 95171127021: PASS.
+Scratch lock SHA-256: f364e750683d08d70c7d720e31fac679a8c6af4df2eb88dba40d6c10d2e544f8.
+
+Phase 140 authoritative validation run 31950645958: PASS.
+Repository Cargo.lock SHA-256: 00c5bec6ad852a70e0b4b021d7c4de4b5953e3f27ad596317f8cf47efc820fb0.
+
+Permanent validation run 31951517003 on b08021e1a139f8ff5acab8c4a1cef6c2780b0cf3: PASS across locked metadata, rustfmt, Clippy -D warnings, tests and build.
+
+PRODUCTION BOUNDARY
+Documentation/audit reconciliation only. No PowerCode service, Agent binary, production key/certificate, listener, firewall/NAT/router/TUN/TAP/route/DNS, ICE/STUN/TURN production traffic, relay, Android/Desktop signing or distribution state changed.
+
+FINAL CLASSIFICATION
+PHASE_139_A02_DONE / ARCHITECTURE_SEQUENCE_RECONCILED / PHASE_140_EVIDENCE_PRESERVED / READY_FOR_PHASE_141_SOURCE_DISPOSABLE_WORK
