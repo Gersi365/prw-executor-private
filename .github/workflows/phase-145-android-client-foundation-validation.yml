@@ -1,0 +1,1149 @@
+name: Phase 145 Android Client Foundation Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-android-client-foundation-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prove Phase 145 contract and toolchain probe
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          grep -Fq 'Status: Phase 145 implementation lock' contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          grep -Fq '31957645210' contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          grep -Fq '34bfaab9e331f85e808296b766068f6fa6c7530834003d27190a4fdc8b55c2c6' contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          grep -Fq 'c871ec404c7df4591b8153a96010c8fd7304b0200b6174f47ffe8128c7c0220a' contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          rustc --version | grep -Fq 'rustc 1.97.1'
+          cargo --version | grep -Fq 'cargo 1.97.1'
+          echo phase145_contract_gate=pass
+
+      - name: Set up JDK and Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install exact Android SDK NDK and Rust targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase145_toolchain=pass
+
+      - name: Materialize Android source in validation checkout
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf apps/android
+          mkdir -p \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw \
+            apps/android/app/src/test/kotlin/com/privateworkspace/prw \
+            apps/android/native/src
+
+          cat > apps/android/settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PrivateRemoteWorkspaceAndroid"
+          include(":app")
+          EOF
+
+          cat > apps/android/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "9.3.0" apply false
+              id("org.jetbrains.kotlin.plugin.compose") version "2.3.21" apply false
+          }
+          EOF
+
+          cat > apps/android/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > apps/android/.gitignore <<'EOF'
+          .gradle/
+          **/build/
+          local.properties
+          EOF
+
+          cat > apps/android/README.md <<'EOF'
+          # PRW Android Application
+
+          Phase 145 establishes the first non-production native Android client foundation.
+
+          Architecture:
+
+          - Kotlin + Jetpack Compose UI;
+          - Android Keystore non-exportable P-256 identity custody;
+          - ViewModel + StateFlow presentation model;
+          - a narrow standalone Rust/JNI adapter under `native/`;
+          - no production endpoint, production account, release signing, boot receiver, or hidden daemon.
+
+          Build prerequisites are locked by `contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md` and `contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md`.
+          EOF
+
+          cat > apps/android/app/build.gradle.kts <<'EOF'
+          import org.gradle.api.tasks.Exec
+
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          val generatedJniLibs = layout.buildDirectory.dir("generated/prwJniLibs")
+
+          val buildPrwNative by tasks.registering(Exec::class) {
+              workingDir(rootProject.file("native"))
+              environment("ANDROID_NDK_HOME", "${System.getenv("ANDROID_HOME")}/ndk/28.2.13676358")
+              environment("ANDROID_NDK_ROOT", "${System.getenv("ANDROID_HOME")}/ndk/28.2.13676358")
+              commandLine(
+                  "cargo", "+1.97.1", "ndk",
+                  "--platform", "29",
+                  "-t", "arm64-v8a",
+                  "-t", "x86_64",
+                  "-o", generatedJniLibs.get().asFile.absolutePath,
+                  "build", "--locked", "--release",
+              )
+          }
+
+          android {
+              namespace = "com.privateworkspace.prw"
+              compileSdk = 36
+
+              defaultConfig {
+                  applicationId = "com.privateworkspace.prw"
+                  minSdk = 29
+                  targetSdk = 36
+                  versionCode = 1
+                  versionName = "0.1.0-dev"
+                  testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+              }
+
+              buildFeatures {
+                  compose = true
+                  buildConfig = false
+              }
+
+              sourceSets["main"].jniLibs.srcDir(generatedJniLibs)
+
+              packaging {
+                  jniLibs {
+                      useLegacyPackaging = false
+                  }
+              }
+          }
+
+          tasks.named("preBuild").configure {
+              dependsOn(buildPrwNative)
+          }
+
+          dependencies {
+              val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
+              implementation(composeBom)
+              implementation("androidx.activity:activity-compose:1.13.0")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+              implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+              testImplementation("junit:junit:4.13.2")
+          }
+          EOF
+
+          cat > apps/android/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="false"
+                  android:fullBackupContent="false"
+                  android:label="Private Remote Workspace"
+                  android:supportsRtl="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/ConnectionState.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal enum class ConnectionState {
+              Disconnected,
+              Connecting,
+              Authenticating,
+              Connected,
+              Suspended,
+              Disconnecting,
+              Error,
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/ConnectionController.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import kotlinx.coroutines.flow.MutableStateFlow
+          import kotlinx.coroutines.flow.StateFlow
+          import kotlinx.coroutines.flow.asStateFlow
+
+          internal class ConnectionController {
+              private val mutableState = MutableStateFlow(ConnectionState.Disconnected)
+              val state: StateFlow<ConnectionState> = mutableState.asStateFlow()
+
+              fun transition(target: ConnectionState): Boolean {
+                  val current = mutableState.value
+                  if (!isAllowed(current, target)) return false
+                  mutableState.value = target
+                  return true
+              }
+
+              companion object {
+                  internal fun isAllowed(from: ConnectionState, to: ConnectionState): Boolean = when (from) {
+                      ConnectionState.Disconnected -> to == ConnectionState.Connecting
+                      ConnectionState.Connecting -> to in setOf(
+                          ConnectionState.Authenticating,
+                          ConnectionState.Disconnected,
+                          ConnectionState.Error,
+                      )
+                      ConnectionState.Authenticating -> to in setOf(
+                          ConnectionState.Connected,
+                          ConnectionState.Disconnected,
+                          ConnectionState.Error,
+                      )
+                      ConnectionState.Connected -> to in setOf(
+                          ConnectionState.Suspended,
+                          ConnectionState.Disconnecting,
+                          ConnectionState.Error,
+                      )
+                      ConnectionState.Suspended -> to in setOf(
+                          ConnectionState.Connecting,
+                          ConnectionState.Disconnecting,
+                          ConnectionState.Error,
+                      )
+                      ConnectionState.Disconnecting -> to == ConnectionState.Disconnected
+                      ConnectionState.Error -> to in setOf(
+                          ConnectionState.Disconnected,
+                          ConnectionState.Connecting,
+                      )
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/BootstrapRequest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import java.io.ByteArrayOutputStream
+          import java.nio.ByteBuffer
+          import java.nio.ByteOrder
+
+          internal data class BootstrapRequest(
+              val workspaceId: String,
+              val userId: String,
+              val deviceId: String,
+              val sessionId: String,
+              val publicSpki: ByteArray,
+              val nonce: ByteArray,
+          ) {
+              fun encode(): ByteArray {
+                  require(nonce.size == NONCE_BYTES)
+                  val output = ByteArrayOutputStream()
+                  output.write(MAGIC)
+                  output.write(shortBytes(VERSION))
+                  writeUtf8(output, workspaceId)
+                  writeUtf8(output, userId)
+                  writeUtf8(output, deviceId)
+                  writeUtf8(output, sessionId)
+                  writeBytes(output, publicSpki)
+                  output.write(nonce)
+                  return output.toByteArray().also { require(it.size <= MAX_BYTES) }
+              }
+
+              companion object {
+                  private val MAGIC = byteArrayOf('P'.code.toByte(), '1'.code.toByte(), '4'.code.toByte(), '5'.code.toByte())
+                  private const val VERSION = 1
+                  private const val NONCE_BYTES = 32
+                  private const val MAX_FIELD_BYTES = 1024
+                  private const val MAX_PUBLIC_SPKI_BYTES = 256
+                  private const val MAX_BYTES = 4096
+
+                  private fun shortBytes(value: Int): ByteArray = ByteBuffer
+                      .allocate(2)
+                      .order(ByteOrder.BIG_ENDIAN)
+                      .putShort(value.toShort())
+                      .array()
+
+                  private fun writeUtf8(output: ByteArrayOutputStream, value: String) {
+                      val bytes = value.toByteArray(Charsets.UTF_8)
+                      require(bytes.isNotEmpty() && bytes.size <= MAX_FIELD_BYTES)
+                      writeBytes(output, bytes)
+                  }
+
+                  private fun writeBytes(output: ByteArrayOutputStream, bytes: ByteArray) {
+                      require(bytes.isNotEmpty() && bytes.size <= MAX_PUBLIC_SPKI_BYTES.coerceAtLeast(MAX_FIELD_BYTES))
+                      require(bytes.size <= UShort.MAX_VALUE.toInt())
+                      output.write(shortBytes(bytes.size))
+                      output.write(bytes)
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.security.keystore.KeyGenParameterSpec
+          import android.security.keystore.KeyProperties
+          import android.security.keystore.StrongBoxUnavailableException
+          import java.security.KeyPairGenerator
+          import java.security.KeyStore
+          import java.security.PrivateKey
+          import java.security.Signature
+          import java.security.spec.ECGenParameterSpec
+
+          internal class AndroidKeyCustody(
+              private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) },
+          ) {
+              fun ensureDeviceIdentitySpki(): ByteArray = ensurePublicSpki(DEVICE_IDENTITY_ALIAS)
+
+              fun ensureTransportIdentitySpki(): ByteArray = ensurePublicSpki(TRANSPORT_IDENTITY_ALIAS)
+
+              fun deviceIdentityIsNonExportable(): Boolean = isNonExportable(DEVICE_IDENTITY_ALIAS)
+
+              internal fun signCanonicalSessionProof(message: ByteArray): ByteArray {
+                  require(message.isNotEmpty() && message.size <= MAX_TYPED_MESSAGE_BYTES)
+                  ensurePublicSpki(DEVICE_IDENTITY_ALIAS)
+                  val privateKey = keyStore.getKey(DEVICE_IDENTITY_ALIAS, null) as? PrivateKey
+                      ?: error("device identity private key unavailable")
+                  check(privateKey.encoded == null) { "Android Keystore private key became exportable" }
+                  return Signature.getInstance(SIGNATURE_ALGORITHM).run {
+                      initSign(privateKey)
+                      update(message)
+                      sign()
+                  }
+              }
+
+              private fun ensurePublicSpki(alias: String): ByteArray {
+                  if (!keyStore.containsAlias(alias)) {
+                      generate(alias, strongBox = true)
+                  }
+                  val certificate = keyStore.getCertificate(alias)
+                      ?: error("Android Keystore public identity unavailable")
+                  return certificate.publicKey.encoded
+                      ?: error("Android Keystore public identity SPKI unavailable")
+              }
+
+              private fun generate(alias: String, strongBox: Boolean) {
+                  try {
+                      generator(alias, strongBox).generateKeyPair()
+                  } catch (error: StrongBoxUnavailableException) {
+                      if (!strongBox) throw error
+                      generator(alias, strongBox = false).generateKeyPair()
+                  }
+              }
+
+              private fun generator(alias: String, strongBox: Boolean): KeyPairGenerator =
+                  KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, KEYSTORE_PROVIDER).apply {
+                      val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+                          .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                          .setDigests(KeyProperties.DIGEST_SHA256)
+                          .setUserAuthenticationRequired(false)
+                      if (strongBox) builder.setIsStrongBoxBacked(true)
+                      initialize(builder.build())
+                  }
+
+              private fun isNonExportable(alias: String): Boolean {
+                  ensurePublicSpki(alias)
+                  val key = keyStore.getKey(alias, null) as? PrivateKey ?: return false
+                  return key.encoded == null
+              }
+
+              companion object {
+                  internal const val DEVICE_IDENTITY_ALIAS = "prw.device-identity.v1"
+                  internal const val TRANSPORT_IDENTITY_ALIAS = "prw.transport-identity.v1"
+                  private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+                  private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
+                  private const val MAX_TYPED_MESSAGE_BYTES = 4_442
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal object NativeBridge {
+              init {
+                  System.loadLibrary("prw_android_adapter")
+              }
+
+              @JvmStatic external fun protocolVersion(): Int
+              @JvmStatic external fun roundTripControlFrame(frame: ByteArray): ByteArray
+              @JvmStatic external fun canonicalSessionMessage(request: ByteArray): ByteArray
+              @JvmStatic external fun verifySessionSignature(request: ByteArray, signature: ByteArray): Boolean
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import androidx.lifecycle.ViewModel
+          import java.security.SecureRandom
+          import kotlinx.coroutines.flow.MutableStateFlow
+          import kotlinx.coroutines.flow.StateFlow
+          import kotlinx.coroutines.flow.asStateFlow
+
+          internal data class PrwUiState(
+              val connectionState: ConnectionState = ConnectionState.Disconnected,
+              val identityReady: Boolean = false,
+              val nativeBridgeReady: Boolean = false,
+              val bootstrapValidated: Boolean = false,
+              val detail: String = "Development bootstrap only — no production endpoint",
+          )
+
+          internal class MainViewModel(
+              private val custody: AndroidKeyCustody = AndroidKeyCustody(),
+              private val controller: ConnectionController = ConnectionController(),
+          ) : ViewModel() {
+              private val mutableUiState = MutableStateFlow(PrwUiState())
+              val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
+
+              fun validateLocalBootstrap() {
+                  if (!controller.transition(ConnectionState.Connecting)) return
+                  publish("Preparing non-exportable Android identity")
+                  runCatching {
+                      check(NativeBridge.protocolVersion() == 1)
+                      val spki = custody.ensureDeviceIdentitySpki()
+                      check(custody.deviceIdentityIsNonExportable())
+                      controller.transition(ConnectionState.Authenticating)
+                      publish("Validating typed local session proof")
+                      val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+                      val request = BootstrapRequest(
+                          workspaceId = "phase145-development-workspace",
+                          userId = "phase145-development-user",
+                          deviceId = "phase145-android-device",
+                          sessionId = "phase145-local-session",
+                          publicSpki = spki,
+                          nonce = nonce,
+                      ).encode()
+                      val canonical = NativeBridge.canonicalSessionMessage(request)
+                      check(canonical.isNotEmpty())
+                      val signature = custody.signCanonicalSessionProof(canonical)
+                      check(NativeBridge.verifySessionSignature(request, signature))
+                      check(controller.transition(ConnectionState.Connected))
+                  }.onSuccess {
+                      mutableUiState.value = PrwUiState(
+                          connectionState = ConnectionState.Connected,
+                          identityReady = true,
+                          nativeBridgeReady = true,
+                          bootstrapValidated = true,
+                          detail = "Local authenticated bootstrap validated; remote production networking remains disabled",
+                      )
+                  }.onFailure { error ->
+                      controller.transition(ConnectionState.Error)
+                      mutableUiState.value = PrwUiState(
+                          connectionState = ConnectionState.Error,
+                          identityReady = runCatching { custody.deviceIdentityIsNonExportable() }.getOrDefault(false),
+                          nativeBridgeReady = runCatching { NativeBridge.protocolVersion() == 1 }.getOrDefault(false),
+                          bootstrapValidated = false,
+                          detail = error.message ?: "Local bootstrap failed closed",
+                      )
+                  }
+              }
+
+              fun disconnect() {
+                  val current = controller.state.value
+                  if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
+                      check(controller.transition(ConnectionState.Disconnecting))
+                      check(controller.transition(ConnectionState.Disconnected))
+                  } else if (current == ConnectionState.Error) {
+                      check(controller.transition(ConnectionState.Disconnected))
+                  }
+                  mutableUiState.value = PrwUiState(
+                      connectionState = controller.state.value,
+                      identityReady = mutableUiState.value.identityReady,
+                      nativeBridgeReady = mutableUiState.value.nativeBridgeReady,
+                      bootstrapValidated = false,
+                  )
+              }
+
+              private fun publish(detail: String) {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      connectionState = controller.state.value,
+                      detail = detail,
+                  )
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.Surface
+          import androidx.compose.material3.Text
+          import androidx.compose.runtime.collectAsState
+          import androidx.compose.runtime.getValue
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.unit.dp
+          import androidx.lifecycle.viewmodel.compose.viewModel
+
+          internal class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          val model: MainViewModel = viewModel()
+                          val state by model.uiState.collectAsState()
+                          Surface(modifier = Modifier.fillMaxSize()) {
+                              Column(
+                                  modifier = Modifier.padding(24.dp),
+                                  verticalArrangement = Arrangement.spacedBy(12.dp),
+                              ) {
+                                  Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
+                                  Text("Phase 145 Android foundation")
+                                  Text("State: ${state.connectionState}")
+                                  Text("Identity ready: ${state.identityReady}")
+                                  Text("Native bridge: ${state.nativeBridgeReady}")
+                                  Text("Authenticated bootstrap: ${state.bootstrapValidated}")
+                                  Text(state.detail)
+                                  Button(onClick = model::validateLocalBootstrap) {
+                                      Text("Validate local bootstrap")
+                                  }
+                                  Button(onClick = model::disconnect) {
+                                      Text("Disconnect")
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/test/kotlin/com/privateworkspace/prw/ConnectionControllerTest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class ConnectionControllerTest {
+              @Test fun legal_bootstrap_path_is_explicit() {
+                  val controller = ConnectionController()
+                  assertTrue(controller.transition(ConnectionState.Connecting))
+                  assertTrue(controller.transition(ConnectionState.Authenticating))
+                  assertTrue(controller.transition(ConnectionState.Connected))
+                  assertEquals(ConnectionState.Connected, controller.state.value)
+              }
+
+              @Test fun illegal_jump_to_connected_fails_closed() {
+                  val controller = ConnectionController()
+                  assertFalse(controller.transition(ConnectionState.Connected))
+                  assertEquals(ConnectionState.Disconnected, controller.state.value)
+              }
+
+              @Test fun disconnect_is_two_step_from_connected() {
+                  val controller = ConnectionController()
+                  assertTrue(controller.transition(ConnectionState.Connecting))
+                  assertTrue(controller.transition(ConnectionState.Authenticating))
+                  assertTrue(controller.transition(ConnectionState.Connected))
+                  assertTrue(controller.transition(ConnectionState.Disconnecting))
+                  assertTrue(controller.transition(ConnectionState.Disconnected))
+              }
+          }
+          EOF
+
+          cat > apps/android/native/Cargo.toml <<'EOF'
+          [workspace]
+
+          [package]
+          name = "prw-android-adapter"
+          version = "0.1.0"
+          edition = "2024"
+          rust-version = "1.97.1"
+          publish = false
+
+          [lib]
+          crate-type = ["cdylib", "rlib"]
+
+          [dependencies]
+          jni = { version = "=0.22.4", default-features = false }
+          prw-control-plane = { path = "../../../crates/prw-control-plane" }
+          prw-core = { path = "../../../crates/prw-core" }
+          prw-device-identity = { path = "../../../crates/prw-device-identity" }
+          prw-remote-transport = { path = "../../../crates/prw-remote-transport" }
+
+          [dev-dependencies]
+          prw-device-identity-signer = { path = "../../../crates/prw-device-identity-signer" }
+          aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
+
+          [lints.rust]
+          unsafe_op_in_unsafe_fn = "deny"
+
+          [lints.clippy]
+          all = "warn"
+          pedantic = "warn"
+          nursery = "warn"
+          EOF
+
+          cat > apps/android/native/src/lib.rs <<'EOF'
+          //! Narrow Phase 145 Android/JNI adapter.
+          //!
+          //! The unavoidable Rust 2024 unsafe symbol-export attributes are isolated here.
+          //! This crate contains no unsafe block, private-key import/export, socket ownership,
+          //! arbitrary command execution, filesystem authority, or production endpoint.
+
+          use std::fmt;
+
+          use jni::{
+              EnvUnowned,
+              errors::ThrowRuntimeExAndDefault,
+              objects::{JByteArray, JClass},
+              sys::{jboolean, jint},
+          };
+          use prw_control_plane::{
+              DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentityPublicKeyEncoding,
+              DeviceIdentitySignature, DeviceIdentitySignatureEncoding, PublicIdentityMaterial,
+              session_auth::{SessionAuthNonce, encode_session_auth_message},
+          };
+          use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
+          use prw_device_identity::verify_device_identity_signature;
+          use prw_remote_transport::ControlFrame;
+
+          pub const ANDROID_ADAPTER_PROTOCOL_VERSION: i32 = 1;
+          const BOOTSTRAP_MAGIC: [u8; 4] = *b"P145";
+          const BOOTSTRAP_VERSION: u16 = 1;
+          const MAX_BOOTSTRAP_BYTES: usize = 4_096;
+          const MAX_IDENTIFIER_BYTES: usize = 1_024;
+          const MAX_PUBLIC_SPKI_BYTES: usize = 256;
+          const MAX_SIGNATURE_BYTES: usize = 256;
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum AndroidAdapterError {
+              InvalidBootstrap,
+              InvalidIdentifier,
+              InvalidPublicIdentity,
+              InvalidControlFrame,
+          }
+
+          impl fmt::Display for AndroidAdapterError {
+              fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                  formatter.write_str(match self {
+                      Self::InvalidBootstrap => "invalid Android bootstrap request",
+                      Self::InvalidIdentifier => "invalid Android bootstrap identifier",
+                      Self::InvalidPublicIdentity => "invalid Android bootstrap public identity",
+                      Self::InvalidControlFrame => "invalid PRWM control frame",
+                  })
+              }
+          }
+
+          impl std::error::Error for AndroidAdapterError {}
+
+          struct BootstrapIdentity {
+              binding: DeviceIdentityBinding,
+              session_id: SessionId,
+              nonce: SessionAuthNonce,
+          }
+
+          pub fn round_trip_control_frame(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {
+              ControlFrame::decode(input)
+                  .map(|frame| frame.encode())
+                  .map_err(|_| AndroidAdapterError::InvalidControlFrame)
+          }
+
+          pub fn canonical_session_message(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {
+              let parsed = parse_bootstrap(input)?;
+              encode_session_auth_message(&parsed.binding, &parsed.session_id, parsed.nonce)
+                  .map_err(|_| AndroidAdapterError::InvalidBootstrap)
+          }
+
+          pub fn verify_session_signature(input: &[u8], signature: &[u8]) -> bool {
+              if signature.is_empty() || signature.len() > MAX_SIGNATURE_BYTES {
+                  return false;
+              }
+              let Ok(parsed) = parse_bootstrap(input) else {
+                  return false;
+              };
+              let Ok(message) =
+                  encode_session_auth_message(&parsed.binding, &parsed.session_id, parsed.nonce)
+              else {
+                  return false;
+              };
+              let Ok(signature) = DeviceIdentitySignature::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
+                  signature.to_vec(),
+              ) else {
+                  return false;
+              };
+              verify_device_identity_signature(&parsed.binding.public_identity, &message, &signature)
+                  .is_ok()
+          }
+
+          fn parse_bootstrap(input: &[u8]) -> Result<BootstrapIdentity, AndroidAdapterError> {
+              if input.len() > MAX_BOOTSTRAP_BYTES || input.len() < 6 + 32 {
+                  return Err(AndroidAdapterError::InvalidBootstrap);
+              }
+              if input[..4] != BOOTSTRAP_MAGIC || u16::from_be_bytes([input[4], input[5]]) != BOOTSTRAP_VERSION {
+                  return Err(AndroidAdapterError::InvalidBootstrap);
+              }
+              let mut reader = Reader::new(&input[6..]);
+              let workspace = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let user = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let device = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let session = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let public_spki = reader.bytes(MAX_PUBLIC_SPKI_BYTES)?;
+              let nonce = reader.array::<32>()?;
+              reader.finish()?;
+
+              let public_identity = PublicIdentityMaterial::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer,
+                  public_spki,
+              )
+              .map_err(|_| AndroidAdapterError::InvalidPublicIdentity)?;
+              Ok(BootstrapIdentity {
+                  binding: DeviceIdentityBinding {
+                      workspace_id: WorkspaceId::new(workspace).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      user_id: UserId::new(user).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      device_id: DeviceId::new(device).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      public_identity,
+                      lifecycle: DeviceLifecycle::Enrolled,
+                  },
+                  session_id: SessionId::new(session).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                  nonce: SessionAuthNonce::new(nonce),
+              })
+          }
+
+          struct Reader<'a> {
+              input: &'a [u8],
+              offset: usize,
+          }
+
+          impl<'a> Reader<'a> {
+              const fn new(input: &'a [u8]) -> Self {
+                  Self { input, offset: 0 }
+              }
+
+              fn u16(&mut self) -> Result<u16, AndroidAdapterError> {
+                  Ok(u16::from_be_bytes(self.array::<2>()?))
+              }
+
+              fn bytes(&mut self, maximum: usize) -> Result<Vec<u8>, AndroidAdapterError> {
+                  let length = usize::from(self.u16()?);
+                  if length == 0 || length > maximum {
+                      return Err(AndroidAdapterError::InvalidBootstrap);
+                  }
+                  let end = self.offset.checked_add(length).ok_or(AndroidAdapterError::InvalidBootstrap)?;
+                  let bytes = self.input.get(self.offset..end).ok_or(AndroidAdapterError::InvalidBootstrap)?;
+                  self.offset = end;
+                  Ok(bytes.to_vec())
+              }
+
+              fn utf8(&mut self, maximum: usize) -> Result<String, AndroidAdapterError> {
+                  let bytes = self.bytes(maximum)?;
+                  String::from_utf8(bytes).map_err(|_| AndroidAdapterError::InvalidBootstrap)
+              }
+
+              fn array<const N: usize>(&mut self) -> Result<[u8; N], AndroidAdapterError> {
+                  let end = self.offset.checked_add(N).ok_or(AndroidAdapterError::InvalidBootstrap)?;
+                  let bytes = self.input.get(self.offset..end).ok_or(AndroidAdapterError::InvalidBootstrap)?;
+                  let mut output = [0_u8; N];
+                  output.copy_from_slice(bytes);
+                  self.offset = end;
+                  Ok(output)
+              }
+
+              const fn finish(self) -> Result<(), AndroidAdapterError> {
+                  if self.offset == self.input.len() {
+                      Ok(())
+                  } else {
+                      Err(AndroidAdapterError::InvalidBootstrap)
+                  }
+              }
+          }
+
+          fn jni_bytes<'caller>(
+              unowned_env: &mut EnvUnowned<'caller>,
+              input: &JByteArray<'caller>,
+              operation: impl FnOnce(&[u8]) -> Vec<u8>,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let input = env.convert_byte_array(input)?;
+                      env.byte_array_from_slice(&operation(&input))
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion<'caller>(
+              _env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+          ) -> jint {
+              ANDROID_ADAPTER_PROTOCOL_VERSION
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_roundTripControlFrame<'caller>(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              input: JByteArray<'caller>,
+          ) -> JByteArray<'caller> {
+              jni_bytes(&mut env, &input, |bytes| round_trip_control_frame(bytes).unwrap_or_default())
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_canonicalSessionMessage<'caller>(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              input: JByteArray<'caller>,
+          ) -> JByteArray<'caller> {
+              jni_bytes(&mut env, &input, |bytes| canonical_session_message(bytes).unwrap_or_default())
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_verifySessionSignature<'caller>(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              input: JByteArray<'caller>,
+              signature: JByteArray<'caller>,
+          ) -> jboolean {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let input = env.convert_byte_array(&input)?;
+                      let signature = env.convert_byte_array(&signature)?;
+                      Ok(if verify_session_signature(&input, &signature) { 1 } else { 0 })
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use aws_lc_rs::{rand::SystemRandom, signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair}};
+              use prw_device_identity_signer::UbuntuEnrollmentSigner;
+              use prw_remote_transport::{ControlFrame, ControlMessageKind};
+
+              use super::*;
+
+              fn field(target: &mut Vec<u8>, bytes: &[u8]) {
+                  target.extend_from_slice(&u16::try_from(bytes.len()).expect("field length").to_be_bytes());
+                  target.extend_from_slice(bytes);
+              }
+
+              fn input(public_spki: &[u8]) -> Vec<u8> {
+                  let mut value = Vec::new();
+                  value.extend_from_slice(&BOOTSTRAP_MAGIC);
+                  value.extend_from_slice(&BOOTSTRAP_VERSION.to_be_bytes());
+                  field(&mut value, b"workspace-145");
+                  field(&mut value, b"user-145");
+                  field(&mut value, b"device-145");
+                  field(&mut value, b"session-145");
+                  field(&mut value, public_spki);
+                  value.extend_from_slice(&[7; 32]);
+                  value
+              }
+
+              #[test]
+              fn prwm_round_trip_uses_existing_transport_codec() {
+                  let frame = ControlFrame::new(ControlMessageKind::Heartbeat, 17, b"phase145".to_vec())
+                      .expect("frame")
+                      .encode();
+                  assert_eq!(round_trip_control_frame(&frame), Ok(frame));
+                  assert_eq!(round_trip_control_frame(b"bad"), Err(AndroidAdapterError::InvalidControlFrame));
+              }
+
+              #[test]
+              fn typed_session_message_and_signature_validate() {
+                  let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                      .expect("key");
+                  let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("signer");
+                  let request = input(signer.public_identity().as_bytes());
+                  let parsed = parse_bootstrap(&request).expect("parse");
+                  let message = canonical_session_message(&request).expect("canonical message");
+                  let challenge = prw_control_plane::session_auth::SessionAuthChallengeState::new(
+                      parsed.binding.clone(),
+                      parsed.session_id.clone(),
+                      parsed.nonce,
+                      10,
+                      20,
+                  ).expect("challenge state");
+                  let signature = signer
+                      .sign_session_auth_proof(&parsed.binding, challenge.challenge())
+                      .expect("typed proof");
+                  assert!(verify_session_signature(&request, signature.signature().as_bytes()));
+                  let mut bad = signature.signature().as_bytes().to_vec();
+                  bad[bad.len() - 1] ^= 1;
+                  assert!(!verify_session_signature(&request, &bad));
+                  assert!(message.starts_with(prw_control_plane::session_auth::SESSION_AUTH_DOMAIN_SEPARATOR));
+              }
+
+              #[test]
+              fn malformed_bootstrap_fails_closed() {
+                  assert_eq!(canonical_session_message(b"P145\0\1"), Err(AndroidAdapterError::InvalidBootstrap));
+                  assert!(!verify_session_signature(b"bad", &[1, 2, 3]));
+              }
+          }
+          EOF
+
+          echo phase145_source_materialized=pass
+
+      - name: Generate and inspect standalone native lock graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 metadata --locked --format-version 1 > "$RUNNER_TEMP/phase145-native-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          data = json.load(open(os.environ['RUNNER_TEMP'] + '/phase145-native-metadata.json'))
+          root = next(p for p in data['packages'] if p['name'] == 'prw-android-adapter')
+          direct = {d['name']: d['req'] for d in root['dependencies']}
+          expected = {
+              'aws-lc-rs': '=1.18.0',
+              'jni': '=0.22.4',
+              'prw-control-plane': '*',
+              'prw-core': '*',
+              'prw-device-identity': '*',
+              'prw-device-identity-signer': '*',
+              'prw-remote-transport': '*',
+          }
+          if direct != expected:
+              raise SystemExit(f'Phase145 native direct graph mismatch: {direct!r}')
+          jni = next(p for p in data['packages'] if p['name'] == 'jni')
+          if jni['version'] != '0.22.4':
+              raise SystemExit(f'jni resolved to {jni["version"]}')
+          print('phase145_native_graph=pass')
+          PY
+          echo "phase145_native_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+
+      - name: Validate native adapter on host and Android targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+          if grep -R --line-number -E 'unsafe[[:space:]]*\{|unsafe[[:space:]]+fn' src; then
+            echo phase145_unexpected_unsafe_block_or_fn >&2
+            exit 1
+          fi
+          if grep -R --line-number 'JNIEnv' src; then
+            echo phase145_deprecated_jnienv_detected >&2
+            exit 1
+          fi
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -t x86_64 -o "$RUNNER_TEMP/phase145-native-libs" build --locked --release
+          test -s "$RUNNER_TEMP/phase145-native-libs/arm64-v8a/libprw_android_adapter.so"
+          test -s "$RUNNER_TEMP/phase145-native-libs/x86_64/libprw_android_adapter.so"
+          echo phase145_native_validation=pass
+
+      - name: Validate Android unit tests lint and APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase145-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_adapter.so' "$RUNNER_TEMP/phase145-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_adapter.so' "$RUNNER_TEMP/phase145-apk-list.txt"
+          echo "phase145_apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)" | tee "$RUNNER_TEMP/phase145-apk-sha.txt"
+          echo phase145_android_build=pass
+
+      - name: Prove Android security static boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          manifest=apps/android/app/src/main/AndroidManifest.xml
+          ! grep -Fq 'RECEIVE_BOOT_COMPLETED' "$manifest"
+          ! grep -Eq '<(service|receiver|provider)' "$manifest"
+          ! grep -R -E 'https?://|wss?://' apps/android/app/src/main apps/android/native/src
+          ! grep -R -E 'BEGIN (EC |RSA |)PRIVATE KEY|PrivateKeyDer' apps/android/app/src/main apps/android/native/src
+          grep -Fq 'AndroidKeyStore' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'setIsStrongBoxBacked(true)' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'privateKey.encoded == null' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'prw.device-identity.v1' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'prw.transport-identity.v1' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          echo phase145_android_security_boundary=pass
+
+      - name: Revalidate root Rust workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo phase145_root_workspace=pass
+
+      - name: Add permanent Android CI and authoritative report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > .github/workflows/android-validation.yml <<'EOF'
+          name: PRW Android Validation
+
+          on:
+            push:
+              paths:
+                - 'apps/android/**'
+                - 'crates/**'
+                - 'Cargo.toml'
+                - 'Cargo.lock'
+                - 'rust-toolchain.toml'
+                - '.github/workflows/android-validation.yml'
+            pull_request:
+              paths:
+                - 'apps/android/**'
+                - 'crates/**'
+                - 'Cargo.toml'
+                - 'Cargo.lock'
+                - 'rust-toolchain.toml'
+                - '.github/workflows/android-validation.yml'
+
+          permissions:
+            contents: read
+
+          jobs:
+            validate:
+              runs-on: ubuntu-24.04
+              timeout-minutes: 60
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-java@v4
+                  with:
+                    distribution: temurin
+                    java-version: '17'
+                - uses: gradle/actions/setup-gradle@v4
+                  with:
+                    gradle-version: '9.5.0'
+                - name: Prepare exact Android and Rust toolchains
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+                    test -x "$sdkmanager_bin"
+                    yes | "$sdkmanager_bin" --licenses >/dev/null || true
+                    "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+                    rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+                    cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+                - name: Validate native adapter
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    cd apps/android/native
+                    cargo +1.97.1 fmt --all -- --check
+                    cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+                    cargo +1.97.1 test --locked --all-targets
+                - name: Validate Android application
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    cd apps/android
+                    gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+                    test -s app/build/outputs/apk/debug/app-debug.apk
+          EOF
+
+          report_dir=logs/audits/phase-145-android-client-foundation
+          report="$report_dir/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          native_lock_sha=$(sha256sum apps/android/native/Cargo.lock | cut -d' ' -f1)
+          native_src_sha=$(sha256sum apps/android/native/src/lib.rs | cut -d' ' -f1)
+          custody_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt | cut -d' ' -f1)
+          apk_sha=$(cut -d= -f2 "$RUNNER_TEMP/phase145-apk-sha.txt")
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 145 — Android Client Foundation' \
+            '' \
+            'STATUS:' \
+            'PASS / NATIVE_KOTLIN_COMPOSE_SHELL / JNI_0_22_4 / CARGO_NDK_4_1_2 / ANDROID_KEYSTORE_NON_EXPORTABLE_P256_SOURCE_BOUNDARY / TYPED_SESSION_BOOTSTRAP / ARM64_X86_64_NATIVE_BUILD / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            'Dependency/toolchain probe run: 31957645210' \
+            'Probe scratch JNI Cargo.lock SHA-256: 34bfaab9e331f85e808296b766068f6fa6c7530834003d27190a4fdc8b55c2c6' \
+            'Probe APK SHA-256: c871ec404c7df4591b8153a96010c8fd7304b0200b6174f47ffe8128c7c0220a' \
+            "Authoritative native Cargo.lock SHA-256: $native_lock_sha" \
+            "Native adapter source SHA-256: $native_src_sha" \
+            "Android custody source SHA-256: $custody_sha" \
+            "Validated debug APK SHA-256: $apk_sha" \
+            '' \
+            'CONTRACT: contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md' \
+            'ANDROID: native Kotlin + Compose, minSdk29/compileSdk36/targetSdk36, AGP9.3.0/Gradle9.5/JDK17, Compose BOM 2026.06.00.' \
+            'NATIVE: standalone apps/android/native adapter, jni 0.22.4 with EnvUnowned entrypoints, Rust1.97.1, cargo-ndk4.1.2, NDK28.2.13676358, arm64-v8a+x86_64.' \
+            'CUSTODY: source boundary uses AndroidKeyStore P-256 signing aliases for separate device and transport identities, requests StrongBox with ordinary AndroidKeyStore fallback, exports only public SPKI, and checks PrivateKey.encoded == null. No file/plaintext private-key fallback exists.' \
+            'BOOTSTRAP: the native adapter reuses Phase128 canonical session-authentication message construction and Phase119 device-signature verification. Kotlin connection state reaches Connected only after native canonical-message construction, Android-Keystore typed signing and native signature verification; no network endpoint is contacted.' \
+            'VALIDATION: native fmt/Clippy -D warnings/host tests passed; native Android release cross-build passed for two ABIs; Android unit tests/lint/debug APK passed; APK contains both native libraries; root Rust workspace fmt/Clippy/tests/build passed.' \
+            'PERMANENT CI: .github/workflows/android-validation.yml added for app/native validation.' \
+            'PRODUCTION BOUNDARY: no release signing/distribution, production account/device, production listener, STUN/ICE/TURN/relay activation, Agent replacement/restart, production credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.' \
+            '' \
+            'FINAL CLASSIFICATION: PHASE_145_DONE / ANDROID_SHELL_AND_KEY_CUSTODY_VALIDATED / JNI_0_22_4_CARGO_NDK_4_1_2 / NON_EXPORTABLE_KEYSTORE_P256_SOURCE_BOUNDARY / AUTHENTICATED_BOOTSTRAP_FOUNDATION_VALIDATED / PERMANENT_ANDROID_CI / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_146' \
+            > "$report"
+          echo phase145_report_and_ci=pass
+
+      - name: Commit only validated Phase 145 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!target' ':!apps/android/**/build'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add apps/android .github/workflows/android-validation.yml logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          git status --short
+          git commit -m 'phase 145: validate Android client foundation'
+          git push origin HEAD:main
+          echo phase145_materialization=pass
