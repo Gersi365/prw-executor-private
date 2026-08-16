@@ -1,0 +1,12 @@
+[package]
+name = "prw-control-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+rustls = { version = "=0.23.43", default-features = false, features = ["std", "aws_lc_rs"] }
+
+[lints]
+workspace = true
