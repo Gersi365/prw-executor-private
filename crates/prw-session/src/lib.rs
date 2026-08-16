@@ -323,7 +323,7 @@ mod tests {
             .begin_session(bound.clone(), session_a.clone(), 10, 100)
             .expect("session a");
         let challenge_b = service
-            .begin_session(bound.clone(), session_b.clone(), 10, 100)
+            .begin_session(bound.clone(), session_b, 10, 100)
             .expect("session b");
         let proof_b = signer
             .sign_session_auth_proof(&bound, &challenge_b)
