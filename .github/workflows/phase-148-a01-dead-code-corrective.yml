@@ -1,4 +1,4 @@
-name: Phase 148 A01 Native Files Dead-Code Corrective
+name: Phase 148 A01 Native Files and Kotlin Materialization Corrective
 
 on:
   push:
@@ -84,17 +84,18 @@ jobs:
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-1.sh)
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-2.sh)
           test -f apps/android/native/src/files.rs
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
           echo phase148_a01_reconstruction=pass
 
-      - name: Apply only proven dead-code correction
+      - name: Apply only proven Phase 148 corrections
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('apps/android/native/src/files.rs')
-          text = path.read_text()
+          native = Path('apps/android/native/src/files.rs')
+          text = native.read_text()
           old = '''fn byte_array<'caller>(
               unowned_env: &mut EnvUnowned<'caller>,
               operation: impl FnOnce() -> Vec<u8>,
@@ -107,14 +108,39 @@ jobs:
           '''
           if text.count(old) != 1:
               raise SystemExit(f'A01 dead-code boundary mismatch: count={text.count(old)}')
-          path.write_text(text.replace(old, '', 1))
+          native.write_text(text.replace(old, '', 1))
+
+          vm = Path('apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt')
+          text = vm.read_text()
+
+          upload_old = '"phase148 disposable upload payload\n"'
+          upload_new = r'"phase148 disposable upload payload\n"'
+          if text.count(upload_old) != 1:
+              raise SystemExit(f'A01 upload newline boundary mismatch: count={text.count(upload_old)}')
+          text = text.replace(upload_old, upload_new, 1)
+
+          download_old = '"phase148 disposable download\n"'
+          download_new = r'"phase148 disposable download\n"'
+          if text.count(download_old) != 2:
+              raise SystemExit(f'A01 download newline boundary mismatch: count={text.count(download_old)}')
+          text = text.replace(download_old, download_new, 2)
+          vm.write_text(text)
+
+          verified = vm.read_text()
+          if verified.count(r'"phase148 disposable upload payload\n"') != 1:
+              raise SystemExit('A01 corrected upload literal proof failed')
+          if verified.count(r'"phase148 disposable download\n"') != 2:
+              raise SystemExit('A01 corrected download literal proof failed')
           PY
           cd apps/android/native
           cargo +1.97.1 fmt --all
           ! grep -Fq "fn byte_array<'caller>" src/files.rs
           grep -Fq 'Java_com_privateworkspace_prw_NativeBridge_fileListPayload' src/files.rs
           grep -Fq 'Java_com_privateworkspace_prw_NativeBridge_downloadChunkPayload' src/files.rs
-          echo phase148_a01_dead_code_correction=pass
+          cd "$GITHUB_WORKSPACE"
+          grep -Fq 'phase148 disposable upload payload\n' apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          test "$(grep -Fo 'phase148 disposable download\n' apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt | wc -l)" -eq 2
+          echo phase148_a01_corrections=pass
 
       - name: Re-run exact Phase 148 validation bodies
         shell: bash
@@ -127,10 +153,13 @@ jobs:
           test -f "$report"
           cat >> "$report" <<'EOF'
 
-          A01 NATIVE DEAD-CODE CORRECTIVE:
+          A01 CORRECTIVE EVIDENCE:
           - Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
           - Clippy reported exactly one source defect: the private helper byte_array in apps/android/native/src/files.rs was unused under -D warnings.
-          - A01 removes only that unused private helper after reconstructing the exact Phase 148 candidate. File/transfer protocol encoding, JNI exports, Kotlin lifecycle semantics, acknowledged-progress authority, dependency selection and production boundaries are unchanged.
+          - A01 run 31971936812 proved the dead-code correction, native Clippy, all 11 native tests, and arm64-v8a plus x86_64 Android native builds before stopping at Kotlin compilation.
+          - Kotlin compilation exposed exactly three Python-materialized newline literals in MainViewModel.kt: one disposable upload payload and two disposable download payload uses. Python had converted the intended Kotlin backslash-n escape into a physical newline inside the string literal.
+          - A01 preserves the intended literal newline byte semantics by restoring only those three Kotlin backslash-n escapes after exact candidate reconstruction.
+          - File/transfer protocol encoding, JNI exports, controller lifecycle semantics, acknowledged-progress authority, dependency selection, production boundaries, and Phase 148 scope remain unchanged.
           EOF
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-8.sh)
           echo phase148_a01_revalidation_and_staging=pass
