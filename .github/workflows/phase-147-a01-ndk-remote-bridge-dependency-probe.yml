@@ -1,0 +1,82 @@
+name: Phase 147 A01 NDK Remote Bridge Dependency Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-147-a01-ndk-remote-bridge-dependency-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove corrected probe baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-146-android-enrollment-device-management/PRW-PHASE-146-ANDROID-ENROLLMENT-DEVICE-MANAGEMENT-VALIDATION.txt
+          test -f "$report"
+          grep -Fq 'PERMANENT_ANDROID_CI_SUCCESS' "$report"
+          test -f .github/workflows/phase-147-remote-bridge-android-dependency-probe.yml
+          ! grep -Fq 'prw-remote-bridge' apps/android/native/Cargo.toml
+          echo phase147_a01_baseline=pass
+
+      - name: Prepare exact validated Android NDK and Rust toolchain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'ndk;28.2.13676358'
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          test -x "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"
+          echo phase147_a01_toolchain=pass
+
+      - name: Inject remote bridge dependency only in runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/android/native/Cargo.toml')
+          text = path.read_text()
+          marker = 'prw-remote-transport = { path = "../../../crates/prw-remote-transport" }\n'
+          replacement = marker + 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }\n'
+          if text.count(marker) != 1:
+              raise SystemExit('native dependency insertion boundary mismatch')
+          path.write_text(text.replace(marker, replacement, 1))
+          PY
+          grep -Fq 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }' apps/android/native/Cargo.toml
+          echo phase147_a01_injection=pass
+
+      - name: Probe exact Android ARM64 build with remote bridge graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 tree --locked --target aarch64-linux-android > "$RUNNER_TEMP/phase147-a01-tree.txt"
+          grep -Fq 'prw-remote-bridge' "$RUNNER_TEMP/phase147-a01-tree.txt"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -o "$RUNNER_TEMP/phase147-a01-native" build --locked --release
+          test -s "$RUNNER_TEMP/phase147-a01-native/arm64-v8a/libprw_android_adapter.so"
+          echo phase147_a01_remote_bridge_android_dependency_probe=pass
+
+      - name: Prove no product-source materialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff -- apps/android/native/Cargo.toml apps/android/native/Cargo.lock > "$RUNNER_TEMP/phase147-a01-probe.diff"
+          test -s "$RUNNER_TEMP/phase147-a01-probe.diff"
+          ! git diff --name-only | grep -Ev '^apps/android/native/(Cargo.toml|Cargo.lock)$'
+          echo phase147_a01_no_materialization=pass
