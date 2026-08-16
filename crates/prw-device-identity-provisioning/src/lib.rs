@@ -275,8 +275,7 @@ fn ensure_private_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityP
 fn require_absent(path: &Path) -> Result<(), DeviceIdentityProvisioningError> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Ok(_) => Err(DeviceIdentityProvisioningError::AlreadyProvisioned),
-        Err(_) => Err(DeviceIdentityProvisioningError::AlreadyProvisioned),
+        Ok(_) | Err(_) => Err(DeviceIdentityProvisioningError::AlreadyProvisioned),
     }
 }
 
