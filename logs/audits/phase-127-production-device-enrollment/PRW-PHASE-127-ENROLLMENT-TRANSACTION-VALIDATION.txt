@@ -1,0 +1,147 @@
+Private Remote Workspace
+Phase 127 — Production Device Enrollment Transaction Foundation
+
+STATUS:
+PASS / IMPLEMENTED_AND_VALIDATED_SOURCE / DISPOSABLE_END_TO_END_POP_PASS / LOCKFILE_PROMOTED_FROM_VALIDATED_GENERATION / PRODUCTION_ENROLLMENT_NOT_YET_EXECUTED / CAUSALLY_BLOCKED_BY_PHASE_126_PRIVILEGED_AGENT_HANDOFF
+
+AUDIT TYPE: SOURCE IMPLEMENTATION / DISPOSABLE CRYPTOGRAPHIC TRANSACTION VALIDATION / PRODUCTION-PREREQUISITE BOUNDARY
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+
+SCOPE
+
+Phase 127 introduces the bounded device-enrollment transaction authority that composes the existing PRW enrollment request/challenge/proof contracts, the typed Ubuntu enrollment signer, and the production enrollment proof verifier.
+
+This phase intentionally does not select or activate a remote transport, account-login mechanism, durable registry database, workspace membership persistence, remote approval UI, terminal/files capability, mesh transport, relay, or DNS.
+
+IMPLEMENTATION
+
+New workspace crate:
+crates/prw-enrollment
+
+Workspace registration commit:
+0bd75b9788037143737d1bd76f8b17200e831a0b
+
+Initial crate manifest commit:
+ff2394b6d0f1ece5c08b3697b95ec71fc2d5c7eb
+
+Initial implementation commit:
+98be50bc5c4ec409cabc65c106df450759464a90
+
+Rustfmt corrective commit:
+1842329a2e8b173f653df3030f333bbe885d1063
+
+Clippy documentation corrective commit:
+2ba2483ad58d503786ad8c0720670e1f993e5f5a
+
+The implemented EnrollmentService:
+- rejects duplicate enrollment identifiers;
+- rejects a second enrollment for an already-enrolled DeviceId;
+- generates a fresh 256-bit server challenge through AWS-LC SystemRandom;
+- delegates challenge lifetime validation to the already locked EnrollmentProofChallengeState contract;
+- verifies submitted proof-of-possession through the production prw-device-identity verifier;
+- commits DeviceIdentityBinding only after successful proof verification;
+- sets DeviceLifecycle::Enrolled only after verification succeeds;
+- removes the successful pending transaction;
+- records completed enrollment state and enrolled-device uniqueness in bounded in-memory authority;
+- rejects replay against an already-completed enrollment;
+- exposes no generic signing API, no private-key export, no networking, no shell execution, and no account authorization inference.
+
+DISPOSABLE VALIDATION HISTORY
+
+Temporary validation workflow:
+.github/workflows/phase-127-lockfile-validation.yml
+
+First run:
+31939385883
+Job:
+95146247653 — FAILURE SAFE
+
+Failure point:
+cargo fmt --all -- --check
+
+Classification:
+mechanical rustfmt-only differences; Clippy/tests were not reached. No production host mutation occurred.
+
+Second run:
+31939444016
+Job:
+95146378576 — FAILURE SAFE
+
+Formatting passed. Clippy reached source and reported exactly one clippy::doc_markdown issue for the token PoP lacking backticks. No functional/API defect was reported before that fail-closed stop. No production host mutation occurred.
+
+Final isolated validation run:
+31939525695 — SUCCESS
+Job:
+95146568862 — SUCCESS
+
+The successful run proved:
+- rustc 1.97.1;
+- cargo 1.97.1;
+- deterministic cargo generate-lockfile completed;
+- locked metadata resolution passed;
+- rustfmt passed;
+- Clippy passed with -D warnings for prw-enrollment all targets/all features;
+- all prw-enrollment tests passed.
+
+Focused test result:
+5 passed / 0 failed.
+
+Validated cases:
+1. a valid typed proof enrolls exactly the bound workspace/user/device/public identity and reaches DeviceLifecycle::Enrolled;
+2. replay after completion is rejected;
+3. duplicate enrollment identifiers fail closed;
+4. invalid challenge lifetime creates no pending state;
+5. a proof bound to another enrollment is rejected without completing the target transaction, after which the correct proof remains usable;
+6. an already-enrolled DeviceId cannot begin a second enrollment.
+
+LOCKFILE PROVENANCE
+
+The successful isolated workflow generated Cargo.lock version 4 with SHA-256:
+c4e2d50a76929f311dc82bb77e7b4fe1fdeb20251840e07650a6d4e5c29b223f
+
+No external dependency version changed. The generated lockfile added the local prw-enrollment package entry and preserved the existing locked external graph.
+
+Before repository promotion, the exact reconstructed candidate bytes were independently SHA-256 checked against the workflow-produced authoritative digest and matched exactly.
+
+Lockfile promotion commit:
+2a6d04a29fc37f9e90d876890de2b6895e5d3eda
+
+PERMANENT CLEAN-SOURCE VALIDATION
+
+Permanent PRW Rust Validation run on the promoted lockfile commit:
+31939669903 — SUCCESS
+Job:
+95146909755 — SUCCESS
+
+It passed:
+- toolchain record;
+- locked dependency graph verification;
+- rustfmt;
+- workspace/all-target Clippy with -D warnings;
+- workspace/all-target tests;
+- workspace build.
+
+TEMPORARY WORKFLOW CLEANUP
+
+Temporary Phase 127 validation workflow cleanup commit:
+bacd21428cccc4a077adaf2d60ca1be539c96bd5
+
+PRODUCTION BOUNDARY
+
+Phase 127 source/disposable enrollment transaction logic is implemented and validated, but the real PowerCode production enrollment has NOT executed.
+
+The causal prerequisite is Phase 126 production identity activation. The currently staged Phase 126-A05 root handoff requires the already-authorized but technically interactive sudo Agent replacement transaction because the connected runner has no root credential and the security contract forbids weakening sudo policy.
+
+Until the identity-aware production Agent is installed and Phase 126 production private identity is generated/activated/attested:
+- no real PowerCode enrollment request may be promoted as production enrollment;
+- no production DeviceId may be claimed as issued;
+- no production authentication/session state may be activated from a nonexistent enrollment.
+
+This does not block further source/disposable implementation of later authorized phases, provided each later phase preserves the same causal production boundary.
+
+FINAL CLASSIFICATION
+
+PHASE_127_SOURCE_AND_DISPOSABLE_TRANSACTION_FOUNDATION_DONE / PRODUCTION_ENROLLMENT_PENDING_PHASE_126_IDENTITY_ACTIVATION / NO_PRODUCTION_ENROLLMENT_SIDE_EFFECT
