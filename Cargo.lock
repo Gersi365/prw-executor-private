@@ -209,6 +209,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-enrollment"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-control-plane",
+ "prw-core",
+ "prw-device-identity",
+ "prw-device-identity-signer",
+]
+
+[[package]]
 name = "prw-files"
 version = "0.1.0"
 dependencies = [
