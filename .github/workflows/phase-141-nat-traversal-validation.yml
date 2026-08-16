@@ -92,14 +92,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           cargo fmt --all
-          mapfile -t changed < <(git diff --name-only)
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
           for path in "${changed[@]}"; do
             case "$path" in
               Cargo.toml|Cargo.lock|crates/prw-nat-traversal/src/lib.rs) ;;
               *) echo "phase141_unexpected_format_path=$path" >&2; exit 1 ;;
             esac
           done
-          git diff --check
+          git diff --check -- . ':!target'
 
       - name: Focused Phase 141 validation
         shell: bash
@@ -161,6 +161,7 @@ jobs:
           PROBE HISTORY
           Run 31951951887 resolved exact versions but failed only because the scratch harness attempted unsupported Vec<u8> -> BytesMut conversion. No repository runtime graph was mutated.
           Corrective run 31952085411 / job 95177012142 passed exact-version compile and repository-immutability checks on Rust/Cargo 1.97.1. Scratch lock SHA-256: ad791a289eb61b6d5839d8b94d612b2e67fbd6efa837f3648766393935e6cb96.
+          Initial validation run 31952482522 passed prerequisite, exact graph and static boundary, then stopped only because its format guard included tracked target/.rustc_info.json build metadata. No Phase 141 runtime source was promoted by that run.
 
           SECURITY/ARCHITECTURE OUTCOME
           The PRW traversal crate owns no socket, async runtime, DNS resolver, process, TUN/TAP, route or firewall API. It emits/consumes typed datagrams no larger than 2048 bytes. STUN discovery accepts only an explicit server SocketAddr and rejects wrong-source responses. ICE is UDP4/UDP6 only with mDNS disabled and relay allocation deferred to Phase 142. Successful ICE selection yields only a candidate reachability observation correlated to an existing Phase 135 CandidateId; Phase 135 remains the authoritative LocalDirect -> InternetDirect -> Relay -> Offline selector.
@@ -179,7 +180,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          git diff --check
+          git diff --check -- . ':!target'
           git config user.name Gersi365
           git config user.email Gersi365@outlook.com
           git add Cargo.toml Cargo.lock crates/prw-nat-traversal \
