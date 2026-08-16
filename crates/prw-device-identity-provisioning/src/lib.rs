@@ -7,8 +7,7 @@
 #![cfg(target_os = "linux")]
 
 use std::{
-    env,
-    fmt,
+    env, fmt,
     fs::{self, File, OpenOptions, Permissions},
     io::Write,
     os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
@@ -138,8 +137,8 @@ pub fn sha256_hex(fingerprint: [u8; 32]) -> String {
 /// Returns [`DeviceIdentityProvisioningError`] for invalid XDG roots, pre-existing
 /// identity state, generation/encryption failure, insecure filesystem state, or
 /// durability/atomic-commit failure.
-pub fn provision_first_ubuntu_device_identity(
-) -> Result<ProvisionedDeviceIdentity, DeviceIdentityProvisioningError> {
+pub fn provision_first_ubuntu_device_identity()
+-> Result<ProvisionedDeviceIdentity, DeviceIdentityProvisioningError> {
     let uid = getuid().as_raw();
     let state_root = resolve_xdg_root("XDG_STATE_HOME", ".local/state")
         .ok_or(DeviceIdentityProvisioningError::InvalidStateRoot)?;
@@ -162,11 +161,9 @@ pub fn provision_first_ubuntu_device_identity(
     ensure_private_directory(&credential_dir, uid)?;
     require_absent(&final_ciphertext)?;
 
-    let generated = EcdsaKeyPair::generate_pkcs8(
-        &ECDSA_P256_SHA256_ASN1_SIGNING,
-        &SystemRandom::new(),
-    )
-    .map_err(|_| DeviceIdentityProvisioningError::KeyGenerationFailed)?;
+    let generated =
+        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+            .map_err(|_| DeviceIdentityProvisioningError::KeyGenerationFailed)?;
     let private_pkcs8 = Zeroizing::new(generated.as_ref().to_vec());
     let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(private_pkcs8.as_slice())
         .map_err(|_| DeviceIdentityProvisioningError::GeneratedIdentityInvalid)?;
@@ -231,10 +228,7 @@ fn resolve_xdg_root(variable: &str, home_suffix: &str) -> Option<PathBuf> {
     Some(home.join(home_suffix))
 }
 
-fn validate_existing_root(
-    path: &Path,
-    uid: u32,
-) -> Result<(), DeviceIdentityProvisioningError> {
+fn validate_existing_root(path: &Path, uid: u32) -> Result<(), DeviceIdentityProvisioningError> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|_| DeviceIdentityProvisioningError::InsecureDirectory)?;
     if metadata.file_type().is_symlink()
@@ -247,10 +241,7 @@ fn validate_existing_root(
     Ok(())
 }
 
-fn ensure_private_directory(
-    path: &Path,
-    uid: u32,
-) -> Result<(), DeviceIdentityProvisioningError> {
+fn ensure_private_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityProvisioningError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             if metadata.file_type().is_symlink()
