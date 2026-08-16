@@ -21,6 +21,7 @@ members = [
     "crates/prw-connectivity",
     "crates/prw-relay",
     "crates/prw-private-dns",
+    "crates/prw-remote-transport",
     "crates/prw-agent",
 ]
 

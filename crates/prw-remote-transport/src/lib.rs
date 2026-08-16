@@ -9,8 +9,8 @@ use std::{fmt, sync::Arc, time::Duration};
 use aws_lc_rs::digest::{SHA256, digest};
 use prw_connectivity::TransportIdentity;
 use quinn::{
-    ClientConfig as QuinnClientConfig, Connection, EndpointConfig, ServerConfig as QuinnServerConfig,
-    TransportConfig, VarInt,
+    ClientConfig as QuinnClientConfig, Connection, EndpointConfig,
+    ServerConfig as QuinnServerConfig, TransportConfig, VarInt,
     crypto::rustls::{HandshakeData, QuicClientConfig, QuicServerConfig},
 };
 use rustls::{
@@ -116,7 +116,7 @@ pub enum ControlMessageKind {
 impl TryFrom<u16> for ControlMessageKind {
     type Error = RemoteTransportError;
 
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
+    fn try_from(value: u16) -> Result<Self, RemoteTransportError> {
         match value {
             1 => Ok(Self::SessionAuthentication),
             2 => Ok(Self::Request),
@@ -294,7 +294,7 @@ fn transport_config() -> Result<Arc<TransportConfig>, RemoteTransportError> {
                 .try_into()
                 .map_err(|_| RemoteTransportError::QuinnConfiguration)?,
         ))
-        .stream_receive_window(VarInt::from_u32(MAX_CONTROL_PAYLOAD_BYTES as u32))
+        .stream_receive_window(VarInt::from_u32(65_536))
         .receive_window(VarInt::from_u32(1_048_576));
     Ok(Arc::new(config))
 }
@@ -333,8 +333,8 @@ pub fn build_client_config(
     tls.enable_early_data = false;
     tls.resumption = Resumption::disabled();
 
-    let crypto = QuicClientConfig::try_from(tls)
-        .map_err(|_| RemoteTransportError::QuinnConfiguration)?;
+    let crypto =
+        QuicClientConfig::try_from(tls).map_err(|_| RemoteTransportError::QuinnConfiguration)?;
     let mut config = QuinnClientConfig::new(Arc::new(crypto));
     config.version(QUIC_VERSION_1);
     config.transport_config(transport_config()?);
@@ -353,12 +353,10 @@ pub fn build_server_config(
     private_key: PrivateKeyDer<'static>,
 ) -> Result<QuinnServerConfig, RemoteTransportError> {
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    let verifier = WebPkiClientVerifier::builder_with_provider(
-        Arc::new(root_store(roots)?),
-        provider.clone(),
-    )
-    .build()
-    .map_err(|_| RemoteTransportError::TlsConfiguration)?;
+    let verifier =
+        WebPkiClientVerifier::builder_with_provider(Arc::new(root_store(roots)?), provider.clone())
+            .build()
+            .map_err(|_| RemoteTransportError::TlsConfiguration)?;
 
     let mut tls = RustlsServerConfig::builder_with_provider(provider)
         .with_protocol_versions(&[&rustls::version::TLS13])
@@ -370,8 +368,8 @@ pub fn build_server_config(
     tls.max_early_data_size = 0;
     tls.send_tls13_tickets = 0;
 
-    let crypto = QuicServerConfig::try_from(tls)
-        .map_err(|_| RemoteTransportError::QuinnConfiguration)?;
+    let crypto =
+        QuicServerConfig::try_from(tls).map_err(|_| RemoteTransportError::QuinnConfiguration)?;
     let mut config = QuinnServerConfig::with_crypto(Arc::new(crypto));
     config.transport = transport_config()?;
     Ok(config)
@@ -438,8 +436,14 @@ mod tests {
 
     #[test]
     fn deterministic_initiator_orders_transport_identity() {
-        assert_eq!(local_is_deterministic_initiator(identity(1), identity(2)), Ok(true));
-        assert_eq!(local_is_deterministic_initiator(identity(2), identity(1)), Ok(false));
+        assert_eq!(
+            local_is_deterministic_initiator(identity(1), identity(2)),
+            Ok(true)
+        );
+        assert_eq!(
+            local_is_deterministic_initiator(identity(2), identity(1)),
+            Ok(false)
+        );
         assert_eq!(
             local_is_deterministic_initiator(identity(1), identity(1)),
             Err(RemoteTransportError::EqualTransportIdentity)
@@ -495,7 +499,7 @@ mod tests {
 
         cases.push(valid[..valid.len() - 1].to_vec());
 
-        let mut trailing = valid.clone();
+        let mut trailing = valid;
         trailing.push(0);
         cases.push(trailing);
 

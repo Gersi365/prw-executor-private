@@ -1,0 +1,43 @@
+Private Remote Workspace
+Phase 140 — Disposable Encrypted Remote Transport Foundation
+
+STATUS:
+PASS / QUIC_V1_TLS13_MTLS_LOOPBACK_VALIDATED / MANDATORY_CLIENT_CERTIFICATE_VERIFICATION / EXPLICIT_PRIVATE_ROOTS / TRANSPORT_IDENTITY_BINDING_VALIDATED / PRWM_FRAME_BOUNDS_VALIDATED / FULL_WORKSPACE_PASS / PRODUCTION_REMOTE_TRANSPORT_NOT_ACTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation input head: 73b0fdc7761f8cfe4e72066b3962d1ed236b929f
+Authoritative validation run: 31950645958
+Cargo.lock SHA-256: 00c5bec6ad852a70e0b4b021d7c4de4b5953e3f27ad596317f8cf47efc820fb0
+prw-remote-transport source SHA-256: ea064d1dd856223f72731a5a349f62e3d8ecef3c23819068ae86c48dcdff77f1
+
+CONTRACT
+contracts/DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-remote-transport
+
+DEPENDENCY/SECURITY OUTCOME
+Runtime direct pins are Quinn 0.11.11, rustls 0.23.43, Tokio 1.53.1 and aws-lc-rs 1.18.0; rcgen 0.14.8 is disposable dev-only certificate machinery. Runtime is QUIC-v1/TLS1.3-only with ALPN prw-mesh/1, explicit private roots and WebPkiClientVerifier mandatory client-auth defaults. Runtime contains no allow_unauthenticated/no_client_auth path, 0-RTT, dangerous/platform verifier, application DATAGRAM API, DNS lookup, shell or Agent integration.
+
+IDENTITY/FRAME OUTCOME
+Leaf SPKI SHA-256 derives TransportIdentity and established Quinn/rustls peer chains are checked against expected identity. SAN/SNI derives from full TransportIdentity without DNS discovery. PRWM v1.0 uses a fixed 24-byte header, nonzero request ID and 64 KiB payload maximum with malformed/truncated/trailing inputs rejected.
+
+LOOPBACK OUTCOME
+Disposable P-256 CA and peer leaves proved a real loopback QUIC mTLS connection, exact ALPN, both peer identities and bounded PRWM request/response. Wrong server name and wrong CA reject handshake. Missing client certificate is rejected by the server; Quinn may transiently yield a client-side connection handle before the peer close propagates, so the authoritative test proves the server never accepts the authenticated connection and any such client handle closes within the finite operation bound. Post-handshake expected TransportIdentity mismatch also fails closed at the PRW binding layer.
+
+CORRECTIVE HISTORY
+Run 31950119293 stopped safely on Rust 1.97.1 compile/lint compatibility before tests. Run 31950251949 fixed those mechanical issues and exposed a negative-handshake harness omission. Run 31950469103 corrected server acceptance; wrong-CA then passed, while missing-client-cert demonstrated Quinn's transient client-handle/peer-close propagation behavior. This A03 run validates the actual fail-closed property without weakening mandatory rustls client authentication.
+
+VALIDATION
+The authoritative run passed focused rustfmt/Clippy -D warnings/all-target tests and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+DEFERRED
+Phase 141 owns ICE/STUN/TURN traversal. Phase 142 owns relay provider/service. Phase 143 owns authenticated capability bridging and specialized file/terminal/forwarding streams.
+
+PRODUCTION BOUNDARY
+No PowerCode or other production UDP listener, transport key/certificate, Agent service, firewall/NAT/router/TUN/TAP/route, DNS, ICE/STUN/TURN production traffic, relay or Android/Desktop distribution state was created or mutated.
+
+FINAL CLASSIFICATION
+PHASE_140_DONE / DISPOSABLE_ENCRYPTED_REMOTE_TRANSPORT_VALIDATED / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_141

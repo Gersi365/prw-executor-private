@@ -109,6 +109,7 @@ fn endpoint_with_client(config: quinn::ClientConfig) -> Endpoint {
     endpoint
 }
 
+#[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "current_thread")]
 async fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {
     let (root, server_material, client_material) = fixtures();
@@ -139,7 +140,10 @@ async fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {
             .await
             .expect("server handshake timeout")
             .expect("server handshake");
-        assert_eq!(negotiated_alpn(&connection).expect("server ALPN"), MESH_ALPN);
+        assert_eq!(
+            negotiated_alpn(&connection).expect("server ALPN"),
+            MESH_ALPN
+        );
         assert_eq!(
             peer_transport_identity(&connection).expect("client transport identity"),
             client_material.identity
@@ -184,7 +188,10 @@ async fn loopback_quic_v1_mtls_binds_peer_identity_and_control_frame() {
         .await
         .expect("client handshake timeout")
         .expect("client handshake");
-        assert_eq!(negotiated_alpn(&connection).expect("client ALPN"), MESH_ALPN);
+        assert_eq!(
+            negotiated_alpn(&connection).expect("client ALPN"),
+            MESH_ALPN
+        );
         assert_eq!(
             peer_transport_identity(&connection).expect("server transport identity"),
             server_material.identity
@@ -289,15 +296,27 @@ async fn wrong_ca_fails_closed() {
         .expect("client config"),
     );
     let server_addr = server.local_addr().expect("server address");
-    let result = timeout(
-        OPERATION_TIMEOUT,
-        client
-            .connect(server_addr, &server_material.server_name)
-            .expect("start wrong-CA connection"),
-    )
-    .await
-    .expect("wrong-CA timeout");
-    assert!(result.is_err());
+    let server_task = async {
+        let incoming = timeout(OPERATION_TIMEOUT, server.accept())
+            .await
+            .expect("accept timeout")
+            .expect("incoming");
+        timeout(OPERATION_TIMEOUT, incoming).await
+    };
+    let client_task = async {
+        timeout(
+            OPERATION_TIMEOUT,
+            client
+                .connect(server_addr, &server_material.server_name)
+                .expect("start wrong-CA connection"),
+        )
+        .await
+    };
+    let (_server_result, client_result) = tokio::join!(server_task, client_task);
+    assert!(
+        !matches!(client_result, Ok(Ok(_))),
+        "wrong CA must never establish a client connection"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -329,15 +348,32 @@ async fn missing_client_certificate_fails_closed() {
     let client = endpoint_with_client(config);
     let server_addr = server.local_addr().expect("server address");
 
-    let result = timeout(
-        OPERATION_TIMEOUT,
-        client
-            .connect(server_addr, &server_material.server_name)
-            .expect("start anonymous connection"),
-    )
-    .await
-    .expect("anonymous timeout");
-    assert!(result.is_err());
+    let server_task = async {
+        let incoming = timeout(OPERATION_TIMEOUT, server.accept())
+            .await
+            .expect("accept timeout")
+            .expect("incoming");
+        timeout(OPERATION_TIMEOUT, incoming).await
+    };
+    let client_task = async {
+        timeout(
+            OPERATION_TIMEOUT,
+            client
+                .connect(server_addr, &server_material.server_name)
+                .expect("start anonymous connection"),
+        )
+        .await
+    };
+    let (server_result, client_result) = tokio::join!(server_task, client_task);
+    assert!(
+        !matches!(server_result, Ok(Ok(_))),
+        "server must reject a peer that presents no client certificate"
+    );
+    if let Ok(Ok(connection)) = client_result {
+        timeout(OPERATION_TIMEOUT, connection.closed())
+            .await
+            .expect("transient anonymous client handle must close within the operation bound");
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
