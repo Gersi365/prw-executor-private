@@ -46,5 +46,16 @@ A10/A11 final materialization channel corrective:
 - A10 run 31964079969 passed exact toolchain preparation, source reconstruction, native graph, host native tests, arm64-v8a+x86_64 Android native cross-build, Android unit tests, lintDebug, debug APK assembly, security-boundary guards, root Rust workspace validation, report generation, generated-output ignore validation, and explicit staging allowlist validation.
 - A10 created local runner commit a94e8b9, but GitHub rejected only the remote push because the Actions App token was not permitted to create/update `.github/workflows/android-validation.yml` without workflow scope.
 - A11 reuses the exact successful A10 toolchain/source/validation/finalization bodies and asserts the native Cargo.lock SHA-256 remains 6cbdca07de7d87612bfa065d7ae3e77557fb831df595a63aac16374968cc35a7.
-- A11 stages only validated Android source plus this authoritative report. The generated permanent Android CI candidate is intentionally excluded from the Actions-authenticated commit and will be materialized separately through the connected GitHub contents API.
-- Phase 145 completion remains held until that permanent CI file is present on main and its validation run succeeds.
+- A11 stages only validated Android source plus this authoritative report. The generated permanent Android CI candidate is intentionally excluded from the Actions-authenticated commit and is materialized separately through the connected GitHub contents API.
+- A11 source materialization commit: 54d95c327a2685418c560e7a8d4dc8e1bd5c66f8.
+
+PERMANENT CI CLOSURE:
+- Permanent Android workflow commit: e10cdefcfd3fa87e849bce24d66815107fb2f87f.
+- Permanent Android workflow blob SHA: b7eda79cfea86e9996bb212e0421ed3e35c8acfd.
+- Permanent Android validation run: 31965414558 — SUCCESS.
+- Permanent Android validation passed exact toolchain preparation, native fmt/Clippy/tests, Android unit tests, lintDebug, and debug APK assembly on the materialized source.
+- Root Rust validation run on the permanent-CI commit: 31965415114 — SUCCESS for locked dependency graph, fmt, Clippy, tests, and build.
+- No production Android distribution/signing, production account/device, production listener, network activation, Agent replacement/restart, credential, firewall/NAT/router/TUN/TAP/route/DNS mutation occurred.
+- Temporary Phase 145 corrective workflows are intentionally retained because deleting remote Git paths is destructive cleanup and has not been separately authorized.
+
+CURRENT CLASSIFICATION: PHASE_145_FUNCTIONAL_IMPLEMENTATION_VALIDATED / PERMANENT_ANDROID_CI_SUCCESS / ANDROID_SHELL_AND_KEY_CUSTODY_VALIDATED / AUTHENTICATED_BOOTSTRAP_FOUNDATION_VALIDATED / NO_PRODUCTION_SIDE_EFFECT / TEMPORARY_WORKFLOW_CLEANUP_RETAINED_PENDING_EXPLICIT_DESTRUCTIVE_APPROVAL / READY_FOR_PHASE_146_FUNCTIONAL_IMPLEMENTATION
