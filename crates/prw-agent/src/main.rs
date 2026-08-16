@@ -2,15 +2,19 @@
 //!
 //! Phase 125 extends the thin executable boundary with one fail-closed
 //! device-identity custody preflight before entering the already-validated
-//! Phase 102 Linux runtime facade. Missing or invalid systemd-delivered
-//! identity material therefore fails before the Agent runtime directory,
-//! instance lock, or local socket can be created.
+//! Phase 102 Linux runtime facade. Phase 126 adds one bounded public-identity
+//! attestation after custody succeeds and before any Agent runtime resource is
+//! created. Missing or invalid systemd-delivered identity material therefore
+//! still fails before the Agent runtime directory, instance lock, or local socket.
 
-use std::process::ExitCode;
+use std::{
+    io::{self, Write},
+    process::ExitCode,
+};
 
 #[cfg(target_os = "linux")]
 fn main() -> ExitCode {
-    let Ok(_device_identity_signer) =
+    let Ok(device_identity_signer) =
         prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential()
     else {
         eprintln!(
@@ -18,6 +22,22 @@ fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+
+    let fingerprint = device_identity_signer.public_spki_sha256_hex();
+    let mut stdout = io::stdout().lock();
+    if writeln!(
+        stdout,
+        "prw-agent event=device_identity_loaded public_spki_sha256={fingerprint}"
+    )
+    .and_then(|()| stdout.flush())
+    .is_err()
+    {
+        eprintln!(
+            "prw-agent event=startup_failure kind=device_identity_attestation exit=failure signal_mask_restore=not_applicable"
+        );
+        return ExitCode::FAILURE;
+    }
+    drop(stdout);
 
     match prw_agent::linux_bootstrap::run() {
         Ok(report) => {
