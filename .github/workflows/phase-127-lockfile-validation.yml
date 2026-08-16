@@ -1,0 +1,34 @@
+name: Phase 127 Lockfile and Enrollment Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-127-lockfile-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate deterministic lockfile candidate and validate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cp Cargo.lock Cargo.lock.before
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-enrollment --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-enrollment --all-targets
+          echo "phase127_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+          echo 'phase127_lockfile_base64_begin'
+          base64 -w0 Cargo.lock
+          echo
+          echo 'phase127_lockfile_base64_end'
+          echo 'phase127_validation=pass'
