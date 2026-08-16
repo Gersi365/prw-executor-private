@@ -1,0 +1,226 @@
+name: Phase 145 A10 Step-Isolated Android Materialization Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-a10-step-isolated-materialization-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  complete-validated-materialization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A10 baseline and A09 shell-boundary failure
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f .github/workflows/phase-145-a05-clippy-corrective.yml
+          test -f .github/workflows/phase-145-a07-agp-jni-string-path-corrective.yml
+          test -f .github/workflows/phase-145-a08-materialization-staging-corrective.yml
+          test -f .github/workflows/phase-145-a09-complete-materialization-corrective.yml
+          grep -Fq "script = '\\n'.join(extract_run(source, a, b) for a, b in pairs)" .github/workflows/phase-145-a09-complete-materialization-corrective.yml
+          grep -Fq 'cd apps/android/native' .github/workflows/phase-145-a05-clippy-corrective.yml
+          echo phase145_a10_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Reuse exact A07 toolchain preparation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a07-agp-jni-string-path-corrective.yml').read_text()
+          start = source.index('      - name: Prepare exact toolchains\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Reconstruct A05 validated native source candidate\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a10-toolchains.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a10-toolchains.sh
+          echo phase145_a10_toolchains=pass
+
+      - name: Reconstruct exact A07 validated source candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def extract_run(source: str, step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          source = Path('.github/workflows/phase-145-a07-agp-jni-string-path-corrective.yml').read_text()
+          script = extract_run(source, 'Reconstruct A05 validated native source candidate', 'Apply exact AGP JNI String path corrective')
+          script += '\n' + extract_run(source, 'Apply exact AGP JNI String path corrective', 'Reuse A05 native graph validation')
+          Path('/tmp/phase145-a10-source.sh').write_text(script)
+          PY
+          bash /tmp/phase145-a10-source.sh
+          grep -Fq '#[must_use]' apps/android/native/src/lib.rs
+          grep -Fq 'pub const extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion' apps/android/native/src/lib.rs
+          grep -Fq 'sourceSets["main"].jniLibs.directories.add(generatedJniLibs.get().asFile.absolutePath)' apps/android/app/build.gradle.kts
+          ! grep -Fq 'android.sourceset.disallowProvider=false' apps/android/gradle.properties
+          grep -Fq 'dependsOn(buildPrwNative)' apps/android/app/build.gradle.kts
+          echo phase145_a10_source=pass
+
+      - name: Re-run exact A05 validation with original step cwd isolation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def extract_run(source: str, step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          source = Path('.github/workflows/phase-145-a05-clippy-corrective.yml').read_text()
+          pairs = [
+              ('Generate exact native graph', 'Validate native adapter host and Android targets'),
+              ('Validate native adapter host and Android targets', 'Validate Android unit tests lint and APK'),
+              ('Validate Android unit tests lint and APK', 'Prove Android security boundaries'),
+              ('Prove Android security boundaries', 'Revalidate root Rust workspace'),
+              ('Revalidate root Rust workspace', 'Materialize permanent Android CI and authoritative report'),
+          ]
+          for index, (start, end) in enumerate(pairs, 1):
+              Path(f'/tmp/phase145-a10-validation-{index}.sh').write_text(extract_run(source, start, end))
+          PY
+          for step_script in /tmp/phase145-a10-validation-{1..5}.sh; do
+            (cd "$GITHUB_WORKSPACE" && bash "$step_script")
+          done
+          test -s apps/android/native/Cargo.lock
+          test -s "$RUNNER_TEMP/phase145-a05-apk-sha.txt"
+          echo phase145_a10_validation=pass
+
+      - name: Materialize exact A07 permanent CI and authoritative report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a07-agp-jni-string-path-corrective.yml').read_text()
+          start = source.index('      - name: Materialize permanent Android CI and authoritative A07 report\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Commit only validated Phase 145 state\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a10-finalize.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a10-finalize.sh
+          test -f .github/workflows/android-validation.yml
+          report=logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          test -f "$report"
+          grep -Fq 'A07 uses the same directories API with the resolved absolute String path' "$report"
+          echo phase145_a10_finalize=pass
+
+      - name: Apply A08 generated-output ignore boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/android/.gitignore')
+          text = path.read_text()
+          if '**/target/\n' not in text:
+              if not text.endswith('\n'):
+                  text += '\n'
+              text += '**/target/\n'
+          path.write_text(text)
+          PY
+          grep -Fxq '**/target/' apps/android/.gitignore
+          mkdir -p apps/android/native/target
+          printf 'probe\n' > apps/android/native/target/phase145-a10-ignore-probe
+          git check-ignore -q apps/android/native/target/phase145-a10-ignore-probe
+          rm -rf apps/android/native/target
+          echo phase145_a10_ignore_boundary=pass
+
+      - name: Record A08 A09 and A10 materialization evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          cat >> "$report" <<'EOF'
+
+          A08/A09/A10 materialization corrective:
+          - A07 run 31960247020 passed native, Android unit/lint/APK, security-boundary, root-workspace, and report-generation gates; its final write step failed after broad `git add apps/android` exposed Cargo native target output.
+          - A08 run 31961373173 reconstructed the exact validated A07 source but stopped before staging because it invoked report finalization without first regenerating the native Cargo.lock and APK hash prerequisites on the fresh runner.
+          - A09 run 31963888967 restored those prerequisites and generated the exact native graph, then stopped because five originally separate A05 workflow steps were concatenated into one shell; the first `cd apps/android/native` therefore leaked into the next body.
+          - A10 executes each unchanged A05 validation body in its own subshell rooted at `GITHUB_WORKSPACE`, preserving the original per-step working-directory semantics.
+          - A10 retains the A08 non-semantic `**/target/` ignore rule and explicit validated-source staging allowlist.
+          - No Android behavior, Rust/JNI behavior, security policy, endpoint, signing, deployment, authentication, database, or network behavior is broadened by the A08/A09/A10 materialization corrections.
+          EOF
+          grep -Fq 'A10 executes each unchanged A05 validation body' "$report"
+          echo phase145_a10_report=pass
+
+      - name: Stage only authoritative Phase 145 source and evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          git diff --check -- apps/android .github/workflows/android-validation.yml "$report"
+
+          git add \
+            apps/android/.gitignore \
+            apps/android/README.md \
+            apps/android/settings.gradle.kts \
+            apps/android/build.gradle.kts \
+            apps/android/gradle.properties \
+            apps/android/app/build.gradle.kts \
+            apps/android/app/src/main/AndroidManifest.xml \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw \
+            apps/android/app/src/test/kotlin/com/privateworkspace/prw \
+            apps/android/native/Cargo.toml \
+            apps/android/native/Cargo.lock \
+            apps/android/native/src \
+            .github/workflows/android-validation.yml \
+            "$report"
+
+          staged="$(git diff --cached --name-only)"
+          test -n "$staged"
+          if printf '%s\n' "$staged" | grep -E '(^|/)(build|target|\.gradle)/' ; then
+            echo 'generated output entered staged set' >&2
+            exit 1
+          fi
+          if git status --porcelain --untracked-files=all | grep -E '(^| )apps/android/.*/(build|target|\.gradle)/' ; then
+            echo 'generated output remains visible despite ignore policy' >&2
+            exit 1
+          fi
+          printf '%s\n' "$staged" > /tmp/phase145-a10-staged.txt
+          grep -Fxq 'apps/android/app/build.gradle.kts' /tmp/phase145-a10-staged.txt
+          grep -Fxq 'apps/android/native/Cargo.lock' /tmp/phase145-a10-staged.txt
+          grep -Fxq 'apps/android/native/src/lib.rs' /tmp/phase145-a10-staged.txt
+          grep -Fxq '.github/workflows/android-validation.yml' /tmp/phase145-a10-staged.txt
+          grep -Fxq "$report" /tmp/phase145-a10-staged.txt
+          echo phase145_a10_staging=pass
+
+      - name: Commit and push validated Phase 145 state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 145: validate Android client foundation'
+          git push origin HEAD:main
+          echo phase145_a10_materialization=pass
