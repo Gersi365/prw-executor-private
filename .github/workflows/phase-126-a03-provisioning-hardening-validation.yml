@@ -1,0 +1,257 @@
+name: Phase 126 A03 Provisioning Hardening Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-126-a03-provisioning-hardening-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact source and build disposable payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+
+          provisioner='crates/prw-device-identity-provisioning/src/lib.rs'
+          cli='crates/prw-device-identity-provisioning/src/bin/prw-device-identity-provision.rs'
+          agent='crates/prw-agent/src/main.rs'
+          grep -Fq 'SYSTEMD_CREDS_PATH: &str = "/usr/bin/systemd-creds"' "$provisioner"
+          grep -Fq '.arg(temp_ciphertext)' "$provisioner"
+          grep -Fq '.stdin(Stdio::piped())' "$provisioner"
+          grep -Fq '.stdout(Stdio::null())' "$provisioner"
+          grep -Fq '.stderr(Stdio::null())' "$provisioner"
+          grep -Fq 'private_pkcs8.zeroize()' "$provisioner"
+          grep -Fq 'OFlags::NOFOLLOW' "$provisioner"
+          grep -Fq 'file.set_permissions(Permissions::from_mode(CIPHERTEXT_MODE))' "$provisioner"
+          grep -Fq 'RenameFlags::NOREPLACE' "$provisioner"
+          grep -Fq 'DEVICE_IDENTITY_DROPIN_RELATIVE_PATH' "$provisioner"
+          grep -Fq 'args_os().nth(1).is_some()' "$cli"
+          grep -Fq 'event=device_identity_loaded public_spki_sha256=' "$agent"
+          ! grep -Eq 'Command::new\("(sh|bash)"\)|\.arg\("-c"\)' "$provisioner"
+          ! grep -Fq 'wait_with_output' "$provisioner"
+          ! grep -Eq 'sign\s*\(\s*&?\[u8\]' crates/prw-agent/src/main.rs crates/prw-device-identity-provisioning/src/lib.rs
+
+          cargo build --release --locked -p prw-agent -p prw-device-identity-provisioning
+          mkdir -p crates/prw-agent/examples
+          cat > crates/prw-agent/examples/phase126a03_status_probe.rs <<'RS'
+          use std::{env, io::Write, os::unix::net::UnixStream};
+          use prw_agent::local_commands::LocalAgentCommand;
+          use prw_agent::local_commands::request_frame::stream::write_local_command_request;
+          use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
+          use prw_agent::local_commands::status_snapshot::response_frame::stream::read_success_status_response;
+          use prw_agent::LocalIpcRequestId;
+
+          fn main() {
+              let socket = env::args().nth(1).expect("socket path");
+              let mut stream = UnixStream::connect(socket).expect("connect socket");
+              let request_id = LocalIpcRequestId::new(12603).expect("nonzero request id");
+              write_local_command_request(&mut stream, request_id, LocalAgentCommand::GetAgentStatus)
+                  .expect("write status request");
+              stream.flush().expect("flush status request");
+              let response = read_success_status_response(&mut stream).expect("read status response");
+              assert_eq!(response.request_id(), request_id);
+              assert_eq!(response.snapshot().runtime_state(), LocalAgentRuntimeState::Ready);
+              assert!(response.snapshot().protocol_version().is_supported());
+              println!("phase126a03_status=Ready protocol_supported=yes");
+          }
+          RS
+          cargo fmt -- crates/prw-agent/examples/phase126a03_status_probe.rs
+          cargo build --release --locked -p prw-agent --example phase126a03_status_probe
+          mkdir -p phase126-a03-payload
+          install -m 0755 target/release/prw-agent phase126-a03-payload/prw-agent
+          install -m 0755 target/release/prw-device-identity-provision phase126-a03-payload/prw-device-identity-provision
+          install -m 0755 target/release/examples/phase126a03_status_probe phase126-a03-payload/phase126a03-status-probe
+          cp Cargo.lock phase126-a03-payload/Cargo.lock
+          (cd phase126-a03-payload && sha256sum prw-agent prw-device-identity-provision phase126a03-status-probe Cargo.lock > SHA256SUMS)
+          cat phase126-a03-payload/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase126-a03-payload
+          path: phase126-a03-payload
+          if-no-files-found: error
+          retention-days: 1
+
+  prove-powercode:
+    needs: validate-build
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase126-a03-payload
+          path: phase126-a03-payload
+      - name: Prove hardened provisioning and identity binding without production mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          shopt -s inherit_errexit
+          payload="$GITHUB_WORKSPACE/phase126-a03-payload"
+          cd "$payload"
+          sha256sum -c SHA256SUMS
+          chmod 0755 prw-agent prw-device-identity-provision phase126a03-status-probe
+
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+          production_unit='/usr/lib/systemd/user/prw-agent.service'
+          production_socket="$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock"
+          production_cipher="${XDG_STATE_HOME:-$HOME/.local/state}/private-remote-workspace/credentials/device-identity-private-key-v1.cred"
+          production_dropin="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/prw-agent.service.d/20-device-identity-credential.conf"
+          expected_agent='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          expected_unit='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+          credential_name='prw.device-identity.private-key.v1'
+          root="$RUNNER_TEMP/prw-phase126-a03-${GITHUB_RUN_ID}"
+          state_root="$root/state"
+          config_root="$root/config"
+          runtime_root="$XDG_RUNTIME_DIR/prw-phase126-a03-${GITHUB_RUN_ID}"
+          missing_runtime="$XDG_RUNTIME_DIR/prw-phase126-a03-missing-${GITHUB_RUN_ID}"
+          unit="prw-phase126-a03-${GITHUB_RUN_ID}.service"
+          cipher="$state_root/private-remote-workspace/credentials/device-identity-private-key-v1.cred"
+
+          cleanup() {
+            set +e
+            systemctl --user stop "$unit" >/dev/null 2>&1 || true
+            systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+            rm -rf -- "$root" "$runtime_root" "$missing_runtime"
+          }
+          trap cleanup EXIT INT TERM
+
+          test "$(hostname)" = PowerCode
+          test "$(id -u)" = 1000
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = active
+          test "$(systemctl --user is-enabled prw-agent.service)" = enabled
+          test "$(loginctl show-user "$USER" -p Linger --value)" = yes
+          test -z "$(systemctl --user show prw-agent.service -p DropInPaths --value)"
+          test ! -e "$production_cipher"
+          test ! -e "$production_dropin"
+          "$payload/phase126a03-status-probe" "$production_socket"
+          echo 'phase126_a03_production_preflight=pass'
+
+          install -d -m 0700 "$root" "$state_root" "$config_root" "$runtime_root" "$missing_runtime"
+
+          set +e
+          invalid_output=$(XDG_STATE_HOME="$root/invalid-state" XDG_CONFIG_HOME="$root/invalid-config" \
+            "$payload/prw-device-identity-provision" unexpected 2>&1)
+          invalid_rc=$?
+          set -e
+          test "$invalid_rc" -ne 0
+          grep -Fxq 'prw-device-identity-provision event=failed kind=invalid_arguments exit=failure' <<<"$invalid_output"
+          test ! -e "$root/invalid-state"
+          test ! -e "$root/invalid-config"
+          echo 'phase126_a03_zero_argument_surface=pass'
+
+          outside="$root/symlink-outside"
+          symlink_state="$root/symlink-state"
+          install -d -m 0700 "$outside"
+          ln -s "$outside" "$symlink_state"
+          set +e
+          symlink_output=$(XDG_STATE_HOME="$symlink_state" XDG_CONFIG_HOME="$config_root" \
+            "$payload/prw-device-identity-provision" 2>&1)
+          symlink_rc=$?
+          set -e
+          test "$symlink_rc" -ne 0
+          grep -Fq 'event=failed' <<<"$symlink_output"
+          test -z "$(find "$outside" -mindepth 1 -print -quit)"
+          echo 'phase126_a03_symlink_fail_closed=pass'
+
+          provision_output=$(XDG_STATE_HOME="$state_root" XDG_CONFIG_HOME="$config_root" \
+            "$payload/prw-device-identity-provision")
+          printf '%s\n' "$provision_output"
+          fingerprint=$(sed -n 's/.*public_spki_sha256=\([0-9a-f]\{64\}\).*/\1/p' <<<"$provision_output")
+          test "${#fingerprint}" -eq 64
+          [[ "$fingerprint" =~ ^[0-9a-f]{64}$ ]]
+          test -f "$cipher"
+          test ! -L "$cipher"
+          test "$(stat -c '%u:%g:%a' "$cipher")" = "$(id -u):$(id -g):600"
+          test "$(stat -c '%s' "$cipher")" -gt 0
+          test "$(find "$state_root" -type f | wc -l)" -eq 1
+          test -z "$(find "$(dirname "$cipher")" -maxdepth 1 -name '*.tmp' -o -name '.*.tmp-*' -print -quit)"
+          first_hash=$(sha256sum "$cipher" | cut -d' ' -f1)
+          echo "phase126_a03_provisioning_fingerprint=$fingerprint"
+          echo 'phase126_a03_first_provisioning=pass'
+
+          set +e
+          second_output=$(XDG_STATE_HOME="$state_root" XDG_CONFIG_HOME="$config_root" \
+            "$payload/prw-device-identity-provision" 2>&1)
+          second_rc=$?
+          set -e
+          test "$second_rc" -ne 0
+          grep -Fq 'event=failed' <<<"$second_output"
+          test "$(sha256sum "$cipher" | cut -d' ' -f1)" = "$first_hash"
+          test "$(find "$state_root" -type f | wc -l)" -eq 1
+          echo 'phase126_a03_creation_only=pass'
+
+          systemd-run --user \
+            --unit="$unit" \
+            --property=Type=exec \
+            --property=Restart=no \
+            --property="LoadCredentialEncrypted=$credential_name:$cipher" \
+            --setenv="XDG_RUNTIME_DIR=$runtime_root" \
+            "$payload/prw-agent"
+
+          socket="$runtime_root/private-remote-workspace/agent.sock"
+          for _ in $(seq 1 100); do
+            [[ -S "$socket" ]] && break
+            systemctl --user is-active --quiet "$unit" || {
+              systemctl --user status "$unit" --no-pager || true
+              journalctl --user -u "$unit" -n 30 --no-pager || true
+              exit 1
+            }
+            sleep 0.05
+          done
+          test -S "$socket"
+          "$payload/phase126a03-status-probe" "$socket"
+          journal=''
+          for _ in $(seq 1 50); do
+            journal=$(journalctl --user -u "$unit" -o cat --no-pager 2>/dev/null || true)
+            grep -Fq 'event=device_identity_loaded public_spki_sha256=' <<<"$journal" && break
+            sleep 0.05
+          done
+          runtime_fingerprint=$(sed -n 's/.*event=device_identity_loaded public_spki_sha256=\([0-9a-f]\{64\}\).*/\1/p' <<<"$journal" | tail -n1)
+          test "$runtime_fingerprint" = "$fingerprint"
+          echo "phase126_a03_runtime_fingerprint=$runtime_fingerprint"
+          echo 'phase126_a03_identity_binding=pass'
+
+          systemctl --user stop "$unit"
+          for _ in $(seq 1 100); do
+            [[ ! -e "$socket" ]] && break
+            sleep 0.05
+          done
+          test ! -e "$socket"
+          echo 'phase126_a03_candidate_cleanup=pass'
+
+          set +e
+          env -u CREDENTIALS_DIRECTORY XDG_RUNTIME_DIR="$missing_runtime" \
+            "$payload/prw-agent" >"$root/missing.stdout" 2>"$root/missing.stderr"
+          missing_rc=$?
+          set -e
+          test "$missing_rc" -ne 0
+          test ! -s "$root/missing.stdout"
+          grep -Fxq 'prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable' "$root/missing.stderr"
+          test ! -e "$missing_runtime/private-remote-workspace"
+          echo 'phase126_a03_missing_identity_fail_closed=pass'
+
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = active
+          test "$(systemctl --user is-enabled prw-agent.service)" = enabled
+          test "$(loginctl show-user "$USER" -p Linger --value)" = yes
+          test -z "$(systemctl --user show prw-agent.service -p DropInPaths --value)"
+          test ! -e "$production_cipher"
+          test ! -e "$production_dropin"
+          "$payload/phase126a03-status-probe" "$production_socket"
+          echo 'phase126_a03_production_unchanged=pass'
