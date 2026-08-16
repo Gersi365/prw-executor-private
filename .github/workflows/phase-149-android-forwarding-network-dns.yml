@@ -1,0 +1,1186 @@
+name: Phase 149 Android Forwarding Network DNS
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-149-android-forwarding-network-dns.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove Phase 149 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-148-android-remote-files-transfers/PRW-PHASE-148-ANDROID-REMOTE-FILES-TRANSFERS-VALIDATION.txt
+          test -f "$report"
+          for token in PHASE_148_FUNCTIONALLY_VALIDATED MATERIALIZED_ON_MAIN PERMANENT_ANDROID_CI_SUCCESS ROOT_RUST_CI_SUCCESS READY_FOR_PHASE_149; do
+            grep -Fq "$token" "$report"
+          done
+          test -f contracts/ANDROID_FORWARDING_NETWORK_DNS_CONTRACT.md
+          test -f contracts/PORT_FORWARDING_FOUNDATION_CONTRACT.md
+          test -f contracts/PRIVATE_MESH_CONNECTIVITY_FOUNDATION_CONTRACT.md
+          test -f contracts/OPTIONAL_PRIVATE_DNS_FOUNDATION_CONTRACT.md
+          test -f apps/android/native/src/files.rs
+          test ! -f apps/android/native/src/network.rs
+          test ! -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt
+          ! grep -Fq 'prw-forwarding = ' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-connectivity = ' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-private-dns = ' apps/android/native/Cargo.toml
+          cp apps/android/native/Cargo.lock "$RUNNER_TEMP/phase149-native-lock-before"
+          echo phase149_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact validated Android and Rust toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase149_toolchain=pass
+
+      - name: Materialize Phase 149 candidate source in runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('apps/android/native/Cargo.toml')
+          text = cargo.read_text()
+          marker = 'prw-file-transfer = { path = "../../../crates/prw-file-transfer" }\n'
+          addition = (
+              marker
+              + 'prw-forwarding = { path = "../../../crates/prw-forwarding" }\n'
+              + 'prw-connectivity = { path = "../../../crates/prw-connectivity" }\n'
+              + 'prw-private-dns = { path = "../../../crates/prw-private-dns" }\n'
+          )
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 native dependency insertion boundary mismatch')
+          cargo.write_text(text.replace(marker, addition, 1))
+
+          lib = Path('apps/android/native/src/lib.rs')
+          text = lib.read_text()
+          marker = 'mod files;\n'
+          if text.count(marker) != 1 or 'mod network;' in text:
+              raise SystemExit('Phase149 native module insertion boundary mismatch')
+          lib.write_text(text.replace(marker, marker + 'mod network;\n', 1))
+          PY
+
+          cat > apps/android/native/src/network.rs <<'EOF'
+          use std::net::{IpAddr, Ipv4Addr};
+
+          use jni::{
+              EnvUnowned,
+              errors::ThrowRuntimeExAndDefault,
+              objects::{JByteArray, JClass},
+              sys::{jboolean, jint, jlong},
+          };
+          use prw_connectivity::{
+              CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityPathKind,
+              PeerConnectivityIdentity, PeerConnectivityPlan, ReachabilityObservation,
+              SelectedConnectivityPath, TransportIdentity,
+          };
+          use prw_core::DeviceId;
+          use prw_forwarding::{
+              ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec,
+          };
+          use prw_private_dns::{
+              DnsDomainSuffix, PrivateDnsConfig, PrivateDnsMode, ResolverEndpoint,
+          };
+          use prw_remote_bridge::BridgeCommand;
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          enum NetworkAdapterError {
+              Identifier,
+              Family,
+              Port,
+              Address,
+              Bridge,
+              Observation,
+              Connectivity,
+              Dns,
+              Utf8,
+          }
+
+          fn utf8(input: &[u8]) -> Result<&str, NetworkAdapterError> {
+              std::str::from_utf8(input).map_err(|_| NetworkAdapterError::Utf8)
+          }
+
+          fn forward_id(value: i64) -> Result<PortForwardId, NetworkAdapterError> {
+              let value = u64::try_from(value).map_err(|_| NetworkAdapterError::Identifier)?;
+              PortForwardId::new(value).map_err(|_| NetworkAdapterError::Identifier)
+          }
+
+          const fn family(value: i32) -> Result<LoopbackFamily, NetworkAdapterError> {
+              match value {
+                  0 => Ok(LoopbackFamily::Ipv4),
+                  1 => Ok(LoopbackFamily::Ipv6),
+                  _ => Err(NetworkAdapterError::Family),
+              }
+          }
+
+          fn port(value: i32) -> Result<u16, NetworkAdapterError> {
+              u16::try_from(value).map_err(|_| NetworkAdapterError::Port)
+          }
+
+          fn target(input: &[u8], target_port: i32) -> Result<ForwardTarget, NetworkAdapterError> {
+              let address = utf8(input)?
+                  .parse::<IpAddr>()
+                  .map_err(|_| NetworkAdapterError::Address)?;
+              ForwardTarget::new(address, port(target_port)?)
+                  .map_err(|_| NetworkAdapterError::Address)
+          }
+
+          fn encode_forward_open(
+              id: i64,
+              family_code: i32,
+              bind_port: i32,
+              target_address: &[u8],
+              target_port: i32,
+          ) -> Result<Vec<u8>, NetworkAdapterError> {
+              let bind = LoopbackBind::new(family(family_code)?, port(bind_port)?)
+                  .map_err(|_| NetworkAdapterError::Port)?;
+              let spec = TcpForwardSpec::new(bind, target(target_address, target_port)?);
+              BridgeCommand::ForwardOpen {
+                  forward_id: forward_id(id)?,
+                  spec,
+              }
+              .encode()
+              .map_err(|_| NetworkAdapterError::Bridge)
+          }
+
+          fn encode_forward_close(id: i64) -> Result<Vec<u8>, NetworkAdapterError> {
+              BridgeCommand::ForwardClose(forward_id(id)?)
+                  .encode()
+                  .map_err(|_| NetworkAdapterError::Bridge)
+          }
+
+          fn is_forward_payload(payload: &[u8]) -> bool {
+              matches!(
+                  BridgeCommand::decode(payload),
+                  Ok(BridgeCommand::ForwardOpen { .. } | BridgeCommand::ForwardClose(_))
+              )
+          }
+
+          const fn observation(value: i32) -> Result<ReachabilityObservation, NetworkAdapterError> {
+              match value {
+                  0 => Ok(ReachabilityObservation::Unknown),
+                  1 => Ok(ReachabilityObservation::Reachable),
+                  2 => Ok(ReachabilityObservation::Unreachable),
+                  _ => Err(NetworkAdapterError::Observation),
+              }
+          }
+
+          fn connectivity_candidate(
+              id: u64,
+              kind: ConnectivityPathKind,
+              port: u16,
+          ) -> Result<ConnectivityCandidate, NetworkAdapterError> {
+              let id = CandidateId::new(id).map_err(|_| NetworkAdapterError::Connectivity)?;
+              let endpoint = ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
+                  .map_err(|_| NetworkAdapterError::Connectivity)?;
+              Ok(ConnectivityCandidate::new(id, kind, endpoint))
+          }
+
+          fn selected_path_code(
+              local: i32,
+              internet: i32,
+              relay: i32,
+          ) -> Result<i32, NetworkAdapterError> {
+              let peer = PeerConnectivityIdentity::new(
+                  DeviceId::new("phase149-android-disposable")
+                      .map_err(|_| NetworkAdapterError::Connectivity)?,
+                  TransportIdentity::new([149; 32])
+                      .map_err(|_| NetworkAdapterError::Connectivity)?,
+              );
+              let candidates = vec![
+                  connectivity_candidate(1, ConnectivityPathKind::LocalDirect, 24_901)?,
+                  connectivity_candidate(2, ConnectivityPathKind::InternetDirect, 24_902)?,
+                  connectivity_candidate(3, ConnectivityPathKind::Relay, 24_903)?,
+              ];
+              let mut plan = PeerConnectivityPlan::new(peer, candidates)
+                  .map_err(|_| NetworkAdapterError::Connectivity)?;
+              for (id, value) in [(1, local), (2, internet), (3, relay)] {
+                  plan.set_observation(
+                      CandidateId::new(id).map_err(|_| NetworkAdapterError::Connectivity)?,
+                      observation(value)?,
+                  )
+                  .map_err(|_| NetworkAdapterError::Connectivity)?;
+              }
+              Ok(match plan.selected_path() {
+                  SelectedConnectivityPath::Offline => 0,
+                  SelectedConnectivityPath::Candidate(candidate) => match candidate.kind() {
+                      ConnectivityPathKind::LocalDirect => 1,
+                      ConnectivityPathKind::InternetDirect => 2,
+                      ConnectivityPathKind::Relay => 3,
+                  },
+              })
+          }
+
+          fn optional_suffix(input: &[u8]) -> Result<Option<DnsDomainSuffix>, NetworkAdapterError> {
+              if input.is_empty() {
+                  return Ok(None);
+              }
+              DnsDomainSuffix::new(utf8(input)?)
+                  .map(Some)
+                  .map_err(|_| NetworkAdapterError::Dns)
+          }
+
+          fn dns_valid(
+              enabled: bool,
+              device_naming: bool,
+              device_domain: &[u8],
+              resolver_address: &[u8],
+              resolver_port: i32,
+              split_domain: &[u8],
+          ) -> bool {
+              let result = (|| -> Result<PrivateDnsConfig, NetworkAdapterError> {
+                  let mode = if enabled {
+                      PrivateDnsMode::Enabled
+                  } else {
+                      PrivateDnsMode::Disabled
+                  };
+                  let device_domain = optional_suffix(device_domain)?;
+                  let split_domains = optional_suffix(split_domain)?.into_iter().collect();
+                  let resolvers = if resolver_address.is_empty() {
+                      if resolver_port != 0 {
+                          return Err(NetworkAdapterError::Dns);
+                      }
+                      Vec::new()
+                  } else {
+                      let address = utf8(resolver_address)?
+                          .parse::<IpAddr>()
+                          .map_err(|_| NetworkAdapterError::Dns)?;
+                      let endpoint = ResolverEndpoint::new(
+                          address,
+                          port(resolver_port).map_err(|_| NetworkAdapterError::Dns)?,
+                      )
+                      .map_err(|_| NetworkAdapterError::Dns)?;
+                      vec![endpoint]
+                  };
+                  PrivateDnsConfig::new(
+                      mode,
+                      device_naming,
+                      device_domain,
+                      resolvers,
+                      split_domains,
+                  )
+                  .map_err(|_| NetworkAdapterError::Dns)
+              })();
+              result.is_ok()
+          }
+
+          fn jni_output<'caller>(
+              unowned_env: &mut EnvUnowned<'caller>,
+              operation: impl FnOnce() -> Vec<u8>,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| env.byte_array_from_slice(&operation()))
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_forwardOpenPayload<'caller>(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              id: jlong,
+              family_code: jint,
+              bind_port: jint,
+              target_address: JByteArray<'caller>,
+              target_port: jint,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let target_address = env.convert_byte_array(&target_address)?;
+                      let payload = encode_forward_open(
+                          id,
+                          family_code,
+                          bind_port,
+                          &target_address,
+                          target_port,
+                      )
+                      .unwrap_or_default();
+                      env.byte_array_from_slice(&payload)
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_forwardClosePayload<'caller>(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              id: jlong,
+          ) -> JByteArray<'caller> {
+              jni_output(&mut env, || encode_forward_close(id).unwrap_or_default())
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_isForwardingPayload<'caller>(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              payload: JByteArray<'caller>,
+          ) -> jboolean {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let payload = env.convert_byte_array(&payload)?;
+                      Ok(is_forward_payload(&payload))
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_connectivitySelectedPath<'caller>(
+              _env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              local: jint,
+              internet: jint,
+              relay: jint,
+          ) -> jint {
+              selected_path_code(local, internet, relay).unwrap_or(-1)
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_validatePrivateDnsConfig<'caller>(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              enabled: jboolean,
+              device_naming: jboolean,
+              device_domain: JByteArray<'caller>,
+              resolver_address: JByteArray<'caller>,
+              resolver_port: jint,
+              split_domain: JByteArray<'caller>,
+          ) -> jboolean {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let device_domain = env.convert_byte_array(&device_domain)?;
+                      let resolver_address = env.convert_byte_array(&resolver_address)?;
+                      let split_domain = env.convert_byte_array(&split_domain)?;
+                      Ok(dns_valid(
+                          enabled != 0,
+                          device_naming != 0,
+                          &device_domain,
+                          &resolver_address,
+                          resolver_port,
+                          &split_domain,
+                      ))
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn forwarding_payloads_reuse_exact_phase143_bridge_operations() {
+                  let open = encode_forward_open(149, 0, 41_149, b"127.0.0.1", 22)
+                      .expect("valid forward open");
+                  let expected = BridgeCommand::ForwardOpen {
+                      forward_id: PortForwardId::new(149).expect("id"),
+                      spec: TcpForwardSpec::new(
+                          LoopbackBind::new(LoopbackFamily::Ipv4, 41_149).expect("bind"),
+                          ForwardTarget::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 22)
+                              .expect("target"),
+                      ),
+                  };
+                  assert_eq!(BridgeCommand::decode(&open).expect("decode"), expected);
+                  assert!(is_forward_payload(&open));
+
+                  let ipv6 = encode_forward_open(150, 1, 41_150, b"::1", 443)
+                      .expect("valid ipv6 forward");
+                  assert!(matches!(
+                      BridgeCommand::decode(&ipv6).expect("decode ipv6"),
+                      BridgeCommand::ForwardOpen { .. }
+                  ));
+
+                  let close = encode_forward_close(149).expect("close");
+                  assert_eq!(
+                      BridgeCommand::decode(&close).expect("decode close"),
+                      BridgeCommand::ForwardClose(PortForwardId::new(149).expect("id"))
+                  );
+              }
+
+              #[test]
+              fn forwarding_inputs_fail_closed_through_existing_authorities() {
+                  assert!(encode_forward_open(0, 0, 41_149, b"127.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(-1, 0, 41_149, b"127.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(149, 9, 41_149, b"127.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 0, b"127.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 65_536, b"127.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 41_149, b"127.0.0.1", 0).is_err());
+                  assert!(encode_forward_open(149, 0, 41_149, b"example.com", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 41_149, b"0.0.0.0", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 41_149, b"224.0.0.1", 22).is_err());
+                  assert!(encode_forward_open(149, 0, 41_149, b"255.255.255.255", 22).is_err());
+              }
+
+              #[test]
+              fn connectivity_selection_reuses_existing_deterministic_authority() {
+                  assert_eq!(selected_path_code(0, 0, 0).expect("offline"), 0);
+                  assert_eq!(selected_path_code(1, 1, 1).expect("local"), 1);
+                  assert_eq!(selected_path_code(2, 1, 1).expect("internet"), 2);
+                  assert_eq!(selected_path_code(2, 2, 1).expect("relay"), 3);
+                  assert!(selected_path_code(9, 1, 1).is_err());
+              }
+
+              #[test]
+              fn private_dns_validation_is_typed_optional_and_non_mutating() {
+                  assert!(dns_valid(false, false, b"", b"", 0, b""));
+                  assert!(dns_valid(
+                      true,
+                      true,
+                      b"prw.internal",
+                      b"127.0.0.1",
+                      53,
+                      b"dev.internal",
+                  ));
+                  assert!(!dns_valid(true, true, b"", b"127.0.0.1", 53, b""));
+                  assert!(!dns_valid(false, false, b"PRW.internal", b"", 0, b""));
+                  assert!(!dns_valid(false, false, b"", b"resolver.local", 53, b""));
+                  assert!(!dns_valid(false, false, b"", b"", 0, b"dev.internal"));
+
+                  let before = selected_path_code(2, 1, 1).expect("before DNS");
+                  assert!(dns_valid(true, false, b"", b"127.0.0.1", 53, b""));
+                  let after = selected_path_code(2, 1, 1).expect("after DNS");
+                  assert_eq!(before, after);
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal enum class ForwardLifecycleView {
+              Closed,
+              Opening,
+              Active,
+              Closing,
+              Failed,
+          }
+
+          internal enum class LoopbackFamilyView(val code: Int) {
+              Ipv4(0),
+              Ipv6(1),
+          }
+
+          internal enum class ReachabilityView(val code: Int) {
+              Unknown(0),
+              Reachable(1),
+              Unreachable(2),
+          }
+
+          internal enum class ConnectivityPathView {
+              Offline,
+              LocalDirect,
+              InternetDirect,
+              Relay,
+          }
+
+          internal data class ForwardingUiState(
+              val lifecycle: ForwardLifecycleView = ForwardLifecycleView.Closed,
+              val forwardId: Long? = null,
+              val family: LoopbackFamilyView = LoopbackFamilyView.Ipv4,
+              val bindPort: Int = 0,
+              val targetAddress: String = "",
+              val targetPort: Int = 0,
+              val lastPayloadBytes: Int = 0,
+          )
+
+          internal data class PrivateDnsUiState(
+              val requestedEnabled: Boolean = false,
+              val validated: Boolean = true,
+              val deviceNaming: Boolean = false,
+              val deviceDomain: String = "",
+              val resolverAddress: String = "",
+              val resolverPort: Int = 0,
+              val splitDomain: String = "",
+              val osApplied: Boolean = false,
+          )
+
+          internal data class NetworkManagementUiState(
+              val forwarding: ForwardingUiState = ForwardingUiState(),
+              val selectedPath: ConnectivityPathView = ConnectivityPathView.Offline,
+              val privateDns: PrivateDnsUiState = PrivateDnsUiState(),
+          )
+
+          internal interface NetworkCommandEncoder {
+              fun forwardOpen(
+                  forwardId: Long,
+                  family: LoopbackFamilyView,
+                  bindPort: Int,
+                  targetAddress: String,
+                  targetPort: Int,
+              ): ByteArray
+
+              fun forwardClose(forwardId: Long): ByteArray
+
+              fun selectedPath(
+                  local: ReachabilityView,
+                  internet: ReachabilityView,
+                  relay: ReachabilityView,
+              ): Int
+
+              fun validatePrivateDns(
+                  enabled: Boolean,
+                  deviceNaming: Boolean,
+                  deviceDomain: String,
+                  resolverAddress: String,
+                  resolverPort: Int,
+                  splitDomain: String,
+              ): Boolean
+          }
+
+          internal object NativeNetworkCommandEncoder : NetworkCommandEncoder {
+              override fun forwardOpen(
+                  forwardId: Long,
+                  family: LoopbackFamilyView,
+                  bindPort: Int,
+                  targetAddress: String,
+                  targetPort: Int,
+              ): ByteArray = NativeBridge.forwardOpenPayload(
+                  forwardId,
+                  family.code,
+                  bindPort,
+                  targetAddress.encodeToByteArray(),
+                  targetPort,
+              )
+
+              override fun forwardClose(forwardId: Long): ByteArray =
+                  NativeBridge.forwardClosePayload(forwardId)
+
+              override fun selectedPath(
+                  local: ReachabilityView,
+                  internet: ReachabilityView,
+                  relay: ReachabilityView,
+              ): Int = NativeBridge.connectivitySelectedPath(local.code, internet.code, relay.code)
+
+              override fun validatePrivateDns(
+                  enabled: Boolean,
+                  deviceNaming: Boolean,
+                  deviceDomain: String,
+                  resolverAddress: String,
+                  resolverPort: Int,
+                  splitDomain: String,
+              ): Boolean = NativeBridge.validatePrivateDnsConfig(
+                  enabled,
+                  deviceNaming,
+                  deviceDomain.encodeToByteArray(),
+                  resolverAddress.encodeToByteArray(),
+                  resolverPort,
+                  splitDomain.encodeToByteArray(),
+              )
+          }
+
+          internal class NetworkManagementController(private val encoder: NetworkCommandEncoder) {
+              private var current = NetworkManagementUiState()
+
+              fun state(): NetworkManagementUiState = current
+
+              fun requestForwardOpen(
+                  forwardId: Long,
+                  family: LoopbackFamilyView,
+                  bindPort: Int,
+                  targetAddress: String,
+                  targetPort: Int,
+              ): Boolean {
+                  if (current.forwarding.lifecycle !in setOf(ForwardLifecycleView.Closed, ForwardLifecycleView.Failed)) {
+                      return false
+                  }
+                  val payload = runCatching {
+                      encoder.forwardOpen(forwardId, family, bindPort, targetAddress, targetPort)
+                  }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      forwarding = ForwardingUiState(
+                          lifecycle = ForwardLifecycleView.Opening,
+                          forwardId = forwardId,
+                          family = family,
+                          bindPort = bindPort,
+                          targetAddress = targetAddress,
+                          targetPort = targetPort,
+                          lastPayloadBytes = payload.size,
+                      ),
+                  )
+                  return true
+              }
+
+              fun applyAuthoritativeForwardOpen(forwardId: Long): Boolean {
+                  val forward = current.forwarding
+                  if (forward.lifecycle != ForwardLifecycleView.Opening || forward.forwardId != forwardId) return false
+                  current = current.copy(forwarding = forward.copy(lifecycle = ForwardLifecycleView.Active))
+                  return true
+              }
+
+              fun requestForwardClose(): Boolean {
+                  val forward = current.forwarding
+                  val id = forward.forwardId ?: return false
+                  if (forward.lifecycle != ForwardLifecycleView.Active) return false
+                  val payload = runCatching { encoder.forwardClose(id) }.getOrNull() ?: return false
+                  if (payload.isEmpty()) return false
+                  current = current.copy(
+                      forwarding = forward.copy(
+                          lifecycle = ForwardLifecycleView.Closing,
+                          lastPayloadBytes = payload.size,
+                      ),
+                  )
+                  return true
+              }
+
+              fun applyAuthoritativeForwardClosed(forwardId: Long): Boolean {
+                  val forward = current.forwarding
+                  if (forward.lifecycle != ForwardLifecycleView.Closing || forward.forwardId != forwardId) return false
+                  current = current.copy(forwarding = ForwardingUiState())
+                  return true
+              }
+
+              fun applyAuthoritativeForwardFailure(forwardId: Long): Boolean {
+                  val forward = current.forwarding
+                  if (forward.forwardId != forwardId || forward.lifecycle == ForwardLifecycleView.Closed) return false
+                  current = current.copy(forwarding = forward.copy(lifecycle = ForwardLifecycleView.Failed))
+                  return true
+              }
+
+              fun applyAuthoritativeConnectivitySnapshot(
+                  local: ReachabilityView,
+                  internet: ReachabilityView,
+                  relay: ReachabilityView,
+              ): Boolean {
+                  val code = runCatching { encoder.selectedPath(local, internet, relay) }.getOrNull() ?: return false
+                  val selected = when (code) {
+                      0 -> ConnectivityPathView.Offline
+                      1 -> ConnectivityPathView.LocalDirect
+                      2 -> ConnectivityPathView.InternetDirect
+                      3 -> ConnectivityPathView.Relay
+                      else -> return false
+                  }
+                  current = current.copy(selectedPath = selected)
+                  return true
+              }
+
+              fun validatePrivateDnsDraft(
+                  enabled: Boolean,
+                  deviceNaming: Boolean,
+                  deviceDomain: String,
+                  resolverAddress: String,
+                  resolverPort: Int,
+                  splitDomain: String,
+              ): Boolean {
+                  val accepted = runCatching {
+                      encoder.validatePrivateDns(
+                          enabled,
+                          deviceNaming,
+                          deviceDomain,
+                          resolverAddress,
+                          resolverPort,
+                          splitDomain,
+                      )
+                  }.getOrDefault(false)
+                  if (!accepted) return false
+                  current = current.copy(
+                      privateDns = PrivateDnsUiState(
+                          requestedEnabled = enabled,
+                          validated = true,
+                          deviceNaming = deviceNaming,
+                          deviceDomain = deviceDomain,
+                          resolverAddress = resolverAddress,
+                          resolverPort = resolverPort,
+                          splitDomain = splitDomain,
+                          osApplied = false,
+                      ),
+                  )
+                  return true
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/test/kotlin/com/privateworkspace/prw/NetworkManagementControllerTest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          internal class NetworkManagementControllerTest {
+              private class FakeEncoder : NetworkCommandEncoder {
+                  var openPayload = byteArrayOf(1, 2, 3)
+                  var closePayload = byteArrayOf(4, 5)
+                  var selectedPathCode = 0
+                  var dnsAccepted = true
+
+                  override fun forwardOpen(
+                      forwardId: Long,
+                      family: LoopbackFamilyView,
+                      bindPort: Int,
+                      targetAddress: String,
+                      targetPort: Int,
+                  ): ByteArray = openPayload
+
+                  override fun forwardClose(forwardId: Long): ByteArray = closePayload
+
+                  override fun selectedPath(
+                      local: ReachabilityView,
+                      internet: ReachabilityView,
+                      relay: ReachabilityView,
+                  ): Int = selectedPathCode
+
+                  override fun validatePrivateDns(
+                      enabled: Boolean,
+                      deviceNaming: Boolean,
+                      deviceDomain: String,
+                      resolverAddress: String,
+                      resolverPort: Int,
+                      splitDomain: String,
+                  ): Boolean = dnsAccepted
+              }
+
+              @Test
+              fun forwarding_requires_explicit_authoritative_acknowledgements() {
+                  val encoder = FakeEncoder()
+                  val controller = NetworkManagementController(encoder)
+
+                  assertTrue(controller.requestForwardOpen(149001, LoopbackFamilyView.Ipv4, 4149, "127.0.0.1", 22))
+                  assertEquals(ForwardLifecycleView.Opening, controller.state().forwarding.lifecycle)
+                  assertFalse(controller.requestForwardClose())
+                  assertTrue(controller.applyAuthoritativeForwardOpen(149001))
+                  assertEquals(ForwardLifecycleView.Active, controller.state().forwarding.lifecycle)
+                  assertTrue(controller.requestForwardClose())
+                  assertEquals(ForwardLifecycleView.Closing, controller.state().forwarding.lifecycle)
+                  assertTrue(controller.applyAuthoritativeForwardClosed(149001))
+                  assertEquals(ForwardLifecycleView.Closed, controller.state().forwarding.lifecycle)
+              }
+
+              @Test
+              fun empty_forward_payload_fails_without_fabricating_state() {
+                  val encoder = FakeEncoder().also { it.openPayload = byteArrayOf() }
+                  val controller = NetworkManagementController(encoder)
+                  assertFalse(controller.requestForwardOpen(149001, LoopbackFamilyView.Ipv4, 4149, "127.0.0.1", 22))
+                  assertEquals(ForwardLifecycleView.Closed, controller.state().forwarding.lifecycle)
+              }
+
+              @Test
+              fun connectivity_changes_only_through_authoritative_snapshot_application() {
+                  val encoder = FakeEncoder().also { it.selectedPathCode = 2 }
+                  val controller = NetworkManagementController(encoder)
+                  assertEquals(ConnectivityPathView.Offline, controller.state().selectedPath)
+                  assertTrue(
+                      controller.applyAuthoritativeConnectivitySnapshot(
+                          ReachabilityView.Unreachable,
+                          ReachabilityView.Reachable,
+                          ReachabilityView.Reachable,
+                      ),
+                  )
+                  assertEquals(ConnectivityPathView.InternetDirect, controller.state().selectedPath)
+              }
+
+              @Test
+              fun dns_validation_never_claims_operating_system_application() {
+                  val encoder = FakeEncoder()
+                  val controller = NetworkManagementController(encoder)
+                  assertTrue(
+                      controller.validatePrivateDnsDraft(
+                          true,
+                          true,
+                          "prw.internal",
+                          "127.0.0.1",
+                          53,
+                          "dev.internal",
+                      ),
+                  )
+                  val dns = controller.state().privateDns
+                  assertTrue(dns.requestedEnabled)
+                  assertTrue(dns.validated)
+                  assertFalse(dns.osApplied)
+
+                  encoder.dnsAccepted = false
+                  assertFalse(controller.validatePrivateDnsDraft(true, true, "BAD", "", 0, ""))
+                  assertEquals(dns, controller.state().privateDns)
+              }
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          bridge = Path('apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt')
+          text = bridge.read_text()
+          marker = '    @JvmStatic external fun isFileTransferPayload(payload: ByteArray): Boolean\n'
+          addition = '''    @JvmStatic external fun isFileTransferPayload(payload: ByteArray): Boolean
+              @JvmStatic external fun forwardOpenPayload(forwardId: Long, familyCode: Int, bindPort: Int, targetAddress: ByteArray, targetPort: Int): ByteArray
+              @JvmStatic external fun forwardClosePayload(forwardId: Long): ByteArray
+              @JvmStatic external fun isForwardingPayload(payload: ByteArray): Boolean
+              @JvmStatic external fun connectivitySelectedPath(localObservation: Int, internetObservation: Int, relayObservation: Int): Int
+              @JvmStatic external fun validatePrivateDnsConfig(enabled: Boolean, deviceNaming: Boolean, deviceDomain: ByteArray, resolverAddress: ByteArray, resolverPort: Int, splitDomain: ByteArray): Boolean
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 NativeBridge insertion boundary mismatch')
+          bridge.write_text(text.replace(marker, addition, 1))
+
+          vm = Path('apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt')
+          text = vm.read_text()
+          marker = '    val files: RemoteFilesUiState = RemoteFilesUiState(),\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 UI state insertion boundary mismatch')
+          text = text.replace(marker, marker + '    val network: NetworkManagementUiState = NetworkManagementUiState(),\n', 1)
+
+          marker = '    private val fileController: RemoteFilesController = RemoteFilesController(NativeFileCommandEncoder),\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 controller insertion boundary mismatch')
+          text = text.replace(marker, marker + '    private val networkController: NetworkManagementController = NetworkManagementController(NativeNetworkCommandEncoder),\n', 1)
+
+          marker = '    fun disconnect() {\n'
+          methods = '''    fun requestDisposableForwardOpen(): Boolean {
+                  val accepted = networkController.requestForwardOpen(
+                      DISPOSABLE_FORWARD_ID,
+                      LoopbackFamilyView.Ipv4,
+                      41_149,
+                      "127.0.0.1",
+                      22,
+                  )
+                  publishNetworkState(if (accepted) "Forward-open intent encoded; no socket opened" else "Forward-open intent rejected")
+                  return accepted
+              }
+
+              fun applyDisposableForwardOpen(): Boolean {
+                  val accepted = networkController.applyAuthoritativeForwardOpen(DISPOSABLE_FORWARD_ID)
+                  publishNetworkState(if (accepted) "Disposable authoritative forward-open acknowledgement applied" else "Forward-open acknowledgement rejected")
+                  return accepted
+              }
+
+              fun requestDisposableForwardClose(): Boolean {
+                  val accepted = networkController.requestForwardClose()
+                  publishNetworkState(if (accepted) "Forward-close intent encoded; completion not forged" else "Forward-close intent rejected")
+                  return accepted
+              }
+
+              fun applyDisposableForwardClosed(): Boolean {
+                  val accepted = networkController.applyAuthoritativeForwardClosed(DISPOSABLE_FORWARD_ID)
+                  publishNetworkState(if (accepted) "Disposable authoritative forward-close acknowledgement applied" else "Forward-close acknowledgement rejected")
+                  return accepted
+              }
+
+              fun applyDisposableConnectivitySnapshot(): Boolean {
+                  val accepted = networkController.applyAuthoritativeConnectivitySnapshot(
+                      ReachabilityView.Unreachable,
+                      ReachabilityView.Reachable,
+                      ReachabilityView.Reachable,
+                  )
+                  publishNetworkState(if (accepted) "Disposable authoritative connectivity snapshot selected existing path" else "Connectivity snapshot rejected")
+                  return accepted
+              }
+
+              fun validateDisposablePrivateDns(): Boolean {
+                  val accepted = networkController.validatePrivateDnsDraft(
+                      enabled = true,
+                      deviceNaming = true,
+                      deviceDomain = "prw.internal",
+                      resolverAddress = "127.0.0.1",
+                      resolverPort = 53,
+                      splitDomain = "dev.internal",
+                  )
+                  publishNetworkState(if (accepted) "Private-DNS draft validated; OS resolver remains unchanged" else "Private-DNS draft rejected")
+                  return accepted
+              }
+
+              fun validateDisabledPrivateDns(): Boolean {
+                  val accepted = networkController.validatePrivateDnsDraft(
+                      enabled = false,
+                      deviceNaming = false,
+                      deviceDomain = "",
+                      resolverAddress = "",
+                      resolverPort = 0,
+                      splitDomain = "",
+                  )
+                  publishNetworkState(if (accepted) "Private-DNS disabled draft validated; connectivity remains independent" else "Disabled DNS draft rejected")
+                  return accepted
+              }
+
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 ViewModel method insertion boundary mismatch')
+          text = text.replace(marker, methods + marker, 1)
+
+          marker = '    private fun publishTerminalState(detail: String) {\n'
+          publish = '''    private fun publishNetworkState(detail: String) {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      network = networkController.state(),
+                      detail = detail,
+                  )
+              }
+
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 ViewModel publish insertion boundary mismatch')
+          text = text.replace(marker, publish + marker, 1)
+
+          marker = '        private const val DISPOSABLE_TERMINAL_SESSION_ID = 147_001L\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 ViewModel constant insertion boundary mismatch')
+          text = text.replace(marker, marker + '        private const val DISPOSABLE_FORWARD_ID = 149_001L\n', 1)
+          vm.write_text(text)
+
+          activity = Path('apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt')
+          text = activity.read_text()
+          old_title = '                        Text("Phase 148 remote files + transfers UX")\n'
+          new_title = '                        Text("Phase 149 forwarding + network + optional DNS UX")\n'
+          if text.count(old_title) != 1:
+              raise SystemExit('Phase149 Activity title boundary mismatch')
+          text = text.replace(old_title, new_title, 1)
+
+          marker = '                        Button(onClick = model::disconnect) {\n'
+          block = '''                        Text("Disposable forwarding — no production socket", style = MaterialTheme.typography.titleMedium)
+                          Text("Forward lifecycle: ${state.network.forwarding.lifecycle}")
+                          Text("Forward payload: ${state.network.forwarding.lastPayloadBytes} bytes")
+                          when (state.network.forwarding.lifecycle) {
+                              ForwardLifecycleView.Closed, ForwardLifecycleView.Failed -> {
+                                  Button(onClick = model::requestDisposableForwardOpen) { Text("Request loopback forward") }
+                              }
+                              ForwardLifecycleView.Opening -> {
+                                  Button(onClick = model::applyDisposableForwardOpen) { Text("Apply disposable open acknowledgement") }
+                              }
+                              ForwardLifecycleView.Active -> {
+                                  Button(onClick = model::requestDisposableForwardClose) { Text("Request forward close") }
+                              }
+                              ForwardLifecycleView.Closing -> {
+                                  Button(onClick = model::applyDisposableForwardClosed) { Text("Apply disposable close acknowledgement") }
+                              }
+                          }
+
+                          Text("Private-network status", style = MaterialTheme.typography.titleMedium)
+                          Text("Selected path: ${state.network.selectedPath}")
+                          Button(onClick = model::applyDisposableConnectivitySnapshot) {
+                              Text("Apply disposable connectivity snapshot")
+                          }
+
+                          Text("Optional private DNS", style = MaterialTheme.typography.titleMedium)
+                          Text("Requested enabled: ${state.network.privateDns.requestedEnabled}")
+                          Text("Validated: ${state.network.privateDns.validated}")
+                          Text("OS applied: ${state.network.privateDns.osApplied}")
+                          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                              Button(onClick = model::validateDisposablePrivateDns) { Text("Validate DNS draft") }
+                              Button(onClick = model::validateDisabledPrivateDns) { Text("Validate DNS disabled") }
+                          }
+
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase149 Activity insertion boundary mismatch')
+          activity.write_text(text.replace(marker, block + marker, 1))
+          PY
+
+          cat > apps/android/README.md <<'EOF'
+          # PRW Android Application
+
+          Phase 149 completes the currently planned non-production Android functional-client slices.
+
+          Current development responsibilities include:
+
+          - non-exportable Android Keystore identity custody and typed authenticated bootstrap;
+          - enrollment/device-management presentation;
+          - bounded terminal UX through existing PRWC terminal commands;
+          - bounded remote-file browser and resumable upload/download presentation;
+          - loopback-only TCP forwarding intent encoding through existing `prw-forwarding` and Phase 143 `BridgeCommand` authority;
+          - private-network selected-path presentation through existing `prw-connectivity` authority;
+          - optional private-DNS draft validation through existing `prw-private-dns` authority.
+
+          Phase 149 remains non-production. It opens no forwarding socket, performs no network discovery/probe, mutates no route/firewall/NAT/TUN/TAP or OS resolver state, and does not sign/distribute a production Android application.
+          EOF
+
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 fmt --all
+          cd "$GITHUB_WORKSPACE"
+
+          python3 - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+
+          def registry_packages(path):
+              with open(path, 'rb') as handle:
+                  data = tomllib.load(handle)
+              return {(p['name'], p['version'], p.get('source'), p.get('checksum')) for p in data.get('package', []) if p.get('source', '').startswith('registry+')}
+
+          before = registry_packages(Path(os.environ['RUNNER_TEMP']) / 'phase149-native-lock-before')
+          after = registry_packages('apps/android/native/Cargo.lock')
+          root = registry_packages('Cargo.lock')
+          added = sorted(after - before)
+          missing = [item for item in added if item not in root]
+          if missing:
+              raise SystemExit(f'Phase149 selected third-party versions absent from root lock: {missing}')
+          Path(os.environ['RUNNER_TEMP'], 'phase149-added-registry-packages.txt').write_text(
+              '\n'.join(f'{name} {version}' for name, version, _, _ in added) + ('\n' if added else '')
+          )
+          PY
+          echo phase149_candidate=pass
+
+      - name: Validate Phase 149 native projection
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+          cargo +1.97.1 tree --locked | grep -Fq 'prw-forwarding'
+          cargo +1.97.1 tree --locked | grep -Fq 'prw-connectivity'
+          cargo +1.97.1 tree --locked | grep -Fq 'prw-private-dns'
+          grep -Fq 'BridgeCommand::ForwardOpen' src/network.rs
+          grep -Fq 'BridgeCommand::ForwardClose' src/network.rs
+          grep -Fq 'PeerConnectivityPlan::new' src/network.rs
+          grep -Fq 'plan.selected_path()' src/network.rs
+          grep -Fq 'PrivateDnsConfig::new' src/network.rs
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -t x86_64 -o "$RUNNER_TEMP/phase149-native-libs" build --locked --release
+          test -s "$RUNNER_TEMP/phase149-native-libs/arm64-v8a/libprw_android_adapter.so"
+          test -s "$RUNNER_TEMP/phase149-native-libs/x86_64/libprw_android_adapter.so"
+          echo phase149_native=pass
+
+      - name: Validate Phase 149 Android UX
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase149-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_adapter.so' "$RUNNER_TEMP/phase149-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_adapter.so' "$RUNNER_TEMP/phase149-apk-list.txt"
+          sha256sum "$apk" | cut -d' ' -f1 > "$RUNNER_TEMP/phase149-apk-sha.txt"
+          echo phase149_android=pass
+
+      - name: Prove Phase 149 authority and production boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rust=apps/android/native/src/network.rs
+          kotlin=apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt
+          grep -Fq 'BridgeCommand::ForwardOpen' "$rust"
+          grep -Fq 'ForwardTarget::new' "$rust"
+          grep -Fq 'PeerConnectivityPlan::new' "$rust"
+          grep -Fq 'PrivateDnsConfig::new' "$rust"
+          grep -Fq 'applyAuthoritativeForwardOpen' "$kotlin"
+          grep -Fq 'applyAuthoritativeConnectivitySnapshot' "$kotlin"
+          grep -Fq 'osApplied = false' "$kotlin"
+          ! grep -R -E 'ProcessBuilder|Runtime\.getRuntime|\.exec\(' "$rust" "$kotlin"
+          ! grep -R -E 'TcpListener|TcpStream|UdpSocket|ServerSocket|DatagramSocket|VpnService' "$rust" "$kotlin"
+          ! grep -R -E 'resolvectl|/etc/resolv\.conf|NetworkManager|systemd-resolved|iptables|nftables|TUN|TAP' "$rust" "$kotlin"
+          ! grep -Fq 'BridgeCommand::Dns' "$rust"
+          git diff --exit-code -- apps/android/app/build.gradle.kts apps/android/app/src/main/AndroidManifest.xml
+          test -f "$RUNNER_TEMP/phase149-added-registry-packages.txt"
+          test ! -s "$RUNNER_TEMP/phase149-added-registry-packages.txt"
+          echo phase149_boundaries=pass
+
+      - name: Revalidate root Rust workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo phase149_root=pass
+
+      - name: Write authoritative Phase 149 validation report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report_dir=logs/audits/phase-149-android-forwarding-network-dns
+          report="$report_dir/PRW-PHASE-149-ANDROID-FORWARDING-NETWORK-DNS-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          native_lock_sha=$(sha256sum apps/android/native/Cargo.lock | cut -d' ' -f1)
+          network_rust_sha=$(sha256sum apps/android/native/src/network.rs | cut -d' ' -f1)
+          network_kotlin_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt | cut -d' ' -f1)
+          apk_sha=$(cat "$RUNNER_TEMP/phase149-apk-sha.txt")
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 149 — Android Forwarding, Network Status and Optional DNS' \
+            '' \
+            'STATUS:' \
+            'PASS / ANDROID_TYPED_FORWARDING_UX / AUTHORITATIVE_CONNECTIVITY_PATH_PRESENTATION / OPTIONAL_PRIVATE_DNS_TYPED_VALIDATION / EXISTING_FORWARDING_CONNECTIVITY_DNS_AND_PRWC_AUTHORITIES_REUSED / INTENT_ACK_SEPARATION / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_NETWORK_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            "Native Cargo.lock SHA-256: $native_lock_sha" \
+            "Network Rust adapter SHA-256: $network_rust_sha" \
+            "NetworkManagement Kotlin SHA-256: $network_kotlin_sha" \
+            "Validated debug APK SHA-256: $apk_sha" \
+            'New native-lock registry packages relative to Phase148: NONE' \
+            '' \
+            'CONTRACT: contracts/ANDROID_FORWARDING_NETWORK_DNS_CONTRACT.md' \
+            'FORWARDING: Android encodes only existing loopback-only TCP ForwardOpen/ForwardClose PRWC operations; intent does not fabricate Active/Closed completion.' \
+            'CONNECTIVITY: selected path is produced only by existing PeerConnectivityPlan deterministic authority from explicitly applied disposable observations.' \
+            'PRIVATE DNS: draft values are accepted only through existing PrivateDnsConfig validation; requested Enabled never claims operating-system application.' \
+            'INDEPENDENCE: optional private DNS does not alter or gate connectivity selection.' \
+            'DEPENDENCIES: no Android or external native dependency added; only existing internal prw-forwarding, prw-connectivity and prw-private-dns path authorities are added to the adapter.' \
+            'PRODUCTION BOUNDARY: no production socket/listener/probe, route/firewall/NAT/TUN/TAP mutation, resolver mutation, Agent replacement/restart, release signing/distribution or production-account cutover.' \
+            '' \
+            'INTERIM CLASSIFICATION: PHASE_149_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_NETWORK_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION' \
+            > "$report"
+          echo phase149_report=pass
+
+      - name: Stage only validated Phase 149 source and evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-149-android-forwarding-network-dns/PRW-PHASE-149-ANDROID-FORWARDING-NETWORK-DNS-VALIDATION.txt
+          git diff --check -- apps/android "$report"
+          git add \
+            apps/android/README.md \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt \
+            apps/android/app/src/test/kotlin/com/privateworkspace/prw/NetworkManagementControllerTest.kt \
+            apps/android/native/Cargo.toml \
+            apps/android/native/Cargo.lock \
+            apps/android/native/src/lib.rs \
+            apps/android/native/src/network.rs \
+            "$report"
+          staged="$(git diff --cached --name-only)"
+          test -n "$staged"
+          if printf '%s\n' "$staged" | grep -E '(^|/)(build|target|\.gradle)/'; then
+            echo phase149_generated_output_staged >&2
+            exit 1
+          fi
+          grep -Fxq 'apps/android/native/src/network.rs' <<< "$staged"
+          grep -Fxq 'apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt' <<< "$staged"
+          grep -Fxq "$report" <<< "$staged"
+          echo phase149_staging=pass
+
+      - name: Commit and push validated Phase 149 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --cached --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 149: materialize validated Android forwarding network and DNS slice'
+          git push origin HEAD:main
+          echo phase149_materialization=pass
