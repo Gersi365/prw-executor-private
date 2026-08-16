@@ -1,0 +1,326 @@
+Private Remote Workspace
+Phase 114 Enrollment Proof-of-Possession and Trust-Bootstrap Contract
+
+STATUS: PASS / ENROLLMENT_POP_MESSAGE_SEMANTICS_LOCKED / SERVER_CHALLENGE_AND_REPLAY_BOUNDARIES_LOCKED / PROOF_SEPARATE_FROM_APPROVAL_AND_ACCOUNT_AUTH / NO_SIGNING_IMPLEMENTATION / NO_PRIVATE_KEY_STORAGE / NO_NETWORK_OR_PERSISTENCE_ACTIVATION
+AUDIT TYPE: SECURITY PROTOCOL CONTRACT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: 070d13b7f5df3b0b51136a7a3b5d9d66c7c8a03a
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Current validated Cargo.lock blob: 0cb5f43bd7516488fd04c8d6ead14270f8496c3e
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 114 is decision/contract work only and preserves all existing security and product exclusions.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 113 production device-identity verifier:
+- report: logs/audits/phase-113-device-identity-verifier/PRW-PHASE-113-DEVICE-IDENTITY-VERIFIER.txt
+- commit: 070d13b7f5df3b0b51136a7a3b5d9d66c7c8a03a
+- provider: aws-lc-rs 1.18.0
+- role: device-identity public signature verification only
+- profile: ECDSA P-256/SHA-256 + canonical DER X.509 SPKI + DER ECDSA-Sig-Value
+
+Existing control-plane domain types already distinguish:
+- WorkspaceId;
+- UserId;
+- DeviceId;
+- EnrollmentId;
+- EnrollmentRequest;
+- EnrollmentState;
+- DeviceRevocation.
+
+Existing security contracts intentionally deferred proof-of-possession message semantics, trust-bootstrap transport, approving-actor authentication, persistence, and concrete enrollment networking until later security review.
+
+STANDARDS-INFORMED PRINCIPLES
+
+Phase 114 uses established proof-of-possession principles without importing another protocol wholesale:
+- a proof of possession demonstrates control of the corresponding private key but is not by itself an authorization or access-control decision;
+- replay resistance requires fresh/non-repeated proof context, commonly a verifier-issued nonce/challenge and a bounded acceptance window;
+- key possession and primary/account authentication are separate security properties;
+- private key material is never conveyed as part of the proof.
+
+Reference principles reviewed:
+- RFC 9449, Demonstrating Proof of Possession (DPoP), especially proof/replay semantics;
+- RFC 7800, Proof-of-Possession Key Semantics for JWTs, especially signed challenge/nonce replay treatment;
+- NIST SP 800-63B/63C challenge-response and holder-of-key guidance.
+
+PRW does not adopt JWT, DPoP, OAuth, or a NIST identity-assurance profile as its enrollment wire protocol in Phase 114. These references inform security properties only.
+
+CORE SECURITY DECISION
+
+PRW enrollment proof of possession proves exactly one fact:
+
+THE DEVICE CONTROLS THE PRIVATE DEVICE-IDENTITY KEY CORRESPONDING TO THE PUBLIC IDENTITY MATERIAL IN THE EXACT BOUND ENROLLMENT REQUEST.
+
+A valid proof does NOT by itself prove or grant:
+- user/account authentication;
+- workspace membership;
+- permission to approve enrollment;
+- device trust;
+- enrollment approval;
+- policy capability;
+- network access;
+- control-plane authorization.
+
+Proof verification is a prerequisite that a later approval/authentication policy may consume. It is not the approval decision itself.
+
+BOUND ENROLLMENT SNAPSHOT
+
+A proof challenge binds to one exact EnrollmentRequest snapshot containing:
+- EnrollmentId;
+- WorkspaceId;
+- UserId;
+- DeviceId;
+- DeviceIdentityAlgorithm;
+- DeviceIdentityPublicKeyEncoding;
+- exact public identity bytes.
+
+Once a challenge is issued, the bound EnrollmentRequest snapshot is immutable for that challenge.
+
+If any bound field changes, including any public-key byte, the existing challenge is invalidated. The changed request requires a new challenge. Implementations must not silently carry proof state across a changed request.
+
+CANONICAL PROOF MESSAGE
+
+The signed message is a deterministic binary value. JSON, CBOR, textual concatenation, locale-dependent formatting, and implementation-defined serialization are not part of the Phase 114 contract.
+
+Domain separator, exact 32 bytes:
+
+ASCII/bytes: PRW\0EnrollmentProofOfPossession\0
+hex: 50 52 57 00 45 6e 72 6f 6c 6c 6d 65 6e 74 50 72 6f 6f 66 4f 66 50 6f 73 73 65 73 73 69 6f 6e 00
+
+Message version:
+- unsigned 16-bit big-endian;
+- initial value: 1.
+
+Variable-length fields use an unsigned 32-bit big-endian byte-length prefix followed by exactly that number of bytes.
+
+Fixed field order:
+1. 32-byte domain separator;
+2. message version u16 BE = 1;
+3. EnrollmentId UTF-8 bytes, u32-BE length-prefixed;
+4. WorkspaceId UTF-8 bytes, u32-BE length-prefixed;
+5. UserId UTF-8 bytes, u32-BE length-prefixed;
+6. DeviceId UTF-8 bytes, u32-BE length-prefixed;
+7. DeviceIdentityAlgorithm code u16 BE;
+8. DeviceIdentityPublicKeyEncoding code u16 BE;
+9. exact public identity bytes, u32-BE length-prefixed;
+10. exact 32-byte server challenge nonce.
+
+Initial numeric codes:
+- DeviceIdentityAlgorithm::EcdsaP256Sha256 = 1;
+- DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer = 1.
+
+The message contains no signature bytes and no private material.
+
+WHY THE PUBLIC KEY BYTES ARE SIGNED
+
+Although the signature is verified with the same public key, the canonical message also contains the exact public identity bytes. This makes the proof explicitly bind the enrollment request's declared key material and encoding to the remaining enrollment context instead of relying on an implicit verifier-side association.
+
+The production prw-device-identity verifier remains responsible for enforcing the canonical SPKI profile before accepting the signature.
+
+IDENTIFIER AND MESSAGE BOUNDS
+
+The existing identifier domain types currently require non-empty values but do not globally impose a byte-length maximum. Phase 114 therefore locks PoP-encoder-specific bounds without retroactively changing general identifier semantics.
+
+For proof-message construction:
+- EnrollmentId UTF-8 byte length: 1..=1024;
+- WorkspaceId UTF-8 byte length: 1..=1024;
+- UserId UTF-8 byte length: 1..=1024;
+- DeviceId UTF-8 byte length: 1..=1024;
+- public identity bytes: 1..=256 for the locked initial P-256 SPKI profile;
+- challenge nonce: exactly 32 bytes.
+
+No Unicode normalization, case folding, locale transformation, or trimming is performed by the PoP encoder. It signs the exact UTF-8 bytes already present in the typed identifiers.
+
+With the locked 32-byte domain separator and fixed-width fields, the maximum canonical Phase 114 message size is exactly 4442 bytes.
+
+The encoder must fail closed before allocation/copy beyond these bounds.
+
+SERVER CHALLENGE
+
+A server challenge is represented conceptually by:
+
+EnrollmentProofChallenge
+- enrollment_id: EnrollmentId;
+- nonce: [u8; 32];
+- issued_at_unix_seconds: u64;
+- expires_at_unix_seconds: u64.
+
+The nonce is generated by the future verifier/control-plane service using a cryptographically secure random source. Phase 114 does not implement that source.
+
+Nonce requirements:
+- exactly 32 bytes / 256 bits;
+- generated independently for each challenge;
+- statistically unique for the key/enrollment verification context;
+- never intentionally reused.
+
+The future implementation must treat nonce generation failure as fail-closed.
+
+CHALLENGE LIFETIME
+
+The verifier's server clock is authoritative.
+
+Challenge lifetime requirements:
+- expires_at_unix_seconds must be strictly greater than issued_at_unix_seconds;
+- maximum accepted lifetime: 300 seconds;
+- a challenge is invalid when the verifier's current server time is greater than or equal to expires_at_unix_seconds.
+
+The device clock is not trusted or required for PoP correctness.
+
+The issued/expires timestamps are verifier-owned state and are not included in the signed message. The signed nonce identifies the exact server-side challenge record; the verifier always uses its stored lifetime values. Client-provided timestamps must never extend or replace the stored lifetime.
+
+PROOF VALUE
+
+The client proof is conceptually:
+
+EnrollmentProofOfPossession
+- enrollment_id: EnrollmentId;
+- nonce: [u8; 32];
+- signature: DeviceIdentitySignature.
+
+The client does not resend WorkspaceId, UserId, DeviceId, public identity bytes, or challenge timestamps as authoritative proof inputs.
+
+The verifier reconstructs the canonical message from its stored immutable EnrollmentRequest snapshot plus the stored matching challenge. This prevents duplicate client-controlled copies of security-critical binding fields from becoming competing sources of truth.
+
+VERIFICATION SEQUENCE
+
+A future proof verifier must perform these logical steps in this order:
+1. locate the pending EnrollmentRequest by EnrollmentId;
+2. locate the active, unconsumed challenge bound to that exact request;
+3. require proof enrollment_id to match the challenge/request;
+4. require proof nonce to match the stored challenge nonce exactly;
+5. reject if the challenge is expired according to the server clock;
+6. reconstruct the exact canonical message from the stored request snapshot and stored challenge nonce;
+7. invoke the production device-identity signature verifier using the stored public identity, canonical message, and supplied signature;
+8. only on successful signature verification, atomically consume the challenge and record that proof of possession succeeded for the exact enrollment snapshot;
+9. reject every later replay of the consumed challenge/proof;
+10. leave enrollment approval as a separate later decision.
+
+SINGLE-USE AND REPLAY SEMANTICS
+
+Successful proof verification is single-use.
+
+A challenge can transition at most once from active/unconsumed to successfully consumed.
+
+Required semantics:
+- successful verification and challenge consumption are one atomic logical transaction;
+- a second verification attempt for the same consumed nonce is rejected even if the signature is valid;
+- expired challenges are rejected and cannot later become valid;
+- a new challenge supersedes any earlier active challenge for the same enrollment request unless a future persistence protocol explicitly supports multiple active challenges and proves equivalent replay safety;
+- Phase 115 must implement the simpler one-active-challenge-per-enrollment model.
+
+A failed signature verification does not itself consume the challenge in the Phase 114 contract. Rate limiting and abuse controls remain future control-plane/service concerns. The bounded 300-second lifetime still applies.
+
+PROOF STATE VERSUS APPROVAL STATE
+
+Proof state and enrollment decision state remain separate.
+
+Conceptually:
+- EnrollmentRequest may be Pending;
+- PoP may be NotVerified or Verified for that exact immutable request snapshot;
+- only a later authenticated/authorized approving actor may transition the enrollment decision to Approved or Rejected.
+
+A Verified PoP must never automatically transition EnrollmentState::Pending to Approved.
+
+Likewise, an approval implementation must not consider a device key proven unless the exact bound snapshot has a successful non-replayed PoP record under the final policy.
+
+ACCOUNT/AUTHORIZATION BOUNDARY
+
+Phase 114 deliberately does not decide:
+- who the approving user/administrator is;
+- how the approving actor authenticates;
+- which capability authorizes enrollment approval;
+- whether approval occurs locally, remotely, or through a control plane;
+- multi-user/workspace policy semantics.
+
+Those remain separate authorization/account-authentication work.
+
+SIGNER SAFETY BOUNDARY
+
+The future device signing implementation must not expose an API that signs arbitrary server-provided bytes as a generic remote signing oracle.
+
+The intended device-side interface should accept typed PRW enrollment request/challenge inputs, reconstruct the locked canonical PoP message locally, and request a signature over that internally constructed message from the platform key provider.
+
+This preserves the possibility of Android Keystore-backed signing without private-key export and reduces cross-protocol signing risk.
+
+TRANSPORT SEPARATION
+
+The device-identity PoP key is not selected as a transport encryption or transport authentication key by Phase 114.
+
+No transport-key scheme, key agreement, private address, TUN, relay, STUN/ICE/TURN, or TLS selection is introduced by this contract.
+
+FAIL-CLOSED REQUIREMENTS
+
+Proof construction or verification must fail closed on at least:
+- unsupported message version;
+- unsupported device-identity algorithm code;
+- unsupported public-key encoding code;
+- zero-length or over-bound identifiers;
+- zero-length or over-bound public identity bytes;
+- nonce length other than 32 bytes;
+- invalid challenge lifetime;
+- expired challenge;
+- nonce mismatch;
+- enrollment/request mismatch;
+- changed request snapshot;
+- malformed/non-canonical public key;
+- malformed or invalid signature;
+- consumed/replayed challenge;
+- arithmetic overflow while computing encoded lengths or timestamps.
+
+PHASE 115 IMPLEMENTATION BOUNDARY
+
+Standing authorization permits Phase 115 to implement the provider-neutral PoP domain/codec state without another approval request.
+
+Phase 115 should be limited to:
+- typed EnrollmentProofChallenge and EnrollmentProofOfPossession values;
+- exact 32-byte nonce type/bounds;
+- exact canonical message encoder and numeric codes;
+- challenge lifetime validation;
+- simple one-active-challenge state semantics sufficient to prove single-use transitions in memory/tests;
+- deterministic byte-level tests and mutation/boundary tests;
+- composition tests with prw-device-identity verification using disposable test signing material only.
+
+Phase 115 must not add:
+- production private-key generation or storage;
+- production signing provider;
+- Android Keystore implementation;
+- Ubuntu secret store;
+- real approval actor/authentication;
+- HTTP/RPC listener;
+- database/persistence;
+- public networking;
+- deployment or host/service mutation.
+
+MUTATION STATEMENT
+
+Phase 114 is decision/audit work only.
+
+Authorized net repository mutation:
+- this single authoritative audit report.
+
+Phase 114 does not change:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- service/systemd source;
+- installed host files;
+- user-manager state;
+- private keys;
+- network listeners;
+- persistence/database state;
+- deployment state.
+
+FINAL CLASSIFICATION
+
+PASS / ENROLLMENT_POP_MESSAGE_V1_LOCKED / EXACT_ENROLLMENT_SNAPSHOT_AND_PUBLIC_KEY_BOUND / 256_BIT_SERVER_NONCE / 300_SECOND_MAX_LIFETIME / SERVER_CLOCK_AUTHORITATIVE / SINGLE_USE_SUCCESS_ATOMIC_CONSUME / PROOF_SEPARATE_FROM_APPROVAL_AND_ACCOUNT_AUTH / CANONICAL_BINARY_ENCODING_MAX_4442_BYTES / DEVICE_CLOCK_NOT_TRUSTED / NO_SIGNING_IMPLEMENTATION / NO_PRIVATE_KEY_STORAGE / NO_NETWORK_OR_PERSISTENCE_ACTIVATION / PHASE_115_AUTONOMOUSLY_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 114 enrollment proof-of-possession contract report.
