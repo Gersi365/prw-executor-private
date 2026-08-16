@@ -3,9 +3,11 @@
 //! Phase 002 defines typed identity, enrollment, and revocation boundaries.
 //! Phase 003 locks the initial device-identity signature algorithm identifier.
 //! Phase 004 locks the initial public-key and signature byte encodings.
-//! These types still do not select an HTTP/RPC protocol, persistence layer,
-//! authentication mechanism, private-key backend, cryptographic provider, or
-//! network listener.
+//! Phase 115 adds provider-neutral enrollment proof-of-possession message and
+//! challenge/replay state semantics without selecting a wire protocol, signing
+//! backend, persistence layer, account-authentication mechanism, or listener.
+
+pub mod enrollment_pop;
 
 use std::fmt;
 
