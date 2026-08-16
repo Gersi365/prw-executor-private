@@ -1,0 +1,118 @@
+name: Phase 141 ICE Dependency Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-141-ice-dependency-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove prerequisite evidence and baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f logs/audits/phase-139-remote-transport-architecture/PRW-PHASE-139-A02-DUPLICATE-DECISION-RECONCILIATION.txt
+          test -f logs/audits/phase-140-disposable-encrypted-remote-transport/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt
+          grep -Fq 'PHASE_140_DONE' logs/audits/phase-140-disposable-encrypted-remote-transport/PRW-PHASE-140-DISPOSABLE-REMOTE-TRANSPORT-VALIDATION.txt
+          rustc --version
+          cargo --version
+          git diff --exit-code
+          echo phase141_prerequisite=pass
+
+      - name: Compile exact stable Sans-I/O ICE API in scratch graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          cd "$scratch"
+          cat > Cargo.toml <<'EOF'
+          [package]
+          name = "prw-phase141-ice-probe"
+          version = "0.0.0"
+          edition = "2024"
+          rust-version = "1.97.1"
+          publish = false
+
+          [dependencies]
+          rtc-ice = { version = "=0.20.2", default-features = false, features = ["aws-lc-rs"] }
+          rtc-shared = { version = "=0.20.2", default-features = false }
+          sansio = "=1.0.0"
+          EOF
+          mkdir src
+          cat > src/main.rs <<'EOF'
+          use rtc_ice::{Agent, Credentials, agent::agent_config::AgentConfig};
+          use rtc_ice::candidate::{CandidateConfig, candidate_host::CandidateHostConfig};
+          use rtc_shared::{TransportContext, TransportMessage, TransportProtocol};
+          use sansio::Protocol;
+          use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::Arc, time::Instant};
+
+          fn main() -> Result<(), Box<dyn std::error::Error>> {
+              let mut agent = Agent::new(Arc::new(AgentConfig::default()))?;
+              let Credentials { ufrag, pwd } = agent.get_local_credentials();
+              assert!(!ufrag.is_empty());
+              assert!(!pwd.is_empty());
+
+              let local = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 41001);
+              let remote = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 41002);
+              let host = CandidateHostConfig {
+                  base_config: CandidateConfig {
+                      network: "udp".to_owned(),
+                      address: local.ip().to_string(),
+                      port: local.port(),
+                      component: 1,
+                      ..Default::default()
+                  },
+                  ..Default::default()
+              }.new_candidate_host()?;
+              agent.add_local_candidate(host)?;
+              agent.start_connectivity_checks(true, "remote-ufrag".to_owned(), "remote-password".to_owned())?;
+              let _ = agent.poll_timeout();
+              agent.handle_timeout(Instant::now())?;
+              let _ = agent.poll_write();
+
+              let inbound = TransportMessage {
+                  now: Instant::now(),
+                  transport: TransportContext {
+                      local_addr: local,
+                      peer_addr: remote,
+                      ecn: None,
+                      transport_protocol: TransportProtocol::UDP,
+                  },
+                  message: Vec::<u8>::new().into(),
+              };
+              let _ = agent.handle_read(inbound);
+              agent.close()?;
+              Ok(())
+          }
+          EOF
+
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 > metadata.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('metadata.json').read_text())
+          wanted = {'rtc-ice': '0.20.2', 'rtc-shared': '0.20.2', 'sansio': '1.0.0'}
+          resolved = {p['name']: p['version'] for p in data['packages'] if p['name'] in wanted}
+          if resolved != wanted:
+              raise SystemExit(f'exact direct dependency mismatch: {resolved!r}')
+          print('phase141_exact_versions=pass')
+          PY
+          cargo check --locked --all-targets
+          echo "phase141_probe_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+          echo phase141_sansio_ice_api_compile=pass
+
+      - name: Re-prove repository immutability
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --exit-code
+          echo phase141_repository_unchanged=pass
