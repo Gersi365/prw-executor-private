@@ -1,0 +1,1045 @@
+name: Phase 146 Android Enrollment Device Management
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-146-android-enrollment-device-management.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove Phase 146 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_ENROLLMENT_DEVICE_MANAGEMENT_CONTRACT.md
+          test -f contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          test -f .github/workflows/android-validation.yml
+          test -f apps/android/native/Cargo.lock
+          test -f apps/android/native/src/lib.rs
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt
+          grep -Fq 'canonicalSessionMessage' apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt
+          grep -Fq 'signCanonicalSessionProof' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'encode_enrollment_proof_message' crates/prw-control-plane/src/enrollment_pop.rs
+          grep -Fq 'pub fn revoke_device' crates/prw-registry/src/lib.rs
+          echo phase146_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact Phase 145 toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase146_toolchain=pass
+
+      - name: Materialize Phase 146 candidate source in runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/EnrollmentProofRequest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import java.io.ByteArrayOutputStream
+          import java.nio.ByteBuffer
+          import java.nio.ByteOrder
+
+          internal data class EnrollmentProofRequest(
+              val enrollmentId: String,
+              val workspaceId: String,
+              val userId: String,
+              val deviceId: String,
+              val publicSpki: ByteArray,
+              val nonce: ByteArray,
+          ) {
+              fun encode(): ByteArray {
+                  require(nonce.size == NONCE_BYTES)
+                  val output = ByteArrayOutputStream()
+                  output.write(MAGIC)
+                  output.write(shortBytes(VERSION))
+                  writeUtf8(output, enrollmentId)
+                  writeUtf8(output, workspaceId)
+                  writeUtf8(output, userId)
+                  writeUtf8(output, deviceId)
+                  writeBytes(output, publicSpki, MAX_PUBLIC_SPKI_BYTES)
+                  output.write(nonce)
+                  return output.toByteArray().also { require(it.size <= MAX_BYTES) }
+              }
+
+              companion object {
+                  private val MAGIC = byteArrayOf('P'.code.toByte(), '1'.code.toByte(), '4'.code.toByte(), '6'.code.toByte())
+                  private const val VERSION = 1
+                  private const val NONCE_BYTES = 32
+                  private const val MAX_FIELD_BYTES = 1024
+                  private const val MAX_PUBLIC_SPKI_BYTES = 256
+                  private const val MAX_BYTES = 4400
+
+                  private fun shortBytes(value: Int): ByteArray = ByteBuffer
+                      .allocate(2)
+                      .order(ByteOrder.BIG_ENDIAN)
+                      .putShort(value.toShort())
+                      .array()
+
+                  private fun writeUtf8(output: ByteArrayOutputStream, value: String) {
+                      val bytes = value.toByteArray(Charsets.UTF_8)
+                      require(bytes.isNotEmpty() && bytes.size <= MAX_FIELD_BYTES)
+                      writeBytes(output, bytes, MAX_FIELD_BYTES)
+                  }
+
+                  private fun writeBytes(output: ByteArrayOutputStream, bytes: ByteArray, maximum: Int) {
+                      require(bytes.isNotEmpty() && bytes.size <= maximum)
+                      require(bytes.size <= UShort.MAX_VALUE.toInt())
+                      output.write(shortBytes(bytes.size))
+                      output.write(bytes)
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/DeviceManagement.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal enum class DeviceLifecycleView {
+              PendingEnrollment,
+              Enrolled,
+              Revoked,
+          }
+
+          internal data class DeviceSnapshot(
+              val deviceId: String,
+              val lifecycle: DeviceLifecycleView,
+          )
+
+          internal data class DeviceManagementState(
+              val devices: List<DeviceSnapshot> = emptyList(),
+              val pendingRevocationDeviceId: String? = null,
+          )
+
+          internal class DeviceManagementController {
+              private var current = DeviceManagementState()
+
+              fun state(): DeviceManagementState = current
+
+              fun applyAuthoritativeSnapshot(devices: List<DeviceSnapshot>): Boolean {
+                  if (devices.size > MAX_DEVICES) return false
+                  val ids = HashSet<String>()
+                  for (device in devices) {
+                      val bytes = device.deviceId.toByteArray(Charsets.UTF_8)
+                      if (bytes.isEmpty() || bytes.size > MAX_DEVICE_ID_BYTES || !ids.add(device.deviceId)) {
+                          return false
+                      }
+                  }
+                  val pending = current.pendingRevocationDeviceId?.takeIf { deviceId ->
+                      devices.any { it.deviceId == deviceId && it.lifecycle == DeviceLifecycleView.Enrolled }
+                  }
+                  current = DeviceManagementState(devices = devices.toList(), pendingRevocationDeviceId = pending)
+                  return true
+              }
+
+              fun requestRevocation(deviceId: String): Boolean {
+                  if (current.pendingRevocationDeviceId != null) return false
+                  val device = current.devices.singleOrNull { it.deviceId == deviceId } ?: return false
+                  if (device.lifecycle != DeviceLifecycleView.Enrolled) return false
+                  current = current.copy(pendingRevocationDeviceId = deviceId)
+                  return true
+              }
+
+              companion object {
+                  private const val MAX_DEVICES = 256
+                  private const val MAX_DEVICE_ID_BYTES = 1024
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/test/kotlin/com/privateworkspace/prw/EnrollmentProofRequestTest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import org.junit.Assert.assertArrayEquals
+          import org.junit.Assert.assertThrows
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class EnrollmentProofRequestTest {
+              @Test fun exact_nonce_and_bounded_fields_encode() {
+                  val nonce = ByteArray(32) { 7 }
+                  val encoded = EnrollmentProofRequest(
+                      enrollmentId = "enrollment-146",
+                      workspaceId = "workspace-146",
+                      userId = "user-146",
+                      deviceId = "device-146",
+                      publicSpki = byteArrayOf(1, 2, 3),
+                      nonce = nonce,
+                  ).encode()
+                  assertArrayEquals(byteArrayOf('P'.code.toByte(), '1'.code.toByte(), '4'.code.toByte(), '6'.code.toByte()), encoded.copyOfRange(0, 4))
+                  assertTrue(encoded.size <= 4400)
+              }
+
+              @Test fun wrong_nonce_length_fails_closed() {
+                  assertThrows(IllegalArgumentException::class.java) {
+                      EnrollmentProofRequest(
+                          enrollmentId = "enrollment-146",
+                          workspaceId = "workspace-146",
+                          userId = "user-146",
+                          deviceId = "device-146",
+                          publicSpki = byteArrayOf(1),
+                          nonce = ByteArray(31),
+                      ).encode()
+                  }
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/test/kotlin/com/privateworkspace/prw/DeviceManagementTest.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertNull
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class DeviceManagementTest {
+              @Test fun revocation_intent_does_not_forge_authoritative_lifecycle() {
+                  val controller = DeviceManagementController()
+                  assertTrue(controller.applyAuthoritativeSnapshot(listOf(DeviceSnapshot("device-1", DeviceLifecycleView.Enrolled))))
+                  assertTrue(controller.requestRevocation("device-1"))
+                  assertEquals(DeviceLifecycleView.Enrolled, controller.state().devices.single().lifecycle)
+                  assertEquals("device-1", controller.state().pendingRevocationDeviceId)
+                  assertFalse(controller.requestRevocation("device-1"))
+              }
+
+              @Test fun only_enrolled_device_may_request_revocation() {
+                  val controller = DeviceManagementController()
+                  assertTrue(controller.applyAuthoritativeSnapshot(listOf(
+                      DeviceSnapshot("pending", DeviceLifecycleView.PendingEnrollment),
+                      DeviceSnapshot("revoked", DeviceLifecycleView.Revoked),
+                  )))
+                  assertFalse(controller.requestRevocation("pending"))
+                  assertFalse(controller.requestRevocation("revoked"))
+                  assertNull(controller.state().pendingRevocationDeviceId)
+              }
+
+              @Test fun authoritative_revoked_snapshot_clears_pending_intent() {
+                  val controller = DeviceManagementController()
+                  assertTrue(controller.applyAuthoritativeSnapshot(listOf(DeviceSnapshot("device-1", DeviceLifecycleView.Enrolled))))
+                  assertTrue(controller.requestRevocation("device-1"))
+                  assertTrue(controller.applyAuthoritativeSnapshot(listOf(DeviceSnapshot("device-1", DeviceLifecycleView.Revoked))))
+                  assertEquals(DeviceLifecycleView.Revoked, controller.state().devices.single().lifecycle)
+                  assertNull(controller.state().pendingRevocationDeviceId)
+              }
+
+              @Test fun duplicate_device_identifiers_fail_without_mutation() {
+                  val controller = DeviceManagementController()
+                  val baseline = listOf(DeviceSnapshot("device-1", DeviceLifecycleView.Enrolled))
+                  assertTrue(controller.applyAuthoritativeSnapshot(baseline))
+                  assertFalse(controller.applyAuthoritativeSnapshot(listOf(
+                      DeviceSnapshot("device-1", DeviceLifecycleView.Enrolled),
+                      DeviceSnapshot("device-1", DeviceLifecycleView.Revoked),
+                  )))
+                  assertEquals(baseline, controller.state().devices)
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/NativeBridge.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          internal object NativeBridge {
+              init {
+                  System.loadLibrary("prw_android_adapter")
+              }
+
+              @JvmStatic external fun protocolVersion(): Int
+              @JvmStatic external fun roundTripControlFrame(frame: ByteArray): ByteArray
+              @JvmStatic external fun canonicalSessionMessage(request: ByteArray): ByteArray
+              @JvmStatic external fun verifySessionSignature(request: ByteArray, signature: ByteArray): Boolean
+              @JvmStatic external fun canonicalEnrollmentMessage(request: ByteArray): ByteArray
+              @JvmStatic external fun verifyEnrollmentSignature(request: ByteArray, signature: ByteArray): Boolean
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.security.keystore.KeyGenParameterSpec
+          import android.security.keystore.KeyProperties
+          import android.security.keystore.StrongBoxUnavailableException
+          import java.security.KeyPairGenerator
+          import java.security.KeyStore
+          import java.security.PrivateKey
+          import java.security.Signature
+          import java.security.spec.ECGenParameterSpec
+
+          internal class AndroidKeyCustody(
+              private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) },
+          ) {
+              fun ensureDeviceIdentitySpki(): ByteArray = ensurePublicSpki(DEVICE_IDENTITY_ALIAS)
+
+              fun ensureTransportIdentitySpki(): ByteArray = ensurePublicSpki(TRANSPORT_IDENTITY_ALIAS)
+
+              fun deviceIdentityIsNonExportable(): Boolean = isNonExportable(DEVICE_IDENTITY_ALIAS)
+
+              internal fun signCanonicalSessionProof(message: ByteArray): ByteArray = signTypedDeviceProof(message)
+
+              internal fun signCanonicalEnrollmentProof(message: ByteArray): ByteArray = signTypedDeviceProof(message)
+
+              private fun signTypedDeviceProof(message: ByteArray): ByteArray {
+                  require(message.isNotEmpty() && message.size <= MAX_TYPED_MESSAGE_BYTES)
+                  ensurePublicSpki(DEVICE_IDENTITY_ALIAS)
+                  val privateKey = keyStore.getKey(DEVICE_IDENTITY_ALIAS, null) as? PrivateKey
+                      ?: error("device identity private key unavailable")
+                  check(privateKey.encoded == null) { "Android Keystore private key became exportable" }
+                  return Signature.getInstance(SIGNATURE_ALGORITHM).run {
+                      initSign(privateKey)
+                      update(message)
+                      sign()
+                  }
+              }
+
+              private fun ensurePublicSpki(alias: String): ByteArray {
+                  if (!keyStore.containsAlias(alias)) {
+                      generate(alias, strongBox = true)
+                  }
+                  val certificate = keyStore.getCertificate(alias)
+                      ?: error("Android Keystore public identity unavailable")
+                  return certificate.publicKey.encoded
+                      ?: error("Android Keystore public identity SPKI unavailable")
+              }
+
+              private fun generate(alias: String, strongBox: Boolean) {
+                  try {
+                      generator(alias, strongBox).generateKeyPair()
+                  } catch (error: StrongBoxUnavailableException) {
+                      if (!strongBox) throw error
+                      generator(alias, strongBox = false).generateKeyPair()
+                  }
+              }
+
+              private fun generator(alias: String, strongBox: Boolean): KeyPairGenerator =
+                  KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, KEYSTORE_PROVIDER).apply {
+                      val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+                          .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                          .setDigests(KeyProperties.DIGEST_SHA256)
+                          .setUserAuthenticationRequired(false)
+                      if (strongBox) builder.setIsStrongBoxBacked(true)
+                      initialize(builder.build())
+                  }
+
+              private fun isNonExportable(alias: String): Boolean {
+                  ensurePublicSpki(alias)
+                  val key = keyStore.getKey(alias, null) as? PrivateKey ?: return false
+                  return key.encoded == null
+              }
+
+              companion object {
+                  internal const val DEVICE_IDENTITY_ALIAS = "prw.device-identity.v1"
+                  internal const val TRANSPORT_IDENTITY_ALIAS = "prw.transport-identity.v1"
+                  private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+                  private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
+                  private const val MAX_TYPED_MESSAGE_BYTES = 4_442
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import androidx.lifecycle.ViewModel
+          import java.security.SecureRandom
+          import kotlinx.coroutines.flow.MutableStateFlow
+          import kotlinx.coroutines.flow.StateFlow
+          import kotlinx.coroutines.flow.asStateFlow
+
+          internal enum class EnrollmentPresentationState {
+              NotReady,
+              Ready,
+              ProofValidated,
+              Error,
+          }
+
+          internal data class PrwUiState(
+              val connectionState: ConnectionState = ConnectionState.Disconnected,
+              val identityReady: Boolean = false,
+              val nativeBridgeReady: Boolean = false,
+              val bootstrapValidated: Boolean = false,
+              val enrollmentState: EnrollmentPresentationState = EnrollmentPresentationState.NotReady,
+              val devices: List<DeviceSnapshot> = emptyList(),
+              val pendingRevocationDeviceId: String? = null,
+              val detail: String = "Development bootstrap only — no production endpoint",
+          )
+
+          internal class MainViewModel(
+              private val custody: AndroidKeyCustody = AndroidKeyCustody(),
+              private val controller: ConnectionController = ConnectionController(),
+              private val deviceManagement: DeviceManagementController = DeviceManagementController(),
+          ) : ViewModel() {
+              private val mutableUiState = MutableStateFlow(PrwUiState())
+              val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
+
+              fun validateLocalBootstrap() {
+                  if (!controller.transition(ConnectionState.Connecting)) return
+                  publish("Preparing non-exportable Android identity")
+                  runCatching {
+                      check(NativeBridge.protocolVersion() == 1)
+                      val spki = custody.ensureDeviceIdentitySpki()
+                      check(custody.deviceIdentityIsNonExportable())
+                      controller.transition(ConnectionState.Authenticating)
+                      publish("Validating typed local session proof")
+                      val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+                      val request = BootstrapRequest(
+                          workspaceId = "phase145-development-workspace",
+                          userId = "phase145-development-user",
+                          deviceId = "phase145-android-device",
+                          sessionId = "phase145-local-session",
+                          publicSpki = spki,
+                          nonce = nonce,
+                      ).encode()
+                      val canonical = NativeBridge.canonicalSessionMessage(request)
+                      check(canonical.isNotEmpty())
+                      val signature = custody.signCanonicalSessionProof(canonical)
+                      check(NativeBridge.verifySessionSignature(request, signature))
+                      check(controller.transition(ConnectionState.Connected))
+                  }.onSuccess {
+                      mutableUiState.value = mutableUiState.value.copy(
+                          connectionState = ConnectionState.Connected,
+                          identityReady = true,
+                          nativeBridgeReady = true,
+                          bootstrapValidated = true,
+                          detail = "Local authenticated bootstrap validated; remote production networking remains disabled",
+                      )
+                  }.onFailure { error ->
+                      controller.transition(ConnectionState.Error)
+                      mutableUiState.value = mutableUiState.value.copy(
+                          connectionState = ConnectionState.Error,
+                          identityReady = runCatching { custody.deviceIdentityIsNonExportable() }.getOrDefault(false),
+                          nativeBridgeReady = runCatching { NativeBridge.protocolVersion() == 1 }.getOrDefault(false),
+                          bootstrapValidated = false,
+                          detail = error.message ?: "Local bootstrap failed closed",
+                      )
+                  }
+              }
+
+              fun validateLocalEnrollmentProof() {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      enrollmentState = EnrollmentPresentationState.Ready,
+                      detail = "Preparing disposable typed enrollment proof; no enrollment authority is contacted",
+                  )
+                  runCatching {
+                      check(NativeBridge.protocolVersion() == 1)
+                      val spki = custody.ensureDeviceIdentitySpki()
+                      check(custody.deviceIdentityIsNonExportable())
+                      val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+                      val request = EnrollmentProofRequest(
+                          enrollmentId = "phase146-local-enrollment",
+                          workspaceId = "phase146-development-workspace",
+                          userId = "phase146-development-user",
+                          deviceId = "phase146-android-device",
+                          publicSpki = spki,
+                          nonce = nonce,
+                      ).encode()
+                      val canonical = NativeBridge.canonicalEnrollmentMessage(request)
+                      check(canonical.isNotEmpty())
+                      val signature = custody.signCanonicalEnrollmentProof(canonical)
+                      check(NativeBridge.verifyEnrollmentSignature(request, signature))
+                  }.onSuccess {
+                      mutableUiState.value = mutableUiState.value.copy(
+                          identityReady = true,
+                          nativeBridgeReady = true,
+                          enrollmentState = EnrollmentPresentationState.ProofValidated,
+                          detail = "Disposable enrollment proof validated locally; authoritative enrollment remains unchanged",
+                      )
+                  }.onFailure { error ->
+                      mutableUiState.value = mutableUiState.value.copy(
+                          enrollmentState = EnrollmentPresentationState.Error,
+                          detail = error.message ?: "Enrollment proof failed closed",
+                      )
+                  }
+              }
+
+              fun loadDisposableDeviceSnapshots() {
+                  val accepted = deviceManagement.applyAuthoritativeSnapshot(
+                      listOf(
+                          DeviceSnapshot("phase146-android-device", DeviceLifecycleView.Enrolled),
+                          DeviceSnapshot("phase146-pending-device", DeviceLifecycleView.PendingEnrollment),
+                      ),
+                  )
+                  check(accepted)
+                  publishDeviceState("Loaded disposable authoritative device snapshots; no production registry contacted")
+              }
+
+              fun requestRevocation(deviceId: String) {
+                  val accepted = deviceManagement.requestRevocation(deviceId)
+                  publishDeviceState(
+                      if (accepted) {
+                          "Revocation intent pending for $deviceId; authoritative lifecycle remains Enrolled"
+                      } else {
+                          "Revocation intent rejected by current authoritative lifecycle/pending state"
+                      },
+                  )
+              }
+
+              fun disconnect() {
+                  val current = controller.state.value
+                  if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
+                      check(controller.transition(ConnectionState.Disconnecting))
+                      check(controller.transition(ConnectionState.Disconnected))
+                  } else if (current == ConnectionState.Error) {
+                      check(controller.transition(ConnectionState.Disconnected))
+                  }
+                  mutableUiState.value = mutableUiState.value.copy(
+                      connectionState = controller.state.value,
+                      bootstrapValidated = false,
+                      detail = "Development bootstrap only — no production endpoint",
+                  )
+              }
+
+              private fun publish(detail: String) {
+                  mutableUiState.value = mutableUiState.value.copy(
+                      connectionState = controller.state.value,
+                      detail = detail,
+                  )
+              }
+
+              private fun publishDeviceState(detail: String) {
+                  val deviceState = deviceManagement.state()
+                  mutableUiState.value = mutableUiState.value.copy(
+                      devices = deviceState.devices,
+                      pendingRevocationDeviceId = deviceState.pendingRevocationDeviceId,
+                      detail = detail,
+                  )
+              }
+          }
+          EOF
+
+          cat > apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.Surface
+          import androidx.compose.material3.Text
+          import androidx.compose.runtime.collectAsState
+          import androidx.compose.runtime.getValue
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.unit.dp
+          import androidx.lifecycle.viewmodel.compose.viewModel
+
+          internal class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          val model: MainViewModel = viewModel()
+                          val state by model.uiState.collectAsState()
+                          Surface(modifier = Modifier.fillMaxSize()) {
+                              Column(
+                                  modifier = Modifier.padding(24.dp),
+                                  verticalArrangement = Arrangement.spacedBy(12.dp),
+                              ) {
+                                  Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
+                                  Text("Phase 146 enrollment and device management")
+                                  Text("Connection: ${state.connectionState}")
+                                  Text("Identity ready: ${state.identityReady}")
+                                  Text("Native bridge: ${state.nativeBridgeReady}")
+                                  Text("Authenticated bootstrap: ${state.bootstrapValidated}")
+                                  Text("Enrollment proof: ${state.enrollmentState}")
+                                  Text(state.detail)
+                                  Button(onClick = model::validateLocalBootstrap) {
+                                      Text("Validate local bootstrap")
+                                  }
+                                  Button(onClick = model::validateLocalEnrollmentProof) {
+                                      Text("Validate local enrollment proof")
+                                  }
+                                  Button(onClick = model::loadDisposableDeviceSnapshots) {
+                                      Text("Load disposable device snapshots")
+                                  }
+                                  state.devices.forEach { device ->
+                                      Text("${device.deviceId}: ${device.lifecycle}")
+                                      if (device.lifecycle == DeviceLifecycleView.Enrolled) {
+                                          Button(onClick = { model.requestRevocation(device.deviceId) }) {
+                                              Text(
+                                                  if (state.pendingRevocationDeviceId == device.deviceId) {
+                                                      "Revocation pending"
+                                                  } else {
+                                                      "Request revocation"
+                                                  },
+                                              )
+                                          }
+                                      }
+                                  }
+                                  Button(onClick = model::disconnect) {
+                                      Text("Disconnect")
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/android/native/src/lib.rs')
+          text = path.read_text()
+
+          old = '''use prw_control_plane::{
+              DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentityPublicKeyEncoding,
+              DeviceIdentitySignature, DeviceIdentitySignatureEncoding, PublicIdentityMaterial,
+              session_auth::{SessionAuthNonce, encode_session_auth_message},
+          };
+          use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};'''
+          new = '''use prw_control_plane::{
+              DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentityPublicKeyEncoding,
+              DeviceIdentitySignature, DeviceIdentitySignatureEncoding, EnrollmentRequest,
+              PublicIdentityMaterial,
+              enrollment_pop::{EnrollmentProofNonce, encode_enrollment_proof_message},
+              session_auth::{SessionAuthNonce, encode_session_auth_message},
+          };
+          use prw_core::{DeviceId, DeviceLifecycle, EnrollmentId, SessionId, UserId, WorkspaceId};'''
+          if text.count(old) != 1:
+              raise SystemExit('Phase146 native import boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''const BOOTSTRAP_MAGIC: [u8; 4] = *b"P145";
+          const BOOTSTRAP_VERSION: u16 = 1;
+          const MAX_BOOTSTRAP_BYTES: usize = 4_096;'''
+          new = '''const BOOTSTRAP_MAGIC: [u8; 4] = *b"P145";
+          const BOOTSTRAP_VERSION: u16 = 1;
+          const ENROLLMENT_MAGIC: [u8; 4] = *b"P146";
+          const ENROLLMENT_VERSION: u16 = 1;
+          const MAX_BOOTSTRAP_BYTES: usize = 4_096;
+          const MAX_ENROLLMENT_REQUEST_BYTES: usize = 4_400;'''
+          if text.count(old) != 1:
+              raise SystemExit('Phase146 native constants boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''pub enum AndroidAdapterError {
+              InvalidBootstrap,
+              InvalidIdentifier,
+              InvalidPublicIdentity,
+              InvalidControlFrame,
+          }'''
+          new = '''pub enum AndroidAdapterError {
+              InvalidBootstrap,
+              InvalidEnrollment,
+              InvalidIdentifier,
+              InvalidPublicIdentity,
+              InvalidControlFrame,
+          }'''
+          if text.count(old) != 1:
+              raise SystemExit('Phase146 native error enum boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''            Self::InvalidBootstrap => "invalid Android bootstrap request",
+                      Self::InvalidIdentifier => "invalid Android bootstrap identifier",'''
+          new = '''            Self::InvalidBootstrap => "invalid Android bootstrap request",
+                      Self::InvalidEnrollment => "invalid Android enrollment proof request",
+                      Self::InvalidIdentifier => "invalid Android bootstrap identifier",'''
+          if text.count(old) != 1:
+              raise SystemExit('Phase146 native error display boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''struct BootstrapIdentity {
+              binding: DeviceIdentityBinding,
+              session_id: SessionId,
+              nonce: SessionAuthNonce,
+          }
+          '''
+          new = '''struct BootstrapIdentity {
+              binding: DeviceIdentityBinding,
+              session_id: SessionId,
+              nonce: SessionAuthNonce,
+          }
+
+          struct EnrollmentIdentity {
+              request: EnrollmentRequest,
+              nonce: EnrollmentProofNonce,
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('Phase146 native identity struct boundary mismatch')
+          text = text.replace(old, new)
+
+          marker = '''fn parse_bootstrap(input: &[u8]) -> Result<BootstrapIdentity, AndroidAdapterError> {'''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase146 parse bootstrap boundary mismatch')
+          addition = '''/// Builds the canonical typed PRW enrollment proof-of-possession message.
+          ///
+          /// # Errors
+          ///
+          /// Returns a bounded [`AndroidAdapterError`] when the local JNI enrollment envelope,
+          /// identifiers, public identity, nonce, or canonical proof message is invalid.
+          pub fn canonical_enrollment_message(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {
+              let parsed = parse_enrollment(input)?;
+              encode_enrollment_proof_message(&parsed.request, parsed.nonce)
+                  .map_err(|_| AndroidAdapterError::InvalidEnrollment)
+          }
+
+          /// Verifies a bounded DER P-256 signature over the canonical enrollment message.
+          #[must_use]
+          pub fn verify_enrollment_signature(input: &[u8], signature: &[u8]) -> bool {
+              if signature.is_empty() || signature.len() > MAX_SIGNATURE_BYTES {
+                  return false;
+              }
+              let Ok(parsed) = parse_enrollment(input) else {
+                  return false;
+              };
+              let Ok(message) = encode_enrollment_proof_message(&parsed.request, parsed.nonce) else {
+                  return false;
+              };
+              let Ok(signature) = DeviceIdentitySignature::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
+                  signature.to_vec(),
+              ) else {
+                  return false;
+              };
+              verify_device_identity_signature(&parsed.request.public_identity, &message, &signature).is_ok()
+          }
+
+          '''
+          text = text.replace(marker, addition + marker)
+
+          marker = '''struct Reader<'a> {'''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase146 reader boundary mismatch')
+          addition = '''fn parse_enrollment(input: &[u8]) -> Result<EnrollmentIdentity, AndroidAdapterError> {
+              if input.len() > MAX_ENROLLMENT_REQUEST_BYTES || input.len() < 6 + 32 {
+                  return Err(AndroidAdapterError::InvalidEnrollment);
+              }
+              if input[..4] != ENROLLMENT_MAGIC
+                  || u16::from_be_bytes([input[4], input[5]]) != ENROLLMENT_VERSION
+              {
+                  return Err(AndroidAdapterError::InvalidEnrollment);
+              }
+              let mut reader = Reader::new(&input[6..]);
+              let enrollment = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let workspace = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let user = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let device = reader.utf8(MAX_IDENTIFIER_BYTES)?;
+              let public_spki = reader.bytes(MAX_PUBLIC_SPKI_BYTES)?;
+              let nonce = reader.array::<32>()?;
+              reader.finish()?;
+
+              let public_identity = PublicIdentityMaterial::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer,
+                  public_spki,
+              )
+              .map_err(|_| AndroidAdapterError::InvalidPublicIdentity)?;
+              Ok(EnrollmentIdentity {
+                  request: EnrollmentRequest {
+                      enrollment_id: EnrollmentId::new(enrollment)
+                          .map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      workspace_id: WorkspaceId::new(workspace)
+                          .map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      user_id: UserId::new(user).map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      device_id: DeviceId::new(device)
+                          .map_err(|_| AndroidAdapterError::InvalidIdentifier)?,
+                      public_identity,
+                  },
+                  nonce: EnrollmentProofNonce::new(nonce),
+              })
+          }
+
+          '''
+          text = text.replace(marker, addition + marker)
+
+          marker = '''#[cfg(test)]
+          mod tests {'''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase146 native JNI insertion boundary mismatch')
+          addition = '''#[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_canonicalEnrollmentMessage<
+              'caller,
+          >(
+              mut env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              input: JByteArray<'caller>,
+          ) -> JByteArray<'caller> {
+              jni_bytes(&mut env, &input, |bytes| {
+                  canonical_enrollment_message(bytes).unwrap_or_default()
+              })
+          }
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_verifyEnrollmentSignature<
+              'caller,
+          >(
+              mut unowned_env: EnvUnowned<'caller>,
+              _class: JClass<'caller>,
+              input: JByteArray<'caller>,
+              signature: JByteArray<'caller>,
+          ) -> jboolean {
+              unowned_env
+                  .with_env(|env| -> jni::errors::Result<_> {
+                      let input = env.convert_byte_array(&input)?;
+                      let signature = env.convert_byte_array(&signature)?;
+                      Ok(verify_enrollment_signature(&input, &signature))
+                  })
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          '''
+          text = text.replace(marker, addition + marker)
+
+          marker = '''    #[test]
+              fn malformed_bootstrap_fails_closed() {'''
+          if text.count(marker) != 1:
+              raise SystemExit('Phase146 native test insertion boundary mismatch')
+          addition = '''    fn enrollment_input(public_spki: &[u8]) -> Vec<u8> {
+                  let mut value = Vec::new();
+                  value.extend_from_slice(&ENROLLMENT_MAGIC);
+                  value.extend_from_slice(&ENROLLMENT_VERSION.to_be_bytes());
+                  field(&mut value, b"enrollment-146");
+                  field(&mut value, b"workspace-146");
+                  field(&mut value, b"user-146");
+                  field(&mut value, b"device-146");
+                  field(&mut value, public_spki);
+                  value.extend_from_slice(&[11; 32]);
+                  value
+              }
+
+              #[test]
+              fn typed_enrollment_message_and_signature_validate() {
+                  let pkcs8 =
+                      EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                          .expect("key");
+                  let signer = UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("signer");
+                  let input = enrollment_input(signer.public_identity().as_bytes());
+                  let parsed = parse_enrollment(&input).expect("parse enrollment");
+                  let canonical = canonical_enrollment_message(&input).expect("canonical enrollment");
+                  let challenge = prw_control_plane::enrollment_pop::EnrollmentProofChallengeState::new(
+                      parsed.request.clone(),
+                      parsed.nonce,
+                      10,
+                      20,
+                  )
+                  .expect("challenge state");
+                  let proof = signer
+                      .sign_enrollment_proof(&parsed.request, challenge.challenge())
+                      .expect("typed enrollment proof");
+                  assert!(verify_enrollment_signature(
+                      &input,
+                      proof.signature().as_bytes()
+                  ));
+                  let mut bad = proof.signature().as_bytes().to_vec();
+                  let last = bad.len() - 1;
+                  bad[last] ^= 1;
+                  assert!(!verify_enrollment_signature(&input, &bad));
+                  assert!(canonical.starts_with(
+                      prw_control_plane::enrollment_pop::ENROLLMENT_PROOF_DOMAIN_SEPARATOR
+                  ));
+              }
+
+              #[test]
+              fn malformed_enrollment_fails_closed() {
+                  assert_eq!(
+                      canonical_enrollment_message(b"P146\\x00\\x01"),
+                      Err(AndroidAdapterError::InvalidEnrollment)
+                  );
+                  assert!(!verify_enrollment_signature(b"bad", &[1, 2, 3]));
+              }
+
+          '''
+          text = text.replace(marker, addition + marker)
+          path.write_text(text)
+          PY
+
+          cat > apps/android/README.md <<'EOF'
+          # PRW Android Application
+
+          Phase 146 builds on the validated non-production native Android foundation.
+
+          Current development responsibilities:
+
+          - Kotlin + Jetpack Compose UI;
+          - Android Keystore non-exportable P-256 device/transport identity custody;
+          - narrow Rust/JNI adapter reusing authoritative PRW codecs and identity verification;
+          - local typed authenticated bootstrap proof;
+          - local typed enrollment proof validation;
+          - bounded authoritative/injected device lifecycle projection;
+          - revocation intent that never forges authoritative `Revoked` state.
+
+          Phase 146 does not contact a production enrollment/device registry endpoint, perform production revocation propagation, activate production networking, or add production signing/distribution.
+          EOF
+
+          cargo +1.97.1 fmt --manifest-path apps/android/native/Cargo.toml --all
+          echo phase146_source_candidate=pass
+
+      - name: Validate Phase 146 native enrollment boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+          grep -Fq 'encode_enrollment_proof_message' src/lib.rs
+          grep -Fq 'verify_device_identity_signature' src/lib.rs
+          grep -Fq 'ENROLLMENT_MAGIC' src/lib.rs
+          if grep -R --line-number -E 'unsafe[[:space:]]*\{|unsafe[[:space:]]+fn' src; then
+            echo phase146_unexpected_unsafe_block_or_fn >&2
+            exit 1
+          fi
+          if grep -R --line-number 'JNIEnv' src; then
+            echo phase146_deprecated_jnienv_detected >&2
+            exit 1
+          fi
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -t x86_64 -o "$RUNNER_TEMP/phase146-native-libs" build --locked --release
+          test -s "$RUNNER_TEMP/phase146-native-libs/arm64-v8a/libprw_android_adapter.so"
+          test -s "$RUNNER_TEMP/phase146-native-libs/x86_64/libprw_android_adapter.so"
+          echo phase146_native=pass
+
+      - name: Validate Phase 146 Android unit lint and APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase146-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_adapter.so' "$RUNNER_TEMP/phase146-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_adapter.so' "$RUNNER_TEMP/phase146-apk-list.txt"
+          sha256sum "$apk" | cut -d' ' -f1 > "$RUNNER_TEMP/phase146-apk-sha.txt"
+          echo phase146_android=pass
+
+      - name: Prove Phase 146 authority and security boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          manifest=apps/android/app/src/main/AndroidManifest.xml
+          ! grep -Fq 'RECEIVE_BOOT_COMPLETED' "$manifest"
+          ! grep -Eq '<(service|receiver|provider)' "$manifest"
+          ! grep -R -E 'https?://|wss?://' apps/android/app/src/main/kotlin apps/android/native/src
+          ! grep -R -E 'BEGIN (EC |RSA |)PRIVATE KEY|PrivateKeyDer' apps/android/app/src/main/kotlin apps/android/native/src
+          grep -Fq 'privateKey.encoded == null' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'signCanonicalEnrollmentProof' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'DeviceLifecycleView.PendingEnrollment' apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          grep -Fq 'DeviceLifecycleView.Enrolled' apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          grep -Fq 'pendingRevocationDeviceId' apps/android/app/src/main/kotlin/com/privateworkspace/prw/DeviceManagement.kt
+          ! grep -R -E '\b(Trusted|Admin|Authorized|capabilit(y|ies))\b' apps/android/app/src/main/kotlin/com/privateworkspace/prw/DeviceManagement.kt apps/android/app/src/main/kotlin/com/privateworkspace/prw/MainViewModel.kt
+          git diff --exit-code -- apps/android/native/Cargo.toml apps/android/app/build.gradle.kts
+          echo phase146_security=pass
+
+      - name: Revalidate root Rust workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo phase146_root=pass
+
+      - name: Write authoritative Phase 146 validation report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report_dir=logs/audits/phase-146-android-enrollment-device-management
+          report="$report_dir/PRW-PHASE-146-ANDROID-ENROLLMENT-DEVICE-MANAGEMENT-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          native_src_sha=$(sha256sum apps/android/native/src/lib.rs | cut -d' ' -f1)
+          custody_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt | cut -d' ' -f1)
+          device_state_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/DeviceManagement.kt | cut -d' ' -f1)
+          apk_sha=$(cat "$RUNNER_TEMP/phase146-apk-sha.txt")
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 146 — Android Enrollment and Device Management' \
+            '' \
+            'STATUS:' \
+            'PASS / TYPED_ANDROID_ENROLLMENT_PROOF / EXISTING_RUST_CANONICAL_ENCODER_AND_VERIFIER_REUSED / NON_EXPORTABLE_ANDROID_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_REVOKED / NO_NEW_DEPENDENCIES / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            "Native adapter source SHA-256: $native_src_sha" \
+            "Android custody source SHA-256: $custody_sha" \
+            "Device-management source SHA-256: $device_state_sha" \
+            "Validated debug APK SHA-256: $apk_sha" \
+            '' \
+            'CONTRACT: contracts/ANDROID_ENROLLMENT_DEVICE_MANAGEMENT_CONTRACT.md' \
+            'ENROLLMENT: Android-local P146 JNI envelope is not a network protocol; native adapter reconstructs existing EnrollmentRequest/EnrollmentProofNonce and delegates canonical proof bytes to prw-control-plane encode_enrollment_proof_message.' \
+            'SIGNATURE: Android Keystore device key remains non-exportable P-256; typed enrollment proof signing is distinct from UI/generic signing authority; existing Rust device-identity verifier validates DER signature.' \
+            'DEVICE STATUS: presentation exposes only PendingEnrollment, Enrolled and Revoked; disposable injected snapshots stand in for future authoritative fetch without creating production registry persistence.' \
+            'REVOCATION: local request creates only pending intent; displayed lifecycle remains authoritative and can become Revoked only through a later authoritative snapshot.' \
+            'DEPENDENCIES: no Android Gradle or native Cargo dependency change.' \
+            'PRODUCTION BOUNDARY: no account login, real enrollment, production device-list endpoint, revocation propagation, production network listener/transport, release signing/distribution, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.' \
+            '' \
+            'FINAL CLASSIFICATION: PHASE_146_FUNCTIONALLY_VALIDATED / TYPED_ANDROID_ENROLLMENT_PROOF / NON_EXPORTABLE_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_AUTHORITY / NO_NEW_DEPENDENCIES / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_147' \
+            > "$report"
+          echo phase146_report=pass
+
+      - name: Stage only validated Phase 146 source and evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-146-android-enrollment-device-management/PRW-PHASE-146-ANDROID-ENROLLMENT-DEVICE-MANAGEMENT-VALIDATION.txt
+          git diff --check -- apps/android "$report"
+          git add \
+            apps/android/README.md \
+            apps/android/app/src/main/kotlin/com/privateworkspace/prw \
+            apps/android/app/src/test/kotlin/com/privateworkspace/prw \
+            apps/android/native/src/lib.rs \
+            "$report"
+          staged="$(git diff --cached --name-only)"
+          test -n "$staged"
+          if printf '%s\n' "$staged" | grep -E '(^|/)(build|target|\.gradle)/'; then
+            echo phase146_generated_output_staged >&2
+            exit 1
+          fi
+          ! printf '%s\n' "$staged" | grep -Fxq 'apps/android/native/Cargo.toml'
+          ! printf '%s\n' "$staged" | grep -Fxq 'apps/android/app/build.gradle.kts'
+          grep -Fxq 'apps/android/native/src/lib.rs' <<< "$staged"
+          grep -Fxq 'apps/android/app/src/main/kotlin/com/privateworkspace/prw/EnrollmentProofRequest.kt' <<< "$staged"
+          grep -Fxq 'apps/android/app/src/main/kotlin/com/privateworkspace/prw/DeviceManagement.kt' <<< "$staged"
+          grep -Fxq "$report" <<< "$staged"
+          echo phase146_staging=pass
+
+      - name: Commit and push validated Phase 146 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 146: validate Android enrollment and device management'
+          git push origin HEAD:main
+          echo phase146_materialization=pass
