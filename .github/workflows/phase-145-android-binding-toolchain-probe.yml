@@ -22,9 +22,9 @@ jobs:
           set -Eeuo pipefail
           start_head="$(git rev-parse HEAD)"
           printf '%s\n' "$start_head" > "$RUNNER_TEMP/phase145-start-head"
-          git merge-base --is-ancestor b2c82a8a1fa882ac7e56871b041456e6f277e8c8 "$start_head"
           test -f contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md
           test -f logs/audits/phase-144-android-client-architecture/PRW-PHASE-144-ANDROID-CLIENT-ARCHITECTURE-DECISION.txt
+          grep -Fq 'Status: Phase 144 architecture lock' contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md
           grep -Fq 'PHASE_144_DONE' logs/audits/phase-144-android-client-architecture/PRW-PHASE-144-ANDROID-CLIENT-ARCHITECTURE-DECISION.txt
           echo phase145_probe_prerequisite=pass
 
