@@ -1,0 +1,67 @@
+name: Phase 125 Identity-Aware Agent Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-125-identity-aware-agent-validation.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/prw-agent/**'
+      - 'crates/prw-device-identity-custody/**'
+      - 'crates/prw-device-identity-signer/**'
+      - 'crates/prw-device-identity/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact toolchain
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+      - name: Generate deterministic candidate lockfile
+        run: |
+          set -Eeuo pipefail
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          sha256sum Cargo.lock
+      - name: Validate workspace and Phase 125 Agent boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          cargo test --locked -p prw-agent --test phase125_device_identity_bootstrap
+          cargo build --release --locked -p prw-agent --bin prw-agent
+
+          tree=$(cargo tree --locked -p prw-agent)
+          grep -Fq 'prw-device-identity-custody' <<<"$tree"
+          grep -Fq 'prw-device-identity-signer' <<<"$tree"
+          grep -Fq 'prw-device-identity' <<<"$tree"
+          grep -Fq 'aws-lc-rs' <<<"$tree"
+          grep -Fq 'aws-lc-sys' <<<"$tree"
+
+          test "$(grep -Fc 'prw-device-identity-custody' crates/prw-agent/Cargo.toml)" -eq 1
+          ! grep -Eq '^aws-lc-rs|^prw-device-identity-signer|^prw-device-identity[[:space:]]*=' crates/prw-agent/Cargo.toml
+          grep -Fq 'kind=device_identity' crates/prw-agent/src/main.rs
+          ! grep -Eq 'pub[[:space:]]+fn[[:space:]]+sign[[:space:]]*\(' crates/prw-agent/src/main.rs
+
+          sha256sum target/release/prw-agent
+          stat -c 'release_agent_size=%s' target/release/prw-agent
+      - name: Upload validated Cargo.lock candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase125-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
