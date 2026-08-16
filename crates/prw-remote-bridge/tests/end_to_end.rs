@@ -331,22 +331,27 @@ fn stale_transport_expired_or_future_session_never_dispatches() {
 
 #[test]
 fn membership_suspension_and_device_revocation_invalidate_unexpired_session() {
-    let mut fixture = fixture(WorkspaceRole::Member);
-    let workspace = fixture.lease.session().workspace_id().clone();
-    let user = fixture.lease.session().user_id().clone();
-    let device = fixture.lease.session().device_id().clone();
+    let mut suspended_fixture = fixture(WorkspaceRole::Member);
+    let workspace = suspended_fixture.lease.session().workspace_id().clone();
+    let user = suspended_fixture.lease.session().user_id().clone();
+    let device = suspended_fixture.lease.session().device_id().clone();
     let frame = request_frame(3, &BridgeCommand::AgentStatus);
     let policy = FixedPolicy {
         allow: Some(Capability::AgentStatusRead),
     };
 
-    fixture
+    suspended_fixture
         .registry
         .suspend_membership(&workspace, &user)
         .expect("suspend membership");
-    let bridge = CapabilityBridge::new(&fixture.registry, &policy);
+    let bridge = CapabilityBridge::new(&suspended_fixture.registry, &policy);
     assert_eq!(
-        bridge.authorize(fixture.transport, &fixture.lease, 1_100, &frame),
+        bridge.authorize(
+            suspended_fixture.transport,
+            &suspended_fixture.lease,
+            1_100,
+            &frame
+        ),
         Err(RemoteBridgeError::RegistryRejected)
     );
 
