@@ -51,8 +51,18 @@ jobs:
           grep -Fq 'aws-lc-rs' <<<"$tree"
           grep -Fq 'aws-lc-sys' <<<"$tree"
 
-          test "$(grep -Fc 'prw-device-identity-custody' crates/prw-agent/Cargo.toml)" -eq 1
-          ! grep -Eq '^aws-lc-rs|^prw-device-identity-signer|^prw-device-identity[[:space:]]*=' crates/prw-agent/Cargo.toml
+          python3 - <<'PY'
+          import pathlib
+          import tomllib
+
+          manifest = tomllib.loads(pathlib.Path('crates/prw-agent/Cargo.toml').read_text())
+          production = manifest.get('dependencies', {})
+          dev = manifest.get('dev-dependencies', {})
+          assert 'prw-device-identity-custody' in production
+          for forbidden in ('aws-lc-rs', 'prw-device-identity-signer', 'prw-device-identity'):
+              assert forbidden not in production
+          assert 'aws-lc-rs' in dev
+          PY
           grep -Fq 'kind=device_identity' crates/prw-agent/src/main.rs
           ! grep -Eq 'pub[[:space:]]+fn[[:space:]]+sign[[:space:]]*\(' crates/prw-agent/src/main.rs
 
