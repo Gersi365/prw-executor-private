@@ -595,7 +595,7 @@ mod tests {
             base_message,
             encode_session_auth_message(&changed, &session, nonce).expect("message")
         );
-        changed = base.clone();
+        changed = base;
         changed.device_id = DeviceId::new("device-2").expect("device id");
         assert_ne!(
             base_message,
