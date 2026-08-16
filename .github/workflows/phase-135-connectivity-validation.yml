@@ -1,4 +1,4 @@
-name: Phase 135 A01 Private Mesh Connectivity Foundation Validation
+name: Phase 135 A02 Private Mesh Connectivity Foundation Validation
 
 on:
   push:
@@ -45,8 +45,8 @@ jobs:
 
           source = Path('crates/prw-connectivity/src/lib.rs')
           text = source.read_text()
-          old = '                    2000 + value as u16,\n'
-          new = '                    2000 + u16::try_from(value).expect("capacity test value fits u16"),\n'
+          old = '2000 + value as u16'
+          new = '2000 + u16::try_from(value).expect("capacity test value fits u16")'
           if old in text:
               if text.count(old) != 1:
                   raise SystemExit('capacity conversion replacement count mismatch')
@@ -164,7 +164,7 @@ jobs:
           Logical DeviceId is distinct from an opaque non-zero 32-byte TransportIdentity. Phase 135 does not derive cryptographic identity and stores no private key. Candidate endpoints are explicit IP addresses, not hostnames, so basic path selection has no DNS dependency. Unspecified, multicast and IPv4 limited-broadcast endpoints fail closed.
 
           VALIDATION
-          Initial run 31947289728 passed graph normalization and the static no-network/no-DNS boundary, then stopped safely on one test-only possible-truncation lint in the 17-candidate capacity fixture. This corrective replaces the cast with checked conversion. The authoritative run then passes focused prw-connectivity rustfmt/Clippy -D warnings/all-target tests and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+          Initial run 31947289728 passed graph normalization and the static no-network/no-DNS boundary, then stopped safely on one test-only possible-truncation lint in the 17-candidate capacity fixture. Run 31947367610 stopped before compile because its corrective guard assumed formatter-specific line layout. This authoritative corrective replaces the exact cast substring independent of layout, then requires focused and full-workspace PASS.
 
           DEFERRED
           Real discovery, STUN, ICE, NAT traversal traffic, dialing, tunnels, TUN, route/firewall mutation, private address assignment, endpoint publication and path-health scheduling remain deferred. Phase 136 owns relay transport fallback. Phase 137 owns optional private DNS.
