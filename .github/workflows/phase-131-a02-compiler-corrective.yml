@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply exact Phase 131 compiler correctives
+      - name: Apply exact Phase 131 compiler and lint correctives
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -41,23 +41,19 @@ jobs:
                   raise SystemExit('PermissionsExt insertion point mismatch')
               text = text.replace(needle, needle + import_line)
 
-          old = '        file.by_ref()\n'
-          new = '        std::io::Read::by_ref(&mut file)\n'
-          if old in text:
-              if text.count(old) != 1:
-                  raise SystemExit('Read::by_ref replacement count mismatch')
-              text = text.replace(old, new)
-          elif new not in text:
-              raise SystemExit('Read::by_ref expected form missing')
-
-          old = '    fn open_parent(&self, path: &RemotePath) -> Result<(OwnedFd, &str), FileServiceError> {'
-          new = "    fn open_parent<'a>(&self, path: &'a RemotePath) -> Result<(OwnedFd, &'a str), FileServiceError> {"
-          if old in text:
-              if text.count(old) != 1:
-                  raise SystemExit('open_parent lifetime replacement count mismatch')
-              text = text.replace(old, new)
-          elif new not in text:
-              raise SystemExit('open_parent expected lifetime form missing')
+          replacements = [
+              ('        file.by_ref()\n', '        std::io::Read::by_ref(&mut file)\n'),
+              ('    fn open_parent(&self, path: &RemotePath) -> Result<(OwnedFd, &str), FileServiceError> {', "    fn open_parent<'a>(&self, path: &'a RemotePath) -> Result<(OwnedFd, &'a str), FileServiceError> {"),
+              ('    pub fn is_root(&self) -> bool {', '    pub const fn is_root(&self) -> bool {'),
+              ('fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {', 'const fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {'),
+          ]
+          for old, new in replacements:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'replacement count mismatch for {old!r}')
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'expected corrected form missing for {new!r}')
 
           source.write_text(text)
           PY
@@ -115,7 +111,7 @@ jobs:
           Filesystem authority is anchored to an owned root directory descriptor. Descendant resolution is descriptor-relative and rejects symbolic-link traversal. Strict relative UTF-8 paths reject traversal and ambiguous syntax. Reads, writes and listings are bounded. Writes are creation-only, existing destinations are not replaced, file mode is 0600 and directory mode is 0700.
 
           VALIDATION
-          The authoritative run passed focused prw-file-service rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Two compiler defects from run 31942435230 were corrected narrowly: Read::by_ref disambiguation and explicit lifetime binding for open_parent().
+          The authoritative run passed focused prw-file-service rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Run 31942435230 exposed Read::by_ref ambiguity and open_parent lifetime binding; run 31943111171 confirmed those compiler fixes and exposed only two const lints, corrected here without semantic change.
 
           DEFERRED
           Phase 132 owns resumable/chunked transfer, transfer IDs, content integrity, atomic final commit, interruption recovery and cleanup. Policy/remote transport integration remains deferred.
