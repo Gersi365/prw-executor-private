@@ -1,0 +1,264 @@
+name: Phase 145 Android Binding Toolchain Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-android-binding-toolchain-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prove Phase 144 handoff
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md
+          test -f logs/audits/phase-144-android-client-architecture/PRW-PHASE-144-ANDROID-CLIENT-ARCHITECTURE-DECISION.txt
+          grep -Fq 'PHASE_144_DONE' logs/audits/phase-144-android-client-architecture/PRW-PHASE-144-ANDROID-CLIENT-ARCHITECTURE-DECISION.txt
+          test "$(git rev-parse HEAD)" = "b2c82a8a1fa882ac7e56871b041456e6f277e8c8"
+          echo phase145_probe_prerequisite=pass
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install exact Android SDK and NDK inputs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
+          test -d "$ANDROID_HOME/ndk/28.2.13676358"
+          echo phase145_android_sdk_probe=pass
+
+      - name: Set up pinned Rust Android build tooling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version | grep -Fq 'rustc 1.97.1'
+          cargo --version | grep -Fq 'cargo 1.97.1'
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install --locked cargo-ndk --version 4.1.2
+          cargo ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase145_rust_android_tooling_probe=pass
+
+      - name: Create isolated JNI probe crate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$RUNNER_TEMP/prw-phase145-probe"
+          rm -rf "$scratch"
+          mkdir -p "$scratch/native/src" "$scratch/android/app/src/main/kotlin/com/privateworkspace/prw" "$scratch/android/app/src/main"
+          cat > "$scratch/native/Cargo.toml" <<'EOF'
+          [package]
+          name = "prw-android-probe"
+          version = "0.1.0"
+          edition = "2024"
+          rust-version = "1.97.1"
+          publish = false
+
+          [lib]
+          crate-type = ["cdylib"]
+
+          [dependencies]
+          jni = { version = "=0.22.4", default-features = false }
+          EOF
+          cat > "$scratch/native/src/lib.rs" <<'EOF'
+          use jni::{JNIEnv, objects::JClass, sys::jint};
+
+          #[unsafe(no_mangle)]
+          pub extern "system" fn Java_com_privateworkspace_prw_NativeProbe_protocolVersion(
+              _env: JNIEnv<'_>,
+              _class: JClass<'_>,
+          ) -> jint {
+              1
+          }
+          EOF
+          cd "$scratch/native"
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 > "$scratch/native-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          scratch = os.environ['RUNNER_TEMP'] + '/prw-phase145-probe'
+          data = json.load(open(scratch + '/native-metadata.json'))
+          root = next(p for p in data['packages'] if p['name'] == 'prw-android-probe')
+          deps = {d['name']: d['req'] for d in root['dependencies']}
+          if deps != {'jni': '=0.22.4'}:
+              raise SystemExit(f'unexpected JNI probe dependency graph: {deps!r}')
+          jni = next(p for p in data['packages'] if p['name'] == 'jni')
+          if jni['version'] != '0.22.4':
+              raise SystemExit(f'jni resolved to {jni["version"]}')
+          print('phase145_jni_graph=pass')
+          PY
+          echo "phase145_probe_cargo_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+
+      - name: Cross-build JNI probe for Android ABIs
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: |
+          set -Eeuo pipefail
+          scratch="$RUNNER_TEMP/prw-phase145-probe"
+          cd "$scratch/native"
+          cargo ndk --platform 29 -t arm64-v8a -t x86_64 -o "$scratch/android/app/src/main/jniLibs" build --locked --release
+          test -s "$scratch/android/app/src/main/jniLibs/arm64-v8a/libprw_android_probe.so"
+          test -s "$scratch/android/app/src/main/jniLibs/x86_64/libprw_android_probe.so"
+          file "$scratch/android/app/src/main/jniLibs/arm64-v8a/libprw_android_probe.so" | grep -Fq 'ARM aarch64'
+          file "$scratch/android/app/src/main/jniLibs/x86_64/libprw_android_probe.so" | grep -Fq 'x86-64'
+          echo phase145_android_cross_build=pass
+
+      - name: Create isolated native Kotlin Compose probe app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$RUNNER_TEMP/prw-phase145-probe/android"
+          cat > "$scratch/settings.gradle.kts" <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PrwPhase145Probe"
+          include(":app")
+          EOF
+          cat > "$scratch/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "9.3.0" apply false
+              id("org.jetbrains.kotlin.plugin.compose") version "2.3.21" apply false
+          }
+          EOF
+          cat > "$scratch/gradle.properties" <<'EOF'
+          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+          cat > "$scratch/app/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          android {
+              namespace = "com.privateworkspace.prw"
+              compileSdk = 36
+
+              defaultConfig {
+                  applicationId = "com.privateworkspace.prw.probe"
+                  minSdk = 29
+                  targetSdk = 36
+                  versionCode = 1
+                  versionName = "0.1.0"
+              }
+
+              buildFeatures {
+                  compose = true
+              }
+          }
+
+          dependencies {
+              val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
+              implementation(composeBom)
+              implementation("androidx.activity:activity-compose:1.13.0")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+          }
+          EOF
+          cat > "$scratch/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="false"
+                  android:label="PRW Probe"
+                  android:supportsRtl="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > "$scratch/app/src/main/kotlin/com/privateworkspace/prw/NativeProbe.kt" <<'EOF'
+          package com.privateworkspace.prw
+
+          internal object NativeProbe {
+              init {
+                  System.loadLibrary("prw_android_probe")
+              }
+
+              external fun protocolVersion(): Int
+          }
+          EOF
+          cat > "$scratch/app/src/main/kotlin/com/privateworkspace/prw/MainActivity.kt" <<'EOF'
+          package com.privateworkspace.prw
+
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.Text
+
+          class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          Text("Private Remote Workspace")
+                      }
+                  }
+              }
+          }
+          EOF
+          echo phase145_android_probe_sources=pass
+
+      - name: Build and inspect isolated Android APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$RUNNER_TEMP/prw-phase145-probe/android"
+          cd "$scratch"
+          gradle --no-daemon :app:assembleDebug :app:lintDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase145-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_probe.so' "$RUNNER_TEMP/phase145-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_probe.so' "$RUNNER_TEMP/phase145-apk-list.txt"
+          echo "phase145_probe_apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)"
+          echo phase145_android_apk_probe=pass
+
+      - name: Prove repository immutability
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git status --porcelain=v1 --untracked-files=all > "$RUNNER_TEMP/phase145-repo-status.txt"
+          test ! -s "$RUNNER_TEMP/phase145-repo-status.txt"
+          test "$(git rev-parse HEAD)" = "b2c82a8a1fa882ac7e56871b041456e6f277e8c8"
+          echo phase145_probe_repository_immutable=pass
