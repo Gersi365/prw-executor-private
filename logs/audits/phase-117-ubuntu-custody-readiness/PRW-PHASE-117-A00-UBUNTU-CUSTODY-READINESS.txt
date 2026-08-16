@@ -1,0 +1,154 @@
+Private Remote Workspace
+Phase 117-A00 — Ubuntu Device-Identity Custody Provider Host Readiness Gate
+
+STATUS:
+BLOCKED_FAIL_SAFE / PHASE_117_AUTHORIZED_BY_STANDING_PROJECT_AUTHORIZATION / REAL_HOST_EXECUTION_CHANNEL_NOT_CURRENTLY_PROVEN / SELF_HOSTED_RUNNER_INVENTORY_UNREADABLE_BY_GITHUB_APP / NO_BLIND_QUEUED_HOST_JOB / NO_HOST_MUTATION / NO_SYSTEMD_STATE_MUTATION / NO_DUMMY_SECRET / NO_PRIVATE_KEY / NO_PROVIDER_SELECTION
+
+AUDIT TYPE: READ-ONLY ACCESS / CAPABILITY-PROOF READINESS GATE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: ef12ff89c7c92df71b80dbc596e5a5f9c4c0a9f6
+Phase 116 contract: logs/audits/phase-116-device-identity-custody-contract/PRW-PHASE-116-DEVICE-IDENTITY-CUSTODY-CONTRACT.txt
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Cargo.lock blob: 56dfed0854363e923a22fe1bf358cfb1138616cf
+
+AUTHORIZATION
+
+Standing user authorization permits continued PRW implementation without repeated routine approval requests. Phase 117 is the narrow provider-capability work authorized by the Phase 116 contract. This readiness subphase performs no host or provider mutation.
+
+OBJECTIVE
+
+Phase 117 is intended to determine whether a supported Ubuntu/systemd user-service environment can safely use systemd encrypted service credentials, or another stronger provider, as the PRW device-identity private-key custody baseline without falling back to persistent plaintext key storage.
+
+The target proof must use disposable non-key test material only. It must not provision a real PRW device-identity private key.
+
+PREDECESSOR CONTRACT REQUIREMENTS
+
+Phase 116 requires an Ubuntu provider to be:
+- usable non-interactively by the headless systemd user service;
+- encrypted and authenticated at rest;
+- unavailable through a generic remote signing oracle;
+- fail-closed on provider/key mismatch or unavailability;
+- protected against persistent plaintext private-key fallback;
+- compatible with the existing user-manager/linger service lifecycle.
+
+Phase 116 names systemd encrypted service credentials as a candidate only. Provider selection is explicitly deferred until real capability proof.
+
+KNOWN HISTORICAL HOST EVIDENCE
+
+Earlier Phase 109 activation evidence identified the real host as PowerCode and proved a functioning systemd user manager for the PRW service. That evidence is historical and is not treated as proof that the temporary GitHub self-hosted execution conduit is online now.
+
+CURRENT EXECUTION-CHANNEL CHECK
+
+The connected GitHub App attempted to read:
+
+GET /repos/Gersi365/prw-executor-private/actions/runners
+
+GitHub returned:
+
+403 Resource not accessible by integration
+
+Therefore the current tool environment cannot establish whether the previously configured self-hosted runner is online, offline, removed, busy, or otherwise eligible.
+
+The repository currently contains only the permanent hosted Rust validation workflow. There is no current Phase 117 self-hosted workflow and no permanent PRW dependency on a self-hosted runner.
+
+The ChatGPT execution container is not PowerCode and cannot be used as evidence about the real host's user manager, TPM2, systemd credential store, or service activation behavior.
+
+FAIL-SAFE DECISION
+
+No self-hosted Phase 117 workflow is created while runner availability is unproven.
+
+Creating a push-triggered `runs-on: [self-hosted, prw-host]` job without a proven runner could leave a queued host job with no immediate execution/cleanup evidence. Phase 117 therefore stops before creating such a job.
+
+This is an access/readiness blocker only. It is not a negative finding about systemd encrypted credentials and is not a provider rejection.
+
+REQUIRED PHASE 117 CAPABILITY PROOF ON RESUME
+
+When an authenticated real-host execution channel is available again, Phase 117 should proceed in separate bounded steps using only disposable test material:
+
+A. READ-ONLY HOST BASELINE
+- prove hostname and current user/UID;
+- prove current Ubuntu and systemd versions;
+- prove real `$XDG_RUNTIME_DIR` and user-manager availability;
+- record current `prw-agent.service` state without modifying it;
+- record `systemd-creds` version/capabilities;
+- record TPM2 availability in a read-only way;
+- inspect relevant credential search/runtime capabilities without exposing secrets.
+
+B. DISPOSABLE ENCRYPTION ROUND-TRIP
+- create a random or fixed non-secret/dummy byte payload only in a bounded temporary directory;
+- do not use a PRW key or production credential;
+- do not use `--with-key=null` as production evidence;
+- encrypt/authenticate the dummy credential using the candidate supported host-bound mode;
+- verify only bounded metadata/hashes in logs, never the dummy value itself;
+- prove malformed/tampered ciphertext fails closed.
+
+C. TRANSIENT USER-SERVICE DELIVERY
+- use a dedicated transient/test user unit or equivalent disposable user-service scope;
+- do not modify `prw-agent.service`;
+- load the encrypted dummy credential with the candidate systemd directive;
+- prove the test service receives the exact expected bytes through `$CREDENTIALS_DIRECTORY`;
+- log only hash/length, not plaintext;
+- prove the credential is unavailable outside the intended service/user boundary to the extent testable without privilege weakening;
+- prove the user-service path works without a GUI prompt.
+
+D. LIFECYCLE / CLEANUP
+- prove transient service stop removes runtime credential exposure;
+- remove all disposable credential files and test units;
+- prove `prw-agent.service`, its installed files, enablement, active state, and existing linger state are unchanged;
+- prove no production private-key file or persistent plaintext test secret remains.
+
+E. PROVIDER DECISION
+Only after A-D pass may a later Phase 117 report select systemd encrypted credentials as the Ubuntu baseline or reject/defer it in favor of another provider.
+
+SECURITY EXCLUSIONS DURING PROOF
+
+The proof must not:
+- create a real PRW device-identity private key;
+- modify the production Agent unit;
+- stop/restart the production Agent merely for the proof;
+- modify linger;
+- weaken sudo, file permissions, systemd sandboxing, or user-manager policy;
+- store secrets in GitHub Actions secrets solely to work around host custody;
+- inject passwords into workflows;
+- use plaintext environment variables or command-line private-key content;
+- use `systemd-creds --with-key=null` as acceptable production-at-rest protection;
+- enable public networking;
+- alter DNS/TUN/relay/SSH/file-transfer state.
+
+CURRENT MUTATION STATEMENT
+
+Phase 117-A00 is audit-only.
+
+Authorized net repository mutation:
+- this single authoritative readiness-gate report.
+
+No changes are made to:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- systemd/service source;
+- installed host files;
+- service manager state;
+- linger state;
+- private keys;
+- dummy secrets;
+- credential stores;
+- network state;
+- deployment state.
+
+RESUME CONDITION
+
+Phase 117 may resume automatically under standing authorization once a current authenticated execution channel to PowerCode is proven. The previously used temporary self-hosted runner is acceptable as a development/proof conduit if it is explicitly online and attributable to PowerCode; it remains outside the final PRW runtime architecture.
+
+FINAL CLASSIFICATION
+
+BLOCKED_FAIL_SAFE / UBUNTU_CUSTODY_CAPABILITY_PROOF_PENDING / REAL_HOST_CHANNEL_NOT_CURRENTLY_PROVEN / GITHUB_APP_RUNNER_INVENTORY_403 / NO_BLIND_SELF_HOSTED_JOB / NO_HOST_MUTATION / NO_DUMMY_SECRET / NO_PRIVATE_KEY / NO_PROVIDER_SELECTION / PHASE_116_CONTRACT_PRESERVED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 117-A00 Ubuntu custody-provider host-readiness report.
