@@ -1,0 +1,126 @@
+name: Phase 111 AWS-LC Validation Spike
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-111-aws-lc-spike
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ !contains(github.event.head_commit.message, 'phase 111: lock validated aws-lc dependency graph') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pin Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+
+      - name: Generate candidate lockfile
+        run: cargo generate-lockfile
+
+      - name: Review dependency graph
+        run: |
+          echo '=== aws-lc packages ==='
+          cargo tree -p prw-control-plane | tee /tmp/phase111-cargo-tree.txt
+          echo '=== lock diff ==='
+          git diff -- Cargo.lock
+
+      - name: Validate Rust workspace
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+
+      - name: Validate Ubuntu release build and record size
+        run: |
+          start_ns=$(date +%s%N)
+          cargo build --locked --release -p prw-agent
+          end_ns=$(date +%s%N)
+          elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+          agent_size=$(stat -c '%s' target/release/prw-agent)
+          echo "phase111_ubuntu_release_build_ms=$elapsed_ms"
+          echo "phase111_prw_agent_release_bytes=$agent_size"
+
+      - name: Validate Android aarch64 build strategy
+        run: |
+          rustup target add aarch64-linux-android --toolchain 1.97.1
+          test -n "${ANDROID_NDK_HOME:-}"
+          toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$toolchain/aarch64-linux-android24-clang"
+          test -x "$toolchain/llvm-ar"
+          export CC_aarch64_linux_android="$toolchain/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$toolchain/llvm-ar"
+          cargo check --locked -p prw-control-plane --tests --target aarch64-linux-android
+          echo 'phase111_android_aarch64_check=PASS'
+
+      - name: Measure isolated crypto probe footprint
+        run: |
+          probe_root="$RUNNER_TEMP/phase111-size-probe"
+          mkdir -p "$probe_root/empty/src" "$probe_root/crypto/src"
+
+          cat > "$probe_root/empty/Cargo.toml" <<'EOF'
+          [package]
+          name = "phase111-empty-probe"
+          version = "0.0.0"
+          edition = "2024"
+          EOF
+          printf 'fn main() { std::hint::black_box(1_u8); }\n' > "$probe_root/empty/src/main.rs"
+
+          cat > "$probe_root/crypto/Cargo.toml" <<'EOF'
+          [package]
+          name = "phase111-crypto-probe"
+          version = "0.0.0"
+          edition = "2024"
+
+          [dependencies]
+          aws-lc-rs = { version = "=1.18.0", features = ["non-fips"] }
+          EOF
+          cat > "$probe_root/crypto/src/main.rs" <<'EOF'
+          use aws_lc_rs::signature::{ECDSA_P256_SHA256_ASN1, ParsedPublicKey};
+
+          fn main() {
+              let result = ParsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, [0_u8; 1]);
+              std::hint::black_box(result.is_err());
+          }
+          EOF
+
+          cargo build --release --manifest-path "$probe_root/empty/Cargo.toml"
+          cargo build --release --manifest-path "$probe_root/crypto/Cargo.toml"
+          empty_size=$(stat -c '%s' "$probe_root/empty/target/release/phase111-empty-probe")
+          crypto_size=$(stat -c '%s' "$probe_root/crypto/target/release/phase111-crypto-probe")
+          delta=$((crypto_size - empty_size))
+          echo "phase111_empty_probe_bytes=$empty_size"
+          echo "phase111_crypto_probe_bytes=$crypto_size"
+          echo "phase111_crypto_probe_delta_bytes=$delta"
+
+      - name: Commit validated Cargo.lock
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            echo 'phase111_lockfile_change=none'
+            exit 0
+          fi
+          git config user.name 'PRW Phase 111 CI'
+          git config user.email 'phase111-ci@users.noreply.github.com'
+          git add Cargo.lock
+          git commit -m 'phase 111: lock validated aws-lc dependency graph'
+          git push origin HEAD:main
