@@ -100,24 +100,16 @@ jobs:
                   raise SystemExit(f'missing expected A01 enum token: {old}')
               text = text.replace(old, new)
 
-          old = 'fn bridge_payload(command: BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {\n    command.encode().map_err(|_| TerminalAdapterError::Bridge)\n}'
-          new = 'fn bridge_payload(command: &BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {\n    command.encode().map_err(|_| TerminalAdapterError::Bridge)\n}'
-          if text.count(old) != 1:
+          signature = 'fn bridge_payload(command: BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {'
+          borrowed_signature = 'fn bridge_payload(command: &BridgeCommand) -> Result<Vec<u8>, TerminalAdapterError> {'
+          if text.count(signature) != 1:
               raise SystemExit('A01 bridge_payload signature boundary mismatch')
-          text = text.replace(old, new, 1)
+          text = text.replace(signature, borrowed_signature, 1)
 
-          for variant in ('TerminalOpen', 'TerminalInput', 'TerminalResize', 'TerminalRead'):
-              old = f'bridge_payload(BridgeCommand::{variant} {{'
-              new = f'bridge_payload(&BridgeCommand::{variant} {{'
-              if text.count(old) != 1:
-                  raise SystemExit(f'A01 {variant} call boundary mismatch')
-              text = text.replace(old, new, 1)
-
-          old = 'bridge_payload(BridgeCommand::TerminalClose(session_id(session)?))'
-          new = 'bridge_payload(&BridgeCommand::TerminalClose(session_id(session)?))'
-          if text.count(old) != 1:
-              raise SystemExit('A01 TerminalClose call boundary mismatch')
-          text = text.replace(old, new, 1)
+          call_prefix = 'bridge_payload(BridgeCommand::'
+          if text.count(call_prefix) != 5:
+              raise SystemExit(f'A01 expected five BridgeCommand call sites, found {text.count(call_prefix)}')
+          text = text.replace(call_prefix, 'bridge_payload(&BridgeCommand::')
           path.write_text(text)
           PY
           cd apps/android/native
