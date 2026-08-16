@@ -8,8 +8,5 @@ authors.workspace = true
 [dependencies]
 prw-core = { path = "../prw-core" }
 
-[dev-dependencies]
-aws-lc-rs = { version = "=1.18.0", features = ["non-fips"] }
-
 [lints]
 workspace = true
