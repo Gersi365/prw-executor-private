@@ -93,10 +93,10 @@ impl TerminalGeometry {
 /// Registry-current identity snapshot attached immutably to one terminal session.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalPrincipal {
-    workspace_id: WorkspaceId,
-    user_id: UserId,
-    device_id: DeviceId,
-    authenticated_session_id: SessionId,
+    workspace: WorkspaceId,
+    user: UserId,
+    device: DeviceId,
+    authenticated_session: SessionId,
 }
 
 impl TerminalPrincipal {
@@ -104,35 +104,35 @@ impl TerminalPrincipal {
     #[must_use]
     pub fn from_registry(principal: &RegistryValidatedPrincipal, session_id: SessionId) -> Self {
         Self {
-            workspace_id: principal.workspace_id().clone(),
-            user_id: principal.user_id().clone(),
-            device_id: principal.device_id().clone(),
-            authenticated_session_id: session_id,
+            workspace: principal.workspace_id().clone(),
+            user: principal.user_id().clone(),
+            device: principal.device_id().clone(),
+            authenticated_session: session_id,
         }
     }
 
     /// Returns the immutable workspace identifier.
     #[must_use]
     pub const fn workspace_id(&self) -> &WorkspaceId {
-        &self.workspace_id
+        &self.workspace
     }
 
     /// Returns the immutable user identifier.
     #[must_use]
     pub const fn user_id(&self) -> &UserId {
-        &self.user_id
+        &self.user
     }
 
     /// Returns the immutable device identifier.
     #[must_use]
     pub const fn device_id(&self) -> &DeviceId {
-        &self.device_id
+        &self.device
     }
 
     /// Returns the immutable authenticated PRW session identifier.
     #[must_use]
     pub const fn authenticated_session_id(&self) -> &SessionId {
-        &self.authenticated_session_id
+        &self.authenticated_session
     }
 }
 
@@ -175,11 +175,8 @@ pub trait TerminalBackend {
     /// # Errors
     ///
     /// Returns an error when the provider cannot accept the input.
-    fn write_input(
-        &mut self,
-        handle: &mut Self::Handle,
-        bytes: &[u8],
-    ) -> Result<(), TerminalError>;
+    fn write_input(&mut self, handle: &mut Self::Handle, bytes: &[u8])
+    -> Result<(), TerminalError>;
 
     /// Applies already-validated terminal geometry.
     ///
@@ -399,7 +396,10 @@ impl<B: TerminalBackend> TerminalBroker<B> {
         let (backend, sessions) = (&mut self.backend, &mut self.sessions);
         let terminal = sessions.get_mut(&id).ok_or(TerminalError::UnknownSession)?;
         terminal.record.require_open()?;
-        let handle = terminal.handle.as_mut().ok_or(TerminalError::InvalidState)?;
+        let handle = terminal
+            .handle
+            .as_mut()
+            .ok_or(TerminalError::InvalidState)?;
         if backend.write_input(handle, bytes).is_err() {
             terminal.record.mark_failed();
             return Err(TerminalError::Backend);
@@ -421,7 +421,10 @@ impl<B: TerminalBackend> TerminalBroker<B> {
         let (backend, sessions) = (&mut self.backend, &mut self.sessions);
         let terminal = sessions.get_mut(&id).ok_or(TerminalError::UnknownSession)?;
         terminal.record.require_open()?;
-        let handle = terminal.handle.as_mut().ok_or(TerminalError::InvalidState)?;
+        let handle = terminal
+            .handle
+            .as_mut()
+            .ok_or(TerminalError::InvalidState)?;
         if backend.resize(handle, geometry).is_err() {
             terminal.record.mark_failed();
             return Err(TerminalError::Backend);
@@ -449,13 +452,13 @@ impl<B: TerminalBackend> TerminalBroker<B> {
         let (backend, sessions) = (&mut self.backend, &mut self.sessions);
         let terminal = sessions.get_mut(&id).ok_or(TerminalError::UnknownSession)?;
         terminal.record.require_open()?;
-        let handle = terminal.handle.as_mut().ok_or(TerminalError::InvalidState)?;
-        let output = match backend.read_output(handle, maximum_bytes) {
-            Ok(output) => output,
-            Err(_) => {
-                terminal.record.mark_failed();
-                return Err(TerminalError::Backend);
-            }
+        let handle = terminal
+            .handle
+            .as_mut()
+            .ok_or(TerminalError::InvalidState)?;
+        let Ok(output) = backend.read_output(handle, maximum_bytes) else {
+            terminal.record.mark_failed();
+            return Err(TerminalError::Backend);
         };
         if output.len() > maximum_bytes || output.len() > MAX_TERMINAL_IO_BYTES {
             terminal.record.mark_failed();
@@ -474,7 +477,10 @@ impl<B: TerminalBackend> TerminalBroker<B> {
         &mut self,
         id: TerminalSessionId,
     ) -> Result<TerminalSession, TerminalError> {
-        let mut terminal = self.sessions.remove(&id).ok_or(TerminalError::UnknownSession)?;
+        let mut terminal = self
+            .sessions
+            .remove(&id)
+            .ok_or(TerminalError::UnknownSession)?;
         if let Err(error) = terminal.record.require_open() {
             self.sessions.insert(id, terminal);
             return Err(error);
@@ -540,7 +546,9 @@ impl fmt::Display for TerminalError {
             Self::IoTooLarge => "terminal io chunk exceeds bound",
             Self::InvalidOutputRequest => "terminal output request exceeds bound or is zero",
             Self::Backend => "terminal backend operation failed",
-            Self::BackendOutputTooLarge => "terminal backend returned output above the requested bound",
+            Self::BackendOutputTooLarge => {
+                "terminal backend returned output above the requested bound"
+            }
         };
         formatter.write_str(message)
     }
@@ -552,6 +560,16 @@ impl std::error::Error for TerminalError {}
 mod tests {
     use super::*;
 
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    enum FailureMode {
+        #[default]
+        None,
+        Open,
+        Write,
+        Read,
+        Close,
+    }
+
     #[derive(Debug, Default)]
     struct SpyBackend {
         open_calls: usize,
@@ -559,10 +577,7 @@ mod tests {
         resize_calls: usize,
         read_calls: usize,
         close_calls: usize,
-        fail_open: bool,
-        fail_write: bool,
-        fail_read: bool,
-        fail_close: bool,
+        failure: FailureMode,
         last_profile: Option<TerminalProfile>,
         last_geometry: Option<TerminalGeometry>,
         output: Vec<u8>,
@@ -579,7 +594,7 @@ mod tests {
             self.open_calls += 1;
             self.last_profile = Some(profile);
             self.last_geometry = Some(geometry);
-            if self.fail_open {
+            if self.failure == FailureMode::Open {
                 return Err(TerminalError::Backend);
             }
             Ok(u64::try_from(self.open_calls).expect("test open count fits u64"))
@@ -591,7 +606,7 @@ mod tests {
             _bytes: &[u8],
         ) -> Result<(), TerminalError> {
             self.write_calls += 1;
-            if self.fail_write {
+            if self.failure == FailureMode::Write {
                 return Err(TerminalError::Backend);
             }
             Ok(())
@@ -613,7 +628,7 @@ mod tests {
             _maximum_bytes: usize,
         ) -> Result<Vec<u8>, TerminalError> {
             self.read_calls += 1;
-            if self.fail_read {
+            if self.failure == FailureMode::Read {
                 return Err(TerminalError::Backend);
             }
             Ok(self.output.clone())
@@ -621,7 +636,7 @@ mod tests {
 
         fn close(&mut self, _handle: &mut Self::Handle) -> Result<(), TerminalError> {
             self.close_calls += 1;
-            if self.fail_close {
+            if self.failure == FailureMode::Close {
                 return Err(TerminalError::Backend);
             }
             Ok(())
@@ -630,10 +645,10 @@ mod tests {
 
     fn principal() -> TerminalPrincipal {
         TerminalPrincipal {
-            workspace_id: WorkspaceId::new("workspace-1").expect("workspace"),
-            user_id: UserId::new("user-1").expect("user"),
-            device_id: DeviceId::new("device-1").expect("device"),
-            authenticated_session_id: SessionId::new("session-1").expect("session"),
+            workspace: WorkspaceId::new("workspace-1").expect("workspace"),
+            user: UserId::new("user-1").expect("user"),
+            device: DeviceId::new("device-1").expect("device"),
+            authenticated_session: SessionId::new("session-1").expect("session"),
         }
     }
 
@@ -647,8 +662,14 @@ mod tests {
 
     #[test]
     fn identifiers_and_geometry_are_bounded() {
-        assert_eq!(TerminalSessionId::new(0), Err(TerminalError::InvalidIdentifier));
-        assert_eq!(TerminalGeometry::new(0, 24), Err(TerminalError::InvalidGeometry));
+        assert_eq!(
+            TerminalSessionId::new(0),
+            Err(TerminalError::InvalidIdentifier)
+        );
+        assert_eq!(
+            TerminalGeometry::new(0, 24),
+            Err(TerminalError::InvalidGeometry)
+        );
         assert_eq!(
             TerminalGeometry::new(MAX_TERMINAL_DIMENSION + 1, 24),
             Err(TerminalError::InvalidGeometry)
@@ -676,7 +697,12 @@ mod tests {
         let maximum = u64::try_from(MAX_ACTIVE_TERMINAL_SESSIONS).expect("bound fits u64");
         for raw_id in 1..=maximum {
             broker
-                .open_session(id(raw_id), principal(), TerminalProfile::PosixShell, geometry())
+                .open_session(
+                    id(raw_id),
+                    principal(),
+                    TerminalProfile::PosixShell,
+                    geometry(),
+                )
                 .expect("bounded open");
         }
         assert_eq!(broker.session_count(), MAX_ACTIVE_TERMINAL_SESSIONS);
@@ -706,14 +732,17 @@ mod tests {
             .expect("open");
         assert_eq!(record.profile(), TerminalProfile::BashShell);
         assert_eq!(record.geometry(), expected_geometry);
-        assert_eq!(broker.backend.last_profile, Some(TerminalProfile::BashShell));
+        assert_eq!(
+            broker.backend.last_profile,
+            Some(TerminalProfile::BashShell)
+        );
         assert_eq!(broker.backend.last_geometry, Some(expected_geometry));
     }
 
     #[test]
     fn backend_open_failure_never_creates_open_record() {
         let backend = SpyBackend {
-            fail_open: true,
+            failure: FailureMode::Open,
             ..SpyBackend::default()
         };
         let mut broker = TerminalBroker::new(backend);
@@ -778,7 +807,7 @@ mod tests {
     #[test]
     fn backend_failure_marks_session_failed_and_rejects_later_io() {
         let backend = SpyBackend {
-            fail_read: true,
+            failure: FailureMode::Read,
             ..SpyBackend::default()
         };
         let mut broker = TerminalBroker::new(backend);
@@ -786,8 +815,14 @@ mod tests {
             .open_session(id(6), principal(), TerminalProfile::PosixShell, geometry())
             .expect("open");
         assert_eq!(broker.read_output(id(6), 64), Err(TerminalError::Backend));
-        assert_eq!(broker.session(id(6)).expect("session").state(), TerminalState::Failed);
-        assert_eq!(broker.write_input(id(6), b"later"), Err(TerminalError::InvalidState));
+        assert_eq!(
+            broker.session(id(6)).expect("session").state(),
+            TerminalState::Failed
+        );
+        assert_eq!(
+            broker.write_input(id(6), b"later"),
+            Err(TerminalError::InvalidState)
+        );
         assert_eq!(broker.backend.write_calls, 0);
     }
 
@@ -805,7 +840,10 @@ mod tests {
             broker.read_output(id(8), 64),
             Err(TerminalError::BackendOutputTooLarge)
         );
-        assert_eq!(broker.session(id(8)).expect("session").state(), TerminalState::Failed);
+        assert_eq!(
+            broker.session(id(8)).expect("session").state(),
+            TerminalState::Failed
+        );
     }
 
     #[test]
@@ -817,13 +855,16 @@ mod tests {
         let closed = broker.close_session(id(9)).expect("close");
         assert_eq!(closed.state(), TerminalState::Closed);
         assert_eq!(broker.backend.close_calls, 1);
-        assert_eq!(broker.write_input(id(9), b"later"), Err(TerminalError::UnknownSession));
+        assert_eq!(
+            broker.write_input(id(9), b"later"),
+            Err(TerminalError::UnknownSession)
+        );
     }
 
     #[test]
     fn close_failure_retains_failed_record() {
         let backend = SpyBackend {
-            fail_close: true,
+            failure: FailureMode::Close,
             ..SpyBackend::default()
         };
         let mut broker = TerminalBroker::new(backend);
@@ -831,8 +872,14 @@ mod tests {
             .open_session(id(10), principal(), TerminalProfile::PosixShell, geometry())
             .expect("open");
         assert_eq!(broker.close_session(id(10)), Err(TerminalError::Backend));
-        assert_eq!(broker.session(id(10)).expect("session").state(), TerminalState::Failed);
-        assert_eq!(broker.write_input(id(10), b"later"), Err(TerminalError::InvalidState));
+        assert_eq!(
+            broker.session(id(10)).expect("session").state(),
+            TerminalState::Failed
+        );
+        assert_eq!(
+            broker.write_input(id(10), b"later"),
+            Err(TerminalError::InvalidState)
+        );
     }
 
     #[test]

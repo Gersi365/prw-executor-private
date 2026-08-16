@@ -303,6 +303,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-terminal"
+version = "0.1.0"
+dependencies = [
+ "prw-core",
+ "prw-registry",
+ "prw-session",
+]
+
+[[package]]
 name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
