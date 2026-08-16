@@ -2,9 +2,8 @@ use aws_lc_rs::{
     encoding::{AsDer, PublicKeyX509Der},
     rand::SystemRandom,
     signature::{
-        ECDSA_P256_SHA256_ASN1, ECDSA_P256_SHA256_ASN1_SIGNING,
-        ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair, KeyPair,
-        ParsedPublicKey,
+        ECDSA_P256_SHA256_ASN1, ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P256_SHA256_FIXED_SIGNING,
+        ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair, KeyPair, ParsedPublicKey,
     },
 };
 use prw_control_plane::{
@@ -31,8 +30,7 @@ fn verify_locked_profile(
     signature: &DeviceIdentitySignature,
 ) -> Result<(), VerificationError> {
     if public_identity.algorithm() != DeviceIdentityAlgorithm::EcdsaP256Sha256
-        || public_identity.encoding()
-            != DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer
+        || public_identity.encoding() != DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer
         || signature.algorithm() != DeviceIdentityAlgorithm::EcdsaP256Sha256
         || signature.encoding() != DeviceIdentitySignatureEncoding::EcdsaSigValueDer
     {
@@ -103,7 +101,10 @@ fn signature_for(key_pair: &EcdsaKeyPair, message: &[u8]) -> DeviceIdentitySigna
 fn verifies_valid_p256_spki_and_der_signature() {
     let (key_pair, identity) = p256_fixture();
     let signature = signature_for(&key_pair, MESSAGE);
-    assert_eq!(verify_locked_profile(&identity, MESSAGE, &signature), Ok(()));
+    assert_eq!(
+        verify_locked_profile(&identity, MESSAGE, &signature),
+        Ok(())
+    );
 }
 
 #[test]
