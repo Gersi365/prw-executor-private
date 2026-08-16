@@ -1,0 +1,129 @@
+name: Phase 126 A05 Privileged Agent Handoff Staging
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-126-a05-privileged-agent-handoff.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stage-handoff:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 10
+    steps:
+      - name: Stage bounded root-owned Agent replacement transaction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          expected_host='PowerCode'
+          expected_uid='1000'
+          expected_gid='1000'
+          source_commit='1e0b5eec93538bcbf120fa800cf85227eeb32410'
+          installed_sha='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          candidate_sha='4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
+          state_root="${XDG_STATE_HOME:-$HOME/.local/state}"
+          stage="$state_root/private-remote-workspace/phase126/staging/$source_commit"
+          helper="$stage/phase126-a05-root-agent-replace"
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+
+          test "$(hostname)" = "$expected_host"
+          test "$(id -u)" = "$expected_uid"
+          test "$(id -g)" = "$expected_gid"
+          test -d "$stage"
+          test ! -L "$stage"
+          test "$(stat -c '%u:%g:%a' "$stage")" = '1000:1000:700'
+          test -f "$stage/candidate-prw-agent"
+          test ! -L "$stage/candidate-prw-agent"
+          test "$(sha256sum "$stage/candidate-prw-agent" | cut -d' ' -f1)" = "$candidate_sha"
+          test -f "$stage/rollback-prw-agent"
+          test ! -L "$stage/rollback-prw-agent"
+          test "$(sha256sum "$stage/rollback-prw-agent" | cut -d' ' -f1)" = "$installed_sha"
+          test -f "$production_agent"
+          test ! -L "$production_agent"
+          test "$(stat -c '%u:%g:%a' "$production_agent")" = '0:0:755'
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$installed_sha"
+          test "$(systemctl --user is-active prw-agent.service)" = 'active'
+          test "$(systemctl --user is-enabled prw-agent.service)" = 'enabled'
+
+          test ! -e "$helper"
+          test ! -L "$helper"
+          cat > "$helper" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          umask 077
+
+          expected_host='PowerCode'
+          expected_user='gersi365'
+          installed_sha='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          candidate_sha='4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
+          stage='/home/gersi365/.local/state/private-remote-workspace/phase126/staging/1e0b5eec93538bcbf120fa800cf85227eeb32410'
+          candidate="$stage/candidate-prw-agent"
+          rollback="$stage/rollback-prw-agent"
+          destination='/usr/lib/private-remote-workspace/prw-agent'
+          parent='/usr/lib/private-remote-workspace'
+          tmp="$parent/.prw-agent.phase126-a05.$$"
+          rollback_tmp="$parent/.prw-agent.phase126-a05.rollback.$$"
+          committed=0
+
+          cleanup() {
+            rc=$?
+            rm -f -- "$tmp" "$rollback_tmp"
+            if [[ "$rc" -ne 0 && "$committed" -eq 1 ]]; then
+              if [[ -f "$rollback" && ! -L "$rollback" ]] && \
+                 [[ "$(sha256sum "$rollback" | cut -d' ' -f1)" = "$installed_sha" ]]; then
+                install -m 0755 -o root -g root -- "$rollback" "$rollback_tmp"
+                if [[ "$(sha256sum "$rollback_tmp" | cut -d' ' -f1)" = "$installed_sha" ]]; then
+                  mv -f -- "$rollback_tmp" "$destination"
+                  sync -f "$destination" 2>/dev/null || true
+                  echo 'phase126_a05_root_replace=rolled_back_after_failure' >&2
+                fi
+              fi
+            fi
+            exit "$rc"
+          }
+          trap cleanup EXIT
+
+          [[ "$(id -u)" = '0' ]]
+          [[ "$(hostname)" = "$expected_host" ]]
+          [[ "${SUDO_USER:-}" = "$expected_user" ]]
+          [[ -d "$parent" && ! -L "$parent" ]]
+          [[ "$(stat -c '%u:%g:%a' "$parent")" = '0:0:755' ]]
+          [[ -f "$destination" && ! -L "$destination" ]]
+          [[ "$(stat -c '%u:%g:%a' "$destination")" = '0:0:755' ]]
+          [[ "$(sha256sum "$destination" | cut -d' ' -f1)" = "$installed_sha" ]]
+          [[ -d "$stage" && ! -L "$stage" ]]
+          [[ "$(stat -c '%u:%g:%a' "$stage")" = '1000:1000:700' ]]
+          [[ -f "$candidate" && ! -L "$candidate" ]]
+          [[ -f "$rollback" && ! -L "$rollback" ]]
+          [[ "$(stat -c '%u:%g:%a' "$candidate")" = '1000:1000:755' ]]
+          [[ "$(stat -c '%u:%g:%a' "$rollback")" = '1000:1000:700' ]]
+          [[ "$(sha256sum "$candidate" | cut -d' ' -f1)" = "$candidate_sha" ]]
+          [[ "$(sha256sum "$rollback" | cut -d' ' -f1)" = "$installed_sha" ]]
+          [[ ! -e "$tmp" && ! -L "$tmp" ]]
+          [[ ! -e "$rollback_tmp" && ! -L "$rollback_tmp" ]]
+
+          install -m 0755 -o root -g root -- "$candidate" "$tmp"
+          [[ "$(stat -c '%u:%g:%a' "$tmp")" = '0:0:755' ]]
+          [[ "$(sha256sum "$tmp" | cut -d' ' -f1)" = "$candidate_sha" ]]
+          sync -f "$tmp" 2>/dev/null || true
+          mv -f -- "$tmp" "$destination"
+          committed=1
+          sync -f "$destination" 2>/dev/null || true
+          [[ "$(stat -c '%u:%g:%a' "$destination")" = '0:0:755' ]]
+          [[ "$(sha256sum "$destination" | cut -d' ' -f1)" = "$candidate_sha" ]]
+          committed=0
+          trap - EXIT
+          rm -f -- "$tmp" "$rollback_tmp"
+          echo "phase126_a05_root_replace=pass destination_sha256=$candidate_sha"
+          SCRIPT
+          chmod 0700 "$helper"
+          test "$(stat -c '%u:%g:%a' "$helper")" = '1000:1000:700'
+
+          helper_sha=$(sha256sum "$helper" | cut -d' ' -f1)
+          echo "phase126_a05_handoff_helper=$helper"
+          echo "phase126_a05_handoff_helper_sha256=$helper_sha"
+          echo 'phase126_a05_handoff_staging=pass'
+          echo 'phase126_a05_production_mutation=none'
