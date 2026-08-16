@@ -1,0 +1,385 @@
+Private Remote Workspace
+Phase 125 — Identity-Aware Agent Implementation and Disposable Real-Host Proof
+
+STATUS:
+PASS / IMPLEMENTED_AND_VALIDATED / DEVICE_IDENTITY_REQUIRED_BEFORE_AGENT_RUNTIME / SYSTEMD_CREDENTIAL_CUSTODY_ADAPTER_INTEGRATED / MISSING_IDENTITY_FAILS_BEFORE_RUNTIME_SOCKET / HISTORICAL_PHASE102_BINARY_CONTRACT_PRESERVED_WITH_DISPOSABLE_TEST_IDENTITY / LOCKFILE_PROMOTED_FROM_PASS_ARTIFACT / REAL_POWERCODE_MEMORY_ONLY_SYSTEMD_CREDS_PROOF_PASS / TRANSIENT_IDENTITY_AWARE_AGENT_READY / PRODUCTION_AGENT_UNCHANGED / TEMPORARY_WORKFLOWS_REMOVED / FINAL_PERMANENT_CI_PASS / NO_PRODUCTION_PRIVATE_KEY_CREATED / NO_PRODUCTION_CIPHERTEXT_INSTALLED / NO_PRODUCTION_DROPIN_INSTALLED / NO_PRODUCTION_AGENT_REPLACEMENT_OR_RESTART / NO_ENROLLMENT / NO_PUBLIC_NETWORKING
+
+AUDIT TYPE: IMPLEMENTATION / SECURITY BOUNDARY / DISPOSABLE REAL-HOST VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 124-A01 baseline: d55800d235aee784640b9fee023d8525cb5b4be3
+Pre-report clean implementation head: 770b3b368d56abd011281a1c6b4c85bac717ee77
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests.
+
+Phase 125 was explicitly constrained to source/disposable validation. It did not authorize production device-identity provisioning or replacement of the currently installed PowerCode Agent.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 118 locked Ubuntu custody policy:
+- systemd encrypted credentials;
+- logical credential name `prw.device-identity.private-key.v1`;
+- TPM2 plus host secret preferred on supported hosts;
+- explicit host-key-only fallback only where supported and intentionally selected;
+- no silent downgrade.
+
+Phase 119 locked P-256 PKCS#8 v1 DER as the Ubuntu plaintext device-identity credential payload.
+
+Phase 121 implemented the narrow typed Ubuntu enrollment signer.
+
+Phase 122 implemented the fail-closed systemd runtime credential custody adapter.
+
+Phase 123 proved that exact adapter against real PowerCode systemd user-service credential delivery with disposable key material.
+
+Phase 124 locked production provisioning, encrypted-blob persistence, systemd drop-in integration, activation ordering, and rollback semantics.
+
+Phase 124-A01 strengthened startup ordering so required device identity loads before signal/lifecycle/listener assembly.
+
+IMPLEMENTED PRODUCTION SOURCE BOUNDARY
+
+`crates/prw-agent/Cargo.toml` now has a direct production dependency only on:
+`prw-device-identity-custody`
+
+The Agent production manifest does not directly depend on:
+- `prw-device-identity-signer`;
+- `prw-device-identity`;
+- `aws-lc-rs` as a production dependency.
+
+`aws-lc-rs = 1.18.0` appears as a `dev-dependency` only to generate disposable P-256 fixtures for historical binary integration tests. Cargo.lock therefore lists it in the aggregate prw-agent package dependency set, but production source reachability is through the custody crate boundary.
+
+`crates/prw-agent/src/main.rs` now performs one required Linux identity preflight before calling the existing `linux_bootstrap::run()` runtime facade:
+
+- calls `load_ubuntu_enrollment_signer_from_systemd_credential()`;
+- retains the resulting signer for Agent process lifetime;
+- on any custody/signing credential load failure emits exactly one bounded non-secret startup record:
+  `prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable`
+- returns failure before entering the previously validated signal/lifecycle/runtime composition.
+
+The lower Phase 095-102 runtime loop was not modified.
+
+FAIL-CLOSED STARTUP TEST
+
+New integration test:
+`crates/prw-agent/tests/phase125_device_identity_bootstrap.rs`
+
+It launches the real Agent binary with:
+- a secure isolated XDG runtime root;
+- `CREDENTIALS_DIRECTORY` removed.
+
+It proves:
+- non-zero exit;
+- exact bounded `kind=device_identity` stderr;
+- `signal_mask_restore=not_applicable` because signal setup was never entered;
+- no `${XDG_RUNTIME_DIR}/private-remote-workspace` runtime directory is created;
+- therefore no Agent socket/listener is exposed when required identity is absent.
+
+HISTORICAL PHASE 102 CONTRACT PRESERVATION
+
+Phase 125 made device identity mandatory for the real Agent binary. The historical Phase 102 binary suite previously launched the binary without any identity credential.
+
+The test harness, not production semantics, was adapted:
+`crates/prw-agent/tests/phase_102_binary_bootstrap.rs`
+
+For every historical Agent child process the test now:
+- generates a fresh disposable ECDSA P-256 PKCS#8 credential in process memory;
+- writes it only into an isolated temporary credential directory;
+- uses directory mode 0700 and credential mode 0400;
+- uses the exact locked credential name;
+- sets `CREDENTIALS_DIRECTORY` only for that child;
+- removes the disposable directory through test object lifetime cleanup.
+
+This allows the historical proof to reach the runtime behaviors it was designed to test without weakening the new identity requirement.
+
+The Phase 102 suite still proves:
+- SIGTERM clean shutdown;
+- SIGINT clean shutdown;
+- real local `GetAgentStatus` Ready request;
+- second-instance exclusion;
+- missing runtime-root failure;
+- wrong-mode runtime-root failure;
+- socket cleanup;
+- bounded terminal/startup stderr behavior.
+
+No static private test key is committed.
+
+SOURCE VALIDATION / CORRECTIVE HISTORY
+
+Temporary workflow:
+`.github/workflows/phase-125-identity-aware-agent-validation.yml`
+
+The workflow generated a deterministic candidate Cargo.lock and then required locked fmt/Clippy/tests/build plus focused Phase 125 and dependency-boundary guards before uploading the lockfile candidate.
+
+Corrective history was fail-safe:
+
+1. Run 31935763047 / job 95137309069
+   Result: FAILURE before semantic validation due only to rustfmt diff.
+   Corrective: mechanical formatting only.
+
+2. Run 31935795522 / job 95137387273
+   Result: FAILURE from Clippy `manual_let_else` in the new main.rs preflight.
+   Corrective: equivalent `let Ok(...) = ... else` fail-closed form.
+
+3. Run 31935878362 / job 95137594350
+   Result: reached Clippy and workspace tests; new Phase 125 test passed, then the historical Phase 102 binary suite failed because the now-mandatory identity preflight ran before the historical runtime proof.
+   Corrective: historical test harness gained disposable valid credential fixtures; production identity requirement remained unchanged.
+
+4. Run 31936012183 / job 95137925866
+   Result: FAILURE only on rustfmt in the adapted historical test fixture.
+   Corrective: mechanical formatting only.
+
+5. Final source validation run 31936080505 / job 95138094261
+   Result: SUCCESS.
+
+Final source validation proved:
+- Rust/Cargo 1.97.1 exact baseline;
+- deterministic candidate lock generation;
+- rustfmt PASS;
+- Clippy workspace/all-targets/all-features `-D warnings` PASS;
+- all workspace tests PASS;
+- prw-agent unit tests 350/350 PASS;
+- Phase 125 missing-identity binary test PASS;
+- historical Phase 102 binary proof PASS;
+- all workspace builds PASS;
+- release `prw-agent` build PASS;
+- production Agent manifest direct dependency is custody only;
+- expected transitive signer/verifier/AWS-LC reachability exists through custody;
+- no generic public `sign(bytes)` Agent surface exists.
+
+Validated candidate Cargo.lock:
+- artifact ID: 9260708675
+- content SHA-256: `0084e49355cb031c93200b2a49e255a2241eeb92466bf84eac2114edcc6a693d`
+- candidate size: 6090 bytes
+
+Validated release Agent candidate:
+- SHA-256: `80e376b7c72106e9431b422c127138a253dd4052a6a75939d6d763a33f13b4d1`
+- size: 2,858,872 bytes
+
+LOCKFILE PROMOTION
+
+The exact validated Phase 125 lockfile was promoted to main.
+Promotion commit:
+`183717c0ec04355b5b2ee40c4d07434b40269df7`
+
+Current Cargo.lock Git blob after promotion:
+`9a2bc505ab4179bc37998954b716d747a7c1ba54`
+
+The lockfile records the new direct custody dependency and test-only AWS-LC fixture dependency for `prw-agent`.
+
+Permanent CI on the lock-promoted head:
+- run 31936221725
+- result SUCCESS.
+
+DISPOSABLE REAL-HOST PROOF DESIGN
+
+A separate temporary workflow built from the locked repository and used the real `PowerCode` self-hosted runner only after hosted build success:
+`.github/workflows/phase-125-real-host-disposable-agent-proof.yml`
+
+Hosted build created three disposable payload executables:
+- identity-aware candidate `prw-agent`;
+- `phase125-keygen`, a helper that generates a fresh P-256 PKCS#8 credential and writes it only to stdout;
+- `phase125-status-probe`, a helper that sends the real local GetAgentStatus request and requires Ready + supported protocol.
+
+No private key was embedded in the helper binaries or uploaded as an artifact.
+The key generator executed on PowerCode, so disposable private key generation occurred locally on the host.
+
+FIRST REAL-HOST PROOF ATTEMPT
+
+Run 31936333483:
+- hosted build job 95138739943: SUCCESS;
+- PowerCode prove job 95138898851: FAILURE during the first production preflight helper invocation.
+
+Root cause:
+`actions/download-artifact` did not preserve the executable bit on the downloaded helper payload.
+`phase125-status-probe` therefore failed with `Permission denied`.
+
+This occurred before:
+- disposable private-key generation;
+- systemd-creds encryption;
+- transient candidate unit creation.
+
+Cleanup trap executed. No production or disposable credential mutation had occurred before the failure.
+
+Corrective changed only workflow artifact mode normalization after checksum verification.
+
+FINAL DISPOSABLE REAL-HOST PROOF
+
+Corrective run:
+`31936443012`
+
+Hosted build job:
+`95139019628` — SUCCESS
+
+PowerCode prove job:
+`95139174578` — SUCCESS
+
+Hosted build environment:
+- Ubuntu 24.04.4 LTS GitHub-hosted image;
+- Rust 1.97.1;
+- Cargo 1.97.1;
+- locked repository dependency graph.
+
+Final disposable payload hashes:
+- prw-agent: `80e376b7c72106e9431b422c127138a253dd4052a6a75939d6d763a33f13b4d1`
+- phase125-keygen: `9d02bf5f85c4859ae841e6bf6903ab5f228f3ed3657ea08d24b4ab779b18aba5`
+- phase125-status-probe: `c9fe74494c5293d5453692a444b7b184e0da81a262f4a8b3d36443d0826146e8`
+
+Payload artifact:
+- ID: 9260797895
+- ZIP SHA-256: `16fd9c7462fd7e4440fc2ea47e491115ef49906e930e3a6326dd38a15748b40f`
+- retention: one day; artifact is evidence only, not a production release artifact.
+
+POWERCODE PRECONDITION PROOF
+
+Before any disposable credential operation, the real host job proved:
+- installed production Agent SHA-256 remained exactly:
+  `8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf`
+- installed production unit SHA-256 remained exactly:
+  `24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909`
+- `prw-agent.service` active;
+- `prw-agent.service` enabled;
+- Linger=yes;
+- production local IPC returned Ready with a supported protocol.
+
+Marker:
+`phase125_preflight=pass`
+
+MEMORY-ONLY PRIVATE-KEY HANDOFF PROOF
+
+PowerCode executed the disposable key generator and piped its stdout directly to:
+`systemd-creds --user encrypt --name=prw.device-identity.private-key.v1 - <DISPOSABLE_CIPHERTEXT>`
+
+No plaintext private-key file was created.
+The output ciphertext was temporary, non-empty, user-owned, mode 0600, and located under the runner temporary directory.
+
+Marker:
+`phase125_memory_only_encrypt=pass`
+
+This proves the Phase 124 preferred memory-only provisioning handoff is compatible with real PowerCode systemd 259.
+
+TRANSIENT IDENTITY-AWARE AGENT PROOF
+
+The job created a unique secure isolated XDG runtime root under the user's real XDG runtime directory and started the candidate through a transient systemd user service with:
+- Type=exec;
+- Restart=no;
+- `LoadCredentialEncrypted=prw.device-identity.private-key.v1:<DISPOSABLE_CIPHERTEXT>`;
+- candidate-only isolated `XDG_RUNTIME_DIR`;
+- candidate executable from the validated artifact.
+
+Transient unit:
+`prw-phase125-candidate-31936443012.service`
+
+Systemd decrypted and delivered the disposable credential.
+The production Phase 122 adapter loaded it.
+The identity-aware Agent entered the unchanged runtime lifecycle.
+The candidate created its isolated local IPC socket.
+The real status probe returned:
+`phase125_status=Ready protocol_supported=yes`
+
+Marker:
+`phase125_candidate_ready=pass`
+
+The transient service was then stopped and the isolated candidate socket disappeared.
+Marker:
+`phase125_candidate_cleanup=pass`
+
+MISSING-IDENTITY REAL-BINARY PROOF
+
+The same candidate binary was run against another secure isolated XDG root with `CREDENTIALS_DIRECTORY` removed.
+
+It returned failure with exactly:
+`prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable`
+
+No candidate `private-remote-workspace` runtime directory was created.
+
+Marker:
+`phase125_missing_identity_fail_closed=pass`
+
+PRODUCTION STATE PRESERVATION
+
+After all disposable candidate operations, the job re-proved:
+- installed production Agent hash unchanged;
+- installed production unit hash unchanged;
+- production service still active;
+- production service still enabled;
+- Linger still yes;
+- production local IPC still Ready with supported protocol.
+
+Marker:
+`phase125_production_unchanged=pass`
+
+All disposable runtime roots and ciphertext directories were removed by the workflow cleanup trap.
+No persistent Phase 125 user-service unit/drop-in or production credential was installed.
+
+TEMPORARY WORKFLOW CLEANUP
+
+Both temporary Phase 125 workflows were removed after evidence capture.
+
+Source validation cleanup commit:
+`1e96fdc8e01c5ead65c2adf4f700fd7517a6b091`
+
+Real-host proof cleanup commit / pre-report implementation head:
+`770b3b368d56abd011281a1c6b4c85bac717ee77`
+
+Current `.github/workflows/` contains only:
+`.github/workflows/phase-001-rust-validation.yml`
+
+Permanent CI after source-validation workflow removal:
+- run 31936533998
+- result SUCCESS.
+
+Final permanent clean-head CI:
+- run 31936538790
+- result SUCCESS;
+- locked dependency graph PASS;
+- rustfmt PASS;
+- Clippy `-D warnings` PASS;
+- all workspace/all-target tests PASS;
+- all workspace/all-target builds PASS.
+
+FINAL NET MUTATION REVIEW
+
+Compare:
+`d55800d235aee784640b9fee023d8525cb5b4be3...770b3b368d56abd011281a1c6b4c85bac717ee77`
+
+Exactly five net files changed:
+1. `Cargo.lock`
+2. `crates/prw-agent/Cargo.toml`
+3. `crates/prw-agent/src/main.rs`
+4. `crates/prw-agent/tests/phase125_device_identity_bootstrap.rs`
+5. `crates/prw-agent/tests/phase_102_binary_bootstrap.rs`
+
+No temporary workflow remains in the net diff.
+No systemd unit source changed.
+No packaging source changed.
+No production encrypted credential or private key exists in the repository.
+No control-plane/enrollment/networking source was added by Phase 125.
+
+SECURITY CLASSIFICATION
+
+The Ubuntu Agent is now source-ready to require its locked systemd-delivered device identity before local runtime readiness.
+
+The production installed PowerCode Agent remains the older pre-identity binary until a later separately audited production activation transaction.
+
+Phase 125 specifically did NOT:
+- create the production PowerCode private device key;
+- create the production persistent encrypted credential;
+- install the persistent `20-device-identity-credential.conf` drop-in;
+- replace `/usr/lib/private-remote-workspace/prw-agent`;
+- restart the production `prw-agent.service`;
+- modify the vendor unit;
+- alter enablement or linger;
+- send an enrollment request;
+- activate account authentication;
+- activate public/remote networking, TUN, relay, DNS, SSH, file transfer, Android, or Desktop functionality.
+
+READY FOR
+
+`PHASE_126_PRODUCTION_IDENTITY_PROVISIONING_AND_IDENTITY_AWARE_AGENT_ACTIVATION_TRANSACTION`
+
+Phase 126 may proceed autonomously under standing authorization, but it must follow the Phase 124 locked activation/rollback order and must treat the production private device identity as new security state. It must preserve the currently running production Agent until rollback prerequisites are fully staged and verified.
