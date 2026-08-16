@@ -1,0 +1,378 @@
+Private Remote Workspace
+Phase 118 — Ubuntu Device-Identity Custody Provider and Policy Lock
+
+STATUS:
+PASS / SYSTEMD_ENCRYPTED_CREDENTIALS_LOCKED_AS_UBUNTU_CUSTODY_PROVIDER / TPM2_PLUS_HOST_SECRET_DEFAULT_ON_CAPABLE_HOSTS / HOST_KEY_ONLY_EXPLICIT_FALLBACK / NO_SILENT_SECURITY_DOWNGRADE / XDG_STATE_ENCRYPTED_BLOB_STORAGE_LOCKED / FIXED_CREDENTIAL_NAME_LOCKED / CREDENTIAL_DIRECTORY_RUNTIME_ACCESS_LOCKED / MACHINE_BOUND_RECOVERY_SEMANTICS_LOCKED / NO_PRW_PRIVATE_KEY_CREATED / NO_SIGNER_IMPLEMENTATION / NO_SERVICE_OR_HOST_MUTATION / PHASE_119_AUTONOMOUSLY_AUTHORIZED
+
+AUDIT TYPE: SECURITY ARCHITECTURE / PRODUCTION CUSTODY PROVIDER POLICY LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: ad8db2070e94bf107ed7b62869d6ba7332c8dae2
+Validated cleanup head before this report: 7e28eebcf134b6439c019ce3984c89ea59daadba
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 118 is a provider/policy lock only. It does not create, import, persist, decrypt, or sign with a production PRW private key and does not modify the active PRW Agent service.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 116 locked the cross-platform private-key custody and signing architecture:
+- typed enrollment PoP signing only;
+- no arbitrary remote signing oracle;
+- Android Keystore non-exportable custody;
+- plaintext persistent Ubuntu private keys forbidden;
+- systemd encrypted credentials identified as an Ubuntu candidate pending real-host proof.
+
+Phase 117 proved on the real PowerCode host, systemd 259:
+- user-scoped host-key credential encryption/decryption;
+- credential-name binding;
+- authenticated tamper rejection;
+- LoadCredentialEncrypted delivery to a transient user service;
+- no persistent user-home credential-secret side effect under the bounded probe;
+- PRW Agent executable/unit hashes and active/enabled service state unchanged.
+
+Phase 117 deliberately did not decide TPM policy.
+
+PRIMARY SYSTEMD SECURITY MODEL
+
+The systemd credential model used by this lock provides:
+- encrypted and authenticated credentials using AES-256-GCM;
+- encryption keys derived from TPM2, /var/lib/systemd/credential.secret, or both;
+- default combination of TPM2 plus the host credential secret when TPM2 is available and /var is persistent;
+- decryption/authentication at service activation;
+- service plaintext exposure through the service credential directory rather than persistent plaintext files or command-line/environment secret values;
+- credential lifecycle tied to service activation/deactivation.
+
+Phase 118 uses these systemd semantics as the Ubuntu custody substrate rather than inventing a second PRW-specific at-rest key wrapping system.
+
+REAL-HOST TPM CAPABILITY PROOF
+
+Temporary workflow:
+.github/workflows/phase-118-a00-tpm-policy-probe.yml
+
+Workflow commit:
+94b7ad58277983e276051bdf55f00574d25dc779
+
+Run:
+31932359778
+
+Job:
+95129026729
+
+Runner:
+- name: PowerCode;
+- group: Default;
+- labels: self-hosted, prw-host;
+- runner_id: 21.
+
+Host evidence:
+- hostname: PowerCode;
+- user: gersi365;
+- systemd: 259 (259.5-0ubuntu3.4).
+
+TPM capability result:
+- has_tpm2_rc=0;
+- result: yes;
+- firmware: present;
+- driver: present;
+- system support: present;
+- subsystem support: present;
+- required TPM libraries reported present.
+
+The systemd 259 command emitted a compatibility notice that `systemd-creds has-tpm2` is replaced by `systemd-analyze has-tpm2`, then returned usable TPM2 capability successfully.
+
+DEFAULT-POLICY DELIVERY PROOF
+
+The Phase 118 probe used only this disposable non-secret value:
+PRW-PHASE-118-DUMMY-CREDENTIAL-v1
+
+With TPM2 reported usable, the probe invoked user-scoped systemd credential encryption with no host-key-only override:
+systemd-creds --user encrypt --name=phase118.dummy ...
+
+A transient user service then consumed the encrypted credential through:
+LoadCredentialEncrypted=phase118.dummy:<temporary encrypted path>
+
+The delivered value matched the original disposable dummy bytes exactly.
+
+Result:
+default_policy_user_service_delivery=pass
+
+Transient service result:
+- success;
+- status 0/SUCCESS;
+- swap 0B.
+
+No PRW key material was involved.
+
+UBUNTU CUSTODY PROVIDER LOCK
+
+The Ubuntu production device-identity private-key custody provider is:
+SYSTEMD ENCRYPTED SERVICE CREDENTIALS
+
+PRW does not implement its own persistent plaintext key file, password-wrapped file format, environment-secret scheme, or generic secret-store abstraction as the initial Ubuntu custody mechanism.
+
+The encrypted credential blob is persistent ciphertext. Plaintext private-key material must not be written persistently by the normal PRW lifecycle.
+
+CREDENTIAL IDENTITY
+
+The locked logical credential name is:
+prw.device-identity.private-key.v1
+
+The name is versioned independently from the enrollment PoP message version.
+
+The future signer must request exactly this named credential and must fail closed if:
+- it is absent;
+- decryption/authentication fails;
+- credential-name binding fails;
+- the payload format is unsupported;
+- the payload is malformed;
+- the payload does not correspond to the enrolled public identity.
+
+ENCRYPTED BLOB STORAGE
+
+The encrypted-at-rest blob belongs to user-specific PRW state.
+
+Logical storage root:
+${XDG_STATE_HOME:-$HOME/.local/state}/private-remote-workspace/credentials/
+
+Locked initial filename:
+device-identity-private-key-v1.cred
+
+Required ownership and modes:
+- state/credential directories: owned by the PRW user, mode 0700;
+- encrypted credential blob: owned by the PRW user, mode 0600;
+- no symlink following when creating/replacing the blob;
+- atomic replacement required for rotation;
+- unknown/foreign existing target must fail closed rather than be overwritten.
+
+The XDG state path is resolved at provisioning/configuration time. Future systemd integration must reference the resolved absolute encrypted-blob source path, for example through an intentionally managed user-unit drop-in or equivalent bounded configuration. The global packaged service must not assume that every user has the same non-default XDG_STATE_HOME.
+
+RUNTIME DELIVERY CONTRACT
+
+The service receives the private-key plaintext only as a systemd service credential.
+
+Service-visible credential name:
+prw.device-identity.private-key.v1
+
+The future signer reads it relative to:
+$CREDENTIALS_DIRECTORY
+
+PRW code must not hardcode `/run/credentials/...` because systemd documents that hardcoded system-service credential paths do not generalize to user services.
+
+The private-key bytes must not be copied into:
+- environment variables;
+- command-line arguments;
+- logs;
+- audit reports;
+- crash messages;
+- IPC responses;
+- network messages;
+- normal persistent PRW state.
+
+TPM2-CAPABLE POLICY
+
+When the host reports a usable TPM2 and /var is persistent, PRW uses systemd's normal/default encrypted-credential policy rather than forcing host-key-only mode.
+
+Under the documented systemd default this binds encrypted credentials to the combination of:
+- the local TPM2-derived key; and
+- /var/lib/systemd/credential.secret.
+
+Classification:
+TPM2_PLUS_HOST_SECRET
+
+This is the preferred and default Ubuntu custody security level.
+
+PowerCode has proven this path end-to-end with a transient user service on systemd 259.
+
+HOST-KEY-ONLY FALLBACK
+
+Hosts without usable TPM2 may use an explicitly selected host-key-only systemd credential policy if all other supported-host requirements are met.
+
+Classification:
+HOST_KEY_ONLY
+
+This fallback is allowed because Phase 117 separately proved user-scoped host-key-only encryption, decryption, tamper rejection, and user-service delivery on the current systemd 259 host.
+
+The fallback is a lower machine-binding tier and must be recorded as such in future local status/diagnostics.
+
+NO SILENT DOWNGRADE
+
+A device identity provisioned under TPM2_PLUS_HOST_SECRET must never be silently re-encrypted or converted to HOST_KEY_ONLY merely because TPM access later becomes unavailable.
+
+If the existing credential cannot be decrypted under its original policy:
+- startup/signing fails closed for identity-dependent operations;
+- the Agent may continue only operations that do not require the device identity if later policy explicitly permits them;
+- the system surfaces a bounded identity-custody failure state;
+- recovery requires an explicit rotation/re-enrollment path.
+
+Likewise, changing security level is an explicit identity lifecycle event, not an automatic retry mechanism.
+
+PROVISIONING POLICY SELECTION
+
+Future Ubuntu device-identity provisioning must determine custody capability before generating/persisting the production identity.
+
+Required logical sequence:
+1. establish the intended user/service context;
+2. verify systemd encrypted-credential support;
+3. determine TPM2 usability with the current supported systemd capability command;
+4. if TPM2 is usable and /var is persistent, select TPM2_PLUS_HOST_SECRET;
+5. otherwise, if supported host-key encryption is available and product policy permits fallback, select HOST_KEY_ONLY;
+6. if neither supported policy is available, fail before production private-key generation/persistence;
+7. record the selected custody security level as non-secret metadata;
+8. only a later phase may generate the key and persist its encrypted representation transactionally.
+
+PRIVATE-KEY PAYLOAD FORMAT
+
+Phase 118 deliberately does not lock the plaintext serialization of the Ubuntu P-256 private key.
+
+The private-key payload format must be selected only after the Phase 119 signing-provider compatibility proof demonstrates:
+- P-256 key generation;
+- import/reload from a bounded standard representation;
+- DER ECDSA-Sig-Value output compatible with the existing production verifier;
+- canonical SPKI public identity derivation;
+- zero accidental signing API expansion;
+- exact Rust 1.97.1 and supported Ubuntu behavior.
+
+No assumption such as PKCS#8 is promoted to production contract without that proof.
+
+BACKUP / RESTORE / MACHINE BINDING
+
+Initial PRW device identity is machine-bound by design.
+
+For TPM2_PLUS_HOST_SECRET:
+- the encrypted blob alone is not a portable private-key backup;
+- access to both local TPM2 state and the host credential secret is required by the documented systemd default policy;
+- hardware/OS credential-binding loss is handled by device-identity rotation/re-enrollment, not by weakening the credential policy.
+
+For HOST_KEY_ONLY:
+- the encrypted blob remains bound to the host credential secret;
+- PRW does not initially define export/backup of the host credential secret as a supported identity migration mechanism;
+- machine replacement is handled by new identity provisioning and re-enrollment.
+
+PRW must not advertise the encrypted blob alone as a recoverable private-key backup.
+
+ROTATION
+
+A future rotation transaction must:
+- generate a fresh private identity under the selected supported custody policy;
+- derive and verify its public identity before activation;
+- write a new encrypted blob through a fresh temporary file under the protected state directory;
+- verify the encrypted credential can be delivered/decrypted through the intended service context before activation;
+- atomically replace the prior encrypted blob only after all preconditions pass;
+- coordinate enrollment/public-identity transition so an old and new key cannot be ambiguously authoritative;
+- preserve rollback evidence without logging private material.
+
+Phase 118 does not implement rotation.
+
+SIGNING BOUNDARY
+
+Systemd credential delivery is custody infrastructure, not a signing oracle.
+
+The future Ubuntu signer must retain the Phase 116 rule:
+- caller supplies typed PRW enrollment request/challenge context;
+- PRW constructs the canonical enrollment PoP message locally;
+- the signer signs only that internally constructed message;
+- no public API accepts arbitrary caller-provided bytes for generic signing;
+- signature output is the locked DER ECDSA-Sig-Value profile;
+- private bytes never leave the signer/custody boundary through a public PRW API.
+
+SERVICE INTEGRATION BOUNDARY
+
+Phase 118 does not modify:
+- packaging/systemd/prw-agent.service;
+- /usr/lib/systemd/user/prw-agent.service;
+- current daemon-reload state;
+- enablement;
+- current running Agent process;
+- linger;
+- current IPC protocol.
+
+A future service-integration phase must separately validate the exact LoadCredentialEncrypted source/path configuration and rollback semantics before applying any real-host service mutation.
+
+TEMPORARY WORKFLOW CLEANUP
+
+The temporary TPM capability workflow was removed after evidence capture.
+
+Cleanup commit:
+7e28eebcf134b6439c019ce3984c89ea59daadba
+
+Compare from Phase 117 authoritative report head:
+base ad8db2070e94bf107ed7b62869d6ba7332c8dae2
+head 7e28eebcf134b6439c019ce3984c89ea59daadba
+
+Result:
+- ahead_by: 2;
+- net changed files: 0.
+
+Therefore Phase 118's temporary workflow leaves no product or permanent CI source mutation.
+
+PERMANENT CI
+
+Permanent Rust validation on the cleanup head:
+- run: 31932443739;
+- job: 95129228279;
+- head: 7e28eebcf134b6439c019ce3984c89ea59daadba;
+- conclusion: success.
+
+Successful stages:
+- exact toolchain record;
+- locked dependency graph verification;
+- formatting;
+- Clippy;
+- workspace tests;
+- workspace build.
+
+MUTATION STATEMENT
+
+Phase 118 final net repository mutation is this authoritative decision report only.
+
+No production mutation was made to:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- systemd service source;
+- installed host package files;
+- systemd user-manager state;
+- private-key material;
+- enrollment state;
+- network listeners;
+- DNS;
+- persistence/database state.
+
+PHASE 119 BOUNDARY
+
+Standing authorization permits Phase 119 to perform a production-signer compatibility/security-boundary spike without another approval request.
+
+Phase 119 may use disposable test key material to prove:
+- P-256 private-key generation with the intended Ubuntu signer provider;
+- standard private-key serialization/import round-trip;
+- canonical SPKI public identity derivation;
+- ECDSA P-256/SHA-256 DER signature generation;
+- verification by the existing prw-device-identity verifier;
+- signing of the exact Phase 115 canonical enrollment PoP message;
+- negative/mutation cases;
+- bounded/private API design that does not expose arbitrary signing;
+- dependency/build footprint.
+
+Phase 119 must not:
+- generate or persist the production PRW device identity;
+- write a production encrypted credential blob;
+- modify prw-agent.service;
+- deploy new Agent binaries;
+- implement enrollment networking;
+- perform enrollment approval;
+- change account authentication;
+- expose generic remote signing.
+
+FINAL CLASSIFICATION
+
+PASS / UBUNTU_CUSTODY_PROVIDER_SYSTEMD_ENCRYPTED_CREDENTIALS / POWER_CODE_TPM2_USABLE / DEFAULT_POLICY_USER_SERVICE_DELIVERY_PROVEN / TPM2_PLUS_HOST_SECRET_PREFERRED_DEFAULT / HOST_KEY_ONLY_EXPLICIT_FALLBACK / NO_SILENT_DOWNGRADE / XDG_STATE_CIPHERTEXT_0700_0600 / FIXED_CREDENTIAL_NAME / RUNTIME_CREDENTIAL_DIRECTORY_ONLY / MACHINE_BOUND_IDENTITY_RECOVERY_BY_ROTATION_REENROLLMENT / TEMP_WORKFLOW_REMOVED / PERMANENT_CI_SUCCESS / NO_PRODUCTION_PRIVATE_KEY_OR_SIGNER / PHASE_119_AUTONOMOUSLY_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 118 Ubuntu custody provider/policy report.
