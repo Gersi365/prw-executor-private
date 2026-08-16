@@ -1,0 +1,130 @@
+Private Remote Workspace
+Phase 126-A02 — systemd Encrypted-Credential Output Metadata and Ciphertext Handoff Hardening
+
+STATUS:
+PASS / REAL_HOST_SYSTEMD_OUTPUT_METADATA_OBSERVED / DIRECT_SYSTEMD_CREDS_OUTPUT_MODE_0644 / FD_BASED_POST_ENCRYPTION_HARDENING_IMPLEMENTED / O_NOFOLLOW / SAME_INODE_DEVICE_REVALIDATION / USER_OWNERSHIP_REQUIRED / FINAL_MODE_0600 / BOUNDED_CIPHERTEXT / NO_REPLACE_COMMIT / PRODUCTION_STATE_UNCHANGED / TEMPORARY_METADATA_PROBE_REMOVED / PERMANENT_CI_PASS / NO_PRODUCTION_PRIVATE_KEY_CREATED / NO_PRODUCTION_CIPHERTEXT_INSTALLED / NO_PRODUCTION_AGENT_MUTATION
+
+AUDIT TYPE: SECURITY HARDENING / REAL-HOST METADATA PROBE / SOURCE VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+A01 clean implementation baseline: 35296746471b763698c5143a1dc4c1d0d430aa7c
+A02 source-hardening commit: 69cfef890084e358abd7c2a8ecf010c0c06f3090
+A02 cleanup commit: 4bce19c96c28bccb472f182bf2567995579ffd62
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+PURPOSE
+
+Phase 126-A01 proved the creation-only provisioner and the public provisioning-to-runtime identity fingerprint binding. Before allowing production identity creation, A02 measured the exact metadata semantics of `/usr/bin/systemd-creds --user encrypt` when it writes directly to a caller-supplied output path on the real PowerCode host.
+
+The objective was to avoid assuming that the system utility itself creates a final ciphertext file with PRW's required 0600 mode.
+
+REAL-HOST METADATA PROBE
+
+Temporary workflow:
+`.github/workflows/phase-126-a02-systemd-output-metadata-probe.yml`
+
+Workflow run:
+`31937705860`
+
+PowerCode job:
+`95142133260` — SUCCESS
+
+The probe used only disposable dummy credential material and runner-temporary paths. It did not create or mutate the production device identity.
+
+Observed direct output from:
+`/usr/bin/systemd-creds --user encrypt --name=prw.device-identity.private-key.v1 - <DISPOSABLE_OUTPUT_PATH>`
+
+Observed file metadata on PowerCode systemd 259:
+- regular file;
+- not a symlink;
+- UID 1000;
+- GID 1000;
+- mode `0644`;
+- size 230 bytes for the bounded dummy input.
+
+Decryption of the disposable output under the same locked credential name matched the original dummy value exactly.
+
+This result proved that PRW must not treat the mode created directly by systemd-creds as its authoritative final at-rest mode.
+
+The probe also re-proved before/after:
+- installed production Agent hash unchanged;
+- installed vendor unit hash unchanged;
+- production service active/enabled;
+- production IPC Ready;
+- Linger=yes;
+- production encrypted credential absent;
+- production device-identity service drop-in absent.
+
+SOURCE HARDENING
+
+A02 changed only the provisioning ciphertext handoff/validation logic.
+
+The hardened production design now:
+1. creates a unique same-directory temporary ciphertext pathname under the validated private credential directory;
+2. invokes `/usr/bin/systemd-creds` directly, with the fixed logical credential name and private PKCS#8 only through child stdin;
+3. directs systemd-creds to the temporary ciphertext pathname rather than capturing ciphertext through a PRW stdout buffer;
+4. suppresses systemd-creds stdout/stderr from becoming a secret-bearing application surface;
+5. zeroizes the PRW-owned plaintext PKCS#8 buffer immediately after the encryption child completes;
+6. opens the created ciphertext using `O_NOFOLLOW` and read/write access;
+7. requires the opened object to be a regular file owned by the current user;
+8. rejects initial metadata carrying forbidden write/execute bits beyond the measured systemd-created read-only shape;
+9. requires ciphertext size within the locked non-empty bounded range;
+10. records device and inode identity through the opened descriptor;
+11. hardens mode to exact 0600 through the already-open descriptor;
+12. fsyncs the opened ciphertext;
+13. re-reads descriptor metadata and requires same device/inode/owner/size with exact 0600 mode;
+14. re-reads pathname metadata and requires it still names the same non-symlink device/inode;
+15. atomically commits only with `RenameFlags::NOREPLACE`;
+16. fsyncs the parent directory.
+
+This removes any dependence on the system utility producing PRW's final required mode itself and closes a pathname-swap window between external command completion and final commit.
+
+SECURITY PROPERTIES
+
+The production provisioner still:
+- uses no shell for secret-bearing operations;
+- accepts no private key through argv/environment;
+- persists no plaintext private-key file;
+- offers no generic key import/export API;
+- never overwrites an existing production identity;
+- keeps the locked logical credential name compile-time fixed;
+- does not perform enrollment or networking.
+
+The intermediate ciphertext is encrypted material, not private-key plaintext, but it is nevertheless treated as sensitive state and is hardened to mode 0600 before becoming authoritative.
+
+VALIDATION
+
+Permanent CI on A02 source-hardening commit:
+`31937766936` — SUCCESS
+
+Validation passed:
+- locked dependency graph;
+- rustfmt;
+- Clippy with `-D warnings`;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+The temporary metadata workflow was removed after evidence capture.
+Cleanup commit:
+`4bce19c96c28bccb472f182bf2567995579ffd62`
+
+A subsequent Phase 126-A03 hardened disposable real-host validation supersedes A02 as the strongest end-to-end proof of the final provisioner behavior.
+
+NO PRODUCTION MUTATION
+
+A02 did not:
+- create the PowerCode production private key;
+- create the production encrypted credential;
+- install the production service drop-in;
+- replace the installed Agent;
+- restart the production Agent;
+- alter the vendor unit;
+- alter enablement or linger;
+- enroll the device;
+- activate remote/public networking.
+
+READY FOR:
+`PHASE_126_A03_HARDENED_PROVISIONING_DISPOSABLE_VALIDATION`
