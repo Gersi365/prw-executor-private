@@ -439,7 +439,7 @@ fn validate_challenge_lifetime(
     Ok(())
 }
 
-fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], SessionAuthMessageError> {
+const fn bounded_identifier(bytes: &[u8]) -> Result<&[u8], SessionAuthMessageError> {
     if bytes.is_empty() || bytes.len() > MAX_SESSION_AUTH_IDENTIFIER_BYTES {
         return Err(SessionAuthMessageError::IdentifierOutOfBounds);
     }
