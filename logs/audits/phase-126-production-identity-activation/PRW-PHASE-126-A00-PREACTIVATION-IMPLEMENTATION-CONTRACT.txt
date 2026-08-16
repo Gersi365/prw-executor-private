@@ -1,0 +1,134 @@
+Private Remote Workspace
+Phase 126-A00 — Production Identity Activation Preactivation Implementation Contract
+
+STATUS:
+PASS / PREACTIVATION_PREREQUISITES_LOCKED / NO_PRODUCTION_KEY_CREATED / NO_HOST_MUTATION / PUBLIC_IDENTITY_ATTESTATION_REQUIRED / PRODUCTION_PROVISIONER_REQUIRED / NO_PRIVATE_BYTES_IN_LOGS_OR_ARGV / NO_IPC_PROTOCOL_CHANGE_REQUIRED / READY_FOR_PHASE_126_A01_SOURCE_AND_DISPOSABLE_VALIDATION
+
+AUDIT TYPE: SECURITY / ACTIVATION PRECONDITION CONTRACT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: c01349f58fc9c1ff8ed237965ad3077f00308daf
+
+PURPOSE
+
+Phase 124 locked a production activation postcondition requiring proof that the identity-aware Agent loaded the same canonical public identity derived from the newly provisioned production private key.
+
+Phase 125 proved only that an identity-aware candidate can load a disposable systemd credential and become Ready. The current local GetAgentStatus protocol intentionally exposes only runtime state and protocol version; it does not expose public device identity.
+
+Phase 126 must not create the production private key until there is a deterministic, non-secret proof surface that binds:
+1. the locally generated production identity;
+2. the encrypted credential committed to XDG state;
+3. the systemd-delivered runtime credential;
+4. the signer actually loaded by the activated Agent.
+
+LOCKED ATTESTATION DESIGN
+
+The local IPC protocol remains version 1.0 and is not expanded solely for activation evidence.
+
+Instead, the identity-aware Agent emits one bounded startup attestation before entering the existing runtime lifecycle:
+
+`prw-agent event=device_identity_loaded public_spki_sha256=<64-lowercase-hex>`
+
+The fingerprint is SHA-256 over the exact canonical X.509 SubjectPublicKeyInfo DER bytes returned by the loaded signer.
+
+The fingerprint is public/non-secret identity metadata. No PKCS#8/private scalar/signature material is logged.
+
+The attestation occurs only after:
+- Phase 122 custody validation passes;
+- canonical signer construction passes;
+- canonical public SPKI exists.
+
+It occurs before:
+- instance lock acquisition;
+- Agent socket/listener creation;
+- Ready state.
+
+If identity loading fails, the existing Phase 125 single bounded startup failure remains unchanged and no fingerprint is emitted.
+
+The signer/provider boundary should own SHA-256 fingerprint computation over its canonical public identity so `prw-agent` does not add a direct production AWS-LC dependency.
+
+PROVISIONING IMPLEMENTATION REQUIREMENT
+
+Phase 125 demonstrated memory-only `keygen | systemd-creds` compatibility using temporary workflow helpers, but it did not commit a reusable production provisioning implementation.
+
+Before production identity creation, Phase 126-A01 must implement a narrow production provisioning boundary that:
+- generates a fresh ECDSA P-256 private identity locally;
+- canonicalizes/validates PKCS#8 v1 DER under the already locked signer profile;
+- computes the canonical public SPKI SHA-256 fingerprint;
+- resolves the locked XDG state ciphertext path;
+- validates creation-only semantics and all parent/leaf ownership/mode/symlink constraints;
+- invokes `/usr/bin/systemd-creds --user encrypt --name=prw.device-identity.private-key.v1 - <same-directory-temp-target>` directly with `std::process::Command`, never through a shell;
+- writes private PKCS#8 bytes only to the child process stdin pipe;
+- zeroizes every PRW-owned plaintext private-key buffer after transfer;
+- captures only bounded non-secret subprocess diagnostics;
+- verifies non-empty ciphertext and secure mode/ownership;
+- fsyncs file and parent directory;
+- atomically commits to the locked final ciphertext path without replacing an existing identity;
+- returns/prints only the public fingerprint and non-secret destination/classification metadata.
+
+The production provisioner must not expose an existing-key export API and must not accept arbitrary caller-supplied private-key bytes for first provisioning.
+
+PROVISIONER FORM
+
+A dedicated internal workspace crate/binary is preferred:
+`prw-device-identity-provisioning`
+
+Its public library surface, if any, must remain creation-only and narrow. It must not become a generic key-management toolkit.
+
+Its command-line surface must not accept private key material, passwords, secret environment variables, or alternate arbitrary credential names/paths.
+
+Production path is derived from validated XDG/HOME policy; the logical credential name is compile-time fixed.
+
+DISPOSABLE VALIDATION REQUIREMENTS
+
+Phase 126-A01 must prove before production mutation:
+- deterministic workspace fmt/Clippy/tests/build under Rust 1.97.1;
+- production provisioner source contains no shell invocation for secret-bearing operation;
+- disposable first provisioning succeeds against a temporary XDG state root;
+- only encrypted ciphertext persists; no plaintext key file is created;
+- second first-provisioning attempt fails closed without replacing the first ciphertext;
+- malformed/insecure destination/parent/symlink cases fail before key generation where practical;
+- public fingerprint is 64 lowercase hex chars;
+- decrypting the disposable ciphertext through systemd and loading through the Phase 122 adapter yields the same signer fingerprint;
+- candidate Agent startup attestation fingerprint exactly equals the provisioning fingerprint;
+- missing credential still fails before listener creation;
+- no local IPC protocol version change;
+- production PowerCode Agent/unit/service/linger remain unchanged during disposable proof.
+
+PRODUCTION MUTATION GATE
+
+Only after A01 passes and temporary workflows are removed may Phase 126 perform a read-only production preflight.
+
+That preflight must prove absence of:
+- locked production encrypted credential destination;
+- locked production service drop-in destination;
+- any current PRW production identity metadata artifact.
+
+It must also re-prove:
+- installed Agent/unit exact hashes;
+- current service active/running/enabled;
+- current production IPC Ready;
+- Linger=yes pre-existing;
+- TPM2/systemd-creds capability;
+- exact identity-aware candidate binary staged and hashed;
+- exact previous Agent bytes staged for rollback before any key creation.
+
+PRIVILEGE BOUNDARY
+
+The connected self-hosted runner cannot perform non-interactive privileged writes to `/usr/lib/private-remote-workspace/prw-agent` and must not be granted broad NOPASSWD sudo or run as root.
+
+All non-privileged identity provisioning, XDG state, per-user systemd drop-in, daemon-reload, service state reads, and postcondition probes may be automated through the user runner.
+
+The root-owned Agent executable replacement remains a separately audited interactive sudo transaction if no narrower already-authorized privileged mechanism exists.
+
+No sudo password may be stored in GitHub, environment variables, stdin automation, repository files, or ChatGPT-visible output.
+
+NO MUTATION IN A00
+
+Phase 126-A00 changes only this audit/contract report.
+It creates no private key, ciphertext, metadata, systemd drop-in, executable, service state, enrollment state, or networking state.
+
+READY FOR:
+`PHASE_126_A01_PROVISIONER_AND_PUBLIC_IDENTITY_ATTESTATION_IMPLEMENTATION_WITH_DISPOSABLE_VALIDATION`
