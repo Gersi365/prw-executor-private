@@ -1,0 +1,158 @@
+name: Phase 113 Device Identity Verifier Validation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-113-device-identity-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pin Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+
+      - name: Generate candidate lockfile
+        run: cargo generate-lockfile
+
+      - name: Prove provider dependency boundary
+        run: |
+          echo '=== prw-device-identity tree ==='
+          cargo tree -p prw-device-identity -e features | tee /tmp/device-identity-tree.txt
+          grep -F 'aws-lc-rs v1.18.0' /tmp/device-identity-tree.txt
+          grep -F 'aws-lc-sys v0.44.0' /tmp/device-identity-tree.txt
+          if grep -Fq 'untrusted v' /tmp/device-identity-tree.txt; then
+            echo 'unexpected untrusted dependency: minimal feature set failed' >&2
+            exit 1
+          fi
+          echo 'phase113_minimal_provider_features=PASS'
+
+          echo '=== prw-agent tree ==='
+          cargo tree -p prw-agent | tee /tmp/agent-tree.txt
+          if grep -Eq 'aws-lc-rs|aws-lc-sys|prw-device-identity' /tmp/agent-tree.txt; then
+            echo 'prw-agent unexpectedly depends on device identity provider' >&2
+            exit 1
+          fi
+          echo 'phase113_agent_provider_exclusion=PASS'
+
+          echo '=== candidate lock diff ==='
+          git diff -- Cargo.lock
+
+      - name: Validate Rust workspace
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+
+      - name: Validate focused production verifier tests
+        run: cargo test --locked -p prw-device-identity --test locked_profile
+
+      - name: Validate Android aarch64 production crate
+        run: |
+          rustup target add aarch64-linux-android --toolchain 1.97.1
+          test -n "${ANDROID_NDK_HOME:-}"
+          toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$toolchain/aarch64-linux-android24-clang"
+          test -x "$toolchain/llvm-ar"
+          export CC_aarch64_linux_android="$toolchain/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$toolchain/llvm-ar"
+          cargo check --locked -p prw-device-identity --tests --target aarch64-linux-android
+          echo 'phase113_android_aarch64_check=PASS'
+
+      - name: Record Agent release exclusion and size
+        run: |
+          cargo build --locked --release -p prw-agent
+          agent_size=$(stat -c '%s' target/release/prw-agent)
+          echo "phase113_prw_agent_release_bytes=$agent_size"
+          if strings target/release/prw-agent | grep -Eq 'aws_lc|AWS-LC|prw_device_identity'; then
+            echo 'unexpected provider marker in prw-agent release binary' >&2
+            exit 1
+          fi
+          echo 'phase113_agent_binary_provider_marker_check=PASS'
+
+      - name: Measure minimal device identity consumer footprint
+        run: |
+          probe_root="$RUNNER_TEMP/phase113-size-probe"
+          mkdir -p "$probe_root/empty/src" "$probe_root/identity/src"
+
+          cat > "$probe_root/empty/Cargo.toml" <<'EOF'
+          [package]
+          name = "phase113-empty-probe"
+          version = "0.0.0"
+          edition = "2024"
+          EOF
+          printf 'fn main() { std::hint::black_box(1_u8); }\n' > "$probe_root/empty/src/main.rs"
+
+          cat > "$probe_root/identity/Cargo.toml" <<EOF
+          [package]
+          name = "phase113-identity-probe"
+          version = "0.0.0"
+          edition = "2024"
+
+          [dependencies]
+          prw-device-identity = { path = "$GITHUB_WORKSPACE/crates/prw-device-identity" }
+          prw-control-plane = { path = "$GITHUB_WORKSPACE/crates/prw-control-plane" }
+          EOF
+          cat > "$probe_root/identity/src/main.rs" <<'EOF'
+          use prw_control_plane::{
+              DeviceIdentityAlgorithm, DeviceIdentityPublicKeyEncoding, DeviceIdentitySignature,
+              DeviceIdentitySignatureEncoding, PublicIdentityMaterial,
+          };
+          use prw_device_identity::verify_device_identity_signature;
+
+          fn main() {
+              let identity = PublicIdentityMaterial::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer,
+                  vec![1_u8],
+              )
+              .expect("non-empty");
+              let signature = DeviceIdentitySignature::new(
+                  DeviceIdentityAlgorithm::EcdsaP256Sha256,
+                  DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
+                  vec![1_u8],
+              )
+              .expect("non-empty");
+              std::hint::black_box(
+                  verify_device_identity_signature(&identity, b"probe", &signature).is_err(),
+              );
+          }
+          EOF
+
+          cargo build --release --manifest-path "$probe_root/empty/Cargo.toml"
+          cargo build --release --manifest-path "$probe_root/identity/Cargo.toml"
+          empty_size=$(stat -c '%s' "$probe_root/empty/target/release/phase113-empty-probe")
+          identity_size=$(stat -c '%s' "$probe_root/identity/target/release/phase113-identity-probe")
+          delta=$((identity_size - empty_size))
+          echo "phase113_empty_probe_bytes=$empty_size"
+          echo "phase113_identity_probe_bytes=$identity_size"
+          echo "phase113_identity_probe_delta_bytes=$delta"
+
+      - name: Upload validated Cargo.lock candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase113-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
