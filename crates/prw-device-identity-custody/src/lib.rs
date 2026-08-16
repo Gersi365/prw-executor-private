@@ -99,8 +99,8 @@ impl std::error::Error for UbuntuDeviceIdentityCustodyError {
 /// Returns [`UbuntuDeviceIdentityCustodyError`] when the platform, systemd runtime
 /// boundary, file shape, ownership, permissions, bounded read, or signer contract
 /// fails validation.
-pub fn load_ubuntu_enrollment_signer_from_systemd_credential(
-) -> Result<UbuntuEnrollmentSigner, UbuntuDeviceIdentityCustodyError> {
+pub fn load_ubuntu_enrollment_signer_from_systemd_credential()
+-> Result<UbuntuEnrollmentSigner, UbuntuDeviceIdentityCustodyError> {
     #[cfg(target_os = "linux")]
     {
         linux::load_from_environment()
@@ -142,11 +142,10 @@ mod linux {
     const OWNER_READ_BIT: u32 = 0o400;
     const OWNER_DIRECTORY_ACCESS_BITS: u32 = 0o500;
 
-    pub(super) fn load_from_environment(
-    ) -> Result<UbuntuEnrollmentSigner, UbuntuDeviceIdentityCustodyError> {
-        let directory = credentials_directory_from_value(env::var_os(
-            SYSTEMD_CREDENTIALS_DIRECTORY_ENV,
-        ))?;
+    pub fn load_from_environment()
+    -> Result<UbuntuEnrollmentSigner, UbuntuDeviceIdentityCustodyError> {
+        let directory =
+            credentials_directory_from_value(env::var_os(SYSTEMD_CREDENTIALS_DIRECTORY_ENV))?;
         load_from_credentials_directory(&directory)
     }
 
@@ -248,9 +247,7 @@ mod linux {
         }
 
         let mode = metadata.mode();
-        if mode & INSECURE_WRITE_BITS != 0
-            || mode & EXECUTE_BITS != 0
-            || mode & OWNER_READ_BIT == 0
+        if mode & INSECURE_WRITE_BITS != 0 || mode & EXECUTE_BITS != 0 || mode & OWNER_READ_BIT == 0
         {
             return Err(UbuntuDeviceIdentityCustodyError::CredentialPermissionsInsecure);
         }
@@ -265,9 +262,7 @@ mod linux {
         limited
             .read_to_end(&mut credential)
             .map_err(|_| UbuntuDeviceIdentityCustodyError::CredentialReadFailed)?;
-        if credential.is_empty()
-            || credential.len() > MAX_UBUNTU_DEVICE_IDENTITY_PKCS8_BYTES
-        {
+        if credential.is_empty() || credential.len() > MAX_UBUNTU_DEVICE_IDENTITY_PKCS8_BYTES {
             return Err(UbuntuDeviceIdentityCustodyError::CredentialSizeOutOfBounds);
         }
         Ok(credential)
@@ -304,10 +299,8 @@ mod linux {
         impl TestDirectory {
             fn new() -> Self {
                 let id = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
-                let path = std::env::temp_dir().join(format!(
-                    "prw-phase122-{}-{id}",
-                    process::id()
-                ));
+                let path =
+                    std::env::temp_dir().join(format!("prw-phase122-{}-{id}", process::id()));
                 fs::create_dir(&path).expect("create isolated Phase 122 test directory");
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
                     .expect("secure test directory mode");
@@ -324,11 +317,8 @@ mod linux {
 
             fn write_credential(&self, bytes: &[u8]) {
                 fs::write(self.credential_path(), bytes).expect("write test credential");
-                fs::set_permissions(
-                    self.credential_path(),
-                    fs::Permissions::from_mode(0o400),
-                )
-                .expect("secure test credential mode");
+                fs::set_permissions(self.credential_path(), fs::Permissions::from_mode(0o400))
+                    .expect("secure test credential mode");
             }
         }
 
@@ -339,13 +329,10 @@ mod linux {
         }
 
         fn generate_p256_pkcs8() -> Vec<u8> {
-            EcdsaKeyPair::generate_pkcs8(
-                &ECDSA_P256_SHA256_ASN1_SIGNING,
-                &SystemRandom::new(),
-            )
-            .expect("generate disposable P-256 credential")
-            .as_ref()
-            .to_vec()
+            EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                .expect("generate disposable P-256 credential")
+                .as_ref()
+                .to_vec()
         }
 
         #[test]
@@ -400,7 +387,8 @@ mod linux {
             let symlink_directory = TestDirectory::new();
             let target = symlink_directory.path().join("target");
             fs::write(&target, generate_p256_pkcs8()).expect("write symlink target");
-            symlink(&target, symlink_directory.credential_path()).expect("create credential symlink");
+            symlink(&target, symlink_directory.credential_path())
+                .expect("create credential symlink");
             assert_eq!(
                 load_from_credentials_directory(symlink_directory.path()).unwrap_err(),
                 UbuntuDeviceIdentityCustodyError::CredentialNotRegular
@@ -419,11 +407,8 @@ mod linux {
         fn insecure_directory_or_credential_modes_are_rejected() {
             let insecure_directory = TestDirectory::new();
             insecure_directory.write_credential(&generate_p256_pkcs8());
-            fs::set_permissions(
-                insecure_directory.path(),
-                fs::Permissions::from_mode(0o722),
-            )
-            .expect("set insecure directory mode");
+            fs::set_permissions(insecure_directory.path(), fs::Permissions::from_mode(0o722))
+                .expect("set insecure directory mode");
             assert_eq!(
                 load_from_credentials_directory(insecure_directory.path()).unwrap_err(),
                 UbuntuDeviceIdentityCustodyError::CredentialsDirectoryNotSecure
