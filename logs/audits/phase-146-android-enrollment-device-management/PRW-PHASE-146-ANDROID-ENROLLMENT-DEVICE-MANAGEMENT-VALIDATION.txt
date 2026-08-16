@@ -2,13 +2,17 @@ Private Remote Workspace
 Phase 146 — Android Enrollment and Device Management
 
 STATUS:
-PASS / TYPED_ANDROID_ENROLLMENT_PROOF / EXISTING_RUST_CANONICAL_ENCODER_AND_VERIFIER_REUSED / NON_EXPORTABLE_ANDROID_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_REVOKED / NO_NEW_DEPENDENCIES / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT
+PASS / TYPED_ANDROID_ENROLLMENT_PROOF / EXISTING_RUST_CANONICAL_ENCODER_AND_VERIFIER_REUSED / NON_EXPORTABLE_ANDROID_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_REVOKED / NO_NEW_DEPENDENCIES / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / PERMANENT_ANDROID_CI_PASS / NO_PRODUCTION_SIDE_EFFECT
 
 Repository: Gersi365/prw-executor-private
 Branch: main
 Date: 2026-08-16
 Validation source head: a7080982f78c81d0bfc95dc26018ee45a2816d2b
 Authoritative validation run: 31966387956
+Materialized source commit: ca8c762af86d493ef2c9ae641c7b8c773708ff49
+Permanent-CI trigger commit: eba63ab22ba67a70042c06f6c135f8af1388e492
+Permanent Android validation run: 31966961367 — SUCCESS
+Root Rust validation run: 31966961294 — SUCCESS
 Native adapter source SHA-256: 0e15ac2e312c8de76540026fddcd303a122204069c41061325cc4d18f26026ae
 Android custody source SHA-256: cf8fb928d9acb01e9140fc717f444d995f61815d7e0930e9b7b3897e8b15d86b
 Device-management source SHA-256: d01e71c404aa9b323643dff0d4c149016f49280b4c11836c6f08e9affceae89f
@@ -20,6 +24,8 @@ SIGNATURE: Android Keystore device key remains non-exportable P-256; typed enrol
 DEVICE STATUS: presentation exposes only PendingEnrollment, Enrolled and Revoked; disposable injected snapshots stand in for future authoritative fetch without creating production registry persistence.
 REVOCATION: local request creates only pending intent; displayed lifecycle remains authoritative and can become Revoked only through a later authoritative snapshot.
 DEPENDENCIES: no Android Gradle or native Cargo dependency change.
+PERMANENT CI: materialized source was revalidated by .github/workflows/android-validation.yml after an explicit semantics-neutral workflow trigger; native adapter validation and Android unit/lint/debug APK validation passed.
+ROOT RUST: locked dependency graph, fmt, Clippy, tests, and build passed on the permanent-CI trigger head.
 PRODUCTION BOUNDARY: no account login, real enrollment, production device-list endpoint, revocation propagation, production network listener/transport, release signing/distribution, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.
 
-FINAL CLASSIFICATION: PHASE_146_FUNCTIONALLY_VALIDATED / TYPED_ANDROID_ENROLLMENT_PROOF / NON_EXPORTABLE_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_AUTHORITY / NO_NEW_DEPENDENCIES / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_147
+FINAL CLASSIFICATION: PHASE_146_FUNCTIONALLY_VALIDATED / MATERIALIZED_ON_MAIN / PERMANENT_ANDROID_CI_SUCCESS / ROOT_RUST_CI_SUCCESS / TYPED_ANDROID_ENROLLMENT_PROOF / NON_EXPORTABLE_KEYSTORE_DEVICE_SIGNATURE / AUTHORITATIVE_DEVICE_LIFECYCLE_PROJECTION / REVOCATION_INTENT_DOES_NOT_FORGE_AUTHORITY / NO_NEW_DEPENDENCIES / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_147
