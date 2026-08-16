@@ -5,14 +5,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,13 +32,16 @@ internal class MainActivity : ComponentActivity() {
             MaterialTheme {
                 val model: MainViewModel = viewModel()
                 val state by model.uiState.collectAsState()
+                var terminalInput by remember { mutableStateOf("") }
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Private Remote Workspace", style = MaterialTheme.typography.headlineMedium)
-                        Text("Phase 146 enrollment and device management")
+                        Text("Phase 147 bounded remote-terminal UX")
                         Text("Connection: ${state.connectionState}")
                         Text("Identity ready: ${state.identityReady}")
                         Text("Native bridge: ${state.nativeBridgeReady}")
@@ -60,6 +71,71 @@ internal class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+
+                        Text("Disposable terminal — no production endpoint", style = MaterialTheme.typography.titleMedium)
+                        Text("Lifecycle: ${state.terminal.lifecycle}")
+                        Text("Profile: ${state.terminal.profile}")
+                        Text("Geometry: ${state.terminal.columns}x${state.terminal.rows}")
+                        Text("Last PRWC payload: ${state.terminal.lastPayloadBytes} bytes")
+
+                        if (state.terminal.lifecycle == TerminalLifecycleView.Closed) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { model.requestDisposableTerminal(TerminalProfileView.PosixShell) }) {
+                                    Text("Open POSIX")
+                                }
+                                Button(onClick = { model.requestDisposableTerminal(TerminalProfileView.BashShell) }) {
+                                    Text("Open Bash")
+                                }
+                            }
+                        }
+
+                        if (state.terminal.lifecycle == TerminalLifecycleView.Opening) {
+                            Button(onClick = model::acceptDisposableTerminalOpen) {
+                                Text("Apply disposable open acceptance")
+                            }
+                        }
+
+                        if (state.terminal.lifecycle == TerminalLifecycleView.Open) {
+                            OutlinedTextField(
+                                value = terminalInput,
+                                onValueChange = { terminalInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Terminal input") },
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = {
+                                    if (model.sendDisposableTerminalInput(terminalInput)) terminalInput = ""
+                                }) {
+                                    Text("Send input")
+                                }
+                                Button(onClick = model::requestDisposableTerminalRead) {
+                                    Text("Request output")
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = model::injectDisposableTerminalOutput) {
+                                    Text("Apply disposable output")
+                                }
+                                Button(onClick = { model.resizeDisposableTerminal(120, 40) }) {
+                                    Text("Resize 120x40")
+                                }
+                            }
+                            Button(onClick = model::requestDisposableTerminalClose) {
+                                Text("Close terminal")
+                            }
+                        }
+
+                        if (state.terminal.lifecycle == TerminalLifecycleView.Closing) {
+                            Button(onClick = model::acceptDisposableTerminalClosed) {
+                                Text("Apply disposable close completion")
+                            }
+                        }
+
+                        if (state.terminal.transcript.isNotEmpty()) {
+                            Text("Terminal transcript", style = MaterialTheme.typography.titleSmall)
+                            Text(state.terminal.transcript)
+                        }
+
                         Button(onClick = model::disconnect) {
                             Text("Disconnect")
                         }

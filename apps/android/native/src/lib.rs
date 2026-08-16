@@ -23,6 +23,8 @@ use prw_core::{DeviceId, DeviceLifecycle, EnrollmentId, SessionId, UserId, Works
 use prw_device_identity::verify_device_identity_signature;
 use prw_remote_transport::ControlFrame;
 
+mod terminal;
+
 pub const ANDROID_ADAPTER_PROTOCOL_VERSION: i32 = 1;
 const BOOTSTRAP_MAGIC: [u8; 4] = *b"P145";
 const BOOTSTRAP_VERSION: u16 = 1;

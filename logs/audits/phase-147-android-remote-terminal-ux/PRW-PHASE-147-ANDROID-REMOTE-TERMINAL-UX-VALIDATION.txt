@@ -1,0 +1,35 @@
+Private Remote Workspace
+Phase 147 — Android Remote Terminal UX
+
+STATUS:
+PASS / ANDROID_TYPED_TERMINAL_UX / EXISTING_PRW_REMOTE_BRIDGE_CODEC_REUSED / NO_ARBITRARY_RUN_COMMAND_API / OPEN_CLOSE_AUTHORITY_NOT_FORGED / BOUNDED_TERMINAL_IO_AND_TRANSCRIPT / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: d4e07beb4ae2b18c845608020bb22a1a51b732db
+Authoritative validation run: 31969220908
+Initial dependency probe run: 31968272078 — harness failure only (NDK compiler not configured)
+Corrective NDK dependency probe run: 31968345916 — SUCCESS
+Native Cargo.lock SHA-256: e06261f9a60399b85aa4a3ed456596fdb92e70fbe924bb38f81ee1de7070acd9
+Terminal Rust adapter SHA-256: 26d6e76d3fd14445b3e4cbf3cdb1ffbed9578ed0747e7a6b2c165accb5a12a9e
+Terminal Kotlin controller SHA-256: 67ad6ee935d49bf32b59a07e283ea25a577cbece569ea77d23d47e23f5d3ae47
+Validated debug APK SHA-256: 7cb33eb7b931d58c85fbbb100aee1a7e82db22dc5c348c92d2001d337d9145f3
+New native-lock registry packages relative to Phase 146: bitflags 2.13.1,errno 0.3.14,linux-raw-sys 0.12.1,nix 0.31.3,rustix 1.1.4
+
+CONTRACT: contracts/ANDROID_REMOTE_TERMINAL_UX_CONTRACT.md
+CODEC: native adapter constructs existing prw-terminal typed values and delegates PRWC payload encoding/decoding to Phase 143 prw-remote-bridge BridgeCommand; Kotlin does not duplicate PRWC encoding.
+LIFECYCLE: local open/close requests produce pending Opening/Closing presentation only; explicit disposable authoritative callbacks are required for Open/Closed.
+I/O: input/read projection is bounded to the existing narrower Phase 143 60000-byte inline bridge limit; transcript memory is separately bounded.
+OUTPUT: sending terminal input never fabricates remote output; only explicit disposable authoritative output injection changes transcript.
+CAPABILITY: Android does not grant TerminalOpen/TerminalExec; current registry/session/transport/capability authority remains in the existing remote bridge.
+DEPENDENCIES: no Android UI dependency added; native adds only internal prw-remote-bridge and prw-terminal path dependencies; any newly reachable registry package version is already present in the authoritative root Cargo.lock.
+RENDERING: bounded text transcript only; complete ANSI/VT emulation is not claimed by Phase 147.
+PRODUCTION BOUNDARY: no production socket/send/receive, production Agent terminal dispatch, PTY/process activation, account/device cutover, release signing/distribution, listener/relay/TUN/TAP/route/firewall/NAT/router/DNS mutation, or Agent replacement/restart.
+
+INTERIM CLASSIFICATION: PHASE_147_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION
+
+A01 CLIPPY CORRECTIVE:
+- Initial Phase 147 run 31968679548 reconstructed the candidate successfully and stopped before Android/materialization at native Clippy only.
+- Clippy reported exactly enum_variant_names on TerminalAdapterError and needless_pass_by_value on bridge_payload.
+- A01 removes only the repeated Invalid prefix from the private adapter-error variants and changes bridge_payload to borrow BridgeCommand; terminal protocol, bounds, JNI surface, lifecycle, Kotlin UX, dependencies and production boundary are unchanged.

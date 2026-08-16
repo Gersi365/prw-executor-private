@@ -21,6 +21,7 @@ internal data class PrwUiState(
     val enrollmentState: EnrollmentPresentationState = EnrollmentPresentationState.NotReady,
     val devices: List<DeviceSnapshot> = emptyList(),
     val pendingRevocationDeviceId: String? = null,
+    val terminal: TerminalUiState = TerminalUiState(),
     val detail: String = "Development bootstrap only — no production endpoint",
 )
 
@@ -28,6 +29,7 @@ internal class MainViewModel(
     private val custody: AndroidKeyCustody = AndroidKeyCustody(),
     private val controller: ConnectionController = ConnectionController(),
     private val deviceManagement: DeviceManagementController = DeviceManagementController(),
+    private val terminalController: TerminalSessionController = TerminalSessionController(NativeTerminalCommandEncoder),
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(PrwUiState())
     val uiState: StateFlow<PrwUiState> = mutableUiState.asStateFlow()
@@ -134,6 +136,74 @@ internal class MainViewModel(
         )
     }
 
+    fun requestDisposableTerminal(profile: TerminalProfileView): Boolean {
+        val accepted = terminalController.requestOpen(DISPOSABLE_TERMINAL_SESSION_ID, profile, 80, 24)
+        publishTerminalState(
+            if (accepted) {
+                "Disposable terminal open intent encoded; no production endpoint contacted"
+            } else {
+                "Terminal open intent rejected by local bounded lifecycle"
+            },
+        )
+        return accepted
+    }
+
+    fun acceptDisposableTerminalOpen(): Boolean {
+        val accepted = terminalController.applyAuthoritativeOpen(DISPOSABLE_TERMINAL_SESSION_ID)
+        publishTerminalState(
+            if (accepted) "Disposable terminal open acceptance applied" else "Terminal open acceptance rejected",
+        )
+        return accepted
+    }
+
+    fun sendDisposableTerminalInput(text: String): Boolean {
+        val accepted = terminalController.sendInput(text.encodeToByteArray())
+        publishTerminalState(
+            if (accepted) "Terminal input payload encoded through existing PRWC bridge" else "Terminal input rejected",
+        )
+        return accepted
+    }
+
+    fun requestDisposableTerminalRead(): Boolean {
+        val accepted = terminalController.requestRead(4096)
+        publishTerminalState(
+            if (accepted) "Bounded terminal read payload encoded" else "Terminal read request rejected",
+        )
+        return accepted
+    }
+
+    fun injectDisposableTerminalOutput(): Boolean {
+        val accepted = terminalController.applyAuthoritativeOutput(
+            "phase147 disposable remote output\n".encodeToByteArray(),
+        )
+        publishTerminalState(
+            if (accepted) "Disposable authoritative output applied" else "Terminal output rejected",
+        )
+        return accepted
+    }
+
+    fun resizeDisposableTerminal(columns: Int, rows: Int): Boolean {
+        val accepted = terminalController.resize(columns, rows)
+        publishTerminalState(if (accepted) "Terminal resize payload encoded" else "Terminal resize rejected")
+        return accepted
+    }
+
+    fun requestDisposableTerminalClose(): Boolean {
+        val accepted = terminalController.requestClose()
+        publishTerminalState(
+            if (accepted) "Terminal close intent encoded; awaiting disposable completion" else "Terminal close rejected",
+        )
+        return accepted
+    }
+
+    fun acceptDisposableTerminalClosed(): Boolean {
+        val accepted = terminalController.applyAuthoritativeClosed(DISPOSABLE_TERMINAL_SESSION_ID)
+        publishTerminalState(
+            if (accepted) "Disposable terminal close completed" else "Terminal close completion rejected",
+        )
+        return accepted
+    }
+
     fun disconnect() {
         val current = controller.state.value
         if (current == ConnectionState.Connected || current == ConnectionState.Suspended) {
@@ -163,5 +233,16 @@ internal class MainViewModel(
             pendingRevocationDeviceId = deviceState.pendingRevocationDeviceId,
             detail = detail,
         )
+    }
+
+    private fun publishTerminalState(detail: String) {
+        mutableUiState.value = mutableUiState.value.copy(
+            terminal = terminalController.state(),
+            detail = detail,
+        )
+    }
+
+    companion object {
+        private const val DISPOSABLE_TERMINAL_SESSION_ID = 147_001L
     }
 }
