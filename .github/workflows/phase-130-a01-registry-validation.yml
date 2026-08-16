@@ -62,6 +62,7 @@ jobs:
           cargo fmt --all
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git restore --worktree -- target 2>/dev/null || true
           git diff --check
 
       - name: Apply machine-applicable registry test lints only
@@ -71,6 +72,7 @@ jobs:
           cargo clippy --fix --locked -p prw-registry --all-targets --all-features \
             --allow-dirty --allow-staged -- -D warnings
           cargo fmt --all
+          git restore --worktree -- target 2>/dev/null || true
           mapfile -t changed < <(git diff --name-only)
           for path in "${changed[@]}"; do
             case "$path" in
@@ -97,6 +99,7 @@ jobs:
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo test --locked --workspace --all-targets
           cargo build --locked --workspace --all-targets
+          git restore --worktree -- target 2>/dev/null || true
           lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
           echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
           echo "phase130_a02_workspace=pass lock_sha=$lock_sha"
@@ -134,7 +137,7 @@ jobs:
           Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities. Insertions use occupied/vacant entry handling rather than post-insert panic assumptions.
 
           VALIDATION
-          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 exposed two post-insert panic lint sites and two redundant test clones. The corrective run replaced panic assumptions with HashMap Entry insertion and used bounded Clippy test-only correction.
+          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 exposed two post-insert panic lint sites and two redundant test clones. Run 31944241978 applied both test-only fixes but the scope guard detected Cargo mutation of tracked target metadata; target metadata is explicitly restored and excluded from promotion here.
 
           PRODUCTION BOUNDARY
           No production registry was populated. No database, account authentication, capability grant, PowerCode runtime state, or network state was mutated.
