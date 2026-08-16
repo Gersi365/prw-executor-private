@@ -1,0 +1,160 @@
+Private Remote Workspace
+Phase 109-A05 Final Real-Host Activation / Rollback Review
+
+STATUS: PASS / PHASE_109_REAL_HOST_ACTIVATION_COMPLETE / SERVICE_ENABLED_ACTIVE / REAL_AGENT_READY / LOCAL_IPC_PROTOCOL_1_0 / PREEXISTING_LINGER_PRESERVED / INSTALL_ROLLBACK_SIGNAL_ANOMALY_RECORDED
+AUDIT TYPE: FINAL READ-ONLY ACTIVATION POSTCONDITION REVIEW
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Target host: PowerCode
+Target user: gersi365
+Target UID/GID: 1000/1000
+
+PHASE 109 AUTHORIZED SEQUENCE
+
+The user approved a separately audited real-host activation sequence covering:
+
+A. real package-file installation;
+B. user-manager daemon-reload;
+C. service enablement/start;
+D. linger-state transaction/reconciliation;
+E. final activation/rollback review.
+
+This report is the final E-stage review.
+
+SUBTRANSACTION RESULTS
+
+A01 — Real install transaction
+
+Classification:
+INSTALLED_AND_VERIFIED_WITH_ROLLBACK_SIGNAL_ANOMALY
+
+The bounded manual sudo invocation emitted `phase109_install=rolled_back rc=1`, but mandatory independent host readback proved both destination files remained installed with exact locked hashes, modes, and root ownership. The service remained disabled/inactive at that point. A disposable replay later proved the transaction state machine can complete normally, but the real-host rollback marker anomaly is intentionally preserved and is not rewritten as a clean rollback proof.
+
+A02 — User-manager daemon-reload
+
+PASS.
+
+`systemctl --user daemon-reload` completed successfully. The service remained disabled/inactive immediately afterward, the exact unit was loaded, and payload hashes were unchanged.
+
+A03 — Enable/start and functional readiness
+
+PASS.
+
+The unit was enabled for `default.target` and started. Systemd reported loaded/active/running/enabled. The live MainPID executable resolved to the locked installed Agent binary. A real same-UID local IPC `GetAgentStatus` request returned OK / Ready / protocol 1.0.
+
+A04 — Linger-state reconciliation
+
+PASS.
+
+Linger was already `yes` before Phase 109. No linger mutation was performed. PRW records linger as external/pre-existing state and must preserve it during later PRW rollback/uninstall unless separately authorized.
+
+FINAL INDEPENDENT REVIEW EVIDENCE
+
+GitHub Actions run:
+- workflow: Phase 109 A10 Final Activation Review
+- run: 31927564602
+- job: 95117374305
+- runner: PowerCode
+
+The final review was read-only and independently revalidated the live host.
+
+1. Installed package files
+
+Agent:
+- path: /usr/lib/private-remote-workspace/prw-agent
+- owner: root:root
+- mode: 0755
+- SHA-256: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+
+Unit:
+- path: /usr/lib/systemd/user/prw-agent.service
+- owner: root:root
+- mode: 0644
+- SHA-256: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+
+2. Enablement linkage
+
+The user-manager enablement symlink exists at:
+
+/home/gersi365/.config/systemd/user/default.target.wants/prw-agent.service
+
+and resolves exactly to:
+
+/usr/lib/systemd/user/prw-agent.service
+
+3. Live systemd state
+
+- LoadState=loaded
+- ActiveState=active
+- SubState=running
+- UnitFileState=enabled
+- NeedDaemonReload=no
+- MainPID=217895
+- ExecMainPID=217895
+- ExecMainStatus=0
+- Result=success
+
+The live process executable resolved through `/proc/217895/exe` to:
+
+/usr/lib/private-remote-workspace/prw-agent
+
+4. Runtime directory and local IPC socket
+
+Runtime directory:
+- /run/user/1000/private-remote-workspace
+- UID/GID 1000/1000
+- mode 0700
+
+Agent socket:
+- /run/user/1000/private-remote-workspace/agent.sock
+- UID/GID 1000/1000
+- mode 0600
+- Unix-domain socket
+
+5. Independent functional readiness probe
+
+A second independent same-UID probe sent the locked local IPC version-1.0 `GetAgentStatus` request and received:
+
+- final_ipc_status=ok
+- final_runtime_state=ready
+- final_protocol=1.0
+
+This proves the activated service is not merely process-active; the validated local Agent request surface is responsive and reports Ready.
+
+6. Linger reconciliation
+
+Final state:
+- Linger=yes
+- RuntimePath=/run/user/1000
+- linger_source=pre_existing_before_phase109
+- linger_mutation=none
+
+No Phase 109 operation claims ownership of linger.
+
+ROLLBACK POSITION
+
+The enable/start transaction had a bounded automatic rollback path using `systemctl --user disable --now prw-agent.service` if any enable/start/readiness postcondition failed. That rollback was not invoked because all activation and readiness checks passed.
+
+The earlier real-host privileged package-install invocation has a recorded rollback-signal anomaly and therefore does NOT constitute proof of a successful privileged filesystem rollback. Future package rollback/uninstall must use a separately audited transaction and must preserve pre-existing linger state.
+
+FINAL DECISION
+
+Phase 109 real-host activation is complete and operational on PowerCode.
+
+The validated production-local Agent is now:
+
+- installed at the locked system path;
+- loaded by the user's systemd manager;
+- enabled for default.target;
+- active/running;
+- executing the exact locked binary;
+- exposing the trusted-shape same-UID Unix IPC endpoint;
+- returning GetAgentStatus=Ready on protocol 1.0;
+- operating without any PRW-created linger mutation.
+
+No public-network listener, relay, VPN/TUN, SSH service, Android client, Desktop UI, privileged helper, or broader production deployment is claimed by this phase.
+
+CLASSIFICATION
+
+PHASE_109_A05_PASS / REAL_HOST_ACTIVATION_COMPLETE / EXACT_AGENT_INSTALLED / USER_SERVICE_ENABLED_ACTIVE / REAL_IPC_READY / PREEXISTING_LINGER_PRESERVED / A01_ROLLBACK_SIGNAL_ANOMALY_RETAINED / NEXT_SCOPE_REQUIRES_NORMAL_PROJECT_PHASE_GATING
