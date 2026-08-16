@@ -1,0 +1,241 @@
+Private Remote Workspace
+Phase 126-A03 — Hardened Provisioning and Runtime Identity Binding Validation
+
+STATUS:
+PASS / HARDENED_PROVISIONER_VALIDATED / SYSTEMD_DIRECT_TEMP_OUTPUT_WITH_FD_VALIDATION / FINAL_CIPHERTEXT_0600 / ZERO_ARGUMENT_FAIL_CLOSED / XDG_SYMLINK_FAIL_CLOSED / CREATION_ONLY / PROVISIONING_TO_RUNTIME_FINGERPRINT_BINDING / MISSING_IDENTITY_FAIL_BEFORE_SOCKET / PRODUCTION_STATE_PRESERVED / TEMPORARY_WORKFLOW_REMOVED / FINAL_PERMANENT_CI_PASS / NO_PRODUCTION_PRIVATE_KEY_CREATED / READY_FOR_PRODUCTION_READ_ONLY_PREFLIGHT_AND_ROLLBACK_STAGING
+
+AUDIT TYPE: IMPLEMENTATION HARDENING / DISPOSABLE REAL-HOST VALIDATION / PREPRODUCTION GATE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+A03 validation source head: dd71b4d4db3ed2883b4441588bec81bc95a36026
+A03 cleanup head: 0a2b5cbb17f64f164c8be495132f15bab8e49312
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+PURPOSE
+
+A03 is the final disposable validation of the Phase 126 provisioner after the real-host A02 metadata finding and FD-based ciphertext hardening. It proves the exact hardened source against both GitHub-hosted validation and the real PowerCode systemd user manager without creating the production device identity.
+
+TEMPORARY VALIDATION WORKFLOW
+
+Temporary workflow:
+`.github/workflows/phase-126-a03-provisioning-hardening-validation.yml`
+
+Workflow run:
+`31937799227`
+
+Hosted validate/build job:
+`95142374641` — SUCCESS
+
+PowerCode disposable proof job:
+`95142577959` — SUCCESS
+
+The workflow was removed immediately after evidence capture.
+Cleanup commit:
+`0a2b5cbb17f64f164c8be495132f15bab8e49312`
+
+CURRENT workflow inventory after cleanup contains only:
+`.github/workflows/phase-001-rust-validation.yml`
+
+HOSTED VALIDATION
+
+The hosted job ran on Ubuntu 24.04.4 LTS with Rust/Cargo 1.97.1 and proved:
+- locked Cargo metadata;
+- rustfmt PASS;
+- workspace/all-target/all-feature Clippy `-D warnings` PASS;
+- all workspace/all-target tests PASS;
+- all workspace/all-target builds PASS;
+- hardened provisioner source guards;
+- no shell invocation for the secret-bearing encryption path;
+- no `wait_with_output` plaintext/ciphertext capture path;
+- `O_NOFOLLOW` ciphertext open;
+- descriptor-based mode hardening;
+- `RenameFlags::NOREPLACE` final commit;
+- fixed systemd credential utility path/name;
+- zero-argument production CLI boundary;
+- Agent public identity startup attestation;
+- no generic sign-bytes surface.
+
+Release payload hashes from the exact A03 snapshot:
+- candidate prw-agent:
+  `4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e`
+- hardened prw-device-identity-provision:
+  `a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b`
+- A03 status probe:
+  `402d79ec183314de915248f173840ad10b2853250f6a6b5750f5faf2efc036b8`
+- Cargo.lock:
+  `aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424`
+
+A03 payload artifact:
+- artifact ID `9261168917`;
+- ZIP SHA-256 `61bcc1ef13ee04f3e9b40b81cea5e13a4ddbc8961c46a967e621b0bc70d36f12`;
+- uploaded size 2,542,789 bytes;
+- one-day retention;
+- evidence only, not a production release artifact.
+
+POWERCODE PRODUCTION PRECONDITIONS
+
+Before any disposable test mutation, the PowerCode job proved:
+- hostname exactly `PowerCode`;
+- UID exactly 1000;
+- installed production Agent SHA-256 exactly:
+  `8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf`;
+- installed vendor unit SHA-256 exactly:
+  `24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909`;
+- production `prw-agent.service` active;
+- production service enabled;
+- Linger=yes;
+- production `DropInPaths` empty;
+- production encrypted identity ciphertext absent;
+- production identity drop-in absent;
+- production local IPC Ready with supported protocol.
+
+Marker:
+`phase126_a03_production_preflight=pass`
+
+ZERO-ARGUMENT CLI SURFACE
+
+The production provisioner was invoked with an unexpected argument against isolated roots.
+It failed before creating the roots with exact bounded output:
+`prw-device-identity-provision event=failed kind=invalid_arguments exit=failure`
+
+Markers/state proved no provisioning side effect.
+Marker:
+`phase126_a03_zero_argument_surface=pass`
+
+XDG SYMLINK FAIL-CLOSED PROOF
+
+A disposable XDG state path was replaced with a symlink to an external disposable directory.
+The provisioner failed closed and the external target remained empty.
+
+Marker:
+`phase126_a03_symlink_fail_closed=pass`
+
+FIRST PROVISIONING / CIPHERTEXT HARDENING
+
+The hardened production provisioner then ran only against isolated disposable XDG state/config roots.
+
+It generated a fresh disposable P-256 key locally, passed plaintext only through the systemd-creds stdin path, zeroized PRW-owned plaintext memory after encryption, and committed only encrypted state.
+
+The final disposable ciphertext was proven:
+- regular file;
+- not a symlink;
+- UID/GID 1000:1000;
+- exact mode 0600;
+- non-empty;
+- the only regular file in the disposable state tree;
+- no temporary ciphertext file remained after commit.
+
+Disposable provisioning public fingerprint:
+`3957727b24537adcef3dcb6a75ce087cfdd6d9f3f71f7472b64135ef22918ff3`
+
+This fingerprint belongs only to disposable A03 test material. It is not a production identity and must never be recorded as PowerCode's production identity.
+
+Marker:
+`phase126_a03_first_provisioning=pass`
+
+CREATION-ONLY PROOF
+
+A second first-provisioning attempt failed.
+The first ciphertext SHA-256 remained unchanged and the state tree still contained exactly one regular ciphertext file.
+
+Marker:
+`phase126_a03_creation_only=pass`
+
+TRANSIENT IDENTITY-AWARE AGENT PROOF
+
+The disposable ciphertext was delivered through a transient systemd user service using the exact logical credential name:
+`prw.device-identity.private-key.v1`
+
+The exact A03 candidate Agent started against an isolated XDG runtime root, created its isolated local socket, and returned:
+`phase126a03_status=Ready protocol_supported=yes`
+
+The runtime startup journal emitted the public identity fingerprint.
+The runtime fingerprint exactly equaled the provisioner fingerprint:
+`3957727b24537adcef3dcb6a75ce087cfdd6d9f3f71f7472b64135ef22918ff3`
+
+Therefore the hardened chain proves:
+`generated private key -> canonical public SPKI -> encrypted systemd credential -> runtime custody adapter -> signer -> Agent startup attestation`
+with the same public identity.
+
+Marker:
+`phase126_a03_identity_binding=pass`
+
+After stopping the transient candidate, its socket disappeared.
+Marker:
+`phase126_a03_candidate_cleanup=pass`
+
+MISSING-IDENTITY FAIL-CLOSED PROOF
+
+The same identity-aware candidate was launched against another secure isolated XDG runtime root with `CREDENTIALS_DIRECTORY` removed.
+
+It returned failure with no stdout and exact bounded stderr:
+`prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable`
+
+No `private-remote-workspace` runtime directory/socket was created.
+Marker:
+`phase126_a03_missing_identity_fail_closed=pass`
+
+PRODUCTION STATE PRESERVATION
+
+After every disposable operation, PowerCode re-proved:
+- installed production Agent hash unchanged;
+- installed vendor unit hash unchanged;
+- production service active;
+- production service enabled;
+- Linger=yes;
+- production `DropInPaths` still empty;
+- production ciphertext absent;
+- production identity drop-in absent;
+- production IPC still Ready/supported.
+
+Marker:
+`phase126_a03_production_unchanged=pass`
+
+All disposable roots/transient state were removed by the workflow cleanup path.
+
+FINAL REPOSITORY CLEANUP / CI
+
+The A03 temporary workflow was removed in commit:
+`0a2b5cbb17f64f164c8be495132f15bab8e49312`
+
+Permanent Rust validation on that clean head:
+- run `31937929252`;
+- job `95142798097`;
+- result SUCCESS.
+
+Every permanent step passed:
+- exact toolchain record;
+- locked dependency graph;
+- rustfmt;
+- Clippy `-D warnings`;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+The final workflow inventory contains only the permanent Rust validation workflow.
+
+NO PRODUCTION IDENTITY MUTATION
+
+A03 did not:
+- create the production PowerCode private device-identity key;
+- create the production persistent ciphertext;
+- install the persistent identity credential drop-in;
+- replace `/usr/lib/private-remote-workspace/prw-agent`;
+- restart the production Agent;
+- modify the vendor unit;
+- change service enablement;
+- mutate Linger;
+- enroll the device;
+- activate account authentication;
+- activate public/remote networking, TUN, relay, DNS, SSH, file transfer, Android, or Desktop functionality.
+
+FINAL CLASSIFICATION
+
+The production provisioner and identity-aware Agent are now source-validated and real-host-disposable-validated under the exact PowerCode systemd user-manager boundary.
+
+The next safe step is a production **read-only preflight plus rollback staging**. Production key creation remains forbidden until that preflight proves absence of prior identity artifacts and stages/verifies both the new candidate and exact previous Agent rollback bytes.
+
+READY FOR:
+`PHASE_126_A04_PRODUCTION_READ_ONLY_PREFLIGHT_AND_ROLLBACK_STAGING`
