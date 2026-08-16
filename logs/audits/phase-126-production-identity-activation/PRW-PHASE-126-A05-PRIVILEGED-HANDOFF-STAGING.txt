@@ -1,0 +1,103 @@
+Private Remote Workspace
+Phase 126-A05 — Privileged Agent Replacement Handoff Staging
+
+STATUS:
+PASS_FOR_HANDOFF_STAGING / ROOT_REPLACEMENT_NOT_YET_EXECUTED / PRODUCTION_IDENTITY_NOT_YET_CREATED / PRODUCTION_STATE_UNCHANGED / INTERACTIVE_SUDO_BOUNDARY_PRESERVED
+
+AUDIT TYPE: PRIVILEGED HANDOFF PREPARATION / NO PRODUCTION MUTATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Target host: PowerCode
+Target user: gersi365
+
+AUTHORIZATION
+
+The user explicitly authorized PRW phases through Phase 137, including the production mutations within those phases. That authorization permits the Phase 126 production identity activation transaction, but it does not technically provide a root credential to the connected GitHub runner and does not authorize weakening the privilege boundary.
+
+CONTRACT BOUNDARY
+
+Phase 126-A00 explicitly states that the self-hosted runner cannot perform non-interactive privileged writes to /usr/lib/private-remote-workspace/prw-agent and that the root-owned Agent replacement remains a separately audited interactive sudo transaction when no narrower privileged mechanism exists.
+
+Phase 126-A04 independently re-proved:
+- noninteractive sudo unavailable on PowerCode (sudo -n rc=1);
+- installed production Agent SHA-256 = 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf;
+- identity-aware candidate Agent SHA-256 = 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e;
+- exact rollback Agent bytes staged;
+- production encrypted identity and identity drop-in absent;
+- production service active/enabled, Linger=yes, local IPC Ready.
+
+HANDOFF STAGING EVIDENCE
+
+Temporary workflow source commit:
+a114f8e1a9f61aef90546eb9000fb95c785e0c0b
+
+Workflow run:
+31939296388
+
+PowerCode job:
+95146035340 — SUCCESS
+
+The job revalidated before helper creation:
+- host = PowerCode;
+- UID/GID = 1000/1000;
+- A04 stage exists, user-owned mode 0700;
+- candidate-prw-agent exact locked candidate hash;
+- rollback-prw-agent exact locked installed hash;
+- current production Agent root:root mode 0755 and exact old installed hash;
+- production service active and enabled.
+
+The job created only this user-owned staged helper:
+/home/gersi365/.local/state/private-remote-workspace/phase126/staging/1e0b5eec93538bcbf120fa800cf85227eeb32410/phase126-a05-root-agent-replace
+
+Helper metadata:
+- owner: gersi365 / UID 1000
+- mode: 0700
+- SHA-256: a75bcc1d44f788e34b12303d4446a8c31de5cb60858d56b59956ea990905ea64
+
+Authoritative workflow markers:
+phase126_a05_handoff_staging=pass
+phase126_a05_production_mutation=none
+
+HELPER SCOPE
+
+The staged helper is deliberately restricted to the root-owned Agent executable replacement transaction. When invoked interactively through sudo, it must:
+- require EUID 0;
+- require host PowerCode and SUDO_USER=gersi365;
+- require the current destination Agent to match the exact old production hash and root:root 0755 metadata;
+- require the A04 candidate and rollback bytes to match their locked hashes and expected user ownership/modes;
+- install the candidate to a fresh root-owned temporary sibling;
+- verify root:root 0755 and exact candidate SHA-256 before promotion;
+- atomically promote the temporary sibling to the fixed production Agent path;
+- verify the exact candidate hash after promotion;
+- attempt restoration of the exact staged rollback Agent if a post-promotion helper check fails.
+
+The helper does NOT:
+- generate any device private key;
+- read or write the production encrypted credential;
+- install the systemd identity drop-in;
+- call systemctl or loginctl;
+- daemon-reload or restart the Agent;
+- mutate sudoers or privilege policy;
+- enroll any device;
+- activate authentication or networking.
+
+WORKFLOW CLEANUP
+
+The temporary Phase 126-A05 handoff-staging workflow was removed after successful staging.
+Cleanup commit:
+aee8e84f2ea50cc782b52212d867ad9dab68f0d5
+
+CURRENT PRODUCTION BOUNDARY
+
+The real root-owned Agent replacement has NOT yet executed. Therefore the production private identity MUST NOT be generated yet because the currently installed Agent is the pre-identity-aware binary.
+
+Source/disposable implementation work for later authorized phases may continue independently, but production enrollment/auth/network activation remains causally blocked until:
+1. the exact staged root helper is run through an authenticated interactive sudo session;
+2. a read-only PowerCode reconciliation proves the installed Agent now has candidate SHA-256 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e;
+3. only then the non-privileged first-provisioning / drop-in / daemon-reload / restart / attestation transaction proceeds.
+
+FINAL CLASSIFICATION
+
+PHASE_126_A05_HANDOFF_STAGED / NO_PRODUCTION_MUTATION / INTERACTIVE_ROOT_TRANSACTION_PENDING / AUTHORIZED_ROADMAP_SOURCE_WORK_CONTINUES
