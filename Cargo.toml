@@ -4,6 +4,7 @@ members = [
     "crates/prw-core",
     "crates/prw-policy",
     "crates/prw-files",
+    "crates/prw-file-service",
     "crates/prw-network",
     "crates/prw-control-plane",
     "crates/prw-control-transport",

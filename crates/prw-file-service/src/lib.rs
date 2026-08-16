@@ -9,13 +9,12 @@ use std::{
     fs::File,
     io::{Read, Write},
     os::fd::OwnedFd,
+    os::unix::fs::PermissionsExt,
     path::Path,
 };
 
 use rustix::{
-    fs::{
-        AtFlags, Dir, FileType, Mode, OFlags, fchmod, fstat, mkdirat, open, openat, statat,
-    },
+    fs::{AtFlags, Dir, FileType, Mode, OFlags, fchmod, fstat, mkdirat, open, openat, statat},
     io::{Errno, dup},
 };
 
@@ -36,7 +35,9 @@ const OPEN_DIRECTORY: OFlags = OFlags::RDONLY
     .union(OFlags::DIRECTORY)
     .union(OFlags::NOFOLLOW)
     .union(OFlags::CLOEXEC);
-const OPEN_READ_FILE: OFlags = OFlags::RDONLY.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
+const OPEN_READ_FILE: OFlags = OFlags::RDONLY
+    .union(OFlags::NOFOLLOW)
+    .union(OFlags::CLOEXEC);
 const OPEN_CREATE_FILE: OFlags = OFlags::WRONLY
     .union(OFlags::CREATE)
     .union(OFlags::EXCL)
@@ -104,7 +105,7 @@ impl RemotePath {
 
     /// Returns whether this path denotes the authorized root.
     #[must_use]
-    pub fn is_root(&self) -> bool {
+    pub const fn is_root(&self) -> bool {
         self.components.is_empty()
     }
 
@@ -280,7 +281,8 @@ impl AnchoredFileRoot {
     /// Returns [`FileServiceError::InvalidRoot`] if the root cannot be opened as a
     /// directory descriptor under the locked flags.
     pub fn open(path: &Path) -> Result<Self, FileServiceError> {
-        let root = open(path, OPEN_DIRECTORY, Mode::empty()).map_err(|_| FileServiceError::InvalidRoot)?;
+        let root =
+            open(path, OPEN_DIRECTORY, Mode::empty()).map_err(|_| FileServiceError::InvalidRoot)?;
         Ok(Self { root })
     }
 
@@ -353,7 +355,7 @@ impl AnchoredFileRoot {
         }
         let mut file = File::from(fd);
         let mut payload = Vec::new();
-        file.by_ref()
+        std::io::Read::by_ref(&mut file)
             .take((MAX_WHOLE_FILE_BYTES + 1) as u64)
             .read_to_end(&mut payload)
             .map_err(|_| FileServiceError::Filesystem)?;
@@ -369,25 +371,20 @@ impl AnchoredFileRoot {
     ///
     /// Rejects root, oversized payload, an existing destination, resolution/write
     /// failure, or post-create type/mode mismatch.
-    pub fn create_file(
-        &self,
-        path: &RemotePath,
-        payload: &[u8],
-    ) -> Result<(), FileServiceError> {
+    pub fn create_file(&self, path: &RemotePath, payload: &[u8]) -> Result<(), FileServiceError> {
         if payload.len() > MAX_WHOLE_FILE_BYTES {
             return Err(FileServiceError::PayloadTooLarge);
         }
         let (parent, final_name) = self.open_parent(path)?;
-        let fd = openat(&parent, final_name, OPEN_CREATE_FILE, FILE_MODE).map_err(map_create_error)?;
+        let fd =
+            openat(&parent, final_name, OPEN_CREATE_FILE, FILE_MODE).map_err(map_create_error)?;
         fchmod(&fd, FILE_MODE).map_err(|_| FileServiceError::Filesystem)?;
         {
             let mut file = File::from(fd);
             file.write_all(payload)
                 .map_err(|_| FileServiceError::Filesystem)?;
             file.sync_all().map_err(|_| FileServiceError::Filesystem)?;
-            let stat = file
-                .metadata()
-                .map_err(|_| FileServiceError::Filesystem)?;
+            let stat = file.metadata().map_err(|_| FileServiceError::Filesystem)?;
             if !stat.is_file() || stat.permissions().mode() & 0o777 != 0o600 {
                 return Err(FileServiceError::PostconditionFailed);
             }
@@ -407,13 +404,17 @@ impl AnchoredFileRoot {
             .map_err(|_| FileServiceError::PostconditionFailed)?;
         fchmod(&fd, DIRECTORY_MODE).map_err(|_| FileServiceError::Filesystem)?;
         let stat = fstat(&fd).map_err(|_| FileServiceError::Filesystem)?;
-        if classify_mode(stat.st_mode) != RemoteFileType::Directory || stat.st_mode & 0o777 != 0o700 {
+        if classify_mode(stat.st_mode) != RemoteFileType::Directory || stat.st_mode & 0o777 != 0o700
+        {
             return Err(FileServiceError::PostconditionFailed);
         }
         Ok(())
     }
 
-    fn open_parent(&self, path: &RemotePath) -> Result<(OwnedFd, &str), FileServiceError> {
+    fn open_parent<'a>(
+        &self,
+        path: &'a RemotePath,
+    ) -> Result<(OwnedFd, &'a str), FileServiceError> {
         let final_name = path.final_component()?;
         let mut current = dup(&self.root).map_err(|_| FileServiceError::Filesystem)?;
         for component in &path.components[..path.components.len() - 1] {
@@ -441,7 +442,7 @@ fn map_create_error(error: Errno) -> FileServiceError {
     }
 }
 
-fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {
+const fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {
     classify_file_type(FileType::from_raw_mode(mode))
 }
 
@@ -479,10 +480,8 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .expect("system time after epoch")
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!(
-                "prw-phase131-{label}-{}-{nonce}",
-                process::id()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("prw-phase131-{label}-{}-{nonce}", process::id()));
             fs::create_dir(&path).expect("create disposable root");
             Self { path }
         }
@@ -498,9 +497,18 @@ mod tests {
     fn path_parser_rejects_escape_and_ambiguity() {
         assert!(RemotePath::parse("").expect("root").is_root());
         assert_eq!(RemotePath::parse("/etc"), Err(RemotePathError::Absolute));
-        assert_eq!(RemotePath::parse("a//b"), Err(RemotePathError::EmptyComponent));
-        assert_eq!(RemotePath::parse("a/./b"), Err(RemotePathError::CurrentDirectory));
-        assert_eq!(RemotePath::parse("a/../b"), Err(RemotePathError::ParentTraversal));
+        assert_eq!(
+            RemotePath::parse("a//b"),
+            Err(RemotePathError::EmptyComponent)
+        );
+        assert_eq!(
+            RemotePath::parse("a/./b"),
+            Err(RemotePathError::CurrentDirectory)
+        );
+        assert_eq!(
+            RemotePath::parse("a/../b"),
+            Err(RemotePathError::ParentTraversal)
+        );
         assert_eq!(RemotePath::parse("a\\b"), Err(RemotePathError::Backslash));
         let too_many = std::iter::repeat_n("a", MAX_REMOTE_PATH_COMPONENTS + 1)
             .collect::<Vec<_>>()
@@ -543,8 +551,7 @@ mod tests {
         let outside = TempTree::new("outside");
         fs::write(outside.path.join("secret"), b"outside").expect("outside secret");
         symlink(&outside.path, tree.path.join("escape")).expect("intermediate symlink");
-        symlink(outside.path.join("secret"), tree.path.join("final-link"))
-            .expect("final symlink");
+        symlink(outside.path.join("secret"), tree.path.join("final-link")).expect("final symlink");
         let root = AnchoredFileRoot::open(&tree.path).expect("open anchored root");
 
         assert!(
@@ -562,7 +569,10 @@ mod tests {
             ),
             Err(FileServiceError::AlreadyExists)
         );
-        assert_eq!(fs::read(outside.path.join("secret")).expect("outside unchanged"), b"outside");
+        assert_eq!(
+            fs::read(outside.path.join("secret")).expect("outside unchanged"),
+            b"outside"
+        );
     }
 
     #[test]

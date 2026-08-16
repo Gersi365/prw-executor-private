@@ -34,7 +34,7 @@ pub const MAX_CONTROL_TRUST_ANCHORS: usize = 16;
 /// Maximum DER bytes accepted for one trust anchor.
 pub const MAX_CONTROL_TRUST_ANCHOR_BYTES: usize = 65_536;
 /// Maximum individual socket timeout accepted by the transport constructor.
-pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_secs(60);
+pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// Transport-envelope message kind. Semantics remain above the transport layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,19 +223,14 @@ pub fn read_control_frame<R: Read>(reader: &mut R) -> Result<ControlFrame, Contr
     if flags != 0 {
         return Err(ControlFrameError::NonZeroFlags);
     }
-    let request_id = u64::from_be_bytes(
-        header[12..20]
-            .try_into()
-            .expect("fixed eight-byte request identifier slice"),
-    );
+    let request_id = u64::from_be_bytes([
+        header[12], header[13], header[14], header[15], header[16], header[17], header[18],
+        header[19],
+    ]);
     if request_id == 0 {
         return Err(ControlFrameError::ZeroRequestId);
     }
-    let payload_len = u32::from_be_bytes(
-        header[20..24]
-            .try_into()
-            .expect("fixed four-byte payload length slice"),
-    ) as usize;
+    let payload_len = u32::from_be_bytes([header[20], header[21], header[22], header[23]]) as usize;
     if payload_len > MAX_CONTROL_PAYLOAD_BYTES {
         return Err(ControlFrameError::PayloadTooLarge);
     }
@@ -581,7 +576,8 @@ mod tests {
         );
 
         let mut invalid = bytes;
-        invalid[20..24].copy_from_slice(&((MAX_CONTROL_PAYLOAD_BYTES as u32) + 1).to_be_bytes());
+        let oversized_payload = u32::try_from(MAX_CONTROL_PAYLOAD_BYTES + 1).unwrap_or(u32::MAX);
+        invalid[20..24].copy_from_slice(&oversized_payload.to_be_bytes());
         assert_eq!(
             read_control_frame(&mut Cursor::new(invalid)),
             Err(ControlFrameError::PayloadTooLarge)
@@ -628,8 +624,8 @@ mod tests {
                 Duration::from_secs(1),
                 Duration::from_secs(1)
             ),
-            Err(ControlTransportError::InvalidTrustAnchor)
-                | Err(ControlTransportError::InvalidServerName)
+            Err(ControlTransportError::InvalidTrustAnchor
+                | ControlTransportError::InvalidServerName)
         ));
         assert!(matches!(
             ControlTlsClientConfig::new(

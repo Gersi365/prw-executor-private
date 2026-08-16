@@ -1,0 +1,6 @@
+Private Remote Workspace — Phase 129 A05
+STATUS: PASS / RESIDUAL_CLIPPY_AND_TEST_LINT_DEBT_CLOSED / TRANSPORT_SEMANTICS_UNCHANGED / FULL_WORKSPACE_PASS
+Run: 31943429576
+Source head: c9b175bddfaf3658b046484b836e607ddd0b0db1
+Cargo.lock SHA-256: c5a3169cc69d04c0fae628c5b39502a3aeb0b314c883787489ca76fb22967dd7
+Corrected only lint/structural forms in control transport and its disposable TLS integration tests. TLS remains 1.3-only, ALPN remains prw-control/1, explicit trust roots/server name remain required, framing and bounds are unchanged, and no production network state was mutated.

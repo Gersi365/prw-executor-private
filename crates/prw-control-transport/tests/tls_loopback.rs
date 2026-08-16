@@ -1,10 +1,4 @@
-use std::{
-    io::Write,
-    net::{TcpListener, TcpStream},
-    sync::Arc,
-    thread,
-    time::Duration,
-};
+use std::{io::Write, net::TcpListener, sync::Arc, thread, time::Duration};
 
 use prw_control_transport::{CONTROL_ALPN, ControlTlsClientConfig, ControlTransportError};
 use rustls::{
@@ -102,7 +96,7 @@ fn wrong_alpn_fails_closed_after_tls_handshake() {
     let config = client_config(addr, "control.test").expect("valid client config");
     assert!(matches!(
         config.connect(),
-        Err(ControlTransportError::TlsHandshake) | Err(ControlTransportError::WrongAlpn)
+        Err(ControlTransportError::TlsHandshake | ControlTransportError::WrongAlpn)
     ));
     server.join().expect("server thread");
 }
