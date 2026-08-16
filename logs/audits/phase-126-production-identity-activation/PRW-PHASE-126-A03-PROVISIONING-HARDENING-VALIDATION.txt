@@ -1,0 +1,319 @@
+Private Remote Workspace
+Phase 126-A03 — Provisioning Output Hardening / Disposable Production-Path Validation
+
+STATUS:
+PASS / A01_IMPLEMENTATION_HARDENED / DIRECT_SYSTEMD_CREDS_TEMP_TARGET / SYSTEMD259_MODE_BEHAVIOR_MEASURED / OPEN_FD_MODE_HARDENING_TO_0600 / O_NOFOLLOW_AND_INODE_IDENTITY_GUARDS / NOREPLACE_FINAL_COMMIT / ZERO_ARGUMENT_CREATION_ONLY_CLI / PROVISIONING_TO_RUNTIME_FINGERPRINT_BINDING_PASS / MISSING_IDENTITY_FAIL_CLOSED / TEMPORARY_WORKFLOWS_REMOVED / CLEAN_HEAD_PERMANENT_CI_PASS / PRODUCTION_UNCHANGED / NO_PRODUCTION_PRIVATE_KEY / NO_PRODUCTION_CIPHERTEXT / NO_PRODUCTION_DROPIN / NO_PRODUCTION_AGENT_REPLACEMENT_OR_RESTART / NO_ENROLLMENT / EXPLICIT_REAL_HOST_MUTATION_GATE_PENDING
+
+AUDIT TYPE: SECURITY HARDENING / DISPOSABLE REAL-HOST VALIDATION / IMPLEMENTATION CLOSURE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Governing Phase 126-A00 contract: logs/audits/phase-126-production-identity-activation/PRW-PHASE-126-A00-PREACTIVATION-IMPLEMENTATION-CONTRACT.txt
+Prior A01 report: logs/audits/phase-126-production-identity-activation/PRW-PHASE-126-A01-PROVISIONING-ATTESTATION-VALIDATION.txt
+A03 cleanup head: 0a2b5cbb17f64f164c8be495132f15bab8e49312
+A01 report head immediately before this report: 9bcef7971900a54a11b2bd34fbb75749a11a365d
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+PURPOSE
+
+Phase 126-A03 closes the ciphertext-output hardening gap discovered after the initial Phase 126-A01 creation-only provisioner and public-identity attestation implementation.
+
+The final implementation preserves A01's public-identity binding and creation-only semantics while aligning the encrypted-credential handoff with the Phase 126-A00 contract:
+
+systemd-creds --user encrypt --name=prw.device-identity.private-key.v1 - <same-directory-temporary-target>
+
+The private PKCS#8 payload is supplied only through child stdin. The direct encrypted output is validated and hardened through an O_NOFOLLOW file descriptor before no-replace atomic final commit.
+
+No production device identity was created or activated by A02/A03.
+
+A01 PREDECESSOR STATUS
+
+Phase 126-A01 remains valid for:
+- creation-only first-provisioning API shape;
+- zero-argument provisioner surface;
+- internal fresh P-256 generation;
+- canonical SPKI SHA-256 fingerprint derivation;
+- Agent startup public identity attestation;
+- provisioning fingerprint == runtime loaded fingerprint proof;
+- fail-closed missing identity behavior;
+- no production mutation.
+
+A03 supersedes only the initial encrypted-output capture/validation detail described by A01.
+
+DISCOVERED HARDENING GAP
+
+After A01, the source was tightened to direct systemd-creds output into the same-directory temporary target rather than capturing encrypted bytes through process stdout.
+
+A disposable PowerCode attempt then stopped fail-safe after production preflight and before transient Agent activation with:
+
+encrypted device identity persistence failed
+
+The production Agent/service/unit/linger/IPC baseline remained unchanged.
+
+The failure was classified as an encrypted-output metadata compatibility gap, not a cryptographic failure and not a production runtime defect.
+
+PHASE 126-A02 METADATA PROBE
+
+Temporary read/disposable workflow:
+.github/workflows/phase-126-a02-systemd-output-metadata-probe.yml
+
+PowerCode run:
+31937705860
+
+PowerCode job:
+95142133260 — PASS
+
+The probe used disposable non-key input and measured direct systemd 259 user-scoped encrypted-credential output exactly as:
+
+uid=1000
+gid=1000
+mode=0644
+size=624 bytes
+
+The disposable parent directory was private mode 0700.
+
+The probe verified production Agent/unit hashes and active/enabled/Linger/IPC state before and after the measurement. Production remained unchanged.
+
+A02 therefore proved that requiring the direct systemd-creds target to already be mode 0600 was incompatible with the real PowerCode/systemd 259 behavior.
+
+A02 workflow was removed after evidence capture.
+
+FINAL FILE-DESCRIPTOR HARDENING
+
+Corrective source commit:
+69cfef83e021893a376a60da8645260f85d0eefa
+
+The final provisioner now:
+1. derives fixed XDG production targets and rejects pre-existing ciphertext/drop-in before key generation;
+2. creates only private PRW state directories at mode 0700;
+3. generates a fresh P-256 PKCS#8 v1 DER identity internally;
+4. holds PRW-owned plaintext bytes in Zeroizing memory;
+5. invokes absolute /usr/bin/systemd-creds directly, without shell execution;
+6. uses fixed logical credential name prw.device-identity.private-key.v1;
+7. transfers plaintext private bytes only through child stdin;
+8. uses the same-directory temporary target as the direct systemd-creds output path;
+9. discards child stdout/stderr rather than capturing unbounded output;
+10. explicitly zeroizes/drops the PRW-owned private buffer after stdin transfer;
+11. validates the direct temporary output as regular, same-UID, non-empty/bounded and without unsafe initial write/execute permission bits;
+12. opens that exact path with O_NOFOLLOW;
+13. proves pre-open/open device+inode identity;
+14. changes permissions through the already-open file handle to exactly 0600;
+15. revalidates owner/mode/size and device+inode identity after hardening;
+16. fsyncs the hardened temporary ciphertext;
+17. commits with renameat_with(..., RenameFlags::NOREPLACE);
+18. verifies the final path is the same hardened inode and mode 0600;
+19. fsyncs the parent directory;
+20. removes temporary artifacts on fail-safe paths where it owns them.
+
+The provisioner exposes no existing-key import/export, caller-supplied private-key input, caller-supplied credential name/path, generic signing API, shell command surface, enrollment action, service activation action, or networking action.
+
+ZERO-ARGUMENT CLI
+
+The production provisioner binary rejects every user argument before state mutation.
+
+Bounded failure record:
+prw-device-identity-provision event=failed kind=invalid_arguments exit=failure
+
+The successful output contains only public/non-secret metadata:
+- canonical public SPKI SHA-256 fingerprint;
+- encrypted credential path.
+
+PUBLIC IDENTITY ATTESTATION
+
+After successful custody load and before entering the mature Agent runtime lifecycle, the candidate Agent emits:
+
+prw-agent event=device_identity_loaded public_spki_sha256=<64-lowercase-hex>
+
+The fingerprint is SHA-256 over canonical SPKI DER derived through the typed signer boundary.
+
+The local IPC protocol remains 1.0 and was not expanded for this evidence channel.
+
+SOURCE VALIDATION
+
+Permanent Rust validation on the hardened source commit 69cfef83e021893a376a60da8645260f85d0eefa:
+
+Run: 31937766936
+Result: PASS
+
+Passed:
+- exact pinned toolchain;
+- locked dependency graph;
+- rustfmt;
+- Clippy with -D warnings;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+Validated Cargo.lock SHA-256 used by A03:
+aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424
+
+PHASE 126-A03 AUTHORITATIVE DISPOSABLE VALIDATION
+
+Temporary workflow:
+.github/workflows/phase-126-a03-provisioning-hardening-validation.yml
+
+Workflow run:
+31937799227 — PASS
+
+Hosted validate/build job:
+95142374641 — PASS
+
+PowerCode disposable proof job:
+95142577959 — PASS
+
+Validated release payload hashes:
+- candidate prw-agent: 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+- prw-device-identity-provision: a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b
+- status probe: 402d79ec183314de915248f173840ad10b2853250f6a6b5750f5faf2efc036b8
+- Cargo.lock: aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424
+
+The A03 hosted validation proved:
+- locked metadata;
+- rustfmt;
+- Clippy all workspace/all targets/all features with -D warnings;
+- all tests;
+- all builds;
+- absolute systemd-creds invocation;
+- direct same-directory temp target;
+- stdin-only plaintext transfer;
+- stdout/stderr not captured;
+- explicit zeroization;
+- O_NOFOLLOW;
+- open-file permission hardening;
+- RenameFlags::NOREPLACE;
+- fixed drop-in target;
+- zero-argument CLI;
+- Agent public attestation;
+- no shell and no wait_with_output path;
+- no generic signing surface.
+
+POWERCODE A03 PROOF
+
+Before any disposable activity, the PowerCode job re-proved:
+- installed production Agent SHA-256: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf;
+- installed production unit SHA-256: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909;
+- production service active;
+- production service enabled;
+- Linger=yes;
+- no production DropInPaths;
+- no production ciphertext;
+- no production identity drop-in;
+- production local IPC Ready/protocol supported.
+
+Checkpoint:
+phase126_a03_production_preflight=pass
+
+The zero-argument boundary was proved fail-closed with no state creation:
+phase126_a03_zero_argument_surface=pass
+
+A symlinked disposable XDG state target was rejected without writing through the symlink:
+phase126_a03_symlink_fail_closed=pass
+
+One first disposable provisioning succeeded. The final ciphertext was proved:
+- regular file;
+- not a symlink;
+- uid/gid 1000/1000;
+- mode exactly 0600;
+- non-empty;
+- the only file under the disposable state root;
+- no temporary ciphertext artifact remained.
+
+Checkpoint:
+phase126_a03_first_provisioning=pass
+
+A second first-provisioning attempt failed and the existing ciphertext SHA remained unchanged:
+phase126_a03_creation_only=pass
+
+The disposable encrypted credential was then delivered through a transient systemd user service to the exact identity-aware candidate Agent. The candidate reached:
+
+phase126a03_status=Ready protocol_supported=yes
+
+The public fingerprint emitted by the provisioner exactly equaled the fingerprint emitted by the runtime-loaded Agent identity:
+
+phase126_a03_identity_binding=pass
+
+The fingerprint belonged only to disposable test material and is not a production PRW identity.
+
+After transient service stop, the isolated candidate socket disappeared:
+phase126_a03_candidate_cleanup=pass
+
+A separate execution with CREDENTIALS_DIRECTORY removed proved the exact bounded missing-identity startup failure and proved no Agent runtime directory was created:
+phase126_a03_missing_identity_fail_closed=pass
+
+Finally, production Agent/unit hashes, active/enabled state, Linger, absent production identity/drop-in state, and production local IPC Ready were re-proved unchanged:
+
+phase126_a03_production_unchanged=pass
+
+PRODUCTION MUTATION STATEMENT
+
+Phase 126-A02/A03 did NOT:
+- generate a production PRW device-identity private key;
+- persist a production encrypted device-identity credential;
+- install the production 20-device-identity-credential.conf drop-in;
+- modify /usr/lib/private-remote-workspace/prw-agent;
+- modify /usr/lib/systemd/user/prw-agent.service;
+- daemon-reload the production identity integration;
+- restart/replace prw-agent.service for identity activation;
+- change service enablement;
+- change linger;
+- perform production enrollment;
+- activate public networking, DNS, SSH, forwarding, file transfer, or control-plane persistence.
+
+TEMPORARY WORKFLOW CLEANUP
+
+A02 metadata-probe workflow was removed after evidence capture.
+A03 provisioning-hardening workflow was removed after evidence capture.
+
+A03 cleanup head:
+0a2b5cbb17f64f164c8be495132f15bab8e49312
+
+After cleanup, .github/workflows/ contains exactly:
+phase-001-rust-validation.yml
+
+CLEAN-HEAD PERMANENT VALIDATION
+
+Permanent Rust validation on A03 cleanup head:
+
+Run: 31937929252
+Head: 0a2b5cbb17f64f164c8be495132f15bab8e49312
+Result: PASS
+
+Passed:
+- exact toolchain record;
+- locked dependency graph;
+- rustfmt;
+- Clippy with -D warnings;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+FINAL PHASE 126-A03 CLASSIFICATION
+
+PASS / PROVISIONER_HARDENED_AND_VALIDATED / SYSTEMD259_DIRECT_OUTPUT_MODE_CALIBRATED / SECURE_0600_FINAL_CIPHERTEXT / CREATION_ONLY_NOREPLACE / PUBLIC_IDENTITY_BINDING_PROVEN / AGENT_IDENTITY_ATTESTATION_PROVEN / FAIL_CLOSED_MISSING_IDENTITY / TEMP_WORKFLOWS_REMOVED / CLEAN_PERMANENT_CI_PASS / PRODUCTION_UNCHANGED / NO_PRODUCTION_IDENTITY_ACTIVATION
+
+NEXT BOUNDARY
+
+The source implementation and disposable production-path validation are ready for production-activation transaction preparation.
+
+Safe work that may continue without crossing the production mutation gate includes:
+- exact production activation transaction package preparation;
+- exact candidate/installed artifact hash inventory;
+- drop-in payload generation and byte-level review;
+- rollback package preparation;
+- read-only PowerCode preflight revalidation;
+- operator/sudo transport planning without collecting or storing credentials;
+- production postcondition checklist preparation.
+
+The following remain BLOCKED until the user gives explicit authorization for the real-host production identity activation transaction, as required by Phase 124 and Phase 126-A00:
+- generating the real production PRW private key on PowerCode;
+- creating/persisting the production encrypted credential;
+- installing the production identity systemd drop-in;
+- replacing the production Agent executable with the identity-aware candidate;
+- daemon-reload/restart for production identity activation;
+- production enrollment or any authentication/networking cutover.
+
+Standing authorization for routine/non-production work does not override this narrower explicit production mutation gate.
+
+AUTHORITATIVE EVIDENCE
+
+This file is the authoritative Phase 126-A03 hardening and disposable validation closure report. It supplements and supersedes the initial A01 ciphertext-output implementation detail while preserving the A01 public-identity binding evidence.
