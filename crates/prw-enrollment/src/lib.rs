@@ -135,8 +135,7 @@ impl EnrollmentService {
             .pending
             .get_mut(enrollment_id)
             .ok_or(EnrollmentServiceError::UnknownEnrollment)?;
-        verify_enrollment_proof(state, proof, now_unix_seconds)
-            .map_err(map_verification_error)?;
+        verify_enrollment_proof(state, proof, now_unix_seconds).map_err(map_verification_error)?;
 
         let request = state.bound_request().clone();
         if self.enrolled_devices.contains_key(&request.device_id) {
@@ -161,7 +160,10 @@ impl EnrollmentService {
 
     /// Returns a completed binding by enrollment identifier.
     #[must_use]
-    pub fn completed_binding(&self, enrollment_id: &EnrollmentId) -> Option<&DeviceIdentityBinding> {
+    pub fn completed_binding(
+        &self,
+        enrollment_id: &EnrollmentId,
+    ) -> Option<&DeviceIdentityBinding> {
         self.completed.get(enrollment_id)
     }
 
@@ -207,11 +209,9 @@ mod tests {
     use super::{EnrollmentService, EnrollmentServiceError};
 
     fn signer() -> UbuntuEnrollmentSigner {
-        let pkcs8 = EcdsaKeyPair::generate_pkcs8(
-            &ECDSA_P256_SHA256_ASN1_SIGNING,
-            &SystemRandom::new(),
-        )
-        .expect("generate disposable test key");
+        let pkcs8 =
+            EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                .expect("generate disposable test key");
         UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
             .expect("load disposable test signer")
     }
