@@ -11,8 +11,7 @@ use std::process::ExitCode;
 #[cfg(target_os = "linux")]
 fn main() -> ExitCode {
     let _device_identity_signer =
-        match prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential()
-        {
+        match prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential() {
             Ok(signer) => signer,
             Err(_) => {
                 eprintln!(
