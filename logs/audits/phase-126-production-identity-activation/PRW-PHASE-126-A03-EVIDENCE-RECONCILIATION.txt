@@ -1,0 +1,156 @@
+Private Remote Workspace
+Phase 126-A03 — Audit Evidence Reconciliation
+
+STATUS:
+PASS / AUDIT_RECORD_CORRECTED_NON_DESTRUCTIVELY / HISTORICAL_REPORTS_RETAINED / GITHUB_ACTIONS_RUN_LOGS_AND_COMMIT_METADATA_TREATED_AS_AUTHORITATIVE_WHERE_NARRATIVE_REPORTS_CONFLICT / PRODUCTION_STATE_UNCHANGED / EXPLICIT_REAL_HOST_MUTATION_GATE_PENDING
+
+AUDIT TYPE: EVIDENCE RECONCILIATION / NON-DESTRUCTIVE CORRECTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+
+PURPOSE
+
+This report corrects inconsistencies discovered among the retained Phase 126-A02/A03 narrative audit reports after the underlying GitHub Actions runs and commit metadata were re-read.
+
+No historical audit file is deleted or rewritten. The original reports remain preserved as historical evidence. Where a narrative field conflicts with the actual workflow log or Git commit metadata, the workflow log / commit metadata below is authoritative.
+
+AUTHORITATIVE EVIDENCE ORDER FOR THESE CORRECTIONS
+
+1. GitHub Actions job logs for the cited run/job.
+2. Git commit metadata for exact commit SHA and changed-file identity.
+3. Retained narrative audit reports when they do not conflict with items 1 or 2.
+
+CORRECTION 1 — PHASE 126-A02 DIRECT SYSTEMD-CREDS OUTPUT METADATA
+
+Authoritative workflow run:
+31937705860
+
+Authoritative PowerCode job:
+95142133260 — SUCCESS
+
+The actual job log recorded:
+phase126_a02_direct_output uid=1000 gid=1000 mode=644 size=624
+
+Therefore the authoritative observed disposable direct-output metadata is:
+- UID: 1000
+- GID: 1000
+- mode: 0644
+- size: 624 bytes
+
+The retained file `PRW-PHASE-126-A02-SYSTEMD-CIPHERTEXT-HARDENING.txt` contains a conflicting `230 bytes` size statement. That size value is superseded by this reconciliation.
+
+The A02 probe job did not perform an explicit decrypt-and-compare step. Any narrative claim that this exact A02 run proved decryption equality is not supported by the cited job log and is withdrawn as an A02 evidence claim.
+
+The security-relevant A02 conclusion remains unchanged: systemd-creds direct output on PowerCode/systemd 259 was observed at mode 0644, so PRW must harden the encrypted temporary file to exact 0600 before authoritative commit.
+
+CORRECTION 2 — PHASE 126-A02/A03 HARDENING SOURCE COMMIT
+
+Authoritative source-hardening commit:
+69cfef890084e358abd7c2a8ecf010c0c06f3090
+
+Commit message:
+phase 126 a02: harden direct systemd credential output before commit
+
+Permanent Rust validation run for that source-hardening commit:
+31937766936 — SUCCESS
+
+Any retained narrative SHA variant that does not exactly equal `69cfef890084e358abd7c2a8ecf010c0c06f3090` is superseded by this reconciliation.
+
+CORRECTION 3 — PHASE 126-A03 DISPOSABLE PUBLIC-IDENTITY FINGERPRINT
+
+Authoritative A03 workflow run:
+31937799227 — SUCCESS
+
+Hosted validate/build job:
+95142374641 — SUCCESS
+
+PowerCode disposable proof job:
+95142577959 — SUCCESS
+
+The actual PowerCode job log recorded the provisioning fingerprint:
+7cecd0278b09f99ab2ba85035323a650759c8ea72fe759f463b9d2222e30b17d
+
+The same job log recorded the runtime-loaded Agent fingerprint:
+7cecd0278b09f99ab2ba85035323a650759c8ea72fe759f463b9d2222e30b17d
+
+Therefore the authoritative A03 identity-binding statement is:
+provisioning public fingerprint == runtime loaded public fingerprint == 7cecd0278b09f99ab2ba85035323a650759c8ea72fe759f463b9d2222e30b17d
+
+The retained file `PRW-PHASE-126-A03-HARDENED-PROVISIONING-VALIDATION.txt` contains a conflicting disposable fingerprint value. That value is superseded by this reconciliation.
+
+This fingerprint identifies disposable A03 test material only. It is not the PowerCode production device identity and must never be promoted, enrolled, or recorded as such.
+
+CORRECTION 4 — PHASE 126-A03 VALIDATED PAYLOAD HASHES
+
+The hosted A03 job log recorded:
+- candidate prw-agent: 4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e
+- hardened prw-device-identity-provision: a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b
+- A03 status probe: 402d79ec183314de915248f173840ad10b2853250f6a6b5750f5faf2efc036b8
+- Cargo.lock: aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424
+
+A03 artifact:
+- artifact ID: 9261168917
+- ZIP SHA-256: 61bcc1ef13ee04f3e9b40b81cea5e13a4ddbc8961c46a967e621b0bc70d36f12
+
+CORRECTION 5 — A03 CLEANUP AND PERMANENT VALIDATION
+
+A03 temporary workflow cleanup head:
+0a2b5cbb17f64f164c8be495132f15bab8e49312
+
+Permanent Rust validation run on that cleanup head:
+31937929252 — SUCCESS
+
+The workflow inventory after cleanup contained only:
+.github/workflows/phase-001-rust-validation.yml
+
+The successful permanent run covered:
+- locked dependency graph;
+- rustfmt;
+- Clippy with -D warnings;
+- all workspace/all-target tests;
+- all workspace/all-target builds.
+
+AUTHORITATIVE A03 SECURITY OUTCOME
+
+The final hardened disposable proof established all of the following on PowerCode without production identity activation:
+- production baseline preflight passed;
+- zero-argument CLI failed closed before state creation;
+- symlinked disposable XDG state failed closed;
+- first disposable provisioning succeeded;
+- final disposable ciphertext was regular, same-user, exact mode 0600, non-empty, and committed creation-only;
+- second first-provisioning attempt failed without replacing the first ciphertext;
+- transient systemd LoadCredentialEncrypted delivery started the exact candidate Agent;
+- candidate local IPC reached Ready with supported protocol;
+- provisioner public fingerprint exactly matched runtime-loaded Agent fingerprint;
+- transient candidate cleanup succeeded;
+- missing CREDENTIALS_DIRECTORY failed before runtime directory/socket creation;
+- production Agent/unit hashes, service active/enabled state, Linger, absent production ciphertext/drop-in state, and production IPC Ready were re-proved unchanged.
+
+PRODUCTION MUTATION STATEMENT
+
+Phase 126-A01/A02/A03 and this reconciliation did NOT:
+- generate the real PowerCode production PRW private device-identity key;
+- create the production encrypted device-identity credential;
+- install the production identity systemd drop-in;
+- replace the installed production Agent;
+- daemon-reload/restart production identity integration;
+- enroll the production device identity;
+- activate authentication/networking cutovers.
+
+NEXT BOUNDARY
+
+Safe non-production work may continue with Phase 126-A04 production read-only preflight and rollback staging.
+
+The following remain BLOCKED until the user explicitly authorizes the real-host production identity activation transaction required by Phase 124 and Phase 126-A00:
+- production private-key generation;
+- production encrypted credential persistence;
+- production identity drop-in installation;
+- production Agent replacement;
+- daemon-reload/restart for identity activation;
+- production enrollment or authentication/networking cutover.
+
+FINAL AUTHORITY STATEMENT
+
+This reconciliation is the authoritative correction layer for Phase 126-A02/A03 narrative evidence. Historical reports remain preserved. When those reports conflict with this file on the corrected fields above, this file and the cited GitHub Actions/commit evidence govern.
