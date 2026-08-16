@@ -1,0 +1,159 @@
+name: Phase 125 Custody Startup Integration Validation
+
+on:
+  push:
+    branches:
+      - phase-125-custody-startup-integration
+    paths:
+      - ".github/workflows/phase-125-custody-startup-integration.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout validation branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-125-custody-startup-integration
+          fetch-depth: 2
+
+      - name: Verify authoritative parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "b210467fe3e84258e790963c5f08ce69d19f8843"
+
+      - name: Apply guarded Phase 125 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"guard failed for {path}: expected 1 match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "crates/prw-agent/Cargo.toml",
+              'prw-core = { path = "../prw-core" }\n',
+              'prw-core = { path = "../prw-core" }\nprw-device-identity-custody = { path = "../prw-device-identity-custody" }\n',
+          )
+
+          replace_once(
+              "Cargo.lock",
+              'dependencies = [\n "nix",\n "prw-core",\n "prw-files",\n "prw-network",\n "prw-policy",\n "rustix",\n]\n',
+              'dependencies = [\n "nix",\n "prw-core",\n "prw-device-identity-custody",\n "prw-files",\n "prw-network",\n "prw-policy",\n "rustix",\n]\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_production_lifecycle.rs",
+              '//! service manager.\n\nuse super::accept_ready::{\n',
+              '//! service manager.\n\nuse std::env;\n\nuse prw_device_identity_custody::{\n    SYSTEMD_CREDENTIALS_DIRECTORY_ENV, UbuntuDeviceIdentityCustodyError,\n    load_ubuntu_enrollment_signer_from_systemd_credential,\n};\n\nuse super::accept_ready::{\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_production_lifecycle.rs",
+              '    /// The exclusive same-user Agent instance lock could not be acquired.\n    InstanceLock(AgentInstanceLockError),\n    /// The validated filesystem-backed Agent socket could not be bound.\n',
+              '    /// The exclusive same-user Agent instance lock could not be acquired.\n    InstanceLock(AgentInstanceLockError),\n    /// A configured systemd device-identity credential failed the locked custody boundary.\n    DeviceIdentityCustody(UbuntuDeviceIdentityCustodyError),\n    /// The validated filesystem-backed Agent socket could not be bound.\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_production_lifecycle.rs",
+              '    let instance_lock = acquire_agent_instance_lock(&runtime_directory)\n        .map_err(LocalLinuxProductionLifecycleAssemblyError::InstanceLock)?;\n    let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)\n',
+              '    let instance_lock = acquire_agent_instance_lock(&runtime_directory)\n        .map_err(LocalLinuxProductionLifecycleAssemblyError::InstanceLock)?;\n    let _device_identity_signer = if env::var_os(SYSTEMD_CREDENTIALS_DIRECTORY_ENV).is_some() {\n        Some(\n            load_ubuntu_enrollment_signer_from_systemd_credential()\n                .map_err(LocalLinuxProductionLifecycleAssemblyError::DeviceIdentityCustody)?,\n        )\n    } else {\n        None\n    };\n    let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_bootstrap.rs",
+              '    /// The instance lock failed for a reason other than an existing Agent.\n    InstanceLock,\n    /// The validated local Agent socket could not be bound.\n',
+              '    /// The instance lock failed for a reason other than an existing Agent.\n    InstanceLock,\n    /// A configured systemd device-identity credential failed the locked custody boundary.\n    DeviceIdentityCustody,\n    /// The validated local Agent socket could not be bound.\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_bootstrap.rs",
+              '            Self::InstanceLock => "instance_lock",\n            Self::Bind => "bind",\n',
+              '            Self::InstanceLock => "instance_lock",\n            Self::DeviceIdentityCustody => "device_identity_custody",\n            Self::Bind => "bind",\n',
+          )
+
+          replace_once(
+              "crates/prw-agent/src/linux_bootstrap.rs",
+              '        LocalLinuxProductionLifecycleAssemblyError::InstanceLock(_) => {\n            LinuxAgentBootstrapStartKind::InstanceLock\n        }\n        LocalLinuxProductionLifecycleAssemblyError::Bind(_) => LinuxAgentBootstrapStartKind::Bind,\n',
+              '        LocalLinuxProductionLifecycleAssemblyError::InstanceLock(_) => {\n            LinuxAgentBootstrapStartKind::InstanceLock\n        }\n        LocalLinuxProductionLifecycleAssemblyError::DeviceIdentityCustody(_) => {\n            LinuxAgentBootstrapStartKind::DeviceIdentityCustody\n        }\n        LocalLinuxProductionLifecycleAssemblyError::Bind(_) => LinuxAgentBootstrapStartKind::Bind,\n',
+          )
+          PY
+
+      - name: Format candidate
+        run: cargo fmt --all
+
+      - name: Verify mutation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only | sort)
+          printf '%s\n' "${changed[@]}"
+          expected=(
+            Cargo.lock
+            crates/prw-agent/Cargo.toml
+            crates/prw-agent/src/linux_bootstrap.rs
+            crates/prw-agent/src/linux_production_lifecycle.rs
+          )
+          test "${#changed[@]}" -eq "${#expected[@]}"
+          for i in "${!expected[@]}"; do test "${changed[$i]}" = "${expected[$i]}"; done
+
+      - name: Verify locked metadata
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        run: cargo build --locked --workspace --all-targets
+
+      - name: Verify Phase 125 security/source guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo tree --locked -p prw-agent | grep -F 'prw-device-identity-custody'
+          grep -F 'SYSTEMD_CREDENTIALS_DIRECTORY_ENV' crates/prw-agent/src/linux_production_lifecycle.rs
+          grep -F 'load_ubuntu_enrollment_signer_from_systemd_credential' crates/prw-agent/src/linux_production_lifecycle.rs
+          grep -F 'DeviceIdentityCustody' crates/prw-agent/src/linux_production_lifecycle.rs
+          grep -F 'device_identity_custody' crates/prw-agent/src/linux_bootstrap.rs
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('crates/prw-agent/src/linux_production_lifecycle.rs').read_text()
+          lock = text.index('acquire_agent_instance_lock')
+          custody = text.index('load_ubuntu_enrollment_signer_from_systemd_credential()', lock)
+          bind = text.index('bind_validated_agent_socket', custody)
+          if not lock < custody < bind:
+              raise SystemExit('custody ordering guard failed')
+          forbidden = ['sign(bytes', 'export_pkcs8', '/run/credentials', 'XDG_STATE_HOME', '.local/state']
+          for token in forbidden:
+              if token in text:
+                  raise SystemExit(f'forbidden token in Agent lifecycle: {token}')
+          PY
+
+      - name: Commit validated candidate and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "PRW Validation Bot"
+          git config user.email "prw-validation@users.noreply.github.com"
+          git rm .github/workflows/phase-125-custody-startup-integration.yml
+          git add Cargo.lock crates/prw-agent/Cargo.toml crates/prw-agent/src/linux_bootstrap.rs crates/prw-agent/src/linux_production_lifecycle.rs
+          git commit -m "phase 125: integrate systemd custody before agent readiness"
+          git push origin HEAD:phase-125-custody-startup-integration
