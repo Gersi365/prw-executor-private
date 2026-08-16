@@ -71,6 +71,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          cp apps/android/native/Cargo.lock "$RUNNER_TEMP/phase147-native-lock-before"
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-1.sh)
           (cd "$GITHUB_WORKSPACE" && bash /tmp/phase147-a01-step-2.sh)
           echo phase147_a01_reconstruction=pass
