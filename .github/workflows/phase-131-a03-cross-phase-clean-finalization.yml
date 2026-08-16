@@ -1,0 +1,250 @@
+name: Phase 131 A03 Cross-Phase Clean Finalization
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-131-a03-cross-phase-clean-finalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply exact Phase 129 residual and Phase 131 compiler-lint correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Phase 131 workspace registration.
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-file-service",\n'
+          if member not in text:
+              needle = '    "crates/prw-files",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('Phase 131 workspace insertion point mismatch')
+              text = text.replace(needle, needle + member)
+              cargo.write_text(text)
+
+          # Phase 131 compiler/lint correctives already proven incrementally.
+          source = Path('crates/prw-file-service/src/lib.rs')
+          text = source.read_text()
+          import_line = '    os::unix::fs::PermissionsExt,\n'
+          if import_line not in text:
+              needle = '    os::fd::OwnedFd,\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('PermissionsExt insertion point mismatch')
+              text = text.replace(needle, needle + import_line)
+
+          phase131_replacements = [
+              ('        file.by_ref()\n', '        std::io::Read::by_ref(&mut file)\n'),
+              ('    fn open_parent(&self, path: &RemotePath) -> Result<(OwnedFd, &str), FileServiceError> {', "    fn open_parent<'a>(&self, path: &'a RemotePath) -> Result<(OwnedFd, &'a str), FileServiceError> {"),
+              ('    pub fn is_root(&self) -> bool {', '    pub const fn is_root(&self) -> bool {'),
+              ('fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {', 'const fn classify_mode(mode: rustix::fs::RawMode) -> RemoteFileType {'),
+          ]
+          for old, new in phase131_replacements:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'Phase 131 replacement count mismatch for {old!r}')
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'Phase 131 corrected form missing for {new!r}')
+          source.write_text(text)
+
+          # Phase 129 residual Clippy debt from authoritative run 31941341945.
+          transport = Path('crates/prw-control-transport/src/lib.rs')
+          text = transport.read_text()
+
+          old = 'pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_secs(60);'
+          new = 'pub const MAX_CONTROL_TIMEOUT: Duration = Duration::from_mins(1);'
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase 129 timeout replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase 129 corrected timeout form missing')
+
+          old = '''    let request_id = u64::from_be_bytes(\n        header[12..20]\n            .try_into()\n            .expect("fixed eight-byte request identifier slice"),\n    );'''
+          new = '''    let request_id = u64::from_be_bytes([\n        header[12], header[13], header[14], header[15], header[16], header[17], header[18],\n        header[19],\n    ]);'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase 129 request-id replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase 129 corrected request-id form missing')
+
+          old = '''    let payload_len = u32::from_be_bytes(\n        header[20..24]\n            .try_into()\n            .expect("fixed four-byte payload length slice"),\n    ) as usize;'''
+          new = '''    let payload_len =\n        u32::from_be_bytes([header[20], header[21], header[22], header[23]]) as usize;'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase 129 payload-length replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase 129 corrected payload-length form missing')
+
+          old = '        invalid[20..24].copy_from_slice(&((MAX_CONTROL_PAYLOAD_BYTES as u32) + 1).to_be_bytes());'
+          new = '''        let oversized_payload =\n            u32::try_from(MAX_CONTROL_PAYLOAD_BYTES + 1).unwrap_or(u32::MAX);\n        invalid[20..24].copy_from_slice(&oversized_payload.to_be_bytes());'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase 129 payload-test replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase 129 corrected payload-test form missing')
+
+          old = '''            Err(ControlTransportError::InvalidTrustAnchor)\n                | Err(ControlTransportError::InvalidServerName)'''
+          new = '''            Err(\n                ControlTransportError::InvalidTrustAnchor | ControlTransportError::InvalidServerName\n            )'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase 129 or-pattern replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase 129 corrected or-pattern form missing')
+
+          transport.write_text(text)
+          PY
+
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --check
+
+      - name: Prove Phase 129 focused transport gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-control-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-control-transport --all-targets
+          echo 'phase129_a04_residual_cleanup=pass'
+
+      - name: Prove Phase 131 focused file-service gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --locked -p prw-file-service --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-file-service --all-targets
+          echo 'phase131_a03_focused_validation=pass'
+
+      - name: Prove full workspace gates
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase131_a03_workspace_validation=pass lock_sha=$lock_sha"
+
+      - name: Record reconciliation and authoritative reports
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p logs/audits/phase-129-control-transport
+          cat > logs/audits/phase-129-control-transport/PRW-PHASE-129-A04-CLIPPY-RECONCILIATION.txt <<EOF
+          Private Remote Workspace
+          Phase 129 A04 — Control Transport Clippy Reconciliation
+
+          STATUS:
+          PASS / RESIDUAL_CLIPPY_DEBT_CORRECTED / TRANSPORT_SEMANTICS_UNCHANGED / FULL_WORKSPACE_VALIDATION_PASS
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative reconciliation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+
+          CORRECTED RESIDUALS
+          - Duration unit spelling normalized from 60 seconds to one minute.
+          - Fixed-size frame-header decoding no longer contains infallible-slice expect() calls.
+          - Oversized-payload negative test no longer uses a potentially truncating usize-to-u32 cast.
+          - Negative TLS-config test uses the nested or-pattern required by Clippy 1.97.1.
+
+          SECURITY/PROTOCOL EFFECT
+          No protocol number, ALPN, frame layout, trust policy, TLS version, transport address policy, timeout value, payload bound or production networking state changed.
+
+          VALIDATION
+          Focused prw-control-transport rustfmt, Clippy -D warnings and all-target tests passed before full workspace/all-target Clippy, tests and build.
+
+          FINAL CLASSIFICATION
+          PHASE_129_RESIDUAL_VALIDATION_DEBT_CLOSED / NO_PRODUCTION_NETWORK_MUTATION
+          EOF
+
+          mkdir -p logs/audits/phase-131-remote-file-management-foundation
+          cat > logs/audits/phase-131-remote-file-management-foundation/PRW-PHASE-131-FILE-MANAGEMENT-FOUNDATION-VALIDATION.txt <<EOF
+          Private Remote Workspace
+          Phase 131 — Remote File Management Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / DESCRIPTOR_ANCHORED_ROOT_IMPLEMENTED / PATH_TRAVERSAL_FAIL_CLOSED / CREATE_ONLY_PRIMITIVES_VALIDATED / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REMOTE_FILES_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative finalization run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+
+          CONTRACT
+          contracts/REMOTE_FILE_MANAGEMENT_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-file-service
+
+          SECURITY OUTCOME
+          Filesystem authority is anchored to an owned root directory descriptor. Descendant resolution is descriptor-relative and rejects symbolic-link traversal. Strict relative UTF-8 paths reject traversal and ambiguous syntax. Reads, writes and listings are bounded. Writes are creation-only, existing destinations are not replaced, file mode is 0600 and directory mode is 0700.
+
+          VALIDATION
+          Seven focused file-service tests passed, including symlink rejection, root descriptor path-replacement resistance, traversal rejection, bounded read/list behavior, create-only non-overwrite and 0600/0700 mode checks. Focused Clippy -D warnings passed, followed by full workspace/all-target Clippy, tests and build under the locked graph.
+
+          CORRECTIVE HISTORY
+          Run 31942435230 exposed only Read::by_ref ambiguity and open_parent lifetime binding. Run 31943111171 confirmed those compiler fixes and exposed two const lints. Run 31943156058 passed all seven focused Phase 131 tests and then surfaced residual Phase 129 Clippy debt; this reconciliation run closed that debt without changing the file-service security model.
+
+          DEFERRED
+          Phase 132 owns resumable/chunked transfer, transfer IDs, content integrity, atomic final commit, interruption recovery and cleanup. Remote policy/transport activation remains deferred.
+
+          PRODUCTION BOUNDARY
+          No arbitrary PowerCode user file or production PRW state was mutated. No remote file capability is active in production.
+
+          FINAL CLASSIFICATION
+          PHASE_131_SOURCE_AND_DISPOSABLE_FILE_FOUNDATION_DONE / NO_PRODUCTION_REMOTE_FILE_SIDE_EFFECT / READY_FOR_PHASE_132_VALIDATION
+          EOF
+
+      - name: Cleanup temporary Phase 129 and 131 workflows and commit validated result
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for path in \
+            .github/workflows/phase-129-a02-clippy-corrective.yml \
+            .github/workflows/phase-129-a02b-clippy-corrective.yml \
+            .github/workflows/phase-129-authoritative-finalization.yml \
+            .github/workflows/phase-129-control-transport-validation.yml \
+            .github/workflows/phase-129-finalize-validation.yml \
+            .github/workflows/phase-131-file-foundation-finalization.yml \
+            .github/workflows/phase-131-authoritative-finalization.yml \
+            .github/workflows/phase-131-a01-bounded-clippy-finalization.yml \
+            .github/workflows/phase-131-a02-compiler-corrective.yml \
+            .github/workflows/phase-131-a03-cross-phase-clean-finalization.yml; do
+            if [[ -e "$path" ]]; then
+              git rm -f -- "$path"
+            fi
+          done
+          git diff --check
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add -A
+          git commit -m 'phase 131: close file foundation with clean workspace validation'
+          git push origin HEAD:main
+          echo 'phase131_a03_finalization=pass'
