@@ -1,0 +1,381 @@
+Private Remote Workspace
+Phase 121 — Typed Ubuntu Device-Identity Signer Implementation
+
+STATUS:
+PASS / PRW_DEVICE_IDENTITY_SIGNER_CRATE_IMPLEMENTED_AND_VALIDATED / P256_PKCS8_V1_DER_CANONICAL_INPUT_ENFORCED / CANONICAL_SPKI_PUBLIC_IDENTITY_DERIVED / TYPED_ENROLLMENT_POP_SIGNING_ONLY / GENERIC_PUBLIC_SIGN_BYTES_API_FORBIDDEN / REQUEST_PUBLIC_IDENTITY_BINDING_ENFORCED / WRONG_CURVE_MALFORMED_TRUNCATED_AND_NON_PKCS8_INPUTS_REJECTED / PRODUCTION_VERIFIER_COMPOSITION_PASS / SIGNER_NOT_REACHABLE_FROM_PRW_AGENT_DEPENDENCY_TREE / LOCKFILE_PROMOTED_FROM_VALIDATED_ARTIFACT / TEMPORARY_VALIDATION_WORKFLOW_REMOVED / PERMANENT_CI_GREEN_ON_CLEANUP_HEAD / NO_SYSTEMD_CREDENTIAL_READER_YET / NO_PRODUCTION_PRIVATE_KEY_CREATED / NO_REAL_HOST_MUTATION / READY_FOR_PHASE_122_CUSTODY_ADAPTER
+
+AUDIT TYPE: SECURITY-BOUNDARY IMPLEMENTATION / CRYPTOGRAPHIC SIGNER COMPOSITION VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: 7e39a2fa1615d28a4e7bc5e7fe028d38261c0fa7
+Validated cleanup head: 2bdc00ef02441ace47da1e24071641e6e78b7623
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION AND SCOPE
+
+Standing user authorization remained active for continued PRW implementation without repeated routine approval requests.
+
+Phase 121 implemented only the signer boundary locked by Phase 120. It did not:
+- create or provision a production private device-identity key;
+- read $CREDENTIALS_DIRECTORY;
+- read or write systemd credential stores;
+- create XDG credential ciphertext;
+- change prw-agent.service;
+- restart or reload the Agent;
+- mutate linger state;
+- change networking, DNS, TUN, firewall, SSH, relay, or control-plane runtime state;
+- use the temporary PowerCode self-hosted runner;
+- perform any real-host mutation.
+
+The entire Phase 121 implementation and validation sequence ran through GitHub repository changes and GitHub-hosted Ubuntu validation.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 113 locked aws-lc-rs 1.18.0 as the device-identity verification provider and kept prw-device-identity verifier-only.
+
+Phase 115 locked the canonical EnrollmentProof message, server challenge type, nonce binding, replay/consume semantics, and production verifier composition.
+
+Phase 116 locked typed PRW enrollment proof signing rather than a generic signing oracle.
+
+Phase 118 locked Ubuntu private-key custody to systemd encrypted service credentials, with runtime plaintext delivered through $CREDENTIALS_DIRECTORY and no plaintext persistent key file.
+
+Phase 119 proved with disposable keys that aws-lc-rs P-256 PKCS#8 v1 DER reload, canonical X.509 SPKI derivation, ASN.1 DER ECDSA signatures, and complete enrollment PoP verification are compatible.
+
+Phase 120 locked a separate prw-device-identity-signer crate, a bounded canonical PKCS#8 constructor, typed EnrollmentRequest + EnrollmentProofChallenge signing only, no generic sign(bytes) API, no filesystem/systemd reader in signer core, and no Agent dependency on the signer.
+
+IMPLEMENTED SOURCE BOUNDARY
+
+New workspace crate:
+crates/prw-device-identity-signer
+
+Net Phase 121 repository changes from starting head to validated cleanup head:
+1. Cargo.toml
+2. Cargo.lock
+3. crates/prw-device-identity-signer/Cargo.toml
+4. crates/prw-device-identity-signer/src/lib.rs
+5. crates/prw-device-identity-signer/tests/typed_signer.rs
+
+The temporary Phase 121 validation workflow was removed before closure and is not part of the net source diff.
+
+Cargo workspace membership now includes:
+crates/prw-device-identity-signer
+
+The signer crate exact production dependencies are:
+- aws-lc-rs = 1.18.0 exact pin, default features disabled, alloc + non-fips;
+- prw-control-plane by local path.
+
+Its dev-only validation dependencies are:
+- prw-core;
+- prw-device-identity verifier.
+
+The production signer crate does not depend on prw-agent, systemd libraries, filesystem libraries, network libraries, SSH libraries, or a control-plane transport implementation.
+
+LOCKED PRIVATE CREDENTIAL INPUT
+
+Public constructor:
+UbuntuEnrollmentSigner::from_pkcs8_v1_der(credential: &[u8])
+
+Input bound:
+1..=4096 bytes.
+
+Before any signer object is returned, implementation requires:
+- non-empty bounded input;
+- aws-lc-rs parsing under ECDSA_P256_SHA256_ASN1_SIGNING;
+- successful provider re-serialization as PKCS#8 v1;
+- byte-for-byte equality between re-serialized canonical PKCS#8 v1 DER and supplied credential bytes.
+
+This byte-equality requirement prevents the constructor from silently accepting another private-key serialization merely because the provider can parse it.
+
+Explicit negative coverage includes:
+- empty credential;
+- oversized credential;
+- truncated PKCS#8;
+- P-384 PKCS#8 under the P-256 profile;
+- RFC5915 EC private-key DER supplied instead of canonical PKCS#8 v1 DER.
+
+All are rejected fail-closed.
+
+PRIVATE MATERIAL LIFETIME
+
+The signer constructor borrows the custody payload during parsing.
+
+The signer object retains:
+- the provider-owned EcdsaKeyPair;
+- canonical public identity material.
+
+The signer object does not retain a second PRW-owned raw PKCS#8 byte vector and exposes no private-key export accessor.
+
+Therefore Phase 121 introduces no new long-lived PRW-owned mutable plaintext private-key buffer in production signer core. The future custody adapter remains responsible for owning and zeroizing the decrypted service-credential buffer after signer construction.
+
+Debug implementation exposes only non-secret profile metadata and does not print private credential bytes or provider secret objects.
+
+PUBLIC IDENTITY
+
+After private-key parsing, the signer derives the public key through aws-lc-rs and serializes it as X.509 SubjectPublicKeyInfo DER.
+
+The resulting PublicIdentityMaterial is locked to:
+- DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer.
+
+Reloading the same canonical PKCS#8 payload derives the same canonical public identity.
+
+TYPED SIGNING API
+
+The only public signing operation is:
+UbuntuEnrollmentSigner::sign_enrollment_proof(request, challenge)
+
+It accepts:
+- &EnrollmentRequest;
+- &EnrollmentProofChallenge.
+
+It does not accept caller-controlled raw message bytes.
+
+Before signing, it requires:
+1. request.enrollment_id == challenge.enrollment_id;
+2. request.public_identity == signer.public_identity;
+3. successful construction of the canonical Phase 115 enrollment proof message.
+
+Only after these typed checks does crate-private implementation call aws-lc-rs signing.
+
+Successful output is the existing EnrollmentProofOfPossession type with:
+- the request enrollment id;
+- the exact challenge nonce;
+- DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- DeviceIdentitySignatureEncoding::EcdsaSigValueDer.
+
+GENERIC SIGNING SURFACE
+
+A dedicated validation guard scanned the signer production source for a public function matching a generic sign(...) shape.
+
+Guard result: PASS.
+
+No public API equivalent to sign(message: &[u8]) exists.
+
+No public private-key accessor or export API exists.
+
+Provider generic signing remains crate-private implementation detail reachable only after typed PRW binding and canonical message construction.
+
+REQUEST / KEY CONSISTENCY
+
+A signer refuses to sign when the EnrollmentRequest public identity differs from the loaded private key's derived canonical public identity.
+
+A signer also refuses to sign when request and challenge enrollment ids differ.
+
+These checks occur before provider signing and prevent one loaded signer from acting as an oracle for a request claiming another device identity or another enrollment transaction.
+
+PRODUCTION VERIFIER COMPOSITION
+
+Focused tests generated disposable P-256 PKCS#8 credentials, loaded them through the production signer constructor, created typed enrollment proofs, and verified them through the existing production prw-device-identity verifier.
+
+Successful proof:
+- verified under the canonical bound enrollment snapshot;
+- consumed the server challenge exactly once.
+
+A proof produced for one snapshot failed against a changed device snapshot and did not consume the changed challenge.
+
+This preserves the Phase 115 server-side binding and replay semantics.
+
+FOCUSED PHASE 121 TEST COVERAGE
+
+crates/prw-device-identity-signer/tests/typed_signer.rs contains 8 focused tests covering:
+1. canonical PKCS#8 load and stable public identity derivation;
+2. credential size bounds;
+3. malformed, truncated, wrong-curve, and non-PKCS#8 rejection;
+4. enrollment-id mismatch rejection;
+5. request public-identity mismatch rejection;
+6. typed proof signing accepted by the production verifier and consumed once;
+7. changed enrollment snapshot rejection without consumption;
+8. non-secret Debug representation.
+
+All focused tests passed in the successful Phase 121 validation workflow.
+
+AGENT DEPENDENCY ISOLATION
+
+Temporary validation explicitly executed:
+cargo tree --locked -p prw-agent
+
+and failed the job if any of the following were reachable from prw-agent:
+- prw-device-identity-signer;
+- prw-device-identity;
+- aws-lc-rs;
+- aws-lc-sys.
+
+Guard result: PASS.
+
+Therefore Phase 121 does not silently place private-key signing or AWS-LC device-identity crypto into the existing Agent dependency tree.
+
+This is intentional. A later explicitly reviewed integration phase must decide the narrow custody/invocation boundary before the Agent can consume signer capability.
+
+LOCKFILE TRANSACTION
+
+Adding a workspace crate made the pre-existing Cargo.lock intentionally stale.
+
+Phase 121 did not hand-edit or guess the new lockfile.
+
+Temporary workflow:
+.github/workflows/phase-121-signer-validation.yml
+
+Successful validation run:
+31933255238
+
+Successful validation head:
+d2df1acacb13cf01f57bd1d43192d81f76a56a80
+
+Runner:
+GitHub-hosted ubuntu-24.04
+
+Exact toolchain:
+rustc 1.97.1
+cargo 1.97.1
+
+The workflow executed:
+- cargo generate-lockfile;
+- cargo metadata --locked --no-deps --format-version 1;
+- cargo fmt --all -- --check;
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings;
+- cargo test --locked --workspace --all-targets;
+- cargo build --locked --workspace --all-targets;
+- focused prw-device-identity-signer typed_signer tests;
+- Agent dependency isolation guard;
+- generic public sign API guard;
+- signer production-source file-count guard.
+
+All validation gates passed before the generated Cargo.lock was uploaded.
+
+Validated Cargo.lock SHA-256:
+a46a60648bdb2374ddd18c13815200cdb70ec0db78cf42032365955b8285d649
+
+Validated artifact:
+name: phase121-cargo-lock
+artifact id: 9259910842
+artifact ZIP digest: sha256:65042e9034d5b5e0b354a87e3c789f2a682b22053223037e853410fb94579677
+
+The downloaded artifact contained exactly Cargo.lock.
+
+Local readback of the downloaded Cargo.lock reproduced the exact validated SHA-256 above.
+
+The validated Cargo.lock was then promoted to the repository in commit:
+1825aa518b00ea04f3b081c5ef6392ad48d2f679
+
+The net lockfile change added only the new workspace package stanza for prw-device-identity-signer and its already-existing dependency graph; no new external crate version was introduced by Phase 121.
+
+PERMANENT CI
+
+Permanent PRW Rust Validation on promoted lockfile head:
+run 31933359462
+head 1825aa518b00ea04f3b081c5ef6392ad48d2f679
+result SUCCESS
+
+Validated:
+- locked dependency graph;
+- formatting;
+- Clippy with warnings denied;
+- workspace tests;
+- workspace build.
+
+Temporary validation workflow cleanup commit:
+2bdc00ef02441ace47da1e24071641e6e78b7623
+
+Permanent PRW Rust Validation on cleanup head:
+run 31933431016
+head 2bdc00ef02441ace47da1e24071641e6e78b7623
+result SUCCESS
+
+Therefore the authoritative Phase 121 cleanup head is fully green with no temporary signer workflow retained.
+
+WORKFLOW INVENTORY AFTER CLEANUP
+
+.github/workflows contains exactly:
+phase-001-rust-validation.yml
+
+No Phase 121 temporary workflow remains in repository source.
+
+NET SOURCE DIFF CLOSURE
+
+Compare:
+base 7e39a2fa1615d28a4e7bc5e7fe028d38261c0fa7
+head 2bdc00ef02441ace47da1e24071641e6e78b7623
+
+Net changed files: 5.
+
+Cargo.lock:
++10 / -0
+
+Cargo.toml:
++1 / -0
+
+crates/prw-device-identity-signer/Cargo.toml:
++17 / -0
+
+crates/prw-device-identity-signer/src/lib.rs:
++192 / -0
+
+crates/prw-device-identity-signer/tests/typed_signer.rs:
++186 / -0
+
+No Agent source, service unit, host configuration, networking code, Android source, desktop source, or control-plane network implementation changed in Phase 121.
+
+CORRECTIVES OBSERVED DURING VALIDATION
+
+The implementation sequence encountered only narrow fail-safe CI defects before final PASS:
+
+1. initial temporary validation stopped at rustfmt differences;
+2. signer/test formatting was corrected mechanically;
+3. Clippy then identified one doc_markdown issue for the token PoP;
+4. the documentation token was backticked with no semantic change;
+5. full signer validation then passed;
+6. the validated generated lockfile was promoted;
+7. permanent CI passed;
+8. the temporary workflow was removed;
+9. permanent CI passed again on the cleanup head.
+
+No failed validation path caused production key creation or real-host mutation.
+
+SECURITY CONCLUSION
+
+Phase 121 converts the previously proven disposable-key signer behavior into a narrow production source boundary without turning PRW into a generic signing service.
+
+The key security properties are now enforced in code:
+- canonical bounded P-256 PKCS#8 v1 DER input;
+- no silent alternate private-key serialization acceptance;
+- canonical SPKI public identity derivation;
+- request-to-key public identity equality before signing;
+- request/challenge enrollment-id equality before signing;
+- canonical PRW proof message construction inside signer core;
+- typed ECDSA P-256/SHA-256 DER proof output;
+- no generic public sign(bytes) API;
+- no private-key export API;
+- no filesystem/systemd/networking behavior in signer core;
+- no signer/AWS-LC device-identity dependency reachability from the current Agent.
+
+The remaining production gap is custody acquisition and lifecycle integration, not cryptographic signing compatibility.
+
+PHASE 122 BOUNDARY
+
+Phase 122 may implement the Ubuntu custody adapter that reads the already-decrypted named credential from the systemd-provided $CREDENTIALS_DIRECTORY boundary and hands one bounded plaintext buffer to UbuntuEnrollmentSigner.
+
+Phase 122 must preserve the Phase 118 custody lock and must not yet provision a real long-lived production device identity unless a separate audited provisioning transaction explicitly authorizes it.
+
+At minimum Phase 122 must define/test:
+- exact credential environment/directory semantics;
+- exact credential filename/name binding from Phase 118;
+- fail-closed behavior for missing directory, missing credential, symlink/non-regular-file cases, wrong ownership/mode where observable, oversized content, read failure, and trailing/alternate content;
+- bounded read before signer parsing;
+- zeroization of the adapter-owned plaintext buffer after signer construction attempt;
+- no credential bytes in errors/logs/Debug;
+- no fallback to plaintext persistent key files;
+- no silent downgrade from the locked encrypted systemd credential provider;
+- no Agent/service integration until that adapter is independently validated.
+
+FINAL PHASE 121 STATE
+
+IMPLEMENTED_AND_VALIDATED
+
+READY_FOR_PHASE_122_CUSTODY_ADAPTER
+
+NO_PRODUCTION_PRIVATE_KEY_CREATED
+NO_SYSTEMD_CREDENTIAL_READER_IMPLEMENTED_YET
+NO_REAL_HOST_MUTATION
