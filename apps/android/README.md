@@ -1,20 +1,13 @@
 # PRW Android Application
 
-Android is an initial Private Remote Workspace client and mesh endpoint.
+Phase 145 establishes the first non-production native Android client foundation.
 
-Planned responsibilities:
+Architecture:
 
-- remote device list;
-- remote terminal;
-- remote file browser;
-- phone-to-PC upload;
-- PC-to-phone download;
-- transfer progress, pause, resume, and retry;
-- port-forward management;
-- enrollment;
-- private-network status;
-- optional private-DNS settings.
+- Kotlin + Jetpack Compose UI;
+- Android Keystore non-exportable P-256 identity custody;
+- ViewModel + StateFlow presentation model;
+- a narrow standalone Rust/JNI adapter under `native/`;
+- no production endpoint, production account, release signing, boot receiver, or hidden daemon.
 
-The Android application must not require Tailscale, Termius, or another separately installed remote-access product.
-
-No Android implementation is included in Phase 001.
+Build prerequisites are locked by `contracts/ANDROID_CLIENT_ARCHITECTURE_DECISION.md` and `contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md`.

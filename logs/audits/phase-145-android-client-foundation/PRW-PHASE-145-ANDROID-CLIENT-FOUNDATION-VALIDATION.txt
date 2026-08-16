@@ -1,0 +1,50 @@
+Private Remote Workspace
+Phase 145 — Android Client Foundation
+
+STATUS:
+PASS / NATIVE_KOTLIN_COMPOSE_SHELL / JNI_0_22_4 / CARGO_NDK_4_1_2 / ANDROID_KEYSTORE_NON_EXPORTABLE_P256_SOURCE_BOUNDARY / TYPED_SESSION_BOOTSTRAP / ARM64_X86_64_NATIVE_BUILD / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: ce0623ccf7bb0d907a09281e7ba218fc1286ec37
+Authoritative validation run: 31964893774
+Dependency/toolchain probe run: 31957645210
+Initial materialization run 31958285380 stopped before commit on one invalid Rust test byte escape.
+A01 run 31958480086 stopped before commit because jni 0.22.4 jboolean is Rust bool and the JNI signature verifier returned integer 0/1.
+A02 run 31958676432 stopped before native compilation because rustfmt was not installed for the exact Rust 1.97.1 toolchain.
+A03 run 31958962374 downloaded rustfmt+clippy successfully but stopped on an over-specific rustfmt version-string guard.
+A04 run 31959063075 passed toolchain/source/graph gates and reached real Clippy, which identified exactly two missing Result error-doc sections, one must_use candidate, and one missing_const_for_fn candidate in the Android adapter.
+A05 applied only those four lint findings and passed full native validation, then run 31959294810 stopped before Kotlin compilation because AGP 9.3 rejected a Provider instance in legacy JNI source-set wiring.
+A06 run 31959778666 replaced the Provider with the source-set directories API and again passed full native validation, then stopped during Kotlin DSL configuration because directories.add expects String rather than File.
+A07 uses the same directories API with the resolved absolute String path, retains explicit preBuild dependency on buildPrwNative, and does not enable the disallowProvider compatibility escape hatch.
+Authoritative native Cargo.lock SHA-256: 6cbdca07de7d87612bfa065d7ae3e77557fb831df595a63aac16374968cc35a7
+Native adapter source SHA-256: a70e0a36ef8b720a375ebf2c72ed9fbd56323a4b75a5aa2bfc8bec877231e233
+Android custody source SHA-256: 71d593fe3d279d98b500f2e310ca99424eb091839da94175bfd091416765f2f5
+Validated debug APK SHA-256: 3341d07518708ed903454558de912c2b6f50c458d9ea4f998ce437873ec2113c
+
+CONTRACT: contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+ANDROID: native Kotlin + Compose, minSdk29/compileSdk36/targetSdk36, AGP9.3.0/Gradle9.5/JDK17, Compose BOM 2026.06.00.
+NATIVE: standalone apps/android/native adapter, jni0.22.4 EnvUnowned entrypoints, Rust1.97.1, cargo-ndk4.1.2, NDK28.2.13676358, arm64-v8a+x86_64.
+CUSTODY: AndroidKeyStore P-256 signing aliases are separate for device and transport identity; StrongBox is requested with ordinary AndroidKeyStore fallback; only public SPKI is exported and PrivateKey.encoded must remain null. No plaintext/file private-key fallback exists.
+BOOTSTRAP: native adapter reuses Phase128 canonical session-auth message construction and existing device-signature verification. Kotlin reaches Connected only after typed canonical message construction, Keystore signing and native signature verification; no network endpoint is contacted.
+VALIDATION: native fmt/Clippy/tests passed; Android target cross-build passed for two ABIs; Kotlin unit tests/lint/debug APK passed; APK contains both native libraries; root Rust workspace fmt/Clippy/tests/build passed.
+PERMANENT CI: .github/workflows/android-validation.yml added with exact rustfmt+clippy component preparation.
+PRODUCTION BOUNDARY: no release signing/distribution, production account/device, production listener, STUN/ICE/TURN/relay activation, Agent restart/replacement, production credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.
+
+INTERIM CLASSIFICATION: PHASE_145_SOURCE_VALIDATED / MATERIALIZATION_PENDING_PERMANENT_ANDROID_CI_API_WRITE / NO_PRODUCTION_SIDE_EFFECT
+
+A08/A09/A10 materialization corrective:
+- A07 run 31960247020 passed native, Android unit/lint/APK, security-boundary, root-workspace, and report-generation gates; its final write step failed after broad `git add apps/android` exposed Cargo native target output.
+- A08 run 31961373173 reconstructed the exact validated A07 source but stopped before staging because it invoked report finalization without first regenerating the native Cargo.lock and APK hash prerequisites on the fresh runner.
+- A09 run 31963888967 restored those prerequisites and generated the exact native graph, then stopped because five originally separate A05 workflow steps were concatenated into one shell; the first `cd apps/android/native` therefore leaked into the next body.
+- A10 executes each unchanged A05 validation body in its own subshell rooted at `GITHUB_WORKSPACE`, preserving the original per-step working-directory semantics.
+- A10 retains the A08 non-semantic `**/target/` ignore rule and explicit validated-source staging allowlist.
+- No Android behavior, Rust/JNI behavior, security policy, endpoint, signing, deployment, authentication, database, or network behavior is broadened by the A08/A09/A10 materialization corrections.
+
+A10/A11 final materialization channel corrective:
+- A10 run 31964079969 passed exact toolchain preparation, source reconstruction, native graph, host native tests, arm64-v8a+x86_64 Android native cross-build, Android unit tests, lintDebug, debug APK assembly, security-boundary guards, root Rust workspace validation, report generation, generated-output ignore validation, and explicit staging allowlist validation.
+- A10 created local runner commit a94e8b9, but GitHub rejected only the remote push because the Actions App token was not permitted to create/update `.github/workflows/android-validation.yml` without workflow scope.
+- A11 reuses the exact successful A10 toolchain/source/validation/finalization bodies and asserts the native Cargo.lock SHA-256 remains 6cbdca07de7d87612bfa065d7ae3e77557fb831df595a63aac16374968cc35a7.
+- A11 stages only validated Android source plus this authoritative report. The generated permanent Android CI candidate is intentionally excluded from the Actions-authenticated commit and will be materialized separately through the connected GitHub contents API.
+- Phase 145 completion remains held until that permanent CI file is present on main and its validation run succeeds.
