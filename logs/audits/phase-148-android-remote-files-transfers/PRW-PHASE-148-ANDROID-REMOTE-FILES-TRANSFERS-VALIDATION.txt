@@ -2,13 +2,17 @@ Private Remote Workspace
 Phase 148 — Android Remote Files and Transfers
 
 STATUS:
-PASS / ANDROID_TYPED_REMOTE_FILE_BROWSER / RESUMABLE_UPLOAD_DOWNLOAD_UX / EXISTING_REMOTE_PATH_TRANSFER_AND_PRWC_AUTHORITIES_REUSED / ACKNOWLEDGED_PROGRESS_ONLY / NO_TERMINAL_AS_FILESYSTEM_API / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / NO_PRODUCTION_SIDE_EFFECT
+PASS / ANDROID_TYPED_REMOTE_FILE_BROWSER / RESUMABLE_UPLOAD_DOWNLOAD_UX / EXISTING_REMOTE_PATH_TRANSFER_AND_PRWC_AUTHORITIES_REUSED / ACKNOWLEDGED_PROGRESS_ONLY / NO_TERMINAL_AS_FILESYSTEM_API / ARM64_X86_64_NATIVE_PASS / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_PASS / PERMANENT_ANDROID_CI_PASS / NO_PRODUCTION_SIDE_EFFECT
 
 Repository: Gersi365/prw-executor-private
 Branch: main
 Date: 2026-08-16
 Validation source head: 1f91991dcac70ef3ae33996aac786e6b2cbfd835
 Authoritative validation run: 31972461283
+Materialized source commit: 8e68164c8ecf3c3b2db1ae9f438ffa0f929c562b
+Permanent-CI trigger commit: 59b590a4bea236622bffbeac85c6717387402cae
+Permanent Android validation run: 31973042685 — SUCCESS
+Root Rust validation run: 31973042668 — SUCCESS
 Native Cargo.lock SHA-256: d821bd3ca5d25a43e8781fe38762b273eb5eb2c3f5e1fd35ae917399d70fb006
 File Rust adapter SHA-256: 1f3352132688c52967ff288470f206388325d5e474bbeebc75c2559ca8978ca2
 RemoteFiles Kotlin SHA-256: 3b0f8a94bd956145aef0d6696cbc11dbcc427d2c6d4f9fc92aabef7405663976
@@ -23,9 +27,9 @@ BOUNDS: routed chunks/read requests are capped at the narrower Phase143 60000-by
 INTEGRITY: upload plan carries exact SHA-256; finalize completion is not claimed until authoritative success.
 FILESYSTEM API: no terminal/shell command path is used for browse/upload/download.
 DEPENDENCIES: no Android dependency added; native adds only internal prw-file-service and prw-file-transfer path dependencies.
+PERMANENT CI: materialized Phase 148 source was revalidated by .github/workflows/android-validation.yml after a semantics-neutral workflow trigger; native adapter fmt/Clippy/tests and Android unit/lint/debug APK validation passed.
+ROOT RUST: locked dependency graph, fmt, Clippy, tests, and build passed on the permanent-CI trigger head.
 PRODUCTION BOUNDARY: no production file endpoint, Android arbitrary-storage write, Agent filesystem dispatch, overwrite/delete/move/rename, release signing/distribution, listener/relay/TUN/TAP/route/firewall/NAT/router/DNS mutation, or Agent replacement/restart.
-
-INTERIM CLASSIFICATION: PHASE_148_FUNCTIONALLY_VALIDATED / MATERIALIZATION_PENDING / NO_PRODUCTION_SIDE_EFFECT / PERMANENT_ANDROID_CI_PENDING_AFTER_MATERIALIZATION
 
 A01 CORRECTIVE EVIDENCE:
 - Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
@@ -34,3 +38,5 @@ A01 CORRECTIVE EVIDENCE:
 - Kotlin compilation exposed exactly three Python-materialized newline literals in MainViewModel.kt: one disposable upload payload and two disposable download payload uses. Python had converted the intended Kotlin backslash-n escape into a physical newline inside the string literal.
 - A01 preserves the intended literal newline byte semantics by restoring only those three Kotlin backslash-n escapes after exact candidate reconstruction.
 - File/transfer protocol encoding, JNI exports, controller lifecycle semantics, acknowledged-progress authority, dependency selection, production boundaries, and Phase 148 scope remain unchanged.
+
+FINAL CLASSIFICATION: PHASE_148_FUNCTIONALLY_VALIDATED / MATERIALIZED_ON_MAIN / PERMANENT_ANDROID_CI_SUCCESS / ROOT_RUST_CI_SUCCESS / ANDROID_TYPED_REMOTE_FILE_BROWSER / RESUMABLE_UPLOAD_DOWNLOAD_UX / EXISTING_REMOTE_PATH_TRANSFER_AND_PRWC_AUTHORITIES_REUSED / ACKNOWLEDGED_PROGRESS_ONLY / NO_TERMINAL_AS_FILESYSTEM_API / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_149
