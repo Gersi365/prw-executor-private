@@ -1,0 +1,33 @@
+name: Phase 129 Control Transport Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-129-control-transport-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate control transport and reproducible lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-control-transport --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-control-transport --all-targets
+          echo "phase129_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+          echo 'phase129_lockfile_base64_begin'
+          base64 -w0 Cargo.lock
+          echo
+          echo 'phase129_lockfile_base64_end'
+          echo 'phase129_validation=pass'
