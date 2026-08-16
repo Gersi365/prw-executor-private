@@ -1,0 +1,176 @@
+Private Remote Workspace
+Phase 126-A01 — Provisioner and Public-Identity Attestation Implementation / Disposable Validation
+
+STATUS:
+PASS / PROVISIONER_IMPLEMENTED_AND_VALIDATED / PUBLIC_IDENTITY_ATTESTATION_IMPLEMENTED / DISPOSABLE_PROVISIONING_TO_RUNTIME_BINDING_PROVEN / ZERO_ARGUMENT_CLI_FAIL_CLOSED / LOCKFILE_PROMOTED / TEMPORARY_A01_WORKFLOW_REMOVED / PERMANENT_CI_PASS / NO_PRODUCTION_PRIVATE_KEY_CREATED / NO_PRODUCTION_CIPHERTEXT_INSTALLED / NO_PRODUCTION_DROPIN_INSTALLED / NO_PRODUCTION_AGENT_REPLACEMENT_OR_RESTART / READY_FOR_PROVISIONER_OUTPUT_HARDENING_AND_PRODUCTION_READ_ONLY_PREFLIGHT
+
+AUDIT TYPE: IMPLEMENTATION / SECURITY BOUNDARY / DISPOSABLE REAL-HOST VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 125 authoritative head: c01349f58fc9c1ff8ed237965ad3077f00308daf
+Phase 126-A00 contract: preactivation implementation contract already committed
+A01 clean implementation head before later A02 hardening: 35296746471b763698c5143a1dc4c1d0d430aa7c
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+PURPOSE
+
+A01 implemented the two prerequisites locked by Phase 126-A00 before any production key creation:
+1. a creation-only Ubuntu production device-identity provisioner;
+2. a non-secret Agent startup attestation that proves the exact canonical public identity loaded from the systemd-delivered credential.
+
+No production private key, persistent production ciphertext, persistent service drop-in, production Agent replacement, production service restart, enrollment, or public networking occurred in A01.
+
+IMPLEMENTED SOURCE
+
+A new workspace crate was added:
+`crates/prw-device-identity-provisioning`
+
+The provisioner is Linux-only and creation-only. It:
+- derives the fixed production ciphertext destination from validated XDG state;
+- derives the fixed production service drop-in destination from validated XDG config;
+- rejects pre-existing ciphertext/drop-in state before key generation;
+- generates ECDSA P-256 locally through the locked AWS-LC provider;
+- validates the generated PKCS#8 v1 DER through the production signer boundary;
+- computes SHA-256 over canonical X.509 SubjectPublicKeyInfo DER;
+- invokes `/usr/bin/systemd-creds` directly through `std::process::Command` rather than a shell;
+- uses the fixed logical credential name `prw.device-identity.private-key.v1`;
+- places private PKCS#8 bytes only into the child stdin pipe;
+- keeps PRW-owned plaintext bytes in zeroizing memory;
+- commits encrypted state with no-replace semantics;
+- exposes no existing-key import/export API;
+- performs no enrollment/networking.
+
+A narrow production binary was added:
+`prw-device-identity-provision`
+
+The CLI accepts zero user arguments only. A later A01 hardening commit made any argument fail closed before state mutation with:
+`prw-device-identity-provision event=failed kind=invalid_arguments exit=failure`
+
+The Agent startup boundary gained a public/non-secret attestation:
+`prw-agent event=device_identity_loaded public_spki_sha256=<64-lowercase-hex>`
+
+The attestation is emitted only after successful custody/signer loading and before the existing runtime lifecycle is entered.
+The fingerprint is SHA-256 over the exact canonical SPKI DER returned by the signer.
+The local IPC protocol remains version 1.0 and was not expanded solely for activation evidence.
+
+The attestation is on stdout/journal rather than the existing bounded stderr terminal/failure channel, preserving the historical exact-one-stderr binary contract.
+
+SIGNER EXTENSION
+
+`UbuntuEnrollmentSigner` gained:
+`public_identity_sha256() -> [u8; 32]`
+
+The signer/provider boundary computes the public fingerprint so the Agent does not add a direct production AWS-LC dependency for hashing.
+
+A01 VALIDATION HISTORY
+
+Temporary workflow:
+`.github/workflows/phase-126-a01-provisioning-attestation-validation.yml`
+
+Early runs stopped fail-safe before PowerCode mutation:
+- run 31937118115: rustfmt-only failure;
+- run 31937179134: Clippy `match_same_arms` failure in the fail-closed absence guard;
+- run 31937264347: Clippy `uninlined_format_args` failure in provisioner CLI diagnostics.
+
+Each corrective remained inside the new A01 implementation boundary and did not create production identity state.
+
+AUTHORITATIVE A01 PASS RUN
+
+Workflow run:
+`31937379979`
+
+Hosted validation/build job:
+`95141317497` — SUCCESS
+
+PowerCode disposable proof job:
+`95141565034` — SUCCESS
+
+Snapshot head validated:
+`3fbdbfe0e34ddd46dc7bdb7ed480acc6b27e5105`
+
+Candidate Cargo.lock SHA-256:
+`aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424`
+
+Hosted payload hashes:
+- candidate prw-agent: `4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e`
+- prw-device-identity-provision: `cdbe9a99b2265c95ad3fb7f563016b55eb6a873d0b2b83d8c1bdc5c32ca37a06`
+- status probe: `0b697088c938820246156f652c9159a1f8a4d8397427d1d6c0998036cf453fc6`
+- Cargo.lock: `aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424`
+
+A01 payload artifact:
+- artifact ID: 9261060257
+- ZIP SHA-256: `237dab8b7e47ade21fda91623043408b96d135e56f8da9593460f7acf3799b11`
+- retention one day; evidence only, not a production release artifact.
+
+POWERCODE DISPOSABLE BINDING PROOF
+
+Before disposable provisioning the real host re-proved:
+- installed production Agent SHA-256 `8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf`;
+- installed unit SHA-256 `24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909`;
+- production service active/enabled;
+- production local IPC Ready/protocol supported;
+- Linger=yes;
+- no production identity ciphertext/drop-in mutation.
+
+The production provisioner was then executed only against disposable XDG state/config roots under runner temporary storage.
+
+Disposable provisioning fingerprint from this run:
+`a4b7406e212ac871a9ede773146392099141988c490796d4367742ff7e3f44a4`
+
+This fingerprint identifies disposable test key material only. It is not the production PowerCode identity and must never be treated as such.
+
+The first disposable provisioning created encrypted ciphertext only.
+A second first-provisioning attempt failed and the existing ciphertext hash remained unchanged.
+
+A transient systemd user service then delivered that disposable encrypted credential to the exact identity-aware candidate Agent.
+The Agent reached Ready through real local IPC.
+The journal startup attestation fingerprint was exactly:
+`a4b7406e212ac871a9ede773146392099141988c490796d4367742ff7e3f44a4`
+
+Therefore:
+`provisioning public fingerprint == runtime loaded public fingerprint`
+
+The transient unit was stopped and disposable roots were cleaned.
+The production Agent/unit/service/linger/local Ready state were re-proved unchanged after the test.
+
+LOCKFILE PROMOTION
+
+The exact validated lockfile from the PASS artifact was promoted.
+Promotion commit:
+`093171a2be7d5bf602de065a1096492667a73903`
+
+Cargo.lock Git blob after promotion:
+`7a5298be690edd8177865979ed182a4c5b5f4d81`
+
+Permanent CI on the lock-promoted head:
+`31937551622` — SUCCESS
+
+ZERO-ARGUMENT HARDENING
+
+After the primary disposable PASS, commit:
+`94621e89590952ae271e84ee585a0172e1b01f37`
+
+added fail-closed rejection of any provisioner CLI argument before state mutation.
+Permanent CI:
+`31937559446` — SUCCESS
+
+TEMPORARY A01 WORKFLOW CLEANUP
+
+The temporary A01 workflow was removed.
+Cleanup commit:
+`35296746471b763698c5143a1dc4c1d0d430aa7c`
+
+Permanent cleanup-head CI:
+`31937636103` — SUCCESS
+
+A01 did not install a production key, ciphertext, drop-in, Agent executable, systemd state, enrollment state, or network state.
+
+SUBSEQUENT HARDENING NOTE
+
+After A01 closed, a real-host metadata probe observed direct `systemd-creds` output-file mode behavior and motivated a stricter Phase 126-A02/A03 ciphertext handoff/FD-validation design. Those later hardening phases supersede the initial A01 ciphertext-capture implementation detail while preserving A01's public-identity binding proof and creation-only security semantics.
+
+READY FOR:
+`PHASE_126_A02_A03_PROVISIONER_OUTPUT_HARDENING_THEN_PRODUCTION_READ_ONLY_PREFLIGHT`
