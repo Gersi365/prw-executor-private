@@ -1,9 +1,10 @@
-//! Typed Ubuntu device-identity enrollment signer for Private Remote Workspace.
+//! Typed Ubuntu device-identity signer for Private Remote Workspace.
 //!
 //! This crate deliberately exposes no generic signing API, private-key export API,
-//! systemd credential reader, filesystem access, enrollment approval, or networking.
-//! Callers provide one bounded canonical PKCS#8 v1 DER credential from the trusted
-//! custody boundary and can request only a typed enrollment proof-of-possession.
+//! systemd credential reader, filesystem access, enrollment approval, capability
+//! grant, or networking. Callers provide one bounded canonical PKCS#8 v1 DER
+//! credential from the trusted custody boundary and can request only explicitly
+//! typed enrollment or enrolled-device session-authentication proofs.
 
 use std::fmt;
 
@@ -14,18 +15,23 @@ use aws_lc_rs::{
     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair},
 };
 use prw_control_plane::{
-    DeviceIdentityAlgorithm, DeviceIdentityPublicKeyEncoding, DeviceIdentitySignature,
-    DeviceIdentitySignatureEncoding, EnrollmentRequest, PublicIdentityMaterial,
+    DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentityPublicKeyEncoding,
+    DeviceIdentitySignature, DeviceIdentitySignatureEncoding, EnrollmentRequest,
+    PublicIdentityMaterial,
     enrollment_pop::{
         EnrollmentProofChallenge, EnrollmentProofMessageError, EnrollmentProofOfPossession,
         encode_enrollment_proof_message,
+    },
+    session_auth::{
+        SessionAuthChallenge, SessionAuthMessageError, SessionAuthProof,
+        encode_session_auth_message,
     },
 };
 
 /// Maximum accepted plaintext Ubuntu device-identity PKCS#8 credential size.
 pub const MAX_UBUNTU_DEVICE_IDENTITY_PKCS8_BYTES: usize = 4096;
 
-/// Failure while loading or using the typed Ubuntu enrollment signer.
+/// Failure while loading or using the typed Ubuntu device-identity signer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum UbuntuEnrollmentSignerError {
@@ -37,10 +43,14 @@ pub enum UbuntuEnrollmentSignerError {
     PublicIdentityDerivationFailed,
     /// Enrollment request and challenge identifiers did not match exactly.
     EnrollmentMismatch,
-    /// The enrollment request declared a different public identity than the loaded signer.
+    /// The typed request/binding declared a different public identity than the loaded signer.
     PublicIdentityMismatch,
+    /// Session authentication was attempted from a non-enrolled binding.
+    SessionBindingNotEnrolled,
     /// Canonical enrollment proof message construction failed.
     MessageConstruction(EnrollmentProofMessageError),
+    /// Canonical session-authentication message construction failed.
+    SessionMessageConstruction(SessionAuthMessageError),
     /// The provider failed to create the P-256/SHA-256 signature.
     SigningFailed,
     /// The provider signature could not be represented as the locked typed signature profile.
@@ -61,12 +71,21 @@ impl fmt::Display for UbuntuEnrollmentSignerError {
             }
             Self::EnrollmentMismatch => formatter.write_str("enrollment challenge mismatch"),
             Self::PublicIdentityMismatch => {
-                formatter.write_str("enrollment public identity mismatch")
+                formatter.write_str("device identity public identity mismatch")
+            }
+            Self::SessionBindingNotEnrolled => {
+                formatter.write_str("session authentication binding is not enrolled")
             }
             Self::MessageConstruction(error) => {
                 write!(
                     formatter,
                     "enrollment proof message construction failed: {error}"
+                )
+            }
+            Self::SessionMessageConstruction(error) => {
+                write!(
+                    formatter,
+                    "session authentication message construction failed: {error}"
                 )
             }
             Self::SigningFailed => formatter.write_str("device identity signing failed"),
@@ -79,7 +98,7 @@ impl fmt::Display for UbuntuEnrollmentSignerError {
 
 impl std::error::Error for UbuntuEnrollmentSignerError {}
 
-/// Loaded Ubuntu device-identity signer restricted to typed enrollment `PoP` signing.
+/// Loaded Ubuntu device-identity signer restricted to typed PRW proofs.
 pub struct UbuntuEnrollmentSigner {
     key_pair: EcdsaKeyPair,
     public_identity: PublicIdentityMaterial,
@@ -185,21 +204,62 @@ impl UbuntuEnrollmentSigner {
 
         let message = encode_enrollment_proof_message(request, challenge.nonce())
             .map_err(UbuntuEnrollmentSignerError::MessageConstruction)?;
-        let signature = self
-            .key_pair
-            .sign(&SystemRandom::new(), &message)
-            .map_err(|_| UbuntuEnrollmentSignerError::SigningFailed)?;
-        let signature = DeviceIdentitySignature::new(
-            DeviceIdentityAlgorithm::EcdsaP256Sha256,
-            DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
-            signature.as_ref().to_vec(),
-        )
-        .map_err(|_| UbuntuEnrollmentSignerError::SignatureMaterialConstructionFailed)?;
+        let signature = self.sign_typed_message(&message)?;
 
         Ok(EnrollmentProofOfPossession::new(
             request.enrollment_id.clone(),
             challenge.nonce(),
             signature,
         ))
+    }
+
+    /// Signs exactly one typed enrolled-device session-authentication challenge.
+    ///
+    /// The binding must be enrolled and must declare exactly this signer's canonical
+    /// public identity. The session identifier and nonce come from the server challenge;
+    /// callers cannot supply arbitrary message bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UbuntuEnrollmentSignerError`] when lifecycle/public-identity binding
+    /// fails, canonical session-message construction fails, or provider signing/output
+    /// wrapping fails.
+    pub fn sign_session_auth_proof(
+        &self,
+        binding: &DeviceIdentityBinding,
+        challenge: &SessionAuthChallenge,
+    ) -> Result<SessionAuthProof, UbuntuEnrollmentSignerError> {
+        if !binding.lifecycle.can_participate() {
+            return Err(UbuntuEnrollmentSignerError::SessionBindingNotEnrolled);
+        }
+        if &binding.public_identity != self.public_identity() {
+            return Err(UbuntuEnrollmentSignerError::PublicIdentityMismatch);
+        }
+
+        let message = encode_session_auth_message(binding, challenge.session_id(), challenge.nonce())
+            .map_err(UbuntuEnrollmentSignerError::SessionMessageConstruction)?;
+        let signature = self.sign_typed_message(&message)?;
+
+        Ok(SessionAuthProof::new(
+            challenge.session_id().clone(),
+            challenge.nonce(),
+            signature,
+        ))
+    }
+
+    fn sign_typed_message(
+        &self,
+        message: &[u8],
+    ) -> Result<DeviceIdentitySignature, UbuntuEnrollmentSignerError> {
+        let signature = self
+            .key_pair
+            .sign(&SystemRandom::new(), message)
+            .map_err(|_| UbuntuEnrollmentSignerError::SigningFailed)?;
+        DeviceIdentitySignature::new(
+            DeviceIdentityAlgorithm::EcdsaP256Sha256,
+            DeviceIdentitySignatureEncoding::EcdsaSigValueDer,
+            signature.as_ref().to_vec(),
+        )
+        .map_err(|_| UbuntuEnrollmentSignerError::SignatureMaterialConstructionFailed)
     }
 }
