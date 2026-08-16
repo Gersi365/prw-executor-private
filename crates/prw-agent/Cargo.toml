@@ -13,5 +13,8 @@ prw-policy = { path = "../prw-policy" }
 rustix = { version = "=1.1.4", default-features = false, features = ["std", "event", "fs", "net", "process"] }
 nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
 
+[dev-dependencies]
+aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
+
 [lints]
 workspace = true
