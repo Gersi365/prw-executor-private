@@ -334,7 +334,9 @@ impl fmt::Display for ControlTransportError {
             Self::TlsConfiguration => "control transport TLS configuration failed",
             Self::TcpConnect => "control transport TCP connect failed",
             Self::SocketConfiguration => "control transport socket configuration failed",
-            Self::TlsConnectionConstruction => "control transport TLS connection construction failed",
+            Self::TlsConnectionConstruction => {
+                "control transport TLS connection construction failed"
+            }
             Self::TlsHandshake => "control transport TLS handshake failed",
             Self::WrongTlsVersion => "control transport negotiated wrong TLS version",
             Self::WrongAlpn => "control transport negotiated wrong ALPN",
@@ -419,8 +421,9 @@ impl ControlTlsClientConfig {
             .set_nodelay(true)
             .map_err(|_| ControlTransportError::SocketConfiguration)?;
 
-        let mut connection = ClientConnection::new(self.tls_config.clone(), self.server_name.clone())
-            .map_err(|_| ControlTransportError::TlsConnectionConstruction)?;
+        let mut connection =
+            ClientConnection::new(self.tls_config.clone(), self.server_name.clone())
+                .map_err(|_| ControlTransportError::TlsConnectionConstruction)?;
         while connection.is_handshaking() {
             connection
                 .complete_io(&mut socket)
@@ -511,7 +514,10 @@ mod tests {
         assert_eq!(&bytes[0..4], &CONTROL_FRAME_MAGIC);
         assert_eq!(&bytes[4..6], &CONTROL_PROTOCOL_MAJOR.to_be_bytes());
         assert_eq!(&bytes[6..8], &CONTROL_PROTOCOL_MINOR.to_be_bytes());
-        assert_eq!(&bytes[8..10], &(ControlMessageKind::Heartbeat as u16).to_be_bytes());
+        assert_eq!(
+            &bytes[8..10],
+            &(ControlMessageKind::Heartbeat as u16).to_be_bytes()
+        );
         assert_eq!(&bytes[10..12], &[0, 0]);
         assert_eq!(&bytes[12..20], &0x0102_0304_0506_0708_u64.to_be_bytes());
         assert_eq!(&bytes[20..24], &[0, 0, 0, 0]);
