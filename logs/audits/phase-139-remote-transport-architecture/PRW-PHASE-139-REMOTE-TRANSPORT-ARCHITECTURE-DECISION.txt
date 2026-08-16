@@ -1,0 +1,67 @@
+Private Remote Workspace
+Phase 139 — Remote Transport Standards and Dependency Architecture Decision
+
+STATUS:
+PASS / ARCHITECTURE_APPROVED_AND_LOCKED / QUIC_V1_TLS13_MTLS_SELECTED / EXACT_PHASE140_RUNTIME_DEPENDENCIES_PROBED / ICE_STUN_TURN_STANDARDS_LOCKED / CONTROL_DATA_PLANE_SEPARATION_PRESERVED / NO_PRODUCTION_NETWORK_MUTATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Phase 138 baseline: 30186e700aeb1be9a482038f3ed5ba4845f9234e
+Dependency-probe workflow input head: d69a7211eb9650f48885af1d45f9bfeda5b55334
+Authoritative dependency probe run: 31949211214
+Authoritative dependency probe job: 95169943036
+Scratch dependency lock SHA-256: b1a4be15f6036967971334f8ac7536c0a987e10aff0f38bdc49ca8286743c332
+
+USER ARCHITECTURE APPROVAL
+The user explicitly approved Phase 139 and the remote-transport architecture decision before this lock was materialized.
+
+AUTHORITATIVE CONTRACT
+contracts/REMOTE_TRANSPORT_ARCHITECTURE_DECISION.md
+
+REPOSITORY BASELINE
+The existing Phase 129 control-plane crate already pins rustls 0.23.43 with AWS-LC and implements outbound TCP/TLS 1.3 with ALPN prw-control/1. Phase 135 already separates TransportIdentity from DeviceId and models LocalDirect, InternetDirect, Relay and Offline paths. Phase 136 requires relay payload opacity. Phase 137 keeps private DNS optional and basic connectivity DNS-independent.
+
+PRIMARY-SOURCE REVIEW
+Phase 139 reviewed current upstream specifications/documentation before selecting the stack. QUIC v1 and QUIC-TLS are standardized by RFC 9000/RFC 9001. The current Quinn 0.11.11 feature model provides runtime-tokio and rustls-aws-lc-rs while its default feature set would also enable platform-verifier/rustls-ring/bloom, so PRW explicitly disables default features. Quinn's current 0.11 line does not provide the required initial QUIC-v2 compatibility lock, so PRW starts with QUIC v1. rustls 0.23.43 is the current pinned PRW line and contains QUIC-related fixes; Tokio 1.53.1 is the selected async runtime version. ICE RFC 8445, STUN RFC 8489 and TURN RFC 8656 are locked as the Phase 141 traversal standards, while their exact Rust implementation dependency remains separately gated for current-library validation.
+
+DEPENDENCY PROBE
+A scratch crate outside the repository Cargo graph used Rust/Cargo 1.97.1 with exactly:
+- quinn = 0.11.11, default features disabled, runtime-tokio + rustls-aws-lc-rs;
+- rustls = 0.23.43, default features disabled, std + aws_lc_rs;
+- tokio = 1.53.1, default features disabled, rt + macros + net + time + sync + io-util.
+
+The run generated a scratch lockfile, asserted the exact direct package versions from Cargo metadata and completed cargo check --locked --all-targets. It then re-proved that the repository worktree had not been mutated. Result: PASS.
+
+ARCHITECTURE OUTCOME
+The existing Phase 129 control plane remains TCP/TLS 1.3 and is not repurposed as the mesh data plane. The new data plane is QUIC v1 over UDP with TLS 1.3, mutual TLS, ALPN prw-mesh/1, explicit PRW private trust roots and reliable QUIC streams. No plaintext fallback, custom dangerous verifier, public/OS trust fallback, 0-RTT, initial resumption, application QUIC DATAGRAM or initial active-migration policy is allowed.
+
+IDENTITY OUTCOME
+DeviceId, the Phase 126 device-identity key and the mesh TransportIdentity remain separate. The transport key is a separate locally generated ECDSA P-256 key. TransportIdentity is SHA-256 of the canonical leaf SPKI DER. Transport certificates are short-lived PRW-private-CA X.509 leaves with clientAuth/serverAuth usage. The Phase 126 identity authorizes issuance/renewal but is not reused as the TLS key.
+
+PEER-NAME OUTCOME
+The TLS SAN/SNI identity derives deterministically from the full TransportIdentity as t-<first32hex>.<last32hex>.mesh.prw.invalid. This name is certificate identity only and is never DNS-resolved for endpoint discovery; the selected candidate provides an explicit IP/UDP endpoint. Standard rustls/WebPKI verification remains in force.
+
+CERTIFICATE LIFECYCLE OUTCOME
+Initial leaf maximum validity is 30 days; renewal begins with 10 days or less remaining. Registry revocation overrides certificate expiry state. Transport-CA signing keys never live on the Agent/client. Transport-key rotation creates a new TransportIdentity and requires registry transition/revocation handling.
+
+FRAMING OUTCOME
+The reserved mesh control stream uses a bounded 24-byte PRWM v1.0 envelope with non-zero request IDs and maximum 65,536-byte control payloads. Initial kinds are session-auth, request, response, event, heartbeat and error. Malformed/unknown-major/oversize/truncated frames fail closed. Bulk file/terminal/forwarding stream schemas remain deferred to Phase 143.
+
+CONNECTION ROLE AND LIMITS
+For a selected peer path, the lexicographically smaller 32-byte TransportIdentity is the deterministic QUIC connection initiator. Initial validation limits include at most 32 remotely initiated bidirectional streams and 16 remotely initiated unidirectional streams, plus finite handshake/idle/read/write/cancellation bounds chosen and tested by Phase 140.
+
+NAT/RELAY OUTCOME
+Phase 141 will use ICE/STUN/TURN-standard candidate mechanics and signal candidates through the authenticated control plane. TURN/relay carries end-to-end QUIC packets rather than terminating mesh TLS; this preserves the Phase 136 opaque-relay boundary. Optional private DNS remains outside path discovery.
+
+AUTHORIZATION OUTCOME
+Mesh mTLS authenticates only transport identity. Application capabilities still require registry-current device mapping, authenticated application-session proof, current workspace membership and capability-specific policy. QUIC/TLS success never grants file, terminal or forwarding access by itself.
+
+PRODUCTION BOUNDARY
+No production UDP listener, public/LAN endpoint, TUN/TAP device, firewall/NAT/router/route change, production ICE/STUN/TURN traffic, relay deployment, production transport key/certificate, resolver change, Agent replacement/restart or client signing/distribution occurred. Phase 154 remains the explicit production remote-network activation gate.
+
+CLEANUP
+The disposable Phase 139 dependency-probe workflow was removed after its successful run. No temporary Phase 139 workflow is intended to remain after this decision lock.
+
+FINAL CLASSIFICATION
+PHASE_139_DONE / REMOTE_TRANSPORT_ARCHITECTURE_LOCKED / EXACT_PHASE140_DEPENDENCIES_COMPATIBLE_WITH_RUST_1_97_1 / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_140_DISPOSABLE_ENCRYPTED_TRANSPORT_IMPLEMENTATION
