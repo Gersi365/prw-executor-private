@@ -8,6 +8,7 @@ members = [
     "crates/prw-control-plane",
     "crates/prw-device-identity",
     "crates/prw-device-identity-signer",
+    "crates/prw-device-identity-custody",
     "crates/prw-agent",
 ]
 
