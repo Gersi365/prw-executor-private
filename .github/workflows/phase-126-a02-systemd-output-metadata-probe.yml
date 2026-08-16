@@ -1,0 +1,62 @@
+name: Phase 126 A02 systemd-creds Output Metadata Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-126-a02-systemd-output-metadata-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe-powercode:
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Probe direct systemd-creds destination metadata without production mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/prw-phase126-a02-${GITHUB_RUN_ID}"
+          target="$root/direct-target.cred"
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+          production_unit='/usr/lib/systemd/user/prw-agent.service'
+          production_socket="$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock"
+          expected_agent='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          expected_unit='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+
+          cleanup() { rm -rf -- "$root"; }
+          trap cleanup EXIT INT TERM
+
+          test "$(hostname)" = PowerCode
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = active
+          test "$(systemctl --user is-enabled prw-agent.service)" = enabled
+          test "$(loginctl show-user "$USER" -p Linger --value)" = yes
+          test -S "$production_socket"
+          echo 'phase126_a02_production_preflight=pass'
+
+          install -d -m 0700 "$root"
+          printf 'phase126-a02-disposable-non-key-input\n' |
+            /usr/bin/systemd-creds --user encrypt \
+              --name=prw.device-identity.private-key.v1 - "$target" \
+              >/dev/null 2>/dev/null
+
+          test -f "$target"
+          test ! -L "$target"
+          stat -c 'phase126_a02_direct_output uid=%u gid=%g mode=%a size=%s' "$target"
+          test "$(stat -c '%u' "$target")" = "$(id -u)"
+          test "$(stat -c '%g' "$target")" = "$(id -g)"
+          test "$(stat -c '%s' "$target")" -gt 0
+          echo 'phase126_a02_direct_output_probe=pass'
+
+          rm -f -- "$target"
+          test ! -e "$target"
+          test "$(sha256sum "$production_agent" | cut -d' ' -f1)" = "$expected_agent"
+          test "$(sha256sum "$production_unit" | cut -d' ' -f1)" = "$expected_unit"
+          test "$(systemctl --user is-active prw-agent.service)" = active
+          test "$(systemctl --user is-enabled prw-agent.service)" = enabled
+          test "$(loginctl show-user "$USER" -p Linger --value)" = yes
+          test -S "$production_socket"
+          echo 'phase126_a02_production_unchanged=pass'
