@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+aws-lc-rs = { version = "=1.18.0", features = ["non-fips"] }
 prw-core = { path = "../prw-core" }
 
 [lints]
