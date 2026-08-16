@@ -1,0 +1,340 @@
+name: Phase 145 A05 Android Adapter Clippy Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-145-a05-clippy-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  correct-validate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A05 baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md
+          test -f .github/workflows/phase-145-a04-rust-component-guard-corrective.yml
+          grep -Fq 'Reuse A03 native host and Android target validation' .github/workflows/phase-145-a04-rust-component-guard-corrective.yml
+          echo phase145_a05_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 fmt --version
+          cargo +1.97.1 clippy --version
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+          cargo +1.97.1 ndk --version | grep -Fq 'cargo-ndk 4.1.2'
+          echo phase145_a05_toolchain=pass
+
+      - name: Reuse authoritative A04 source construction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/phase-145-a04-rust-component-guard-corrective.yml').read_text()
+          start = source.index('      - name: Reuse A03 source construction\n')
+          body_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Reuse A03 native graph validation\n', body_start)
+          lines = source[body_start:end].splitlines()
+          Path('/tmp/phase145-a05-source.sh').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          bash /tmp/phase145-a05-source.sh
+          test -f apps/android/native/src/lib.rs
+          grep -Fq 'Ok(verify_session_signature(&input, &signature))' apps/android/native/src/lib.rs
+          echo phase145_a05_source=pass
+
+      - name: Apply exact A05 Clippy correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/android/native/src/lib.rs')
+          text = path.read_text()
+
+          old = '''pub fn round_trip_control_frame(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {'''
+          new = '''/// Decodes and re-encodes one bounded PRWM control frame using the existing transport codec.
+          ///
+          /// # Errors
+          ///
+          /// Returns [`AndroidAdapterError::InvalidControlFrame`] when `input` is not a valid
+          /// bounded PRWM control frame.
+          pub fn round_trip_control_frame(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {'''
+          if text.count(old) != 1:
+              raise SystemExit('round_trip_control_frame doc boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''pub fn canonical_session_message(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {'''
+          new = '''/// Builds the canonical typed PRW session-authentication message for one bootstrap request.
+          ///
+          /// # Errors
+          ///
+          /// Returns a bounded [`AndroidAdapterError`] when the bootstrap request, identifiers,
+          /// public identity, or existing session-authentication encoding is invalid.
+          pub fn canonical_session_message(input: &[u8]) -> Result<Vec<u8>, AndroidAdapterError> {'''
+          if text.count(old) != 1:
+              raise SystemExit('canonical_session_message doc boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''pub fn verify_session_signature(input: &[u8], signature: &[u8]) -> bool {'''
+          new = '''#[must_use]
+          pub fn verify_session_signature(input: &[u8], signature: &[u8]) -> bool {'''
+          if text.count(old) != 1:
+              raise SystemExit('verify_session_signature must_use boundary mismatch')
+          text = text.replace(old, new)
+
+          old = '''pub extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion<'caller>('''
+          new = '''pub const extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion<'caller>('''
+          if text.count(old) != 1:
+              raise SystemExit('protocolVersion const boundary mismatch')
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+          grep -Fq '# Errors' apps/android/native/src/lib.rs
+          grep -Fq '#[must_use]' apps/android/native/src/lib.rs
+          grep -Fq 'pub const extern "system" fn Java_com_privateworkspace_prw_NativeBridge_protocolVersion' apps/android/native/src/lib.rs
+          echo phase145_a05_clippy_correctives=pass
+
+      - name: Generate exact native graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 metadata --locked --format-version 1 > "$RUNNER_TEMP/phase145-a05-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          data = json.load(open(os.environ['RUNNER_TEMP'] + '/phase145-a05-metadata.json'))
+          root = next(p for p in data['packages'] if p['name'] == 'prw-android-adapter')
+          direct = {d['name']: d['req'] for d in root['dependencies']}
+          expected = {
+              'aws-lc-rs': '=1.18.0',
+              'jni': '=0.22.4',
+              'prw-control-plane': '*',
+              'prw-core': '*',
+              'prw-device-identity': '*',
+              'prw-device-identity-signer': '*',
+              'prw-remote-transport': '*',
+          }
+          if direct != expected:
+              raise SystemExit(f'Phase145 A05 graph mismatch: {direct!r}')
+          if next(p for p in data['packages'] if p['name'] == 'jni')['version'] != '0.22.4':
+              raise SystemExit('jni version mismatch')
+          print('phase145_a05_native_graph=pass')
+          PY
+          echo "phase145_a05_native_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+
+      - name: Validate native adapter host and Android targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+          if grep -R --line-number -E 'unsafe[[:space:]]*\{|unsafe[[:space:]]+fn' src; then
+            echo phase145_a05_unexpected_unsafe_block_or_fn >&2
+            exit 1
+          fi
+          if grep -R --line-number 'JNIEnv' src; then
+            echo phase145_a05_deprecated_jnienv_detected >&2
+            exit 1
+          fi
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo +1.97.1 ndk --platform 29 -t arm64-v8a -t x86_64 -o "$RUNNER_TEMP/phase145-a05-native-libs" build --locked --release
+          test -s "$RUNNER_TEMP/phase145-a05-native-libs/arm64-v8a/libprw_android_adapter.so"
+          test -s "$RUNNER_TEMP/phase145-a05-native-libs/x86_64/libprw_android_adapter.so"
+          echo phase145_a05_native_validation=pass
+
+      - name: Validate Android unit tests lint and APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -l "$apk" > "$RUNNER_TEMP/phase145-a05-apk-list.txt"
+          grep -Fq 'lib/arm64-v8a/libprw_android_adapter.so' "$RUNNER_TEMP/phase145-a05-apk-list.txt"
+          grep -Fq 'lib/x86_64/libprw_android_adapter.so' "$RUNNER_TEMP/phase145-a05-apk-list.txt"
+          sha256sum "$apk" | cut -d' ' -f1 > "$RUNNER_TEMP/phase145-a05-apk-sha.txt"
+          echo phase145_a05_android_validation=pass
+
+      - name: Prove Android security boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          manifest=apps/android/app/src/main/AndroidManifest.xml
+          ! grep -Fq 'RECEIVE_BOOT_COMPLETED' "$manifest"
+          ! grep -Eq '<(service|receiver|provider)' "$manifest"
+          ! grep -R -E 'https?://|wss?://' apps/android/app/src/main/kotlin apps/android/native/src
+          ! grep -R -E 'BEGIN (EC |RSA |)PRIVATE KEY|PrivateKeyDer' apps/android/app/src/main/kotlin apps/android/native/src
+          grep -Fq 'AndroidKeyStore' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'setIsStrongBoxBacked(true)' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'privateKey.encoded == null' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'prw.device-identity.v1' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'prw.transport-identity.v1' apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt
+          grep -Fq 'MAX_PUBLIC_SPKI_BYTES = 256' apps/android/app/src/main/kotlin/com/privateworkspace/prw/BootstrapRequest.kt
+          echo phase145_a05_security=pass
+
+      - name: Revalidate root Rust workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo phase145_a05_root_workspace=pass
+
+      - name: Materialize permanent Android CI and authoritative report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > .github/workflows/android-validation.yml <<'EOF'
+          name: PRW Android Validation
+
+          on:
+            push:
+              paths:
+                - 'apps/android/**'
+                - 'crates/**'
+                - 'Cargo.toml'
+                - 'Cargo.lock'
+                - 'rust-toolchain.toml'
+                - '.github/workflows/android-validation.yml'
+            pull_request:
+              paths:
+                - 'apps/android/**'
+                - 'crates/**'
+                - 'Cargo.toml'
+                - 'Cargo.lock'
+                - 'rust-toolchain.toml'
+                - '.github/workflows/android-validation.yml'
+
+          permissions:
+            contents: read
+
+          jobs:
+            validate:
+              runs-on: ubuntu-24.04
+              timeout-minutes: 60
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-java@v4
+                  with:
+                    distribution: temurin
+                    java-version: '17'
+                - uses: gradle/actions/setup-gradle@v4
+                  with:
+                    gradle-version: '9.5.0'
+                - name: Prepare exact Android and Rust toolchains
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+                    test -x "$sdkmanager_bin"
+                    yes | "$sdkmanager_bin" --licenses >/dev/null || true
+                    "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+                    rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+                    rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+                    cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+                - name: Validate native adapter
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    cd apps/android/native
+                    cargo +1.97.1 fmt --all -- --check
+                    cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+                    cargo +1.97.1 test --locked --all-targets
+                - name: Validate Android application
+                  shell: bash
+                  run: |
+                    set -Eeuo pipefail
+                    cd apps/android
+                    gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+                    test -s app/build/outputs/apk/debug/app-debug.apk
+          EOF
+
+          report_dir=logs/audits/phase-145-android-client-foundation
+          report="$report_dir/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          native_lock_sha=$(sha256sum apps/android/native/Cargo.lock | cut -d' ' -f1)
+          native_src_sha=$(sha256sum apps/android/native/src/lib.rs | cut -d' ' -f1)
+          custody_sha=$(sha256sum apps/android/app/src/main/kotlin/com/privateworkspace/prw/AndroidKeyCustody.kt | cut -d' ' -f1)
+          apk_sha=$(cat "$RUNNER_TEMP/phase145-a05-apk-sha.txt")
+          printf '%s\n' \
+            'Private Remote Workspace' \
+            'Phase 145 — Android Client Foundation' \
+            '' \
+            'STATUS:' \
+            'PASS / NATIVE_KOTLIN_COMPOSE_SHELL / JNI_0_22_4 / CARGO_NDK_4_1_2 / ANDROID_KEYSTORE_NON_EXPORTABLE_P256_SOURCE_BOUNDARY / TYPED_SESSION_BOOTSTRAP / ARM64_X86_64_NATIVE_BUILD / ANDROID_UNIT_LINT_APK_PASS / ROOT_RUST_WORKSPACE_PASS / NO_PRODUCTION_SIDE_EFFECT' \
+            '' \
+            'Repository: Gersi365/prw-executor-private' \
+            'Branch: main' \
+            'Date: 2026-08-16' \
+            "Validation source head: $GITHUB_SHA" \
+            "Authoritative validation run: $GITHUB_RUN_ID" \
+            'Dependency/toolchain probe run: 31957645210' \
+            'Initial materialization run 31958285380 stopped before commit on one invalid Rust test byte escape.' \
+            'A01 run 31958480086 stopped before commit because jni 0.22.4 jboolean is Rust bool and the JNI signature verifier returned integer 0/1.' \
+            'A02 run 31958676432 stopped before native compilation because rustfmt was not installed for the exact Rust 1.97.1 toolchain.' \
+            'A03 run 31958962374 downloaded rustfmt+clippy successfully but stopped on an over-specific rustfmt version-string guard.' \
+            'A04 run 31959063075 passed toolchain/source/graph gates and reached real Clippy, which identified exactly two missing Result error-doc sections, one must_use candidate, and one missing_const_for_fn candidate in the Android adapter.' \
+            'A05 applies only those four lint findings, keeps -D warnings unchanged, and repeats every substantive gate.' \
+            "Authoritative native Cargo.lock SHA-256: $native_lock_sha" \
+            "Native adapter source SHA-256: $native_src_sha" \
+            "Android custody source SHA-256: $custody_sha" \
+            "Validated debug APK SHA-256: $apk_sha" \
+            '' \
+            'CONTRACT: contracts/ANDROID_CLIENT_FOUNDATION_CONTRACT.md' \
+            'ANDROID: native Kotlin + Compose, minSdk29/compileSdk36/targetSdk36, AGP9.3.0/Gradle9.5/JDK17, Compose BOM 2026.06.00.' \
+            'NATIVE: standalone apps/android/native adapter, jni0.22.4 EnvUnowned entrypoints, Rust1.97.1, cargo-ndk4.1.2, NDK28.2.13676358, arm64-v8a+x86_64.' \
+            'CUSTODY: AndroidKeyStore P-256 signing aliases are separate for device and transport identity; StrongBox is requested with ordinary AndroidKeyStore fallback; only public SPKI is exported and PrivateKey.encoded must remain null. No plaintext/file private-key fallback exists.' \
+            'BOOTSTRAP: native adapter reuses Phase128 canonical session-auth message construction and existing device-signature verification. Kotlin reaches Connected only after typed canonical message construction, Keystore signing and native signature verification; no network endpoint is contacted.' \
+            'VALIDATION: native fmt/Clippy/tests passed; Android target cross-build passed for two ABIs; Kotlin unit tests/lint/debug APK passed; APK contains both native libraries; root Rust workspace fmt/Clippy/tests/build passed.' \
+            'PERMANENT CI: .github/workflows/android-validation.yml added with exact rustfmt+clippy component preparation.' \
+            'PRODUCTION BOUNDARY: no release signing/distribution, production account/device, production listener, STUN/ICE/TURN/relay activation, Agent restart/replacement, production credential, firewall/NAT/router/TUN/TAP/route/DNS mutation.' \
+            '' \
+            'FINAL CLASSIFICATION: PHASE_145_DONE / ANDROID_SHELL_AND_KEY_CUSTODY_VALIDATED / JNI_0_22_4_CARGO_NDK_4_1_2 / NON_EXPORTABLE_KEYSTORE_P256_SOURCE_BOUNDARY / AUTHENTICATED_BOOTSTRAP_FOUNDATION_VALIDATED / PERMANENT_ANDROID_CI / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_146' \
+            > "$report"
+          echo phase145_a05_finalize=pass
+
+      - name: Commit only validated Phase 145 state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check -- . ':!apps/android/**/build'
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add apps/android .github/workflows/android-validation.yml logs/audits/phase-145-android-client-foundation/PRW-PHASE-145-ANDROID-CLIENT-FOUNDATION-VALIDATION.txt
+          git commit -m 'phase 145: validate Android client foundation'
+          git push origin HEAD:main
+          echo phase145_a05_materialization=pass
