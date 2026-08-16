@@ -1,4 +1,4 @@
-name: Phase 130 A01 Registry Validation
+name: Phase 130 A02 Registry Validation
 
 on:
   push:
@@ -57,20 +57,27 @@ jobs:
           elif new not in text:
               raise SystemExit('device corrective shape mismatch')
 
-          old = '''            workspace.clone(),\n            user.clone(),\n            "device-1",\n            DeviceLifecycle::Enrolled,'''
-          new = '''            workspace,\n            user,\n            "device-1",\n            DeviceLifecycle::Enrolled,'''
-          if old in text:
-              if text.count(old) != 1:
-                  raise SystemExit('test clone corrective count mismatch')
-              text = text.replace(old, new)
-          elif new not in text:
-              raise SystemExit('test clone corrected form missing')
-
           source.write_text(text)
           PY
           cargo fmt --all
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --check
+
+      - name: Apply machine-applicable registry test lints only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --fix --locked -p prw-registry --all-targets --all-features \
+            --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.toml|Cargo.lock|crates/prw-registry/src/lib.rs) ;;
+              *) echo "unexpected_phase130_fix_path=$path" >&2; exit 1 ;;
+            esac
+          done
           git diff --check
 
       - name: Focused registry validation
@@ -80,7 +87,7 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --locked -p prw-registry --all-targets --all-features -- -D warnings
           cargo test --locked -p prw-registry --all-targets
-          echo 'phase130_a01_focused=pass'
+          echo 'phase130_a02_focused=pass'
 
       - name: Full workspace validation
         id: workspace
@@ -92,7 +99,7 @@ jobs:
           cargo build --locked --workspace --all-targets
           lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
           echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
-          echo "phase130_a01_workspace=pass lock_sha=$lock_sha"
+          echo "phase130_a02_workspace=pass lock_sha=$lock_sha"
 
       - name: Record authoritative Phase 130 report
         shell: bash
@@ -127,7 +134,7 @@ jobs:
           Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities. Insertions use occupied/vacant entry handling rather than post-insert panic assumptions.
 
           VALIDATION
-          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 reached source and exposed only two post-insert panic lint sites plus two redundant test clones; this run corrected those without weakening registry semantics.
+          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. Original run 31941931216 failed only at an obsolete Phase 129 prerequisite. Run 31944030006 exposed two post-insert panic lint sites and two redundant test clones. The corrective run replaced panic assumptions with HashMap Entry insertion and used bounded Clippy test-only correction.
 
           PRODUCTION BOUNDARY
           No production registry was populated. No database, account authentication, capability grant, PowerCode runtime state, or network state was mutated.
@@ -148,4 +155,4 @@ jobs:
             logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
           git commit -m 'phase 130: validate registry and workspace membership'
           git push origin HEAD:main
-          echo 'phase130_a01_materialization=pass'
+          echo 'phase130_a02_materialization=pass'
