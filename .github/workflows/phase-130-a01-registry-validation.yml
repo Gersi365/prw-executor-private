@@ -1,0 +1,116 @@
+name: Phase 130 A01 Registry Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-130-a01-registry-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require current Phase 129 authority and register Phase 130 crate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f logs/audits/phase-129-control-transport/PRW-PHASE-129-A05-RESIDUAL-CLEANUP.txt
+          grep -Fq 'STATUS: PASS / RESIDUAL_CLIPPY_AND_TEST_LINT_DEBT_CLOSED' \
+            logs/audits/phase-129-control-transport/PRW-PHASE-129-A05-RESIDUAL-CLEANUP.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text()
+          member = '    "crates/prw-registry",\n'
+          if member not in text:
+              needle = '    "crates/prw-session",\n'
+              if text.count(needle) != 1:
+                  raise SystemExit('registry workspace insertion point mismatch')
+              cargo.write_text(text.replace(needle, needle + member))
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --check
+
+      - name: Focused registry validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-registry --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-registry --all-targets
+          echo 'phase130_a01_focused=pass'
+
+      - name: Full workspace validation
+        id: workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase130_a01_workspace=pass lock_sha=$lock_sha"
+
+      - name: Record authoritative Phase 130 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.workspace.outputs.lock_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-130-device-registry-workspace-membership'
+          report="$report_dir/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 130 — Device Registry and Workspace Membership Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / BOUNDED_REGISTRY_IMPLEMENTED / CURRENT_STATE_REVALIDATION_PASS / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REGISTRY_NOT_POPULATED
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation source head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+
+          CONTRACT
+          contracts/DEVICE_REGISTRY_WORKSPACE_MEMBERSHIP_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-registry
+
+          SECURITY OUTCOME
+          Exact workspace/user membership and DeviceId uniqueness are bounded and fail closed. Membership removal and device revocation invalidate later registry revalidation. Authenticated device sessions are revalidated against current membership/device state before producing a RegistryValidatedPrincipal. Role metadata does not itself grant file, terminal, forwarding, or policy capabilities.
+
+          VALIDATION
+          The authoritative run passed focused prw-registry rustfmt, Clippy -D warnings and all-target tests, then full workspace/all-target Clippy, tests and build under the locked graph. The original Phase 130 run 31941931216 failed only at an obsolete Phase 129 audit-path prerequisite before any registry validation ran; this run revalidated against the current authoritative Phase 129 A05 evidence.
+
+          PRODUCTION BOUNDARY
+          No production registry was populated. No database, account authentication, capability grant, PowerCode runtime state, or network state was mutated.
+
+          FINAL CLASSIFICATION
+          PHASE_130_DONE / NO_PRODUCTION_REGISTRY_SIDE_EFFECT / REGISTRY_CURRENT_STATE_REVALIDATION_READY
+          EOF
+
+      - name: Commit validated source graph and report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.toml Cargo.lock \
+            crates/prw-registry/src/lib.rs \
+            logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
+          git commit -m 'phase 130: validate registry and workspace membership'
+          git push origin HEAD:main
+          echo 'phase130_a01_materialization=pass'
