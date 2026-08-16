@@ -9,7 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce2b2dcc879c3bae0d371e77c99f2238400ef24ec001394befa67b6e543add9e"
 dependencies = [
  "aws-lc-sys",
- "untrusted",
  "zeroize",
 ]
 
@@ -160,13 +159,20 @@ dependencies = [
 name = "prw-control-plane"
 version = "0.1.0"
 dependencies = [
- "aws-lc-rs",
  "prw-core",
 ]
 
 [[package]]
 name = "prw-core"
 version = "0.1.0"
+
+[[package]]
+name = "prw-device-identity"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-control-plane",
+]
 
 [[package]]
 name = "prw-files"
@@ -213,12 +219,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "untrusted"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "windows-link"
