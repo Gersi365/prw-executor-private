@@ -17,6 +17,10 @@ use prw_control_plane::{
         EnrollmentProofChallengeState, EnrollmentProofMessageError, EnrollmentProofOfPossession,
         EnrollmentProofSubmissionError, encode_enrollment_proof_message,
     },
+    session_auth::{
+        SessionAuthChallengeState, SessionAuthMessageError, SessionAuthProof,
+        SessionAuthSubmissionError, encode_session_auth_message,
+    },
 };
 
 /// Failure while verifying the locked PRW device-identity profile.
@@ -78,6 +82,39 @@ impl fmt::Display for EnrollmentProofVerificationError {
 }
 
 impl std::error::Error for EnrollmentProofVerificationError {}
+
+/// Failure while validating and cryptographically verifying a device session proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SessionAuthVerificationError {
+    /// Server-side challenge/replay context rejected the proof submission.
+    Submission(SessionAuthSubmissionError),
+    /// The bound enrolled identity could not be encoded under the locked message contract.
+    Message(SessionAuthMessageError),
+    /// Device-identity public-key or signature verification failed.
+    DeviceIdentity(DeviceIdentityVerificationError),
+}
+
+impl fmt::Display for SessionAuthVerificationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Submission(error) => {
+                write!(formatter, "session authentication submission rejected: {error}")
+            }
+            Self::Message(error) => {
+                write!(formatter, "session authentication message rejected: {error}")
+            }
+            Self::DeviceIdentity(error) => {
+                write!(
+                    formatter,
+                    "session authentication device identity rejected: {error}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SessionAuthVerificationError {}
 
 /// Verifies a signature under the locked PRW device-identity profile.
 ///
@@ -161,4 +198,47 @@ pub fn verify_enrollment_proof(
     state
         .consume_verified(proof, now_unix_seconds)
         .map_err(EnrollmentProofVerificationError::Submission)
+}
+
+/// Verifies one enrolled-device session proof against immutable server challenge state.
+///
+/// Verification order is fail-closed: challenge/replay context, canonical message
+/// construction, device-identity signature verification, then single-use consumption.
+/// Invalid signatures do not consume the challenge. Successful verification consumes
+/// the current in-memory challenge before this function returns.
+///
+/// This function authenticates possession of the bound enrolled device identity only.
+/// It does not grant capabilities, persist a session, select a transport, or perform
+/// account authentication.
+///
+/// # Errors
+///
+/// Returns [`SessionAuthVerificationError`] when challenge/replay checks fail,
+/// canonical message construction fails, or device-identity verification fails.
+pub fn verify_session_auth_proof(
+    state: &mut SessionAuthChallengeState,
+    proof: &SessionAuthProof,
+    now_unix_seconds: u64,
+) -> Result<(), SessionAuthVerificationError> {
+    state
+        .validate_submission(proof, now_unix_seconds)
+        .map_err(SessionAuthVerificationError::Submission)?;
+
+    let message = encode_session_auth_message(
+        state.bound_identity(),
+        state.challenge().session_id(),
+        state.challenge().nonce(),
+    )
+    .map_err(SessionAuthVerificationError::Message)?;
+
+    verify_device_identity_signature(
+        &state.bound_identity().public_identity,
+        &message,
+        proof.signature(),
+    )
+    .map_err(SessionAuthVerificationError::DeviceIdentity)?;
+
+    state
+        .consume_verified(proof, now_unix_seconds)
+        .map_err(SessionAuthVerificationError::Submission)
 }
