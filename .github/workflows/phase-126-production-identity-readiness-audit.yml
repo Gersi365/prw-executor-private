@@ -1,0 +1,190 @@
+name: Phase 126 Production Identity Activation Readiness Audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-126-production-identity-readiness-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-status-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked read-only status probe
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+          mkdir -p crates/prw-agent/examples
+          cat > crates/prw-agent/examples/phase126_status_probe.rs <<'RS'
+          use std::{env, io::Write, os::unix::net::UnixStream};
+          use prw_agent::local_commands::LocalAgentCommand;
+          use prw_agent::local_commands::request_frame::stream::write_local_command_request;
+          use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
+          use prw_agent::local_commands::status_snapshot::response_frame::stream::read_success_status_response;
+          use prw_agent::LocalIpcRequestId;
+
+          fn main() {
+              let socket = env::args().nth(1).expect("socket path argument");
+              let mut stream = UnixStream::connect(socket).expect("connect Agent socket");
+              let request_id = LocalIpcRequestId::new(126).expect("non-zero request id");
+              write_local_command_request(&mut stream, request_id, LocalAgentCommand::GetAgentStatus)
+                  .expect("write status request");
+              stream.flush().expect("flush request");
+              let response = read_success_status_response(&mut stream).expect("read status response");
+              assert_eq!(response.request_id(), request_id);
+              assert_eq!(response.snapshot().runtime_state(), LocalAgentRuntimeState::Ready);
+              assert!(response.snapshot().protocol_version().is_supported());
+              println!("phase126_status=Ready protocol_supported=yes");
+          }
+          RS
+
+          cargo fmt -- crates/prw-agent/examples/phase126_status_probe.rs
+          cargo build --release --locked -p prw-agent --example phase126_status_probe
+          mkdir -p phase126-payload
+          install -m 0755 target/release/examples/phase126_status_probe phase126-payload/phase126-status-probe
+          (cd phase126-payload && sha256sum phase126-status-probe > SHA256SUMS)
+          cat phase126-payload/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase126-readiness-payload
+          path: phase126-payload
+          if-no-files-found: error
+          retention-days: 1
+
+  audit-powercode-read-only:
+    needs: build-status-probe
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase126-readiness-payload
+          path: phase126-payload
+      - name: Audit production identity activation readiness without mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          shopt -s inherit_errexit
+
+          echo 'phase126_read_only_audit=begin'
+          test "$(hostname)" = 'PowerCode'
+          test "$(id -un)" = 'gersi365'
+          test "$(id -u)" = '1000'
+          test "$(id -g)" = '1000'
+          test "${XDG_RUNTIME_DIR:-}" = '/run/user/1000'
+
+          payload="$GITHUB_WORKSPACE/phase126-payload"
+          cd "$payload"
+          sha256sum -c SHA256SUMS
+          chmod 0755 phase126-status-probe
+          test "$(stat -c '%a' phase126-status-probe)" = '755'
+
+          command -v systemd-creds
+          command -v systemd-analyze
+          command -v systemd-run
+          command -v systemctl
+          command -v loginctl
+          systemd-creds --version | head -n 1
+          systemctl --version | head -n 1
+          test "$(systemctl --user is-system-running)" = 'running'
+
+          set +e
+          tpm2_output=$(systemd-creds has-tpm2 2>&1)
+          tpm2_rc=$?
+          set -e
+          printf '%s\n' "$tpm2_output"
+          test "$tpm2_rc" -eq 0
+          grep -Eiq '(^|[^a-z])yes([^a-z]|$)|firmware available|driver available' <<<"$tpm2_output"
+          echo 'phase126_tpm2_capability=pass'
+
+          production_agent='/usr/lib/private-remote-workspace/prw-agent'
+          production_unit='/usr/lib/systemd/user/prw-agent.service'
+          production_socket="$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock"
+          expected_agent_sha='8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf'
+          expected_unit_sha='24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909'
+
+          test -f "$production_agent"
+          test -f "$production_unit"
+          test ! -L "$production_agent"
+          test ! -L "$production_unit"
+
+          before_agent_sha=$(sha256sum "$production_agent" | awk '{print $1}')
+          before_unit_sha=$(sha256sum "$production_unit" | awk '{print $1}')
+          before_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath -p DropInPaths --no-pager)
+          before_linger=$(loginctl show-user "$USER" -p Linger --value)
+
+          test "$before_agent_sha" = "$expected_agent_sha"
+          test "$before_unit_sha" = "$expected_unit_sha"
+          grep -Fxq 'LoadState=loaded' <<<"$before_service"
+          grep -Fxq 'ActiveState=active' <<<"$before_service"
+          grep -Fxq 'SubState=running' <<<"$before_service"
+          grep -Fxq 'UnitFileState=enabled' <<<"$before_service"
+          grep -Fxq 'FragmentPath=/usr/lib/systemd/user/prw-agent.service' <<<"$before_service"
+          dropins=$(systemctl --user show prw-agent.service -p DropInPaths --value)
+          test -z "$dropins"
+          test "$before_linger" = 'yes'
+          ! systemctl --user cat prw-agent.service | grep -Fq 'LoadCredentialEncrypted='
+          "$payload/phase126-status-probe" "$production_socket"
+          echo 'phase126_production_baseline=pass'
+
+          state_root="${XDG_STATE_HOME:-$HOME/.local/state}"
+          config_root="${XDG_CONFIG_HOME:-$HOME/.config}"
+          credential_dir="$state_root/private-remote-workspace/credentials"
+          ciphertext="$credential_dir/device-identity-private-key-v1.cred"
+          dropin_dir="$config_root/systemd/user/prw-agent.service.d"
+          dropin="$dropin_dir/20-device-identity-credential.conf"
+
+          printf 'phase126_state_root=%s\n' "$state_root"
+          printf 'phase126_config_root=%s\n' "$config_root"
+          printf 'phase126_ciphertext_target=%s\n' "$ciphertext"
+          printf 'phase126_dropin_target=%s\n' "$dropin"
+
+          for path in \
+            "$state_root" \
+            "$state_root/private-remote-workspace" \
+            "$credential_dir" \
+            "$config_root" \
+            "$config_root/systemd" \
+            "$config_root/systemd/user" \
+            "$dropin_dir"
+          do
+            if [[ -e "$path" ]]; then
+              test ! -L "$path"
+              owner=$(stat -c '%u' "$path")
+              test "$owner" = "$(id -u)"
+            fi
+          done
+
+          test ! -e "$ciphertext"
+          test ! -L "$ciphertext"
+          test ! -e "$dropin"
+          test ! -L "$dropin"
+
+          if [[ -d "$state_root/private-remote-workspace" ]]; then
+            unexpected=$(find "$state_root/private-remote-workspace" -maxdepth 3 -type f \
+              \( -name 'device-identity-private-key-v1.cred' -o -name '*device*identity*private*key*' \) \
+              -print -quit 2>/dev/null || true)
+            test -z "$unexpected"
+          fi
+          echo 'phase126_first_provisioning_targets_absent=pass'
+
+          after_agent_sha=$(sha256sum "$production_agent" | awk '{print $1}')
+          after_unit_sha=$(sha256sum "$production_unit" | awk '{print $1}')
+          after_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath -p DropInPaths --no-pager)
+          after_linger=$(loginctl show-user "$USER" -p Linger --value)
+
+          test "$after_agent_sha" = "$before_agent_sha"
+          test "$after_unit_sha" = "$before_unit_sha"
+          test "$after_service" = "$before_service"
+          test "$after_linger" = "$before_linger"
+          "$payload/phase126-status-probe" "$production_socket"
+          echo 'phase126_production_unchanged=pass'
+          echo 'phase126_read_only_audit=pass'
