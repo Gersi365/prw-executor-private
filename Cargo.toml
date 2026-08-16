@@ -9,6 +9,7 @@ members = [
     "crates/prw-device-identity",
     "crates/prw-device-identity-signer",
     "crates/prw-device-identity-custody",
+    "crates/prw-device-identity-provisioning",
     "crates/prw-agent",
 ]
 
