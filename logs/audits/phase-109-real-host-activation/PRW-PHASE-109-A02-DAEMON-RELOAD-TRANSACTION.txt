@@ -1,0 +1,86 @@
+Private Remote Workspace
+Phase 109-A02 User-Manager Daemon-Reload Transaction Audit
+
+STATUS: PASS / DAEMON_RELOAD_COMPLETED / UNIT_LOADED / SERVICE_DISABLED_INACTIVE / PAYLOAD_UNCHANGED / LINGER_UNCHANGED
+AUDIT TYPE: REAL-HOST SYSTEMD USER-MANAGER RELOAD
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Target host: PowerCode
+Target user: gersi365
+Target UID: 1000
+
+PREREQUISITE STATE
+
+Phase 109-A01 recorded that the exact root-owned Agent binary and systemd user unit were present at their locked destinations, while the service remained disabled and inactive. A01 also recorded the privileged install rollback-signal anomaly; A02 does not reinterpret or erase that anomaly.
+
+LOCKED DESTINATIONS AND HASHES
+
+- /usr/lib/private-remote-workspace/prw-agent
+  SHA-256: 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+  mode: 0755
+  owner: root:root
+
+- /usr/lib/systemd/user/prw-agent.service
+  SHA-256: 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+  mode: 0644
+  owner: root:root
+
+TRANSACTION EVIDENCE
+
+GitHub Actions run:
+- workflow: Phase 109 A07 Daemon Reload Transaction
+- run: 31927403907
+- job: 95116992351
+- runner: PowerCode
+
+The transaction revalidated host identity, current user/UID, XDG runtime root, user bus socket, locked file shape, ownership, modes, and both payload hashes before manager mutation.
+
+PRE-RELOAD SERVICE STATE
+
+- is-enabled: disabled
+- is-active: inactive
+- LoadState=loaded
+- ActiveState=inactive
+- SubState=dead
+- UnitFileState=disabled
+- NeedDaemonReload=no
+- Linger=yes
+
+MUTATION
+
+Exactly one user-manager mutation was performed:
+
+systemctl --user daemon-reload
+
+Result:
+
+daemon_reload=success
+
+No enable, disable, start, stop, restart, linger mutation, package-file mutation, or public-network mutation was performed by this transaction.
+
+POSTCONDITIONS
+
+After daemon-reload:
+
+- installed Agent hash remained exact;
+- installed unit hash remained exact;
+- is-enabled remained disabled;
+- is-active remained inactive;
+- LoadState=loaded;
+- ActiveState=inactive;
+- SubState=dead;
+- UnitFileState=disabled;
+- NeedDaemonReload=no;
+- systemctl --user cat prw-agent.service resolved the locked global user unit at /usr/lib/systemd/user/prw-agent.service;
+- ExecStart remained /usr/lib/private-remote-workspace/prw-agent;
+- WantedBy remained default.target;
+- Linger remained yes.
+
+LINGER OWNERSHIP
+
+Linger=yes predates PRW Phase 109 activation and remains external/pre-existing state. This transaction neither enabled nor disabled linger and does not claim ownership of it.
+
+CLASSIFICATION
+
+PHASE_109_A02_PASS / USER_MANAGER_DAEMON_RELOAD_COMPLETED / EXACT_UNIT_LOADED / SERVICE_DISABLED_INACTIVE / NO_ENABLE / NO_START / LINGER_PREEXISTING_AND_UNCHANGED
