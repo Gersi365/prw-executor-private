@@ -99,10 +99,16 @@ impl fmt::Display for SessionAuthVerificationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Submission(error) => {
-                write!(formatter, "session authentication submission rejected: {error}")
+                write!(
+                    formatter,
+                    "session authentication submission rejected: {error}"
+                )
             }
             Self::Message(error) => {
-                write!(formatter, "session authentication message rejected: {error}")
+                write!(
+                    formatter,
+                    "session authentication message rejected: {error}"
+                )
             }
             Self::DeviceIdentity(error) => {
                 write!(
