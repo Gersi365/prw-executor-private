@@ -176,6 +176,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-device-identity-signer"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-control-plane",
+ "prw-core",
+ "prw-device-identity",
+]
+
+[[package]]
 name = "prw-files"
 version = "0.1.0"
 dependencies = [
