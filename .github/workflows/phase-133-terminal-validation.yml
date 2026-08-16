@@ -1,0 +1,161 @@
+name: Phase 133 Terminal Foundation Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-133-terminal-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require authoritative prerequisites and contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
+          grep -Fq 'PHASE_130_DONE' \
+            logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
+          test -f logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
+          grep -Fq 'PHASE_132_DONE' \
+            logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
+          test -f contracts/TERMINAL_SESSION_FOUNDATION_CONTRACT.md
+          grep -Fq 'Status: Phase 133 implementation lock' contracts/TERMINAL_SESSION_FOUNDATION_CONTRACT.md
+          grep -Fq '"crates/prw-terminal"' Cargo.toml
+          echo 'phase133_prerequisites=pass'
+
+      - name: Normalize terminal source and exact locked graph
+        id: lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo clippy --fix --locked -p prw-terminal --all-targets --all-features \
+            --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+          git restore --worktree --staged -- target/.rustc_info.json 2>/dev/null || true
+          mapfile -t changed < <(git diff --name-only -- . ':!target')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              Cargo.lock|crates/prw-terminal/src/lib.rs) ;;
+              *) echo "unexpected_phase133_fix_path=$path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+          lock_sha=$(sha256sum Cargo.lock | cut -d' ' -f1)
+          source_sha=$(sha256sum crates/prw-terminal/src/lib.rs | cut -d' ' -f1)
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "phase133_lock_sha256=$lock_sha"
+          echo "phase133_source_sha256=$source_sha"
+
+      - name: Prove terminal API boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source='crates/prw-terminal/src/lib.rs'
+          ! grep -Fq 'std::process::Command' "$source"
+          ! grep -Fq 'process::Command' "$source"
+          ! grep -Fq 'Command::new' "$source"
+          ! grep -Fq 'TcpListener' "$source"
+          ! grep -Fq 'TcpStream' "$source"
+          ! grep -Fq 'unsafe {' "$source"
+          grep -Fq 'MAX_ACTIVE_TERMINAL_SESSIONS: usize = 32' "$source"
+          grep -Fq 'MAX_TERMINAL_IO_BYTES: usize = 65_536' "$source"
+          grep -Fq 'pub enum TerminalProfile' "$source"
+          grep -Fq 'pub trait TerminalBackend' "$source"
+          echo 'phase133_typed_boundary=pass'
+
+      - name: Run focused Phase 133 gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-terminal --all-targets --all-features -- -D warnings
+          cargo test --locked -p prw-terminal --all-targets
+          echo 'phase133_focused_validation=pass'
+
+      - name: Run full workspace gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets
+          echo 'phase133_workspace_validation=pass'
+
+      - name: Record authoritative Phase 133 report
+        shell: bash
+        env:
+          LOCK_SHA: ${{ steps.lock.outputs.lock_sha }}
+          SOURCE_SHA: ${{ steps.lock.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          report_dir='logs/audits/phase-133-terminal-session-foundation'
+          report="$report_dir/PRW-PHASE-133-TERMINAL-SESSION-FOUNDATION-VALIDATION.txt"
+          mkdir -p "$report_dir"
+          cat > "$report" <<EOF
+          Private Remote Workspace
+          Phase 133 — Terminal Session Foundation
+
+          STATUS:
+          PASS / CONTRACT_LOCKED / TYPED_TERMINAL_BROKER_IMPLEMENTED / SESSION_AND_IO_BOUNDS_VALIDATED / BACKEND_FAILURE_FAIL_CLOSED / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_REMOTE_TERMINAL_NOT_ACTIVE
+
+          Repository: Gersi365/prw-executor-private
+          Branch: main
+          Date: 2026-08-16
+          Validation input head: $GITHUB_SHA
+          Authoritative validation run: $GITHUB_RUN_ID
+          Cargo.lock SHA-256: $LOCK_SHA
+          prw-terminal source SHA-256: $SOURCE_SHA
+
+          CONTRACT
+          contracts/TERMINAL_SESSION_FOUNDATION_CONTRACT.md
+
+          IMPLEMENTATION
+          crates/prw-terminal
+
+          SECURITY OUTCOME
+          TerminalSessionId is non-zero and broker scoped. TerminalGeometry is bounded to 1..1000 in each dimension. Input/output operations are bounded to 64 KiB and one broker tracks at most 32 sessions. Duplicate identifiers, capacity, empty input, oversized input and invalid output requests fail before backend mutation. The backend interface accepts only fixed TerminalProfile values and validated geometry/I/O; it accepts no caller-supplied executable path, argument vector, raw command string, environment injection, filesystem path, network endpoint or privilege instruction. Backend operation failures move retained records to Failed; successful explicit close returns a Closed record and later broker I/O for that record is rejected.
+
+          IDENTITY BINDING
+          A terminal record immutably snapshots WorkspaceId, UserId, DeviceId and authenticated PRW SessionId from a registry-current principal boundary. Workspace role metadata does not itself grant terminal capability.
+
+          VALIDATION
+          The authoritative run passed the static typed-boundary checks, focused prw-terminal rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph. Disposable tests cover zero identifiers, geometry bounds, duplicate identifier rejection, 32-session capacity, named-profile/geometry forwarding, open failure, empty/oversized input, resize validation, output-request bounds, backend failure, oversized backend output, explicit close and immutable identity binding.
+
+          DEFERRED
+          Linux PTY/process spawning, production terminal capability policy, remote transport framing, reconnect/reattach persistence, shell environment policy, clipboard/file integration, Android/Desktop terminal UI and port forwarding remain deferred. Phase 134 owns port-forwarding foundation.
+
+          PRODUCTION BOUNDARY
+          No production remote shell, PTY, SSH listener, public listener, PowerCode runtime terminal capability, privilege change or user-impacting network state was activated or mutated.
+
+          FINAL CLASSIFICATION
+          PHASE_133_DONE / NO_PRODUCTION_REMOTE_TERMINAL_SIDE_EFFECT / READY_FOR_PHASE_134_SOURCE_WORK
+          EOF
+          git diff --check
+
+      - name: Commit validated terminal source graph and report only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add Cargo.lock crates/prw-terminal/src/lib.rs \
+            logs/audits/phase-133-terminal-session-foundation/PRW-PHASE-133-TERMINAL-SESSION-FOUNDATION-VALIDATION.txt
+          git diff --cached --check
+          git commit -m 'phase 133: validate terminal session foundation'
+          git push origin HEAD:main
+          echo 'phase133_materialization=pass'
