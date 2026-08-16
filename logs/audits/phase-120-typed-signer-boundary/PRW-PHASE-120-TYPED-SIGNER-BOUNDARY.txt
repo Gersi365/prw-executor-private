@@ -1,0 +1,335 @@
+Private Remote Workspace
+Phase 120 — Typed Device-Identity Signer API and Source-Boundary Lock
+
+STATUS:
+PASS / SEPARATE_PRW_DEVICE_IDENTITY_SIGNER_CRATE_LOCKED / VERIFIER_CRATE_REMAINS_VERIFIER_ONLY / UBUNTU_PKCS8_CREDENTIAL_LOAD_BOUNDARY_LOCKED / TYPED_ENROLLMENT_REQUEST_PLUS_CHALLENGE_SIGNING_ONLY / REQUEST_PUBLIC_IDENTITY_MUST_MATCH_SIGNER_KEY / GENERIC_SIGN_BYTES_API_FORBIDDEN / SIGNER_CORE_MUST_NOT_READ_SYSTEMD_OR_FILESYSTEM / ANDROID_NON_EXPORTABLE_KEYSTORE_MODEL_PRESERVED / PRIVATE_BYTE_LIFETIME_AND_ZEROIZATION_REQUIREMENTS_LOCKED / NO_PRODUCTION_SIGNER_IMPLEMENTATION_YET / PHASE_121_AUTONOMOUSLY_AUTHORIZED
+
+AUDIT TYPE: SECURITY API / SOURCE-BOUNDARY CONTRACT LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: e31685fb89766c0f9030caebcca52bda6e95eaa9
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests. Phase 120 is decision/audit work only. It does not add a signer crate, dependency, private key, service credential, systemd integration, enrollment network path, or real-host mutation.
+
+AUTHORITATIVE PREDECESSORS
+
+Phase 113:
+- prw-device-identity owns the production public verification boundary;
+- aws-lc-rs 1.18.0 is the locked device-identity provider;
+- verifier public API accepts canonical public identity/message/signature only;
+- crate documentation explicitly excludes private-key generation/import/export/signing/persistence APIs.
+
+Phase 115:
+- canonical EnrollmentProof message encoding exists in prw-control-plane;
+- challenge and replay semantics are typed;
+- production verifier composition consumes valid proofs exactly once.
+
+Phase 116:
+- device signing must be typed PRW enrollment PoP signing rather than a generic signing oracle;
+- Android keys must remain non-exportable in Android Keystore;
+- Ubuntu plaintext persistent private-key storage is forbidden.
+
+Phase 118:
+- Ubuntu custody provider is systemd encrypted service credentials;
+- runtime plaintext credential is exposed only through $CREDENTIALS_DIRECTORY;
+- signer core must remain separable from systemd credential source/path configuration.
+
+Phase 119:
+- aws-lc-rs P-256 signing compatibility is proven;
+- PKCS#8 v1 DER is locked as the Ubuntu plaintext private credential payload;
+- canonical X.509 SPKI derivation is stable across private-key serialization/reload;
+- ASN.1 DER signatures verify through the production verifier;
+- full enrollment PoP sign/verify/consume is proven with disposable keys;
+- no production signing API exists yet.
+
+ARCHITECTURAL DECISION
+
+Production private-key signing does NOT get added to the existing prw-device-identity verifier crate.
+
+A new narrow workspace crate is locked:
+crates/prw-device-identity-signer
+
+Rationale:
+- preserves the verifier crate's existing public/private-key separation;
+- makes private-key dependency reachability explicit in Cargo dependency graphs;
+- allows Agent/control-plane components that only verify identities to avoid importing signer APIs;
+- gives Ubuntu private-key parsing/signing lifecycle its own audit boundary;
+- prevents future Android Keystore signing from being forced through an exportable-PKCS#8 implementation;
+- allows systemd credential acquisition to remain a separate adapter/lifecycle concern.
+
+The new crate is an internal PRW implementation boundary, not a generic cryptographic toolkit.
+
+LOCKED CRATE RESPONSIBILITY
+
+prw-device-identity-signer may own only:
+- parsing/loading the locked Ubuntu PKCS#8 v1 DER P-256 credential into the locked signing provider;
+- deriving the canonical X.509 SPKI public identity from the loaded key;
+- validating that a typed EnrollmentRequest public identity exactly matches the signer key;
+- constructing the canonical Phase 115 enrollment PoP message through the existing control-plane encoder;
+- creating a DER ECDSA-Sig-Value signature with P-256/SHA-256;
+- returning the existing typed EnrollmentProofOfPossession value;
+- bounded error classification without private material.
+
+It must not own:
+- systemd credential path discovery;
+- XDG state file creation/read/write;
+- encrypted credential provisioning;
+- service-unit configuration;
+- account authentication;
+- enrollment approval;
+- networking/wire protocol;
+- transport cryptography;
+- arbitrary signing;
+- key export/backup APIs.
+
+LOCKED UBUNTU LOAD BOUNDARY
+
+The initial Ubuntu signer constructor/load boundary consumes the plaintext bytes of the Phase 119-locked payload:
+PKCS#8 v1 DER containing an ECDSA P-256 private key.
+
+The source of those bytes is outside signer core. A later custody adapter reads the already-decrypted named systemd credential and passes a bounded buffer to signer construction.
+
+The signer constructor must:
+1. reject empty input;
+2. impose an explicit small upper bound before provider parsing;
+3. parse only the locked P-256/SHA-256 signing profile;
+4. derive canonical X.509 SPKI public identity;
+5. retain the provider key object, not a second long-lived plaintext PKCS#8 copy;
+6. never expose the loaded private bytes through Debug, Display, errors, accessors, serialization, IPC, or logs.
+
+INITIAL PRIVATE CREDENTIAL SIZE BOUND
+
+Phase 121 must use a bounded input size rather than accepting unbounded credential bytes.
+
+Locked initial maximum plaintext PKCS#8 credential length:
+4096 bytes.
+
+Rationale:
+- far above the expected P-256 PKCS#8 v1 payload size;
+- small enough to bound memory/parsing exposure;
+- leaves implementation headroom without coupling security behavior to one provider's current exact encoding size.
+
+Input length must be 1..=4096 bytes.
+
+PRIVATE BYTE LIFETIME / ZEROIZATION
+
+The custody adapter owns the incoming decrypted credential buffer until it transfers/borrows it for signer construction.
+
+Phase 121 must ensure any PRW-owned mutable buffer containing plaintext private credential bytes is zeroized on drop/after successful parsing.
+
+Preferred implementation mechanism:
+- direct exact-pinned zeroize dependency already resolved in the workspace dependency graph where practical;
+- use a zeroizing owner for temporary PKCS#8 bytes in tests/adapter-facing APIs;
+- do not implement custom unsafe memory wiping.
+
+The provider's internal key object lifecycle is delegated to the locked provider; PRW must not add a second raw private-key representation to the signer object.
+
+The signer type's Debug output must not include private key material.
+
+LOCKED PUBLIC SIGNER API SHAPE
+
+The crate public API may expose a provider-specific Ubuntu signer type or an equivalently narrow type, conceptually:
+
+UbuntuEnrollmentSigner
+
+Required operations:
+
+1. construction from the bounded PKCS#8 v1 DER custody payload;
+2. public_identity() -> canonical typed PublicIdentityMaterial;
+3. sign_enrollment_proof(request, challenge) -> typed EnrollmentProofOfPossession.
+
+The exact Rust names may be adjusted by rustfmt/Clippy/API ergonomics in Phase 121, but the security semantics are fixed by this report.
+
+GENERIC SIGNING IS FORBIDDEN
+
+The public crate API must not expose any method semantically equivalent to:
+- sign(message: &[u8]);
+- sign_digest(...);
+- sign_arbitrary(...);
+- raw provider key access;
+- private_key();
+- export_pkcs8();
+- export_secret();
+
+Provider generic sign functions may be invoked only inside the crate-private implementation after typed PRW checks and canonical message construction.
+
+TYPED SIGNING INPUT
+
+The signing operation accepts:
+- a typed EnrollmentRequest;
+- a typed EnrollmentProofChallenge.
+
+The caller does not supply raw message bytes.
+
+Required checks before provider signing:
+1. request.enrollment_id exactly equals challenge.enrollment_id;
+2. request.public_identity exactly equals the signer's canonical public identity;
+3. request identity profile is the locked P-256/SPKI profile;
+4. canonical message construction through encode_enrollment_proof_message succeeds under all existing bounds;
+5. only then may the crate-private provider call sign the internally constructed bytes.
+
+Challenge lifetime verification remains verifier/server policy. The device signer need not trust or enforce the server clock. It signs the exact typed challenge nonce supplied by the server after enrollment-id binding checks.
+
+OUTPUT
+
+Successful signing returns an EnrollmentProofOfPossession whose:
+- enrollment_id equals request/challenge enrollment id;
+- nonce equals the exact challenge nonce;
+- signature is DeviceIdentityAlgorithm::EcdsaP256Sha256;
+- signature encoding is DeviceIdentitySignatureEncoding::EcdsaSigValueDer.
+
+The signer must not approve enrollment or mutate server challenge state.
+
+PUBLIC IDENTITY CONSISTENCY
+
+A signer loaded from a private credential derives its own canonical public identity.
+
+Signing MUST fail if the EnrollmentRequest declares any different public identity, including:
+- different P-256 key;
+- altered SPKI bytes;
+- different algorithm/encoding metadata.
+
+This prevents an already-loaded signer from becoming a signing oracle for an enrollment snapshot that claims another identity.
+
+The equality check occurs before signing.
+
+ERROR TAXONOMY
+
+Phase 121 should expose bounded, non-secret error classes sufficient to distinguish at least:
+- CredentialOutOfBounds;
+- InvalidPrivateCredential;
+- PublicIdentityDerivationFailed;
+- EnrollmentMismatch;
+- PublicIdentityMismatch;
+- MessageConstructionFailed;
+- SigningFailed;
+- SignatureMaterialConstructionFailed.
+
+Errors must not contain:
+- PKCS#8 bytes;
+- private scalar material;
+- provider secret objects;
+- the complete canonical message;
+- signatures unless a later audit explicitly demonstrates that such inclusion is necessary and safe.
+
+Display strings must remain generic and bounded.
+
+VERIFIER DEPENDENCY SEPARATION
+
+prw-device-identity remains verifier-only.
+
+It must not depend on prw-device-identity-signer.
+
+prw-device-identity-signer may depend on:
+- aws-lc-rs exact version already locked;
+- prw-control-plane;
+- zeroize for PRW-owned plaintext buffer hygiene if required.
+
+It should not depend on prw-agent or systemd-specific code.
+
+The prw-agent dependency graph must remain free of the signer crate until a separately audited service/custody integration phase explicitly requires it.
+
+SYSTEMD CUSTODY ADAPTER SEPARATION
+
+The Phase 118 systemd credential lifecycle is not implemented inside signer core.
+
+A future adapter/integration phase owns:
+- resolving $CREDENTIALS_DIRECTORY;
+- safely opening the fixed credential name;
+- validating file shape/ownership according to systemd/runtime semantics where applicable;
+- reading no more than the locked maximum;
+- holding the temporary plaintext in a zeroizing buffer;
+- constructing the signer;
+- dropping/zeroizing the temporary raw buffer;
+- handling missing credential/decryption/delivery failure as fail-closed identity availability state.
+
+This separation makes signer tests independent from systemd and makes systemd integration independently auditable.
+
+ANDROID COMPATIBILITY
+
+The Phase 120 Ubuntu signer crate does not become the Android private-key implementation.
+
+Android's Phase 116 lock remains:
+- private P-256 key generated and retained in Android Keystore;
+- no private-key export to Rust/PKCS#8;
+- signing delegated to Keystore-backed Signature operation.
+
+Android should implement the same semantic typed operation:
+- derive/report its canonical public identity;
+- verify EnrollmentRequest identity binding;
+- locally construct the canonical enrollment PoP message;
+- sign only that message;
+- return the typed proof.
+
+A later bridge/API phase may share provider-neutral typed request/result semantics, but must not force Android through UbuntuEnrollmentSigner or an exportable private-key constructor.
+
+TEST REQUIREMENTS FOR PHASE 121
+
+Phase 121 must include focused tests proving at least:
+- valid PKCS#8 load and canonical public identity derivation;
+- zero-length and >4096-byte credential rejection before provider parsing;
+- malformed/truncated PKCS#8 rejection;
+- wrong-curve credential rejection;
+- exact request/challenge enrollment-id mismatch rejection;
+- request public-key mismatch rejection before signing;
+- valid typed signing produces DER signature accepted by production verifier;
+- valid typed full proof is accepted/consumed by production verifier composition;
+- changed request snapshot cannot reuse the proof;
+- no public generic signing method exists by source/API boundary review;
+- signer crate is absent from prw-agent dependency tree;
+- Cargo.lock change, if any, is explainable and minimal.
+
+MUTATION STATEMENT
+
+Phase 120 is decision/audit work only.
+
+Authorized net mutation:
+- this single authoritative report.
+
+No Phase 120 mutation to:
+- Cargo.toml;
+- Cargo.lock;
+- Rust source;
+- Android source;
+- systemd unit source;
+- installed Agent;
+- service runtime state;
+- private-key or credential material;
+- enrollment state;
+- networking/database state.
+
+PHASE 121 BOUNDARY
+
+Standing authorization permits Phase 121 to implement and validate the narrow signer crate without another approval request.
+
+Phase 121 may:
+- register crates/prw-device-identity-signer in the workspace;
+- add its Cargo.toml and production Rust implementation;
+- use aws-lc-rs 1.18.0 with the minimum compatible feature profile;
+- add exact/direct zeroize dependency when needed for raw credential-buffer hygiene;
+- add focused tests with disposable private keys only;
+- update Cargo.lock deterministically if direct dependency metadata requires it;
+- run Ubuntu hosted CI and Android-target compilation only if the signer crate is intended to compile there (Android private-key behavior itself remains Keystore-specific and out of this crate).
+
+Phase 121 must not:
+- write/read the real Phase 118 systemd credential path;
+- create/persist a production PRW key;
+- change prw-agent.service;
+- make prw-agent depend on the signer;
+- deploy new binaries;
+- implement enrollment networking/approval/account authentication;
+- expose generic signing or private-key export APIs.
+
+FINAL CLASSIFICATION
+
+PASS / NEW_NARROW_SIGNER_CRATE_ARCHITECTURE_LOCKED / VERIFIER_SIGNER_SEPARATION_PRESERVED / PKCS8_INPUT_MAX_4096 / ZEROIZING_TEMPORARY_PRIVATE_BYTES_REQUIRED / CANONICAL_PUBLIC_IDENTITY_SELF_DERIVED / REQUEST_IDENTITY_AND_CHALLENGE_BINDING_REQUIRED_BEFORE_SIGN / TYPED_POP_SIGNING_ONLY / GENERIC_SIGNING_AND_PRIVATE_EXPORT_FORBIDDEN / SYSTEMD_ADAPTER_SEPARATE / ANDROID_KEYSTORE_MODEL_PRESERVED / PHASE_121_AUTONOMOUSLY_AUTHORIZED
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 120 typed signer boundary report.
