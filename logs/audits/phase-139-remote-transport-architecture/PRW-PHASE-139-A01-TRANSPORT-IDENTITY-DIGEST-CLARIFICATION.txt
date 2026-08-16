@@ -1,0 +1,38 @@
+Private Remote Workspace
+Phase 139 A01 — Transport Identity Digest Dependency Clarification
+
+STATUS:
+PASS / NORMATIVE_CLARIFICATION_LOCKED / SPKI_SHA256_PATH_COMPILED / AWS_LC_PROVIDER_ALIGNMENT_PRESERVED / NO_REPOSITORY_RUNTIME_MUTATION / NO_PRODUCTION_MUTATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Parent Phase 139 decision: contracts/REMOTE_TRANSPORT_ARCHITECTURE_DECISION.md
+Normative addendum: contracts/REMOTE_TRANSPORT_ARCHITECTURE_DECISION_A01.md
+
+AUTHORITATIVE PROBE
+Run: 31949682590
+Job: 95171127021
+Rust/Cargo: 1.97.1
+Scratch Cargo.lock SHA-256: f364e750683d08d70c7d720e31fac679a8c6af4df2eb88dba40d6c10d2e544f8
+
+EXACT DIRECT SET PROVED
+- quinn 0.11.11
+- rustls 0.23.43
+- tokio 1.53.1
+- aws-lc-rs 1.18.0
+
+TECHNICAL PROOF
+The disposable scratch crate compiled a real TransportIdentity fingerprint path that parses a rustls CertificateDer with rustls::server::ParsedCertificate, obtains canonical SubjectPublicKeyInfo DER, computes SHA-256 through aws_lc_rs::digest and returns a fixed 32-byte value. cargo check --locked --all-targets passed and the repository worktree was re-proved unchanged.
+
+CLARIFICATION
+Direct aws-lc-rs use in Phase 140 is allowed only for SHA-256(SPKI) TransportIdentity derivation and provider-aligned utility under the already-selected AWS-LC rustls profile. It is not authorization for custom TLS verification, homemade crypto, generic signing, private-key import/export or a second application encryption protocol.
+
+CLEANUP
+The temporary Phase 139 A01 workflow was removed after the successful probe.
+
+PRODUCTION BOUNDARY
+No PowerCode key/certificate/listener, Agent service, firewall/route/DNS state, relay, ICE/STUN/TURN production traffic or client distribution artifact was created or mutated.
+
+FINAL CLASSIFICATION
+PHASE_139_A01_DONE / ARCHITECTURE_CLARIFIED / READY_FOR_PHASE_140_DISPOSABLE_IMPLEMENTATION
