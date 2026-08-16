@@ -40,13 +40,13 @@ jobs:
           before_agent_sha=$(sha256sum "$agent" | awk '{print $1}')
           before_unit_sha=$(sha256sum "$unit" | awk '{print $1}')
           before_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath --no-pager)
+          before_credential_files=$(find "$HOME" -maxdepth 5 -type f \( -iname '*credential*secret*' -o -path '*/systemd/*credential*' \) -printf '%p mode=%m uid=%U gid=%G\n' 2>/dev/null | sort || true)
 
           echo "agent_sha_before=$before_agent_sha"
           echo "unit_sha_before=$before_unit_sha"
           printf '%s\n' "$before_service"
-
           echo "credential_related_files_before"
-          find "$HOME" -maxdepth 5 -type f \( -iname '*credential*secret*' -o -path '*/systemd/*credential*' \) -printf '%p mode=%m uid=%U gid=%G\n' 2>/dev/null | sort || true
+          printf '%s\n' "$before_credential_files"
 
           tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/prw-phase117.XXXXXX")
           chmod 700 "$tmp"
@@ -74,7 +74,13 @@ jobs:
           echo "dummy_encrypted_sha=$encrypted_sha"
           test "$encrypted_sha" != "$plain_sha"
 
-          systemd-creds --user decrypt "$encrypted" "$direct"
+          after_encrypt_credential_files=$(find "$HOME" -maxdepth 5 -type f \( -iname '*credential*secret*' -o -path '*/systemd/*credential*' \) -printf '%p mode=%m uid=%U gid=%G\n' 2>/dev/null | sort || true)
+          echo "credential_related_files_after_encrypt"
+          printf '%s\n' "$after_encrypt_credential_files"
+          test "$after_encrypt_credential_files" = "$before_credential_files"
+          echo "no_persistent_user_credential_file_created=pass"
+
+          systemd-creds --user --name=phase117.dummy decrypt "$encrypted" "$direct"
           cmp -s "$plain" "$direct"
           echo "direct_decrypt=pass"
 
@@ -83,7 +89,7 @@ jobs:
           test "$tampered_size" -gt 1
           truncate -s $((tampered_size - 1)) "$tampered"
           set +e
-          systemd-creds --user decrypt "$tampered" "$tampered_out" >/dev/null 2>&1
+          systemd-creds --user --name=phase117.dummy decrypt "$tampered" "$tampered_out" >/dev/null 2>&1
           tamper_rc=$?
           set -e
           echo "tampered_decrypt_rc=$tamper_rc"
@@ -100,17 +106,18 @@ jobs:
           after_agent_sha=$(sha256sum "$agent" | awk '{print $1}')
           after_unit_sha=$(sha256sum "$unit" | awk '{print $1}')
           after_service=$(systemctl --user show prw-agent.service -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath --no-pager)
+          after_credential_files=$(find "$HOME" -maxdepth 5 -type f \( -iname '*credential*secret*' -o -path '*/systemd/*credential*' \) -printf '%p mode=%m uid=%U gid=%G\n' 2>/dev/null | sort || true)
 
           test "$after_agent_sha" = "$before_agent_sha"
           test "$after_unit_sha" = "$before_unit_sha"
           test "$after_service" = "$before_service"
+          test "$after_credential_files" = "$before_credential_files"
 
           echo "agent_sha_after=$after_agent_sha"
           echo "unit_sha_after=$after_unit_sha"
           printf '%s\n' "$after_service"
-
           echo "credential_related_files_after"
-          find "$HOME" -maxdepth 5 -type f \( -iname '*credential*secret*' -o -path '*/systemd/*credential*' \) -printf '%p mode=%m uid=%U gid=%G\n' 2>/dev/null | sort || true
+          printf '%s\n' "$after_credential_files"
 
           rm -rf -- "$tmp"
           trap - EXIT INT TERM
