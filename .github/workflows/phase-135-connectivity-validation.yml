@@ -1,4 +1,4 @@
-name: Phase 135 Private Mesh Connectivity Foundation Validation
+name: Phase 135 A01 Private Mesh Connectivity Foundation Validation
 
 on:
   push:
@@ -28,8 +28,7 @@ jobs:
           test -f crates/prw-connectivity/src/lib.rs
           echo 'phase135_prerequisites=pass'
 
-      - name: Register crate and normalize exact locked graph
-        id: graph
+      - name: Apply exact first-run corrective and register crate
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -43,7 +42,26 @@ jobs:
               if text.count(needle) != 1:
                   raise SystemExit('connectivity workspace insertion point mismatch')
               cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-connectivity/src/lib.rs')
+          text = source.read_text()
+          old = '                    2000 + value as u16,\n'
+          new = '                    2000 + u16::try_from(value).expect("capacity test value fits u16"),\n'
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('capacity conversion replacement count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('corrected capacity conversion form missing')
+          source.write_text(text)
           PY
+          git diff --check
+
+      - name: Normalize exact locked graph
+        id: graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
           rustc --version
           cargo --version
           cargo fmt --all
@@ -146,7 +164,7 @@ jobs:
           Logical DeviceId is distinct from an opaque non-zero 32-byte TransportIdentity. Phase 135 does not derive cryptographic identity and stores no private key. Candidate endpoints are explicit IP addresses, not hostnames, so basic path selection has no DNS dependency. Unspecified, multicast and IPv4 limited-broadcast endpoints fail closed.
 
           VALIDATION
-          The authoritative run passed static no-socket/no-DNS/no-shell checks, focused prw-connectivity rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+          Initial run 31947289728 passed graph normalization and the static no-network/no-DNS boundary, then stopped safely on one test-only possible-truncation lint in the 17-candidate capacity fixture. This corrective replaces the cast with checked conversion. The authoritative run then passes focused prw-connectivity rustfmt/Clippy -D warnings/all-target tests and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
 
           DEFERRED
           Real discovery, STUN, ICE, NAT traversal traffic, dialing, tunnels, TUN, route/firewall mutation, private address assignment, endpoint publication and path-health scheduling remain deferred. Phase 136 owns relay transport fallback. Phase 137 owns optional private DNS.
