@@ -1,0 +1,147 @@
+name: Phase 148 A01 Native Files Dead-Code Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-148-a01-dead-code-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  revalidate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A01 corrective baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-147-android-remote-terminal-ux/PRW-PHASE-147-ANDROID-REMOTE-TERMINAL-UX-VALIDATION.txt
+          test -f "$report"
+          grep -Fq 'PERMANENT_ANDROID_CI_SUCCESS' "$report"
+          grep -Fq 'READY_FOR_PHASE_148' "$report"
+          test -f .github/workflows/phase-148-android-remote-files-transfers.yml
+          test -f contracts/ANDROID_REMOTE_FILES_TRANSFERS_CONTRACT.md
+          test -f contracts/REMOTE_FILE_MANAGEMENT_CONTRACT.md
+          test -f contracts/FILE_TRANSFER_HARDENING_CONTRACT.md
+          test -f apps/android/native/src/terminal.rs
+          grep -Fq 'prw-remote-bridge' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-file-service = ' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-file-transfer = ' apps/android/native/Cargo.toml
+          test ! -f apps/android/native/src/files.rs
+          cp apps/android/native/Cargo.lock "$RUNNER_TEMP/phase148-native-lock-before"
+          echo phase148_a01_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Extract exact Phase 148 step bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/phase-148-android-remote-files-transfers.yml').read_text()
+
+          def extract_run(step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          pairs = [
+              ('Prepare exact validated Android and Rust toolchains', 'Materialize Phase 148 candidate source in runner'),
+              ('Materialize Phase 148 candidate source in runner', 'Validate Phase 148 native file and transfer projection'),
+              ('Validate Phase 148 native file and transfer projection', 'Validate Phase 148 Android files and transfers UX'),
+              ('Validate Phase 148 Android files and transfers UX', 'Prove Phase 148 security and authority boundaries'),
+              ('Prove Phase 148 security and authority boundaries', 'Revalidate root Rust workspace'),
+              ('Revalidate root Rust workspace', 'Write authoritative Phase 148 validation report'),
+              ('Write authoritative Phase 148 validation report', 'Stage only validated Phase 148 source and evidence'),
+              ('Stage only validated Phase 148 source and evidence', 'Commit and push validated Phase 148 source'),
+          ]
+          for index, pair in enumerate(pairs, 1):
+              Path(f'/tmp/phase148-a01-step-{index}.sh').write_text(extract_run(*pair))
+          PY
+          echo phase148_a01_extraction=pass
+
+      - name: Reconstruct exact Phase 148 candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-1.sh)
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-2.sh)
+          test -f apps/android/native/src/files.rs
+          echo phase148_a01_reconstruction=pass
+
+      - name: Apply only proven dead-code correction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/android/native/src/files.rs')
+          text = path.read_text()
+          old = '''fn byte_array<'caller>(
+              unowned_env: &mut EnvUnowned<'caller>,
+              operation: impl FnOnce() -> Vec<u8>,
+          ) -> JByteArray<'caller> {
+              unowned_env
+                  .with_env(|env| env.byte_array_from_slice(&operation()))
+                  .resolve::<ThrowRuntimeExAndDefault>()
+          }
+
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'A01 dead-code boundary mismatch: count={text.count(old)}')
+          path.write_text(text.replace(old, '', 1))
+          PY
+          cd apps/android/native
+          cargo +1.97.1 fmt --all
+          ! grep -Fq "fn byte_array<'caller>" src/files.rs
+          grep -Fq 'Java_com_privateworkspace_prw_NativeBridge_fileListPayload' src/files.rs
+          grep -Fq 'Java_com_privateworkspace_prw_NativeBridge_downloadChunkPayload' src/files.rs
+          echo phase148_a01_dead_code_correction=pass
+
+      - name: Re-run exact Phase 148 validation bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for step_script in /tmp/phase148-a01-step-{3..7}.sh; do
+            (cd "$GITHUB_WORKSPACE" && bash "$step_script")
+          done
+          report=logs/audits/phase-148-android-remote-files-transfers/PRW-PHASE-148-ANDROID-REMOTE-FILES-TRANSFERS-VALIDATION.txt
+          test -f "$report"
+          cat >> "$report" <<'EOF'
+
+A01 NATIVE DEAD-CODE CORRECTIVE:
+- Initial Phase 148 run 31970494252 proved the baseline, exact toolchain preparation and candidate materialization before stopping at native Clippy only.
+- Clippy reported exactly one source defect: the private helper byte_array in apps/android/native/src/files.rs was unused under -D warnings.
+- A01 removes only that unused private helper after reconstructing the exact Phase 148 candidate. File/transfer protocol encoding, JNI exports, Kotlin lifecycle semantics, acknowledged-progress authority, dependency selection and production boundaries are unchanged.
+EOF
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase148-a01-step-8.sh)
+          echo phase148_a01_revalidation_and_staging=pass
+
+      - name: Commit and push A01-validated Phase 148 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --cached --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 148 a01: materialize validated Android remote files and transfers'
+          git push origin HEAD:main
+          echo phase148_a01_materialization=pass
