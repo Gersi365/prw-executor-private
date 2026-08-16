@@ -1,0 +1,110 @@
+name: Phase 109 A03 Build and Stage Payload
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase-109-a03-build-stage-payload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-payload:
+    name: Build pinned release payload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify pinned Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          test "$(rustc --version | awk '{print $2}')" = "1.97.1"
+          test "$(cargo --version | awk '{print $2}')" = "1.97.1"
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Build release agent
+        run: cargo build --release --locked --package prw-agent --bin prw-agent
+
+      - name: Assemble immutable payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase109-payload
+          install -m 0755 target/release/prw-agent phase109-payload/prw-agent
+          install -m 0644 packaging/systemd/prw-agent.service phase109-payload/prw-agent.service
+          (
+            cd phase109-payload
+            sha256sum prw-agent prw-agent.service > SHA256SUMS
+          )
+          cat phase109-payload/SHA256SUMS
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prw-phase109-${{ github.sha }}
+          path: phase109-payload/
+          if-no-files-found: error
+          retention-days: 1
+
+  stage-on-host:
+    name: Stage payload on PowerCode without privileges
+    needs: build-payload
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 5
+    steps:
+      - name: Download immutable payload
+        uses: actions/download-artifact@v4
+        with:
+          name: prw-phase109-${{ github.sha }}
+          path: ${{ runner.temp }}/prw-phase109-payload
+
+      - name: Verify and stage payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          src="$RUNNER_TEMP/prw-phase109-payload"
+          parent="$HOME/.local/state/private-remote-workspace/phase109/staging"
+          final="$parent/$GITHUB_SHA"
+          tmp="$parent/.${GITHUB_SHA}.tmp"
+
+          test -f "$src/prw-agent"
+          test -f "$src/prw-agent.service"
+          test -f "$src/SHA256SUMS"
+          (
+            cd "$src"
+            sha256sum -c SHA256SUMS
+          )
+
+          if [[ -e "$final" || -L "$final" || -e "$tmp" || -L "$tmp" ]]; then
+            echo "Refusing to overwrite an existing Phase 109 staging path" >&2
+            exit 1
+          fi
+
+          mkdir -p "$parent"
+          mkdir "$tmp"
+          install -m 0755 "$src/prw-agent" "$tmp/prw-agent"
+          install -m 0644 "$src/prw-agent.service" "$tmp/prw-agent.service"
+          install -m 0600 "$src/SHA256SUMS" "$tmp/SHA256SUMS"
+          (
+            cd "$tmp"
+            sha256sum -c SHA256SUMS
+          )
+          mv "$tmp" "$final"
+
+          echo "staging_path=$final"
+          stat -Lc '%n mode=%a uid=%u gid=%g type=%F' "$final" "$final/prw-agent" "$final/prw-agent.service" "$final/SHA256SUMS"
+          (
+            cd "$final"
+            cat SHA256SUMS
+          )
+          echo 'phase109_stage_status=ready_for_manual_privileged_install'
