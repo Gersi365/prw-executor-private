@@ -6,6 +6,13 @@
 //! not run a readiness loop, process OS signals, wire `main.rs`, or activate a
 //! service manager.
 
+use std::env;
+
+use prw_device_identity_custody::{
+    SYSTEMD_CREDENTIALS_DIRECTORY_ENV, UbuntuDeviceIdentityCustodyError,
+    load_ubuntu_enrollment_signer_from_systemd_credential,
+};
+
 use super::accept_ready::{
     AcceptReadyAgentSocket, AcceptReadyAgentSocketError, prepare_accept_ready_agent_socket,
 };
@@ -38,6 +45,8 @@ pub enum LocalLinuxProductionLifecycleAssemblyError {
     RuntimeDirectory(PrwRuntimeDirectoryPreparationError),
     /// The exclusive same-user Agent instance lock could not be acquired.
     InstanceLock(AgentInstanceLockError),
+    /// A configured systemd device-identity credential failed the locked custody boundary.
+    DeviceIdentityCustody(UbuntuDeviceIdentityCustodyError),
     /// The validated filesystem-backed Agent socket could not be bound.
     Bind(BoundAgentSocketError),
     /// The bound socket could not enter listening state; rollback evidence is preserved.
@@ -173,6 +182,14 @@ where
         .map_err(LocalLinuxProductionLifecycleAssemblyError::RuntimeDirectory)?;
     let instance_lock = acquire_agent_instance_lock(&runtime_directory)
         .map_err(LocalLinuxProductionLifecycleAssemblyError::InstanceLock)?;
+    let _device_identity_signer = if env::var_os(SYSTEMD_CREDENTIALS_DIRECTORY_ENV).is_some() {
+        Some(
+            load_ubuntu_enrollment_signer_from_systemd_credential()
+                .map_err(LocalLinuxProductionLifecycleAssemblyError::DeviceIdentityCustody)?,
+        )
+    } else {
+        None
+    };
     let bound = bind_validated_agent_socket(&runtime_directory, &instance_lock)
         .map_err(LocalLinuxProductionLifecycleAssemblyError::Bind)?;
 

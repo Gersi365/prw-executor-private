@@ -233,6 +233,8 @@ pub enum LinuxAgentBootstrapStartKind {
     AlreadyRunning,
     /// The instance lock failed for a reason other than an existing Agent.
     InstanceLock,
+    /// A configured systemd device-identity credential failed the locked custody boundary.
+    DeviceIdentityCustody,
     /// The validated local Agent socket could not be bound.
     Bind,
     /// The bound socket could not enter listening state.
@@ -254,6 +256,7 @@ impl LinuxAgentBootstrapStartKind {
             Self::RuntimeDirectory => "runtime_directory",
             Self::AlreadyRunning => "already_running",
             Self::InstanceLock => "instance_lock",
+            Self::DeviceIdentityCustody => "device_identity_custody",
             Self::Bind => "bind",
             Self::Listen => "listen",
             Self::AcceptReady => "accept_ready",
@@ -443,6 +446,9 @@ const fn map_lifecycle_start_kind(
         ) => LinuxAgentBootstrapStartKind::AlreadyRunning,
         LocalLinuxProductionLifecycleAssemblyError::InstanceLock(_) => {
             LinuxAgentBootstrapStartKind::InstanceLock
+        }
+        LocalLinuxProductionLifecycleAssemblyError::DeviceIdentityCustody(_) => {
+            LinuxAgentBootstrapStartKind::DeviceIdentityCustody
         }
         LocalLinuxProductionLifecycleAssemblyError::Bind(_) => LinuxAgentBootstrapStartKind::Bind,
         LocalLinuxProductionLifecycleAssemblyError::Listen { .. } => {
