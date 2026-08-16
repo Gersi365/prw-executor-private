@@ -13,6 +13,10 @@ use aws_lc_rs::{
 use prw_control_plane::{
     DeviceIdentityAlgorithm, DeviceIdentityPublicKeyEncoding, DeviceIdentitySignature,
     DeviceIdentitySignatureEncoding, PublicIdentityMaterial,
+    enrollment_pop::{
+        EnrollmentProofChallengeState, EnrollmentProofMessageError, EnrollmentProofOfPossession,
+        EnrollmentProofSubmissionError, encode_enrollment_proof_message,
+    },
 };
 
 /// Failure while verifying the locked PRW device-identity profile.
@@ -43,6 +47,32 @@ impl fmt::Display for DeviceIdentityVerificationError {
 }
 
 impl std::error::Error for DeviceIdentityVerificationError {}
+
+/// Failure while validating and cryptographically verifying an enrollment proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EnrollmentProofVerificationError {
+    /// Server-side challenge/replay context rejected the proof submission.
+    Submission(EnrollmentProofSubmissionError),
+    /// The bound enrollment snapshot could not be encoded under the locked message contract.
+    Message(EnrollmentProofMessageError),
+    /// Device-identity public-key or signature verification failed.
+    DeviceIdentity(DeviceIdentityVerificationError),
+}
+
+impl fmt::Display for EnrollmentProofVerificationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Submission(error) => write!(formatter, "enrollment proof submission rejected: {error}"),
+            Self::Message(error) => write!(formatter, "enrollment proof message rejected: {error}"),
+            Self::DeviceIdentity(error) => {
+                write!(formatter, "enrollment proof device identity rejected: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EnrollmentProofVerificationError {}
 
 /// Verifies a signature under the locked PRW device-identity profile.
 ///
@@ -88,4 +118,42 @@ pub fn verify_device_identity_signature(
     parsed
         .verify_sig(message, signature.as_bytes())
         .map_err(|_| DeviceIdentityVerificationError::InvalidSignature)
+}
+
+/// Verifies one enrollment proof against the immutable server-side challenge state.
+///
+/// Verification order is fail-closed: challenge/replay context, canonical message
+/// construction, device-identity signature verification, then single-use consumption.
+/// Invalid signatures do not consume the challenge. Successful verification consumes
+/// the current in-memory challenge before this function returns.
+///
+/// This function does not approve enrollment, authenticate an account, persist state,
+/// or generate/sign with a private key.
+///
+/// # Errors
+///
+/// Returns [`EnrollmentProofVerificationError`] when challenge/replay checks fail,
+/// canonical message construction fails, or device-identity verification fails.
+pub fn verify_enrollment_proof(
+    state: &mut EnrollmentProofChallengeState,
+    proof: &EnrollmentProofOfPossession,
+    now_unix_seconds: u64,
+) -> Result<(), EnrollmentProofVerificationError> {
+    state
+        .validate_submission(proof, now_unix_seconds)
+        .map_err(EnrollmentProofVerificationError::Submission)?;
+
+    let message = encode_enrollment_proof_message(state.bound_request(), state.challenge().nonce())
+        .map_err(EnrollmentProofVerificationError::Message)?;
+
+    verify_device_identity_signature(
+        &state.bound_request().public_identity,
+        &message,
+        proof.signature(),
+    )
+    .map_err(EnrollmentProofVerificationError::DeviceIdentity)?;
+
+    state
+        .consume_verified(proof, now_unix_seconds)
+        .map_err(EnrollmentProofVerificationError::Submission)
 }
