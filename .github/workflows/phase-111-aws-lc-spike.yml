@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: phase-111-aws-lc-spike
@@ -15,15 +15,12 @@ concurrency:
 
 jobs:
   validate:
-    if: ${{ !contains(github.event.head_commit.message, 'phase 111: lock validated aws-lc dependency graph') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Pin Rust 1.97.1
         run: |
@@ -40,7 +37,7 @@ jobs:
       - name: Review dependency graph
         run: |
           echo '=== aws-lc packages ==='
-          cargo tree -p prw-control-plane | tee /tmp/phase111-cargo-tree.txt
+          cargo tree -p prw-control-plane
           echo '=== lock diff ==='
           git diff -- Cargo.lock
 
@@ -113,14 +110,10 @@ jobs:
           echo "phase111_crypto_probe_bytes=$crypto_size"
           echo "phase111_crypto_probe_delta_bytes=$delta"
 
-      - name: Commit validated Cargo.lock
+      - name: Emit validated Cargo.lock candidate
+        if: success()
         run: |
-          if git diff --quiet -- Cargo.lock; then
-            echo 'phase111_lockfile_change=none'
-            exit 0
-          fi
-          git config user.name 'PRW Phase 111 CI'
-          git config user.email 'phase111-ci@users.noreply.github.com'
-          git add Cargo.lock
-          git commit -m 'phase 111: lock validated aws-lc dependency graph'
-          git push origin HEAD:main
+          echo 'PHASE111_CARGO_LOCK_BASE64_BEGIN'
+          base64 -w0 Cargo.lock
+          echo
+          echo 'PHASE111_CARGO_LOCK_BASE64_END'
