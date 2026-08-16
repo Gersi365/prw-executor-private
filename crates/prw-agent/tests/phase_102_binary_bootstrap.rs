@@ -76,11 +76,9 @@ impl TempCredentialDirectory {
         fs::set_permissions(&path, Permissions::from_mode(0o700))
             .expect("Phase 125 temporary credential directory mode sets");
 
-        let key = EcdsaKeyPair::generate_pkcs8(
-            &ECDSA_P256_SHA256_ASN1_SIGNING,
-            &SystemRandom::new(),
-        )
-        .expect("Phase 125 disposable P-256 credential generates");
+        let key =
+            EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                .expect("Phase 125 disposable P-256 credential generates");
         let credential = path.join(SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME);
         fs::write(&credential, key.as_ref()).expect("Phase 125 disposable credential writes");
         fs::set_permissions(&credential, Permissions::from_mode(0o400))
