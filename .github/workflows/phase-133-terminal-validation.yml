@@ -1,4 +1,4 @@
-name: Phase 133 Terminal Foundation Validation
+name: Phase 133 A01 Terminal Foundation Validation
 
 on:
   push:
@@ -20,15 +20,87 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -f logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
-          grep -Fq 'PHASE_130_DONE' \
-            logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
+          grep -Fq 'PHASE_130_DONE' logs/audits/phase-130-device-registry-workspace-membership/PRW-PHASE-130-REGISTRY-MEMBERSHIP-VALIDATION.txt
           test -f logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
-          grep -Fq 'PHASE_132_DONE' \
-            logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
+          grep -Fq 'PHASE_132_DONE' logs/audits/phase-132-file-transfer-hardening/PRW-PHASE-132-FILE-TRANSFER-HARDENING-VALIDATION.txt
           test -f contracts/TERMINAL_SESSION_FOUNDATION_CONTRACT.md
           grep -Fq 'Status: Phase 133 implementation lock' contracts/TERMINAL_SESSION_FOUNDATION_CONTRACT.md
           grep -Fq '"crates/prw-terminal"' Cargo.toml
-          echo 'phase133_prerequisites=pass'
+          echo 'phase133_a01_prerequisites=pass'
+
+      - name: Apply exact first-run Clippy correctives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-terminal/src/lib.rs')
+          text = path.read_text()
+
+          replacements = [
+              ('    workspace_id: WorkspaceId,\n', '    workspace: WorkspaceId,\n'),
+              ('    user_id: UserId,\n', '    user: UserId,\n'),
+              ('    device_id: DeviceId,\n', '    device: DeviceId,\n'),
+              ('    authenticated_session_id: SessionId,\n', '    authenticated_session: SessionId,\n'),
+              ('            workspace_id: principal.workspace_id().clone(),\n', '            workspace: principal.workspace_id().clone(),\n'),
+              ('            user_id: principal.user_id().clone(),\n', '            user: principal.user_id().clone(),\n'),
+              ('            device_id: principal.device_id().clone(),\n', '            device: principal.device_id().clone(),\n'),
+              ('            authenticated_session_id: session_id,\n', '            authenticated_session: session_id,\n'),
+              ('        &self.workspace_id\n', '        &self.workspace\n'),
+              ('        &self.user_id\n', '        &self.user\n'),
+              ('        &self.device_id\n', '        &self.device\n'),
+              ('        &self.authenticated_session_id\n', '        &self.authenticated_session\n'),
+              ('            workspace_id: WorkspaceId::new("workspace-1").expect("workspace"),\n', '            workspace: WorkspaceId::new("workspace-1").expect("workspace"),\n'),
+              ('            user_id: UserId::new("user-1").expect("user"),\n', '            user: UserId::new("user-1").expect("user"),\n'),
+              ('            device_id: DeviceId::new("device-1").expect("device"),\n', '            device: DeviceId::new("device-1").expect("device"),\n'),
+              ('            authenticated_session_id: SessionId::new("session-1").expect("session"),\n', '            authenticated_session: SessionId::new("session-1").expect("session"),\n'),
+          ]
+          for old, new in replacements:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'Phase133 field corrective count mismatch for {old!r}')
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'Phase133 corrected field form missing for {new!r}')
+
+          old = '''        let output = match backend.read_output(handle, maximum_bytes) {\n            Ok(output) => output,\n            Err(_) => {\n                terminal.record.mark_failed();\n                return Err(TerminalError::Backend);\n            }\n        };'''
+          new = '''        let Ok(output) = backend.read_output(handle, maximum_bytes) else {\n            terminal.record.mark_failed();\n            return Err(TerminalError::Backend);\n        };'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase133 read-output corrective count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase133 corrected read-output form missing')
+
+          old = '''    #[derive(Debug, Default)]\n    struct SpyBackend {\n        open_calls: usize,\n        write_calls: usize,\n        resize_calls: usize,\n        read_calls: usize,\n        close_calls: usize,\n        fail_open: bool,\n        fail_write: bool,\n        fail_read: bool,\n        fail_close: bool,\n        last_profile: Option<TerminalProfile>,\n        last_geometry: Option<TerminalGeometry>,\n        output: Vec<u8>,\n    }'''
+          new = '''    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n    enum FailureMode {\n        #[default]\n        None,\n        Open,\n        Write,\n        Read,\n        Close,\n    }\n\n    #[derive(Debug, Default)]\n    struct SpyBackend {\n        open_calls: usize,\n        write_calls: usize,\n        resize_calls: usize,\n        read_calls: usize,\n        close_calls: usize,\n        failure: FailureMode,\n        last_profile: Option<TerminalProfile>,\n        last_geometry: Option<TerminalGeometry>,\n        output: Vec<u8>,\n    }'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Phase133 spy corrective count mismatch')
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Phase133 corrected spy form missing')
+
+          for old, new in [
+              ('            if self.fail_open {\n', '            if self.failure == FailureMode::Open {\n'),
+              ('            if self.fail_write {\n', '            if self.failure == FailureMode::Write {\n'),
+              ('            if self.fail_read {\n', '            if self.failure == FailureMode::Read {\n'),
+              ('            if self.fail_close {\n', '            if self.failure == FailureMode::Close {\n'),
+              ('            fail_open: true,\n', '            failure: FailureMode::Open,\n'),
+              ('            fail_read: true,\n', '            failure: FailureMode::Read,\n'),
+              ('            fail_close: true,\n', '            failure: FailureMode::Close,\n'),
+          ]:
+              if old in text:
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f'Phase133 failure-mode form missing for {new!r}')
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          git diff --check
+          echo 'phase133_a01_exact_correctives=pass'
 
       - name: Normalize terminal source and exact locked graph
         id: lock
@@ -37,11 +109,9 @@ jobs:
           set -Eeuo pipefail
           rustc --version
           cargo --version
-          cargo fmt --all
           cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
-          cargo clippy --fix --locked -p prw-terminal --all-targets --all-features \
-            --allow-dirty --allow-staged -- -D warnings
+          cargo clippy --fix --locked -p prw-terminal --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
           cargo fmt --all
           git restore --worktree --staged -- target/.rustc_info.json 2>/dev/null || true
           mapfile -t changed < <(git diff --name-only -- . ':!target')
@@ -56,8 +126,8 @@ jobs:
           source_sha=$(sha256sum crates/prw-terminal/src/lib.rs | cut -d' ' -f1)
           echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "phase133_lock_sha256=$lock_sha"
-          echo "phase133_source_sha256=$source_sha"
+          echo "phase133_a01_lock_sha256=$lock_sha"
+          echo "phase133_a01_source_sha256=$source_sha"
 
       - name: Prove terminal API boundary
         shell: bash
@@ -74,7 +144,7 @@ jobs:
           grep -Fq 'MAX_TERMINAL_IO_BYTES: usize = 65_536' "$source"
           grep -Fq 'pub enum TerminalProfile' "$source"
           grep -Fq 'pub trait TerminalBackend' "$source"
-          echo 'phase133_typed_boundary=pass'
+          echo 'phase133_a01_typed_boundary=pass'
 
       - name: Run focused Phase 133 gates
         shell: bash
@@ -83,7 +153,7 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --locked -p prw-terminal --all-targets --all-features -- -D warnings
           cargo test --locked -p prw-terminal --all-targets
-          echo 'phase133_focused_validation=pass'
+          echo 'phase133_a01_focused_validation=pass'
 
       - name: Run full workspace gates
         shell: bash
@@ -94,7 +164,7 @@ jobs:
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo test --locked --workspace --all-targets
           cargo build --locked --workspace --all-targets
-          echo 'phase133_workspace_validation=pass'
+          echo 'phase133_a01_workspace_validation=pass'
 
       - name: Record authoritative Phase 133 report
         shell: bash
@@ -134,7 +204,7 @@ jobs:
           A terminal record immutably snapshots WorkspaceId, UserId, DeviceId and authenticated PRW SessionId from a registry-current principal boundary. Workspace role metadata does not itself grant terminal capability.
 
           VALIDATION
-          The authoritative run passed the static typed-boundary checks, focused prw-terminal rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph. Disposable tests cover zero identifiers, geometry bounds, duplicate identifier rejection, 32-session capacity, named-profile/geometry forwarding, open failure, empty/oversized input, resize validation, output-request bounds, backend failure, oversized backend output, explicit close and immutable identity binding.
+          Run 31945258630 reached focused source validation and exposed only three Clippy issues: common field postfixes, manual let-else, and excessive bools in the test spy. This authoritative corrective run removes those mechanically without weakening the terminal contract, then passes typed-boundary checks, focused prw-terminal rustfmt/Clippy/tests, and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
 
           DEFERRED
           Linux PTY/process spawning, production terminal capability policy, remote transport framing, reconnect/reattach persistence, shell environment policy, clipboard/file integration, Android/Desktop terminal UI and port forwarding remain deferred. Phase 134 owns port-forwarding foundation.
@@ -153,9 +223,8 @@ jobs:
           set -Eeuo pipefail
           git config user.name Gersi365
           git config user.email Gersi365@outlook.com
-          git add Cargo.lock crates/prw-terminal/src/lib.rs \
-            logs/audits/phase-133-terminal-session-foundation/PRW-PHASE-133-TERMINAL-SESSION-FOUNDATION-VALIDATION.txt
+          git add Cargo.lock crates/prw-terminal/src/lib.rs logs/audits/phase-133-terminal-session-foundation/PRW-PHASE-133-TERMINAL-SESSION-FOUNDATION-VALIDATION.txt
           git diff --cached --check
           git commit -m 'phase 133: validate terminal session foundation'
           git push origin HEAD:main
-          echo 'phase133_materialization=pass'
+          echo 'phase133_a01_materialization=pass'
