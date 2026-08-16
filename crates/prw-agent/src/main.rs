@@ -8,9 +8,19 @@
 
 use std::process::ExitCode;
 
+fn sha256_hex(fingerprint: [u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(64);
+    for byte in fingerprint {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
 #[cfg(target_os = "linux")]
 fn main() -> ExitCode {
-    let Ok(_device_identity_signer) =
+    let Ok(device_identity_signer) =
         prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential()
     else {
         eprintln!(
@@ -18,6 +28,11 @@ fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+
+    eprintln!(
+        "prw-agent event=device_identity_loaded public_spki_sha256={}",
+        sha256_hex(device_identity_signer.public_identity_sha256())
+    );
 
     match prw_agent::linux_bootstrap::run() {
         Ok(report) => {
