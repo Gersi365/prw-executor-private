@@ -1,0 +1,100 @@
+name: Phase 139 Transport Dependency Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-139-transport-dependency-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove repository baseline is unchanged
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f contracts/PRODUCTIZATION_ROADMAP_AND_MUTATION_GATES_CONTRACT.md
+          grep -Fq 'Phase 139 — Remote transport standards and dependency decision' \
+            contracts/PRODUCTIZATION_ROADMAP_AND_MUTATION_GATES_CONTRACT.md
+          rustc --version
+          cargo --version
+          git diff --exit-code
+          echo 'phase139_repo_baseline=pass'
+
+      - name: Build isolated exact dependency graph
+        id: graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          cd "$scratch"
+          cat > Cargo.toml <<'EOF'
+          [package]
+          name = "prw-phase139-transport-probe"
+          version = "0.0.0"
+          edition = "2024"
+          rust-version = "1.97.1"
+          publish = false
+
+          [dependencies]
+          quinn = { version = "=0.11.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+          rustls = { version = "=0.23.43", default-features = false, features = ["std", "aws_lc_rs"] }
+          tokio = { version = "=1.53.1", default-features = false, features = ["rt", "macros", "net", "time", "sync", "io-util"] }
+          EOF
+          mkdir src
+          cat > src/main.rs <<'EOF'
+          use quinn::{ClientConfig as QuinnClientConfig, EndpointConfig, ServerConfig as QuinnServerConfig};
+          use rustls::{ClientConfig as RustlsClientConfig, ServerConfig as RustlsServerConfig};
+          use tokio::{runtime::Builder, time::Duration};
+
+          fn main() {
+              let _ = std::mem::size_of::<QuinnClientConfig>();
+              let _ = std::mem::size_of::<QuinnServerConfig>();
+              let _ = std::mem::size_of::<EndpointConfig>();
+              let _ = std::mem::size_of::<RustlsClientConfig>();
+              let _ = std::mem::size_of::<RustlsServerConfig>();
+              let _ = Builder::new_current_thread().enable_time().build();
+              let _ = Duration::from_secs(1);
+          }
+          EOF
+
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 > metadata.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('metadata.json').read_text())
+          versions = {}
+          for pkg in data['packages']:
+              if pkg['name'] in {'quinn', 'rustls', 'tokio'}:
+                  versions.setdefault(pkg['name'], set()).add(pkg['version'])
+          expected = {
+              'quinn': {'0.11.11'},
+              'rustls': {'0.23.43'},
+              'tokio': {'1.53.1'},
+          }
+          if versions != expected:
+              raise SystemExit(f'exact dependency mismatch: {versions!r}')
+          print('phase139_exact_versions=pass')
+          PY
+          cargo check --locked --all-targets
+          lock_sha="$(sha256sum Cargo.lock | cut -d' ' -f1)"
+          echo "lock_sha=$lock_sha" >> "$GITHUB_OUTPUT"
+          echo "phase139_probe_lock_sha256=$lock_sha"
+          echo 'phase139_exact_dependency_compile=pass'
+
+      - name: Re-prove repository immutability
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --exit-code
+          git status --porcelain=v1 | grep -q '^?? target/' && true || true
+          echo 'phase139_no_repository_runtime_change=pass'
