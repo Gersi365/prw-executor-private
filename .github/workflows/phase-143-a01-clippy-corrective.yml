@@ -1,4 +1,4 @@
-name: Phase 143 A01 Clippy Corrective
+name: Phase 143 A02 Test Corrective
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prove Phase 143 A01 baseline
+      - name: Prove Phase 143 A02 baseline
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -24,9 +24,10 @@ jobs:
           test -f crates/prw-remote-bridge/tests/end_to_end.rs
           grep -Fq 'fn validate_time(&self' crates/prw-remote-bridge/src/lib.rs
           grep -Fq 'fn map_transport_error(' crates/prw-remote-bridge/src/lib.rs
+          grep -Fq 'let mut suspended_fixture = fixture(WorkspaceRole::Member);' crates/prw-remote-bridge/tests/end_to_end.rs
           rustc --version | grep -Fq 'rustc 1.97.1'
           cargo --version | grep -Fq 'cargo 1.97.1'
-          echo phase143_a01_baseline=pass
+          echo phase143_a02_baseline=pass
 
       - name: Materialize Phase 143 registry and workspace graph
         shell: bash
@@ -144,7 +145,7 @@ jobs:
               text = text.replace(method_anchor, methods + method_anchor)
           registry.write_text(text)
           PY
-          echo phase143_a01_graph=pass
+          echo phase143_a02_graph=pass
 
       - name: Apply exact Clippy and documentation correctives
         shell: bash
@@ -171,17 +172,17 @@ jobs:
               raise SystemExit('dispatcher documentation boundary mismatch')
           path.write_text(text.replace(old, new))
           PY
-          echo phase143_a01_correctives=pass
+          echo phase143_a02_correctives=pass
 
       - name: Lock and prove graph and static boundary
         shell: bash
         run: |
           set -Eeuo pipefail
           cargo generate-lockfile
-          cargo metadata --locked --format-version 1 > /tmp/phase143-a01-metadata.json
+          cargo metadata --locked --format-version 1 > /tmp/phase143-a02-metadata.json
           python3 - <<'PY'
           import json
-          data = json.load(open('/tmp/phase143-a01-metadata.json'))
+          data = json.load(open('/tmp/phase143-a02-metadata.json'))
           bridge = next(p for p in data['packages'] if p['name'] == 'prw-remote-bridge')
           runtime = {d['name'] for d in bridge['dependencies'] if d.get('kind') is None}
           expected = {'prw-agent','prw-connectivity','prw-file-service','prw-file-transfer','prw-forwarding','prw-policy','prw-registry','prw-remote-transport','prw-session','prw-terminal'}
@@ -189,19 +190,19 @@ jobs:
               raise SystemExit(f'Phase 143 runtime dependency mismatch: {runtime!r}')
           if any(d.get('source') is not None for d in bridge['dependencies'] if d.get('kind') is None):
               raise SystemExit('Phase 143 acquired external runtime dependency')
-          print('phase143_a01_exact_graph=pass')
+          print('phase143_a02_exact_graph=pass')
           PY
           source=crates/prw-remote-bridge/src/lib.rs
           for forbidden in 'UdpSocket' 'TcpStream' 'TcpListener' 'ToSocketAddrs' 'lookup_host' 'tokio::' 'std::process' 'Command::new' '/dev/net/tun' 'iptables' 'nftables'; do
             if grep -Fq "$forbidden" "$source"; then
-              echo "phase143_a01_forbidden_runtime_token=$forbidden" >&2
+              echo "phase143_a02_forbidden_runtime_token=$forbidden" >&2
               exit 1
             fi
           done
           grep -Fq 'validate_authenticated_session' "$source"
           grep -Fq 'validate_transport_identity' "$source"
           grep -Fq 'self.policy.evaluate(capability)' "$source"
-          echo phase143_a01_static_boundary=pass
+          echo phase143_a02_static_boundary=pass
 
       - name: Focused Phase 143 validation
         shell: bash
@@ -213,7 +214,7 @@ jobs:
           cargo clippy --locked -p prw-registry -p prw-remote-bridge --all-targets --all-features -- -D warnings
           cargo test --locked -p prw-registry -p prw-remote-bridge --all-targets
           cargo build --locked -p prw-remote-bridge --all-targets
-          echo phase143_a01_focused=pass
+          echo phase143_a02_focused=pass
 
       - name: Full workspace validation
         shell: bash
@@ -222,7 +223,7 @@ jobs:
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo test --locked --workspace --all-targets
           cargo build --locked --workspace --all-targets
-          echo phase143_a01_workspace=pass
+          echo phase143_a02_workspace=pass
 
       - name: Write authoritative Phase 143 report
         shell: bash
@@ -263,7 +264,7 @@ jobs:
             '' \
             'VALIDATION: all 18 operation codes round-trip to existing typed domain values and exact capability mappings. Disposable tests use real signed Phase 128 proof and Phase 130 current registry. Expiry/future time, membership suspension, device revocation, stale transport, malformed codec and policy denial prevent dispatch. Valid dispatch returns correlated Response; oversized response fails closed. Focused and full locked workspace validation passed.' \
             '' \
-            'CORRECTIVE HISTORY: initial run passed prerequisites, registry materialization, exact graph and static boundary, then stopped only on five const-eligible Clippy findings and one missing dispatcher # Errors section. A01 changes only those hygiene findings.' \
+            'CORRECTIVE HISTORY: initial run passed prerequisites, registry materialization, exact graph and static boundary, then stopped on five const-eligible Clippy findings and one missing dispatcher # Errors section. A01 corrected those and reached test compilation, which exposed one regression-only local fixture name shadowing the fixture constructor. A02 renames only that local fixture variable and re-runs the same validated source correctives.' \
             '' \
             'PRODUCTION BOUNDARY: no production QUIC listener, ICE/STUN/TURN/relay activation, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS or client distribution state changed.' \
             '' \
@@ -280,4 +281,4 @@ jobs:
           git add Cargo.toml Cargo.lock crates/prw-registry/Cargo.toml crates/prw-registry/src/lib.rs crates/prw-remote-bridge logs/audits/phase-143-end-to-end-authenticated-capability-bridge/PRW-PHASE-143-END-TO-END-AUTHENTICATED-CAPABILITY-BRIDGE-VALIDATION.txt
           git commit -m 'phase 143: validate authenticated capability bridge'
           git push origin HEAD:main
-          echo phase143_a01_materialization=pass
+          echo phase143_a02_materialization=pass
