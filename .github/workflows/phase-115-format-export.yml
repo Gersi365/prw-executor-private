@@ -6,7 +6,11 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: phase-115-format-export
+  cancel-in-progress: false
 
 jobs:
   format-export:
@@ -14,20 +18,48 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Pin Rust 1.97.1
         run: |
           rustup toolchain install 1.97.1 --profile minimal --component rustfmt
           rustup override set 1.97.1
+
       - name: Format workspace
         run: cargo fmt --all
-      - name: Export formatted Phase 115 files
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase115-formatted-files
-          path: |
-            crates/prw-control-plane/src/enrollment_pop.rs
-            crates/prw-control-plane/src/lib.rs
-            crates/prw-device-identity/src/lib.rs
+
+      - name: Guard formatting mutation boundary
+        run: |
+          mapfile -t changed < <(git diff --name-only)
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo 'No rustfmt changes required.'
+            exit 0
+          fi
+
+          allowed_regex='^(crates/prw-control-plane/src/enrollment_pop\.rs|crates/prw-control-plane/src/lib\.rs|crates/prw-device-identity/src/lib\.rs|crates/prw-device-identity/tests/enrollment_pop\.rs)$'
+          for path in "${changed[@]}"; do
+            if ! [[ "$path" =~ $allowed_regex ]]; then
+              echo "Unexpected rustfmt mutation: $path" >&2
+              exit 1
+            fi
+          done
+          git diff --check
+          printf 'phase115_rustfmt_files=%s\n' "${changed[*]}"
+
+      - name: Commit guarded formatting output
+        run: |
+          if git diff --quiet; then
+            echo 'phase115_rustfmt_commit=NOT_REQUIRED'
+            exit 0
+          fi
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add \
+            crates/prw-control-plane/src/enrollment_pop.rs \
+            crates/prw-control-plane/src/lib.rs \
+            crates/prw-device-identity/src/lib.rs \
             crates/prw-device-identity/tests/enrollment_pop.rs
-          if-no-files-found: error
-          retention-days: 1
+          git commit -m 'phase 115 a01: apply rustfmt output'
+          git push origin HEAD:main
+          echo 'phase115_rustfmt_commit=PASS'
