@@ -1,0 +1,127 @@
+Private Remote Workspace
+Phase 109-A03 Enable / Start Transaction Audit
+
+STATUS: PASS / SERVICE_ENABLED_ACTIVE / REAL_AGENT_PROCESS_PROVEN / LOCAL_IPC_READY / PROTOCOL_1_0 / LINGER_UNCHANGED
+AUDIT TYPE: REAL-HOST SYSTEMD USER-SERVICE ENABLEMENT, START, AND FUNCTIONAL READINESS
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Target host: PowerCode
+Target user: gersi365
+Target UID: 1000
+
+PREREQUISITES
+
+Before mutation, the transaction revalidated:
+
+- exact root-owned Agent binary at /usr/lib/private-remote-workspace/prw-agent;
+- exact root-owned unit at /usr/lib/systemd/user/prw-agent.service;
+- Agent SHA-256 8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf;
+- unit SHA-256 24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909;
+- XDG_RUNTIME_DIR=/run/user/1000;
+- live user D-Bus socket at /run/user/1000/bus;
+- pre-transaction service state disabled/inactive;
+- pre-existing linger state yes.
+
+TRANSACTION EVIDENCE
+
+GitHub Actions run:
+- workflow: Phase 109 A08 Enable Start Transaction
+- run: 31927473004
+- job: 95117160103
+- runner: PowerCode
+
+MUTATIONS
+
+1. systemctl --user enable prw-agent.service
+
+Result:
+- enable=success
+- created enablement symlink:
+  /home/gersi365/.config/systemd/user/default.target.wants/prw-agent.service
+  -> /usr/lib/systemd/user/prw-agent.service
+
+2. systemctl --user start prw-agent.service
+
+Result:
+- start=success
+
+ROLLBACK CONTRACT
+
+The transaction installed an ERR/INT/TERM rollback handler before mutation. If any postcondition or readiness proof had failed after enable/start, the handler would execute:
+
+systemctl --user disable --now prw-agent.service
+
+and report the reconciled enabled/active state. No rollback was triggered because all postconditions passed.
+
+SYSTEMD POSTCONDITIONS
+
+Observed after start:
+
+- LoadState=loaded
+- ActiveState=active
+- SubState=running
+- UnitFileState=enabled
+- MainPID=217895
+- ExecMainPID=217895
+- ExecMainStatus=0
+- Result=success
+- configured restart interval=5s
+
+The live process executable resolved through /proc/<MainPID>/exe to:
+
+/usr/lib/private-remote-workspace/prw-agent
+
+FUNCTIONAL LOCAL IPC READINESS PROOF
+
+Readiness was not inferred only from systemd state.
+
+A same-UID Python probe connected to the locked local Unix-domain endpoint:
+
+/run/user/1000/private-remote-workspace/agent.sock
+
+Socket metadata:
+- UID=1000
+- GID=1000
+- mode=0600
+
+The probe constructed the locked PRW local IPC version-1.0 Request frame:
+
+- magic: PRW\0
+- protocol: 1.0
+- message kind: Request
+- non-zero correlated request ID
+- payload length: 2
+- command: GetAgentStatus (code 1)
+
+The live Agent returned a correlated Response frame with:
+
+- response status: OK
+- runtime state: Ready
+- protocol: 1.0
+
+Readiness evidence emitted by the transaction:
+
+- ipc_response_status=ok
+- ipc_runtime_state=ready
+- ipc_protocol=1.0
+- ipc_readiness=success
+
+FINAL POSTCONDITIONS
+
+- service enabled;
+- service active;
+- live Agent executable path exact;
+- local IPC socket trusted shape exact;
+- real GetAgentStatus response Ready;
+- installed Agent hash unchanged;
+- installed unit hash unchanged;
+- linger remained yes.
+
+LINGER OWNERSHIP
+
+Linger=yes predates PRW Phase 109. This enable/start transaction did not call loginctl enable-linger or loginctl disable-linger and does not claim ownership of linger state.
+
+CLASSIFICATION
+
+PHASE_109_A03_PASS / USER_SERVICE_ENABLED_ACTIVE / REAL_PRW_AGENT_RUNNING / SAME_UID_LOCAL_IPC_READY / GET_AGENT_STATUS_OK_READY / PROTOCOL_1_0 / LINGER_PREEXISTING_AND_UNCHANGED
