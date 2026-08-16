@@ -63,7 +63,10 @@ impl fmt::Display for UbuntuEnrollmentSignerError {
                 formatter.write_str("enrollment public identity mismatch")
             }
             Self::MessageConstruction(error) => {
-                write!(formatter, "enrollment proof message construction failed: {error}")
+                write!(
+                    formatter,
+                    "enrollment proof message construction failed: {error}"
+                )
             }
             Self::SigningFailed => formatter.write_str("device identity signing failed"),
             Self::SignatureMaterialConstructionFailed => {
