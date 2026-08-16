@@ -1,0 +1,31 @@
+Private Remote Workspace
+Phase 142 — Disposable Relay Protocol and Service
+
+STATUS:
+PASS / FALLBACK_ONLY / OPAQUE_PAYLOAD_FORWARDING / ROUTE_TOKEN_DEBUG_REDACTED / BOUNDED_IN_MEMORY_SERVICE / FULL_WORKSPACE_VALIDATION_PASS / NO_PRODUCTION_RELAY_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: cfe8ffdcbd794b8fcb6a491af31825b1ccfbdb47
+Authoritative validation run: 31954890602
+Cargo.lock SHA-256: f71c3c2b29310bc100336c7d2d73ea13cbdc735f6533edcb87078042eab32745
+prw-relay/src/lib.rs SHA-256: c37e27c5e92cdfcb86bc9154a0790a656141fcd324aa0ea3872c7cb8069697e7
+prw-relay-service/src/lib.rs SHA-256: cd93bc17284ae31788957a8217f1c8c6535f776c4188eb4c1c5d8e03a9cede62
+
+CONTRACT: contracts/DISPOSABLE_RELAY_PROTOCOL_SERVICE_CONTRACT.md
+IMPLEMENTATION: crates/prw-relay-service plus RelayRouteToken Debug hardening in crates/prw-relay
+
+OUTCOME: Phase 136 fallback-only admission is preserved. The reference provider/service is dependency-local and in-memory, owns no socket/DNS/async/process/TUN/firewall/route/QUIC/TLS capability, and forwards OpaqueRelayFrame bytes byte-for-byte through the 48-byte PRWR metadata envelope.
+
+BOUNDS: 32 active routes, two participants per route, 64 queued frames and 1 MiB queued opaque payload per participant, retaining the Phase 136 65,536-byte single-frame ceiling.
+
+SECURITY: RelayRouteToken and nested RelaySessionSpec Debug redact route-token material. RelayRoutingPacket Debug redacts token and payload. Regression tests prove the byte queue ceiling, route isolation, route-token mismatch rejection, unpaired forwarding failure, third-participant rejection and bidirectional opaque byte preservation.
+
+VALIDATION: focused rustfmt, Clippy -D warnings, relay/service all-target tests and service build passed; full locked workspace Clippy, tests and build passed.
+
+CORRECTIVE HISTORY: initial workflow syntax failed before runner allocation; A01 reached compiler and isolated encode panic-doc plus Result equality requirements; A02 resolved those and isolated only one regression-test similar-name lint and one existing redundant test clone; A03 applies those two semantic-neutral hygiene corrections.
+
+PRODUCTION BOUNDARY: no production relay listener, TURN allocation, Agent restart/replacement, credential, firewall/NAT/router/TUN/TAP/route/DNS or client distribution state changed.
+
+FINAL CLASSIFICATION: PHASE_142_DONE / DISPOSABLE_RELAY_PROVIDER_VALIDATED / OPAQUE_END_TO_END_PAYLOAD / READY_FOR_PHASE_143

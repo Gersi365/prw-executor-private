@@ -42,6 +42,7 @@ impl RelayProviderHandle {
 }
 
 /// One validated Phase 142 relay-routing packet.
+#[derive(PartialEq, Eq)]
 pub struct RelayRoutingPacket {
     route_token: RelayRouteToken,
     payload: OpaqueRelayFrame,
@@ -70,6 +71,10 @@ impl RelayRoutingPacket {
     }
 
     /// Encodes the fixed Phase 142 routing envelope.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the Phase 136 frame ceiling stops fitting in `u32`; the locked 65,536-byte bound fits.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let payload_len = u32::try_from(self.payload.as_bytes().len())
@@ -114,8 +119,8 @@ impl RelayRoutingPacket {
         }
         let mut token_bytes = [0u8; 32];
         token_bytes.copy_from_slice(&encoded[12..44]);
-        let route_token = RelayRouteToken::new(token_bytes)
-            .map_err(|_| RelayServiceError::InvalidRouteToken)?;
+        let route_token =
+            RelayRouteToken::new(token_bytes).map_err(|_| RelayServiceError::InvalidRouteToken)?;
         let declared = u32::from_be_bytes([encoded[44], encoded[45], encoded[46], encoded[47]]);
         let declared = usize::try_from(declared).map_err(|_| RelayServiceError::InvalidLength)?;
         if declared == 0 {
@@ -194,7 +199,10 @@ impl DisposableRelayService {
         self.handle_routes.len()
     }
 
-    fn register(&mut self, spec: &RelaySessionSpec) -> Result<RelayProviderHandle, RelayServiceError> {
+    fn register(
+        &mut self,
+        spec: &RelaySessionSpec,
+    ) -> Result<RelayProviderHandle, RelayServiceError> {
         let token = spec.route_token();
         let endpoint = spec.endpoint();
         let transport = *spec.peer().transport_identity().as_bytes();
@@ -330,7 +338,9 @@ impl DisposableRelayService {
                 .get_mut(&token)
                 .ok_or(RelayServiceError::UnknownRoute)?;
             let before = route.participants.len();
-            route.participants.retain(|participant| participant.handle != handle);
+            route
+                .participants
+                .retain(|participant| participant.handle != handle);
             if route.participants.len() == before {
                 return Err(RelayServiceError::UnknownParticipant);
             }
@@ -594,10 +604,8 @@ mod tests {
 
     #[test]
     fn routing_envelope_rejects_malformed_metadata_and_lengths() {
-        let packet = RelayRoutingPacket::new(
-            token(9),
-            OpaqueRelayFrame::new(vec![1, 2]).expect("frame"),
-        );
+        let packet =
+            RelayRoutingPacket::new(token(9), OpaqueRelayFrame::new(vec![1, 2]).expect("frame"));
         let valid = packet.encode();
         for (index, expected) in [
             (0usize, RelayServiceError::InvalidMagic),
@@ -656,18 +664,12 @@ mod tests {
 
         let first = OpaqueRelayFrame::new(vec![0x00, 0xff, 0x41, 0x10]).expect("first");
         a.transmit(&mut a_handle, &first).expect("a transmit");
-        let received = b
-            .poll_receive(b_handle)
-            .expect("b poll")
-            .expect("b frame");
+        let received = b.poll_receive(b_handle).expect("b poll").expect("b frame");
         assert_eq!(received.as_bytes(), first.as_bytes());
 
         let second = OpaqueRelayFrame::new(vec![7, 8, 9]).expect("second");
         b.transmit(&mut b_handle, &second).expect("b transmit");
-        let received = a
-            .poll_receive(a_handle)
-            .expect("a poll")
-            .expect("a frame");
+        let received = a.poll_receive(a_handle).expect("a poll").expect("a frame");
         assert_eq!(received.as_bytes(), second.as_bytes());
 
         a.close(&mut a_handle).expect("close a");
@@ -683,20 +685,15 @@ mod tests {
         let route = token(4);
         let spec = spec("device-b", 2, route, 5001, 1);
         let handle = provider.open(&spec).expect("open");
-        let packet = RelayRoutingPacket::new(
-            token(5),
-            OpaqueRelayFrame::new(vec![1]).expect("frame"),
-        )
-        .encode();
+        let packet =
+            RelayRoutingPacket::new(token(5), OpaqueRelayFrame::new(vec![1]).expect("frame"))
+                .encode();
         assert_eq!(
             service.0.borrow_mut().forward(handle, &packet),
             Err(RelayServiceError::RouteTokenMismatch)
         );
-        let correct = RelayRoutingPacket::new(
-            route,
-            OpaqueRelayFrame::new(vec![1]).expect("frame"),
-        )
-        .encode();
+        let correct =
+            RelayRoutingPacket::new(route, OpaqueRelayFrame::new(vec![1]).expect("frame")).encode();
         assert_eq!(
             service.0.borrow_mut().forward(handle, &correct),
             Err(RelayServiceError::RouteNotPaired)
@@ -710,7 +707,7 @@ mod tests {
         let mut a = DisposableRelayProvider::new(service.clone());
         let mut b = DisposableRelayProvider::new(service.clone());
         let mut c = DisposableRelayProvider::new(service.clone());
-        let mut d = DisposableRelayProvider::new(service.clone());
+        let mut d = DisposableRelayProvider::new(service);
         let a_spec = spec("device-b", 2, route, 5100, 1);
         let b_spec = spec("device-a", 1, route, 5100, 2);
         let c_spec = spec("device-c", 3, route, 5100, 3);
@@ -724,7 +721,10 @@ mod tests {
         let frame = OpaqueRelayFrame::new(vec![0xaa]).expect("frame");
         a.transmit(&mut a_handle, &frame).expect("transmit");
         assert_eq!(
-            b.poll_receive(b_handle).expect("b poll").expect("b frame").as_bytes(),
+            b.poll_receive(b_handle)
+                .expect("b poll")
+                .expect("b frame")
+                .as_bytes(),
             &[0xaa]
         );
         assert!(d.poll_receive(d_handle).expect("d poll").is_none());
@@ -746,7 +746,10 @@ mod tests {
             a.transmit(&mut a_handle, &frame).expect("within capacity");
         }
         let overflow = OpaqueRelayFrame::new(vec![0xff]).expect("overflow frame");
-        assert_eq!(a.transmit(&mut a_handle, &overflow), Err(RelayError::Backend));
+        assert_eq!(
+            a.transmit(&mut a_handle, &overflow),
+            Err(RelayError::Backend)
+        );
         for value in 0..MAX_QUEUED_RELAY_FRAMES {
             let byte = u8::try_from(value).expect("queue bound fits u8");
             let received = b

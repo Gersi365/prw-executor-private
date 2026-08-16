@@ -45,8 +45,14 @@ impl RelaySessionId {
 }
 
 /// Opaque non-zero relay routing token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RelayRouteToken([u8; 32]);
+
+impl fmt::Debug for RelayRouteToken {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("RelayRouteToken(<redacted>)")
+    }
+}
 
 impl RelayRouteToken {
     /// Creates a non-zero 32-byte routing token.

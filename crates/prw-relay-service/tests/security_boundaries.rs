@@ -30,8 +30,7 @@ fn relay_spec(
     let selected = SelectedConnectivityPath::Candidate(ConnectivityCandidate::new(
         CandidateId::new(candidate_id).expect("candidate identifier"),
         ConnectivityPathKind::Relay,
-        ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5600)
-            .expect("relay endpoint"),
+        ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5600).expect("relay endpoint"),
     ));
     RelaySessionSpec::from_selected_path(peer, route_token, selected).expect("relay spec")
 }
@@ -88,14 +87,16 @@ fn byte_queue_capacity_fails_without_dropping_accepted_frames() {
     assert!(sender.transmit(&mut sender_handle, &frame).is_err());
 
     for _ in 0..accepted {
-        let received = receiver
+        let queued_frame = receiver
             .poll_receive(receiver_handle)
             .expect("receive poll")
             .expect("accepted queued frame");
-        assert_eq!(received.as_bytes(), frame.as_bytes());
+        assert_eq!(queued_frame.as_bytes(), frame.as_bytes());
     }
-    assert!(receiver
-        .poll_receive(receiver_handle)
-        .expect("empty receive poll")
-        .is_none());
+    assert!(
+        receiver
+            .poll_receive(receiver_handle)
+            .expect("empty receive poll")
+            .is_none()
+    );
 }

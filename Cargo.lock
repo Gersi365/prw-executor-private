@@ -1099,6 +1099,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-relay-service"
+version = "0.1.0"
+dependencies = [
+ "prw-connectivity",
+ "prw-core",
+ "prw-relay",
+]
+
+[[package]]
 name = "prw-remote-transport"
 version = "0.1.0"
 dependencies = [
