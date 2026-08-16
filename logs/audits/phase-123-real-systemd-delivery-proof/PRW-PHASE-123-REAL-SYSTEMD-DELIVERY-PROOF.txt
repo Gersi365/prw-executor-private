@@ -1,0 +1,452 @@
+Private Remote Workspace
+Phase 123 — Real systemd User-Service Credential Delivery Proof
+
+STATUS:
+PASS / REAL_POWERCODE_SYSTEMD259_USER_SERVICE_CREDENTIAL_DELIVERY_PROVEN / EXACT_PHASE122_CUSTODY_ADAPTER_LOAD_PASS / DEFAULT_TPM2_CAPABLE_SYSTEMD_ENCRYPTED_CREDENTIAL_POLICY_PATH_PASS / ACTUAL_CREDENTIAL_DIRECTORY_UID1000_GID1000_MODE0500 / ACTUAL_CREDENTIAL_FILE_UID1000_GID1000_MODE0400 / NO_SYMLINK / REGULAR_FILE / DISPOSABLE_P256_PKCS8_ONLY / PLAINTEXT_ZEROED_AND_REMOVED_BEFORE_SERVICE_DELIVERY / AGENT_BYTES_AND_SERVICE_STATE_PRESERVED / LINGER_PRESERVED / HOME_CREDENTIAL_INVENTORY_UNCHANGED / TEMP_WORKFLOW_REMOVED / NET_REPOSITORY_MUTATION_ZERO / PERMANENT_CI_PASS / NO_PRODUCTION_PRIVATE_KEY / NO_AGENT_SERVICE_INTEGRATION_YET / PHASE122_PERMISSION_CHECKS_REAL_HOST_CALIBRATED / READY_FOR_PHASE_124_PRODUCTION_PROVISIONING_AND_SERVICE_INTEGRATION_CONTRACT
+
+AUDIT TYPE: REAL-HOST SECURITY COMPATIBILITY PROOF / DISPOSABLE CREDENTIAL DELIVERY
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative Phase 122 report head: b3653f7a58341b2fd577f3af0ddf482b5053daae
+Phase 123 cleanup head before this report: fc60d0320daea0f3bcf25c5f50191d4c79311a6b
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+
+AUTHORIZATION
+
+Standing user authorization remains active for continued PRW implementation without repeated routine approval requests.
+
+Phase 123 is a real-host compatibility proof only. It is specifically not production device-identity provisioning or Agent service integration.
+
+No long-lived PRW private key was created or installed. No production encrypted credential blob was persisted. No `prw-agent.service` unit or drop-in was changed. No daemon-reload, Agent restart, enablement change, linger mutation, enrollment, networking, DNS, firewall, or persistent control-plane state change was performed.
+
+PURPOSE
+
+Phase 122 implemented a fail-closed Rust custody adapter which expects the exact systemd user-service credential runtime shape:
+- `$CREDENTIALS_DIRECTORY` supplied by systemd;
+- fixed credential name `prw.device-identity.private-key.v1`;
+- effective-user ownership;
+- non-symlink credential directory and credential file;
+- secure directory/file modes;
+- bounded 4096-byte maximum plaintext credential;
+- `O_NOFOLLOW` open and pre/post inode/device stability;
+- temporary `Zeroizing<Vec<u8>>` plaintext ownership;
+- exact canonical PKCS#8 v1 DER signer load.
+
+The remaining question after Phase 122 was whether those ownership and permission assumptions match the actual systemd 259 **user service** credential delivery semantics on PowerCode.
+
+Phase 123 answers that question using the exact Phase 122 adapter and only disposable P-256 test key material.
+
+TEMPORARY WORKFLOW
+
+Temporary workflow:
+`.github/workflows/phase-123-real-systemd-delivery-proof.yml`
+
+Creation commit:
+1b366a9c361e8b81121ec14a11eb79b25a620600
+
+The workflow had two jobs:
+1. `build-probe` on GitHub-hosted Ubuntu 24.04;
+2. `real-host-proof` on `[self-hosted, prw-host]`.
+
+The temporary workflow was deleted after evidence capture.
+
+REAL-HOST WORKFLOW RUN
+
+Workflow run:
+31934976202
+
+Build job:
+95135352574
+Conclusion: SUCCESS
+
+Real-host job:
+95135501271
+Conclusion: SUCCESS
+
+The self-hosted runner accepted the real-host job immediately, proving the temporary execution channel was live during this phase.
+
+RUNNER / HOST IDENTITY
+
+Observed runner:
+- runner version: 2.336.0;
+- runner name: PowerCode;
+- runner group: Default;
+- machine name: PowerCode.
+
+Observed host/process identity:
+- hostname: PowerCode;
+- user: gersi365;
+- UID: 1000;
+- GID: 1000;
+- XDG_RUNTIME_DIR: /run/user/1000.
+
+Observed systemd baseline:
+- systemd-creds: present;
+- systemd-run: present;
+- systemctl: present;
+- loginctl: present;
+- systemd version: 259 (259.5-0ubuntu3.4);
+- systemd user manager: running.
+
+TPM2 CAPABILITY
+
+The host reported TPM2 capability as usable:
+- yes;
+- firmware available;
+- driver available;
+- system support available;
+- subsystem support available;
+- required libraries available, including the observed TSS2 libraries.
+
+The host's `systemd-creds has-tpm2` command redirected to the newer `systemd-analyze has-tpm2` implementation and returned usable capability.
+
+The Phase 123 encryption command intentionally used the Phase 118 default user-scoped systemd encrypted-credential policy:
+
+`systemd-creds --user encrypt --name=prw.device-identity.private-key.v1 ...`
+
+No host-key-only `-H` override was used.
+
+This proves the same default-policy path previously selected for TPM-capable supported hosts remains operational for the Phase 123 device-identity credential shape.
+
+PRW AGENT PRECONDITION
+
+Before disposable credential work, Phase 123 proved:
+
+Agent executable:
+`/usr/lib/private-remote-workspace/prw-agent`
+
+Agent SHA-256:
+8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+
+User service unit:
+`/usr/lib/systemd/user/prw-agent.service`
+
+Unit SHA-256:
+24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+
+Service state:
+- LoadState=loaded;
+- ActiveState=active;
+- SubState=running;
+- FragmentPath=/usr/lib/systemd/user/prw-agent.service;
+- UnitFileState=enabled.
+
+Linger:
+- yes.
+
+The workflow also recorded a bounded user-home credential-related file inventory for before/after equality checking.
+
+DISPOSABLE PROBE BUILD
+
+The GitHub-hosted build job created an uncommitted disposable example source in its temporary checkout:
+`crates/prw-device-identity-custody/examples/phase123_probe.rs`
+
+The source was never committed to the authoritative repository.
+
+The example was built in release mode with locked dependencies against the exact committed Phase 122 custody crate.
+
+The example had only two bounded modes:
+- `generate <path>` — generate one disposable P-256 PKCS#8 v1 DER key;
+- `load` — inspect only non-secret runtime metadata and call the exact Phase 122 public custody adapter.
+
+The load path did not print private bytes, signatures, private scalar material, or credential plaintext.
+
+Only the compiled probe binary was transferred to PowerCode through a one-day GitHub Actions artifact.
+
+Probe artifact ID observed by the real-host job:
+9260382997
+
+Probe artifact ZIP digest observed during download:
+sha256:e2b93718205c634198e5108625b9f07056bcea32711938138e58d01129bb59b5
+
+Probe binary SHA-256 on PowerCode:
+6b48aca97235066a54cbc9b9068437cad5e6d718944e13247cb912c872cdc822
+
+DISPOSABLE PRIVATE KEY MATERIAL
+
+The probe generated exactly one disposable ECDSA P-256 PKCS#8 payload in the runner temporary directory.
+
+Observed non-secret properties:
+- generation result: success;
+- payload length: 138 bytes;
+- temporary plaintext file owner: UID 1000 / GID 1000;
+- temporary plaintext file mode: 0600;
+- payload size below the Phase 122 4096-byte maximum.
+
+The private bytes themselves were not printed, uploaded as an artifact, committed, or included in this audit.
+
+ENCRYPTED CREDENTIAL
+
+The disposable plaintext was encrypted through user-scoped systemd credentials under the exact Phase 118/122 logical name:
+`prw.device-identity.private-key.v1`
+
+Observed encrypted credential SHA-256:
+1e670c1ee36ec3a862549a65f7a0624cd5d2a1e648b11229fa71d6eda1f12742
+
+This hash identifies only the disposable ciphertext produced for the Phase 123 test. It is not a production PRW credential.
+
+PLAINTEXT CLEANUP BEFORE DELIVERY
+
+Immediately after encrypted credential creation and before the transient user service was launched, the disposable plaintext file was:
+1. opened read/write;
+2. overwritten with zero bytes for its complete recorded length;
+3. flushed;
+4. fsynced;
+5. unlinked.
+
+The workflow then asserted that the plaintext path no longer existed.
+
+Result:
+`disposable_plaintext_removed_before_delivery=pass`
+
+This procedure does not claim a universal storage-media secure-erasure guarantee; it establishes that PRW left no named disposable plaintext key file available to the subsequent service-delivery phase.
+
+TRANSIENT SYSTEMD USER-SERVICE DELIVERY
+
+The encrypted disposable credential was delivered only to one transient systemd **user service** through:
+
+`LoadCredentialEncrypted=prw.device-identity.private-key.v1:<temporary encrypted path>`
+
+This property existed only on the transient `systemd-run --user` unit.
+
+It was NOT added to:
+- `/usr/lib/systemd/user/prw-agent.service`;
+- any persistent PRW user-unit drop-in;
+- any system service;
+- any production PRW service configuration.
+
+The transient service executed the exact Phase 122 custody adapter through the disposable probe.
+
+Transient service result:
+- return code: 0;
+- systemd result: success;
+- process status: 0/SUCCESS;
+- memory peak observed: 1.8M;
+- swap observed: 0B.
+
+REAL SYSTEMD USER-SERVICE CREDENTIAL METADATA
+
+The transient service observed the actual runtime systemd credential directory:
+- UID: 1000;
+- GID: 1000;
+- mode: 0500;
+- symlink: false;
+- object type: directory.
+
+It observed the exact named credential file:
+- UID: 1000;
+- GID: 1000;
+- mode: 0400;
+- symlink: false;
+- object type: regular file.
+
+These values are security-relevant non-secret metadata.
+
+PHASE 122 POLICY CALIBRATION RESULT
+
+The Phase 122 directory/file ownership and mode checks are correctly calibrated for the actual PowerCode systemd 259 user-service credential delivery path.
+
+Specifically:
+- effective-user directory ownership requirement matches UID 1000;
+- effective-user credential ownership requirement matches UID 1000;
+- no group/other write requirement matches both objects;
+- directory owner read/search requirement matches mode 0500;
+- credential owner read requirement matches mode 0400;
+- no credential execute-bit requirement matches mode 0400;
+- symlink rejection matches actual non-symlink delivery objects.
+
+Therefore Phase 123 provides no evidence-based reason to weaken the Phase 122 checks.
+
+They SHOULD NOT be relaxed to broader group/other permissions or different ownership merely for compatibility.
+
+EXACT PHASE 122 ADAPTER RESULT
+
+The transient service called:
+`load_ubuntu_enrollment_signer_from_systemd_credential()`
+
+Result:
+`phase123_custody_load=success`
+
+Observed canonical public identity DER length:
+91 bytes
+
+The private credential was therefore successfully:
+- located under `$CREDENTIALS_DIRECTORY`;
+- opened through the Phase 122 fail-closed path;
+- bounded and held in the Phase 122 zeroizing buffer;
+- parsed by the Phase 121 canonical PKCS#8 signer boundary;
+- converted into the signer/provider object;
+- used to derive the canonical public identity.
+
+No generic signing operation was exposed or exercised by this proof.
+
+PRW AGENT POSTCONDITION
+
+After the transient service completed, Phase 123 re-read the production PRW Agent invariants.
+
+Agent SHA-256 after:
+8d0fa919676d1d55200801dd979a5463228610ad0f5aea1d2fd8bbded7047fbf
+
+Unit SHA-256 after:
+24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909
+
+Service state after:
+- LoadState=loaded;
+- ActiveState=active;
+- SubState=running;
+- FragmentPath=/usr/lib/systemd/user/prw-agent.service;
+- UnitFileState=enabled.
+
+Linger after:
+- yes.
+
+The before/after Agent executable hash, unit hash, complete bounded service-state snapshot, and linger value matched exactly.
+
+The bounded home credential-related file inventory also matched exactly before and after:
+`home_credential_inventory_unchanged=pass`
+
+No production PRW Agent restart was required.
+
+TEMPORARY FILE / SERVICE CLEANUP
+
+The disposable probe download directory and Phase 123 temporary directory were deleted before successful job completion.
+
+The transient systemd-run unit used `--collect` and did not become a persistent installed PRW service unit.
+
+The production unit remained unchanged and active throughout the proof.
+
+No disposable private-key plaintext or encrypted credential was promoted to PRW production state.
+
+TEMPORARY WORKFLOW CLEANUP
+
+The Phase 123 temporary workflow was deleted after the successful real-host proof.
+
+Cleanup commit:
+fc60d0320daea0f3bcf25c5f50191d4c79311a6b
+
+Post-cleanup workflow inventory contains exactly:
+`.github/workflows/phase-001-rust-validation.yml`
+
+NET REPOSITORY MUTATION
+
+Compare:
+base: b3653f7a58341b2fd577f3af0ddf482b5053daae
+head: fc60d0320daea0f3bcf25c5f50191d4c79311a6b
+
+Result:
+- ahead_by: 2 commits;
+- net changed files: 0.
+
+The temporary Phase 123 workflow source was completely removed.
+
+No Phase 123 net source change exists to:
+- Cargo.toml;
+- Cargo.lock;
+- any Rust crate;
+- prw-agent;
+- systemd packaging;
+- Android;
+- Desktop;
+- networking;
+- enrollment protocol;
+- persistent credentials.
+
+PERMANENT CI
+
+Permanent CI on the temporary workflow-add head:
+- run: 31934976199
+- job: 95135352469
+- conclusion: SUCCESS.
+
+Permanent clean-head CI after workflow removal:
+- run: 31935074870
+- job: 95135589569
+- head: fc60d0320daea0f3bcf25c5f50191d4c79311a6b
+- conclusion: SUCCESS.
+
+The clean-head run passed:
+- exact toolchain recording;
+- locked dependency graph;
+- rustfmt;
+- Clippy with warnings denied;
+- workspace tests;
+- workspace build.
+
+PRODUCTION PRIVATE-KEY REVIEW
+
+No production PRW device-identity private key was created during Phase 123.
+
+No long-lived key was:
+- generated;
+- persisted;
+- encrypted into the production XDG state path;
+- registered with prw-agent.service;
+- enrolled;
+- backed up;
+- rotated;
+- exported.
+
+All cryptographic private material used by Phase 123 was disposable test material scoped to the temporary workflow execution.
+
+NO AGENT SERVICE CREDENTIAL INTEGRATION YET
+
+The current installed `prw-agent.service` still has no persistent `LoadCredentialEncrypted=` integration for the device identity.
+
+The current installed Agent binary also still has no dependency reachability to the custody/signer/device-identity/AWS-LC chain established by Phases 121-122.
+
+Those are intentional remaining boundaries rather than defects in the Phase 123 proof.
+
+SECURITY CONCLUSION
+
+Phase 123 closes the environmental compatibility uncertainty left by Phase 122.
+
+PowerCode systemd 259 user-service encrypted credential delivery is directly compatible with the exact Phase 122 fail-closed custody adapter.
+
+The actual runtime metadata is stricter than or equal to the adapter requirements:
+- directory 0500, same effective UID/GID;
+- credential 0400, same effective UID/GID;
+- no symlink;
+- regular file.
+
+The custody adapter therefore does not need a compatibility relaxation before future production service integration.
+
+PHASE 124 BOUNDARY
+
+Phase 124 should be a decision/contract lock for production device-identity provisioning and Agent/systemd integration before any production key is generated.
+
+It may lock:
+- first long-lived device-identity key generation lifecycle;
+- exact XDG encrypted-blob path resolution;
+- ownership/mode and atomic creation/replacement semantics;
+- unknown-target and symlink fail-closed behavior;
+- exact `LoadCredentialEncrypted=` integration mechanism for the user service, including whether PRW owns a managed per-user drop-in or another bounded configuration artifact;
+- daemon-reload/restart transaction boundaries;
+- rollback rules if credential configuration or Agent load fails;
+- public-identity persistence and relationship to enrollment state;
+- no-silent-key-replacement policy;
+- key rotation, re-enrollment, revocation, and recovery semantics;
+- Agent dependency/source boundary when the custody/signer chain is first integrated.
+
+Phase 124 must remain decision-only and must not yet:
+- generate the real long-lived PRW private key;
+- create the production encrypted blob;
+- modify the live `prw-agent.service` or persistent drop-ins;
+- restart the Agent;
+- perform device enrollment;
+- enable remote networking.
+
+FINAL PHASE 123 STATE
+
+PASS
+REAL SYSTEMD USER-SERVICE DELIVERY COMPATIBILITY PROVEN
+PHASE 122 PERMISSION CHECKS REAL-HOST CALIBRATED
+NO PRODUCTION PRIVATE KEY
+NO AGENT SERVICE INTEGRATION YET
+READY FOR PHASE 124 PRODUCTION PROVISIONING AND SERVICE-INTEGRATION CONTRACT
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 123 real systemd delivery proof report.
