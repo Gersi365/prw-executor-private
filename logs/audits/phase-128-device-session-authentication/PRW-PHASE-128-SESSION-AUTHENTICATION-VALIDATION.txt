@@ -1,0 +1,264 @@
+Private Remote Workspace
+Phase 128 — Enrolled-Device Session Authentication Foundation
+
+STATUS:
+PASS / CONTRACT_LOCKED / SOURCE_IMPLEMENTED_AND_VALIDATED / DISPOSABLE_TYPED_AUTHENTICATION_PASS / LOCKFILE_REPRODUCIBLE / TEMPORARY_WORKFLOW_REMOVED / CLEAN_HEAD_CI_PASS / PRODUCTION_SESSION_NOT_EXECUTED / CAUSALLY_BLOCKED_BY_PHASE_126_REAL_IDENTITY_AND_PHASE_127_REAL_ENROLLMENT
+
+AUDIT TYPE: SESSION-AUTHENTICATION CONTRACT / SOURCE IMPLEMENTATION / DISPOSABLE CRYPTOGRAPHIC VALIDATION / CLEANUP VALIDATION
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+
+PURPOSE
+
+Phase 128 establishes a replay-resistant enrolled-device session-authentication foundation. The phase proves possession of the already-enrolled device private identity for one fresh server-issued session challenge and produces an immutable authenticated session identity.
+
+Authentication and authorization remain separate. Successful Phase 128 authentication does not grant file, terminal, forwarding, networking, DNS, administrative, or workspace-management capabilities.
+
+CONTRACT LOCK
+
+Contract:
+contracts/REMOTE_DEVICE_SESSION_AUTH_CONTRACT.md
+
+Contract commit:
+35905b739fe77084b1ad8f929d2be97d96b29077
+
+Locked profile:
+- only DeviceLifecycle::Enrolled may begin authentication;
+- ECDSA P-256 with SHA-256;
+- canonical X.509 SubjectPublicKeyInfo DER public identity;
+- ASN.1 DER ECDSA signature;
+- exact domain separator: PRW\0DeviceSessionAuthentication\0;
+- canonical message version: unsigned big-endian u16 value 1;
+- exact server challenge nonce length: 32 bytes;
+- challenge lifetime: 1 through 300 seconds;
+- identifiers: 1 through 1024 UTF-8 bytes;
+- public identity: 1 through 256 bytes;
+- exact derived maximum canonical message length: 4442 bytes;
+- proof context is validated before cryptographic verification;
+- successful challenge is consumed exactly once;
+- authenticated session identity carries no capability set.
+
+SOURCE IMPLEMENTATION
+
+Control-plane session-auth domain:
+crates/prw-control-plane/src/session_auth.rs
+
+Initial semantic commit:
+1a114aeea812d55c788b28d8407482c81e843fe7
+
+Control-plane module exposure commit:
+bab81ae71f7fd114f646561274047078fd3ed0aa
+
+The module defines:
+- SessionAuthNonce;
+- SessionAuthChallenge;
+- SessionAuthProof;
+- SessionAuthChallengeState;
+- bounded challenge/replay errors;
+- exact canonical message encoding;
+- checked lifetime and message-size bounds.
+
+Typed signer extension:
+crates/prw-device-identity-signer/src/lib.rs
+
+Semantic commit:
+0652115cdd15d5f0ea5665863121546b352d70b9
+
+The signer exposes sign_session_auth_proof() only as a typed PRW operation. It does not expose an arbitrary-message signing API. It requires:
+- an enrolled binding;
+- exact equality between the bound public identity and the loaded private-key-derived public identity;
+- server challenge SessionId and nonce;
+- internal canonical message construction.
+
+Production verifier extension:
+crates/prw-device-identity/src/lib.rs
+
+Semantic commit:
+8ff4ec699da558bdf486b4c11f35dc0147f8f784
+
+The verifier order is:
+1. replay/session/nonce/time context validation;
+2. canonical message construction;
+3. locked production device-identity signature verification;
+4. successful single-use challenge consumption.
+
+Invalid signatures do not consume the challenge.
+
+Session orchestration crate:
+crates/prw-session
+
+Manifest commit:
+45930c9fd68353a3714813c0eef4b1c226564131
+
+Initial implementation commit:
+61628bba0a40642d940899fb828b2c74eaceac0b
+
+Workspace registration commit:
+23d939fec1d66fd1aa0b95cf6c7da06f668dc464
+
+AuthenticatedDeviceSession contains exactly:
+- SessionId;
+- WorkspaceId;
+- UserId;
+- DeviceId;
+- canonical public identity.
+
+It contains no capability set.
+
+SessionAuthenticationService provides bounded in-memory pending/completed authority for disposable/source validation. It generates fresh challenge randomness through AWS-LC SystemRandom, delegates proof verification to the production verifier boundary, commits authenticated identity only after successful verification, rejects duplicate sessions, and rejects replay after completion.
+
+LOCKFILE
+
+Phase 128 added only the local prw-session package to the locked workspace graph; no external dependency version was changed by the phase.
+
+Cargo.lock SHA-256:
+e4a8c4100c2db7df74fb02f54df82908c7e376b1dc2e387822261150bbd7187e
+
+Lockfile commit:
+9f168ad092fa444093834ff8955dc43104a7ddfb
+
+The final focused workflow copied the committed lockfile, regenerated it with cargo 1.97.1, and required byte equality.
+
+Authoritative marker:
+phase128_lockfile_reproduction=byte_identical
+
+FAIL-SAFE VALIDATION HISTORY
+
+Temporary workflow:
+.github/workflows/phase-128-session-auth-validation.yml
+
+Initial workflow commit:
+d2a9ee02fd4f6950e1b8a56d9aeef562a6ab6820
+
+Run 1:
+31940023188
+Job:
+95147740554 — FAILURE SAFE
+
+Classification:
+rustfmt-only layout differences. Lockfile regeneration had already proven byte-identical. Clippy/tests were not reached.
+
+Run 2:
+31940301793
+Job:
+95148383093 — FAILURE SAFE
+
+Classification:
+one Rust 1.97.1 Clippy missing_const_for_fn finding on bounded_identifier(). No functional defect was established; tests were not reached.
+
+Run 3:
+31940370347
+Job:
+95148541991 — FAILURE SAFE
+
+Classification:
+one redundant clone in a control-plane test target. Production implementation had advanced through Clippy to the test-target lint.
+
+Corrective commit:
+fdad80d542b45c0be9339843f2861bdeb9b18ea6
+
+Run 4:
+31940432451
+Job:
+95148688643 — FAILURE SAFE
+
+Classification:
+one redundant SessionId clone in a prw-session test target.
+
+Corrective commit:
+2b64eb277b1d9d0837d0bff256e42426b72322ab
+
+None of the above focused failures performed any PowerCode production mutation.
+
+FINAL FOCUSED VALIDATION
+
+Final focused workflow head:
+853a6ea7773fa8abace7b62ed0c697dfad512e97
+
+Run:
+31940519948 — SUCCESS
+
+Job:
+95148884345 — SUCCESS
+
+Authoritative markers:
+phase128_lockfile_reproduction=byte_identical
+phase128_validation=pass
+
+The successful focused validation used:
+- rustc 1.97.1;
+- cargo 1.97.1;
+- locked metadata resolution;
+- rustfmt;
+- Clippy with -D warnings for prw-control-plane, prw-device-identity, prw-device-identity-signer, and prw-session, all targets/all features;
+- focused tests for the same Phase 128 boundary.
+
+Focused nonzero test results:
+- prw-control-plane: 23 passed;
+- prw-device-identity enrollment proof integration: 6 passed;
+- prw-device-identity locked profile: 12 passed;
+- prw-device-identity-signer typed signer: 8 passed;
+- prw-session: 6 passed.
+
+Total relevant focused tests:
+55 passed / 0 failed.
+
+The tests prove, among other cases:
+- PendingEnrollment and Revoked bindings cannot start session authentication;
+- a valid typed proof authenticates exactly the bound session/workspace/user/device/public identity;
+- replay after success is rejected;
+- a proof for another session is rejected without consuming the correct challenge;
+- changed bound identity causes signature verification failure and leaves the correct proof usable;
+- wrong nonce is rejected without consuming the correct challenge;
+- not-yet-valid and expired challenges fail closed;
+- the signer remains typed rather than generic;
+- authenticated session creation grants no capability implicitly.
+
+PERMANENT FULL-WORKSPACE VALIDATION
+
+Permanent CI on the final focused source head:
+31940519962 — SUCCESS
+Job:
+95149038679 — SUCCESS
+
+It passed:
+- toolchain record;
+- locked dependency graph;
+- rustfmt;
+- workspace/all-target Clippy with -D warnings;
+- workspace/all-target tests;
+- workspace build.
+
+TEMPORARY WORKFLOW CLEANUP
+
+Temporary Phase 128 workflow cleanup commit:
+537e8ddca1e52bd5f7812ba32283c71ad9831d40
+
+Post-cleanup workflow inventory contains exactly:
+.github/workflows/phase-001-rust-validation.yml
+
+Clean-head permanent CI after workflow removal:
+31940716857 — SUCCESS
+Job:
+95149356126 — SUCCESS
+
+The clean-head run again passed the locked dependency graph, rustfmt, full-workspace/all-target Clippy, full-workspace/all-target tests, and workspace build.
+
+PRODUCTION CAUSAL BOUNDARY
+
+Phase 128 did NOT create or claim a production authenticated session.
+
+Real PowerCode Phase 128 authentication remains causally blocked until:
+1. the Phase 126 identity-aware Agent candidate is installed through the already staged, authenticated interactive-sudo root handoff;
+2. Phase 126 creates and activates the real production encrypted device identity and runtime fingerprint attestation passes;
+3. Phase 127 completes real production enrollment and the current device registry state is Enrolled.
+
+The user's roadmap authorization through Phase 137 is already present. The remaining Phase 126 blocker is technical privilege acquisition, not lack of user authorization. The privilege boundary must not be weakened to bypass interactive root authentication.
+
+Later source/disposable phases may continue while this production prerequisite remains pending, provided they do not claim production enrollment/authentication/network state that does not yet exist.
+
+FINAL CLASSIFICATION
+
+PHASE_128_SOURCE_AND_DISPOSABLE_AUTHENTICATION_FOUNDATION_DONE / TEMP_WORKFLOW_CLEAN / CLEAN_HEAD_CI_PASS / PRODUCTION_SESSION_PENDING_PHASE_126_AND_PHASE_127_REAL_STATE
