@@ -340,7 +340,9 @@ pub enum SessionAuthMessageError {
 impl fmt::Display for SessionAuthMessageError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::IdentifierOutOfBounds => formatter.write_str("session auth identifier out of bounds"),
+            Self::IdentifierOutOfBounds => {
+                formatter.write_str("session auth identifier out of bounds")
+            }
             Self::PublicIdentityOutOfBounds => {
                 formatter.write_str("session auth public identity out of bounds")
             }
@@ -379,7 +381,8 @@ pub fn encode_session_auth_message(
     let user_id = bounded_identifier(binding.user_id.as_str().as_bytes())?;
     let device_id = bounded_identifier(binding.device_id.as_str().as_bytes())?;
     let public_identity = binding.public_identity.as_bytes();
-    if public_identity.is_empty() || public_identity.len() > MAX_SESSION_AUTH_PUBLIC_IDENTITY_BYTES {
+    if public_identity.is_empty() || public_identity.len() > MAX_SESSION_AUTH_PUBLIC_IDENTITY_BYTES
+    {
         return Err(SessionAuthMessageError::PublicIdentityOutOfBounds);
     }
 
@@ -387,7 +390,9 @@ pub fn encode_session_auth_message(
         DeviceIdentityAlgorithm::EcdsaP256Sha256 => ECDSA_P256_SHA256_CODE,
     };
     let encoding_code = match binding.public_identity.encoding() {
-        DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer => SUBJECT_PUBLIC_KEY_INFO_DER_CODE,
+        DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer => {
+            SUBJECT_PUBLIC_KEY_INFO_DER_CODE
+        }
     };
 
     let message_len = SESSION_AUTH_DOMAIN_SEPARATOR
@@ -445,11 +450,9 @@ const fn length_prefixed_size(bytes: &[u8]) -> usize {
     size_of::<u32>() + bytes.len()
 }
 
-fn push_length_prefixed(
-    target: &mut Vec<u8>,
-    bytes: &[u8],
-) -> Result<(), SessionAuthMessageError> {
-    let length = u32::try_from(bytes.len()).map_err(|_| SessionAuthMessageError::MessageTooLarge)?;
+fn push_length_prefixed(target: &mut Vec<u8>, bytes: &[u8]) -> Result<(), SessionAuthMessageError> {
+    let length =
+        u32::try_from(bytes.len()).map_err(|_| SessionAuthMessageError::MessageTooLarge)?;
     target.extend_from_slice(&length.to_be_bytes());
     target.extend_from_slice(bytes);
     Ok(())
@@ -487,20 +490,44 @@ mod tests {
     fn domain_separator_and_nonce_length_are_locked() {
         assert_eq!(SESSION_AUTH_DOMAIN_SEPARATOR.len(), 32);
         assert_eq!(SESSION_AUTH_NONCE_LEN, 32);
-        assert_eq!(SESSION_AUTH_DOMAIN_SEPARATOR, b"PRW\0DeviceSessionAuthentication\0");
+        assert_eq!(
+            SESSION_AUTH_DOMAIN_SEPARATOR,
+            b"PRW\0DeviceSessionAuthentication\0"
+        );
     }
 
     #[test]
     fn only_enrolled_binding_can_create_challenge_state() {
         let nonce = SessionAuthNonce::new([7; SESSION_AUTH_NONCE_LEN]);
         let session = SessionId::new("session-1").expect("session id");
-        assert!(SessionAuthChallengeState::new(binding(DeviceLifecycle::Enrolled), session.clone(), nonce, 10, 20).is_ok());
+        assert!(
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::Enrolled),
+                session.clone(),
+                nonce,
+                10,
+                20
+            )
+            .is_ok()
+        );
         assert_eq!(
-            SessionAuthChallengeState::new(binding(DeviceLifecycle::PendingEnrollment), session.clone(), nonce, 10, 20),
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::PendingEnrollment),
+                session.clone(),
+                nonce,
+                10,
+                20
+            ),
             Err(SessionAuthChallengeError::BindingNotEnrolled)
         );
         assert_eq!(
-            SessionAuthChallengeState::new(binding(DeviceLifecycle::Revoked), session, nonce, 10, 20),
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::Revoked),
+                session,
+                nonce,
+                10,
+                20
+            ),
             Err(SessionAuthChallengeError::BindingNotEnrolled)
         );
     }
@@ -509,10 +536,34 @@ mod tests {
     fn challenge_lifetime_accepts_one_through_300_seconds_only() {
         let nonce = SessionAuthNonce::new([1; SESSION_AUTH_NONCE_LEN]);
         let session = SessionId::new("session-1").expect("session id");
-        assert!(SessionAuthChallengeState::new(binding(DeviceLifecycle::Enrolled), session.clone(), nonce, 100, 101).is_ok());
-        assert!(SessionAuthChallengeState::new(binding(DeviceLifecycle::Enrolled), session.clone(), nonce, 100, 100 + MAX_SESSION_AUTH_CHALLENGE_LIFETIME_SECONDS).is_ok());
+        assert!(
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::Enrolled),
+                session.clone(),
+                nonce,
+                100,
+                101
+            )
+            .is_ok()
+        );
+        assert!(
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::Enrolled),
+                session.clone(),
+                nonce,
+                100,
+                100 + MAX_SESSION_AUTH_CHALLENGE_LIFETIME_SECONDS
+            )
+            .is_ok()
+        );
         assert_eq!(
-            SessionAuthChallengeState::new(binding(DeviceLifecycle::Enrolled), session, nonce, 100, 401),
+            SessionAuthChallengeState::new(
+                binding(DeviceLifecycle::Enrolled),
+                session,
+                nonce,
+                100,
+                401
+            ),
             Err(SessionAuthChallengeError::InvalidLifetime)
         );
     }
@@ -534,13 +585,22 @@ mod tests {
 
         let mut changed = base.clone();
         changed.workspace_id = WorkspaceId::new("workspace-2").expect("workspace id");
-        assert_ne!(base_message, encode_session_auth_message(&changed, &session, nonce).expect("message"));
+        assert_ne!(
+            base_message,
+            encode_session_auth_message(&changed, &session, nonce).expect("message")
+        );
         changed = base.clone();
         changed.user_id = UserId::new("user-2").expect("user id");
-        assert_ne!(base_message, encode_session_auth_message(&changed, &session, nonce).expect("message"));
+        assert_ne!(
+            base_message,
+            encode_session_auth_message(&changed, &session, nonce).expect("message")
+        );
         changed = base.clone();
         changed.device_id = DeviceId::new("device-2").expect("device id");
-        assert_ne!(base_message, encode_session_auth_message(&changed, &session, nonce).expect("message"));
+        assert_ne!(
+            base_message,
+            encode_session_auth_message(&changed, &session, nonce).expect("message")
+        );
     }
 
     #[test]
