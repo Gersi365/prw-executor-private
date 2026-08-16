@@ -1,0 +1,34 @@
+Private Remote Workspace
+Phase 132 — Resumable File Transfer Hardening
+
+STATUS:
+PASS / CONTRACT_LOCKED / SAME_DIRECTORY_STAGING_VALIDATED / RESUMABLE_SEQUENTIAL_UPLOAD_VALIDATED / SHA256_INTEGRITY_VALIDATED / ATOMIC_NOREPLACE_COMMIT_VALIDATED / BOUNDED_DOWNLOAD_VALIDATED / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_TRANSFER_NOT_ACTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation source head: 4895ee1b58d575917584a9f6d0b263021ffc4471
+Authoritative validation run: 31944525548
+Cargo.lock SHA-256: 456b8653d0cb4a7e520994493d5ac1b89a94abc4fc1448ce5ff42af5620e8ff9
+
+CONTRACT
+contracts/FILE_TRANSFER_HARDENING_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-file-service/src/transfer_storage.rs
+crates/prw-file-transfer
+
+SECURITY/TRANSACTION OUTCOME
+TransferId is 128 bits / 32 lowercase hex externally. Maximum transfer is 1 GiB, maximum chunk 1 MiB, and the manager bound is 128 active uploads. Staging is PRW-generated in the descriptor-validated final parent. Resume reopens the exact NOFOLLOW staging file. Chunks require strict sequential offsets. Final length and AWS-LC SHA-256 must match the plan before same-directory Linux NOREPLACE publication. Existing final files are never overwritten. Parent directory sync follows commit/abort. Abort removes only the exact staging inode/path identity. Download is descriptor-anchored, regular-file-only and bounded to one chunk.
+
+VALIDATION
+The authoritative run passed bounded machine-applicable correction within Phase 132 files, focused file-service+file-transfer rustfmt/Clippy/tests, then full workspace/all-target Clippy, tests and build under the locked graph.
+
+INITIAL OVERWRITE POLICY
+Final overwrite/replace is disabled. Existing destinations fail closed.
+
+PRODUCTION BOUNDARY
+No production remote-file transport, capability policy, or arbitrary PowerCode file was activated or mutated. Production transfer remains dependent on authenticated transport, current registry validation, explicit file capability policy, and a deployed validated Agent build.
+
+FINAL CLASSIFICATION
+PHASE_132_DONE / NO_PRODUCTION_TRANSFER_SIDE_EFFECT / READY_FOR_PHASE_133_SOURCE_WORK

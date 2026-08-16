@@ -6,9 +6,7 @@ use std::{
 
 use aws_lc_rs::digest::{Context, SHA256};
 use rustix::{
-    fs::{
-        AtFlags, Mode, OFlags, RenameFlags, fchmod, fstat, openat, renameat_with, unlinkat,
-    },
+    fs::{AtFlags, Mode, OFlags, RenameFlags, fchmod, fstat, openat, renameat_with, unlinkat},
     io::{Errno, dup},
     process::geteuid,
 };
@@ -26,7 +24,9 @@ const OPEN_NEW_STAGING: OFlags = OFlags::RDWR
     .union(OFlags::NOFOLLOW)
     .union(OFlags::CLOEXEC);
 const OPEN_EXISTING_STAGING: OFlags = OFlags::RDWR.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
-const OPEN_DOWNLOAD: OFlags = OFlags::RDONLY.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
+const OPEN_DOWNLOAD: OFlags = OFlags::RDONLY
+    .union(OFlags::NOFOLLOW)
+    .union(OFlags::CLOEXEC);
 
 /// Maximum one-shot storage chunk accepted by the Phase 132 primitive.
 pub const MAX_TRANSFER_CHUNK_BYTES: usize = 1_048_576;
@@ -318,7 +318,10 @@ fn validate_staging_name(name: &str) -> Result<(), TransferStorageError> {
         return Err(TransferStorageError::InvalidStagingName);
     }
     let hex = &name[STAGING_PREFIX.len()..STAGING_PREFIX.len() + STAGING_HEX_LEN];
-    if !hex.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
+    if !hex
+        .bytes()
+        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
         return Err(TransferStorageError::InvalidStagingName);
     }
     Ok(())
@@ -335,7 +338,11 @@ fn validate_staging_fd(fd: &OwnedFd) -> Result<(), TransferStorageError> {
     Ok(())
 }
 
-fn write_all_at(file: &File, mut bytes: &[u8], mut offset: u64) -> Result<(), TransferStorageError> {
+fn write_all_at(
+    file: &File,
+    mut bytes: &[u8],
+    mut offset: u64,
+) -> Result<(), TransferStorageError> {
     while !bytes.is_empty() {
         match file.write_at(bytes, offset) {
             Ok(0) => return Err(TransferStorageError::Filesystem),

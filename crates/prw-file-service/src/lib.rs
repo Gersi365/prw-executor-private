@@ -4,6 +4,11 @@
 //! file/directory operations. Transfer resume, overwrite/replace, deletion, capability
 //! policy, and remote transport integration remain outside this crate.
 
+mod transfer_storage;
+pub use transfer_storage::{
+    MAX_TRANSFER_CHUNK_BYTES, StagedUploadFile, TransferStorageError, transfer_staging_name,
+};
+
 use std::{
     fmt,
     fs::File,

@@ -247,7 +247,16 @@ dependencies = [
 name = "prw-file-service"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-rs",
  "rustix",
+]
+
+[[package]]
+name = "prw-file-transfer"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "prw-file-service",
 ]
 
 [[package]]

@@ -284,7 +284,8 @@ impl<'a> UploadTransferManager<'a> {
         if offset != current {
             return Err(FileTransferError::OffsetMismatch);
         }
-        let chunk_len = u64::try_from(chunk.len()).map_err(|_| FileTransferError::InvalidChunkLength)?;
+        let chunk_len =
+            u64::try_from(chunk.len()).map_err(|_| FileTransferError::InvalidChunkLength)?;
         let new_len = current
             .checked_add(chunk_len)
             .ok_or(FileTransferError::ExceedsPlannedTotal)?;
@@ -380,7 +381,7 @@ const fn map_storage_error(error: TransferStorageError) -> FileTransferError {
     }
 }
 
-fn hex_nibble(value: u8) -> Result<u8, TransferIdError> {
+const fn hex_nibble(value: u8) -> Result<u8, TransferIdError> {
     match value {
         b'0'..=b'9' => Ok(value - b'0'),
         b'a'..=b'f' => Ok(value - b'a' + 10),
@@ -399,7 +400,9 @@ mod tests {
     };
 
     use aws_lc_rs::digest::{SHA256, digest};
-    use prw_file_service::{AnchoredFileRoot, MAX_TRANSFER_CHUNK_BYTES, RemotePath, transfer_staging_name};
+    use prw_file_service::{
+        AnchoredFileRoot, MAX_TRANSFER_CHUNK_BYTES, RemotePath, transfer_staging_name,
+    };
 
     use super::{
         FileTransferError, MAX_TRANSFER_BYTES, TransferId, UploadPlan, UploadTransferManager,
@@ -416,10 +419,8 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .expect("system time")
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!(
-                "prw-phase132-{label}-{}-{nonce}",
-                process::id()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("prw-phase132-{label}-{}-{nonce}", process::id()));
             fs::create_dir(&path).expect("create disposable root");
             Self { path }
         }
@@ -488,12 +489,17 @@ mod tests {
         let root = AnchoredFileRoot::open(&tree.path).expect("root");
         let payload = b"hello resumable world";
         let destination = RemotePath::parse("result.bin").expect("path");
-        let plan = UploadPlan::new(id(3), destination.clone(), payload.len() as u64, sha(payload))
-            .expect("plan");
+        let plan =
+            UploadPlan::new(id(3), destination, payload.len() as u64, sha(payload)).expect("plan");
         {
             let mut manager = UploadTransferManager::new(&root);
             manager.begin(plan.clone()).expect("begin");
-            assert_eq!(manager.upload_chunk(id(3), 0, &payload[..5]).expect("chunk"), 5);
+            assert_eq!(
+                manager
+                    .upload_chunk(id(3), 0, &payload[..5])
+                    .expect("chunk"),
+                5
+            );
             assert_eq!(
                 manager.upload_chunk(id(3), 0, b"overlap"),
                 Err(FileTransferError::OffsetMismatch)
@@ -505,7 +511,10 @@ mod tests {
             .upload_chunk(id(3), 5, &payload[5..])
             .expect("remaining chunk");
         resumed.finalize(id(3)).expect("finalize");
-        assert_eq!(fs::read(tree.path.join("result.bin")).expect("final bytes"), payload);
+        assert_eq!(
+            fs::read(tree.path.join("result.bin")).expect("final bytes"),
+            payload
+        );
         assert_eq!(
             fs::metadata(tree.path.join("result.bin"))
                 .expect("metadata")
@@ -526,11 +535,21 @@ mod tests {
         manager.begin(plan).expect("begin");
         manager.upload_chunk(id(4), 0, b"bad").expect("chunk");
         assert_eq!(manager.finalize(id(4)), Err(FileTransferError::Incomplete));
-        manager.upload_chunk(id(4), 3, b"!").expect("complete wrong bytes");
-        assert_eq!(manager.finalize(id(4)), Err(FileTransferError::DigestMismatch));
+        manager
+            .upload_chunk(id(4), 3, b"!")
+            .expect("complete wrong bytes");
+        assert_eq!(
+            manager.finalize(id(4)),
+            Err(FileTransferError::DigestMismatch)
+        );
         assert!(!tree.path.join("integrity.bin").exists());
         manager.abort(id(4)).expect("abort");
-        assert!(!tree.path.join(transfer_staging_name(*id(4).as_bytes())).exists());
+        assert!(
+            !tree
+                .path
+                .join(transfer_staging_name(*id(4).as_bytes()))
+                .exists()
+        );
     }
 
     #[test]
@@ -549,7 +568,10 @@ mod tests {
         manager.begin(plan).expect("begin");
         manager.upload_chunk(id(5), 0, b"new").expect("chunk");
         assert_eq!(manager.finalize(id(5)), Err(FileTransferError::Storage));
-        assert_eq!(fs::read(tree.path.join("existing.bin")).expect("old remains"), b"old");
+        assert_eq!(
+            fs::read(tree.path.join("existing.bin")).expect("old remains"),
+            b"old"
+        );
     }
 
     #[test]
@@ -569,7 +591,10 @@ mod tests {
         .expect("plan");
         let mut manager = UploadTransferManager::new(&root);
         assert_eq!(manager.begin(plan), Err(FileTransferError::Storage));
-        assert_eq!(fs::read(outside.path.join("victim")).expect("victim unchanged"), b"safe");
+        assert_eq!(
+            fs::read(outside.path.join("victim")).expect("victim unchanged"),
+            b"safe"
+        );
     }
 
     #[test]
