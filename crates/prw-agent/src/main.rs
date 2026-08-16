@@ -1,14 +1,27 @@
 //! Headless Private Remote Workspace Agent binary bootstrap.
 //!
-//! Phase 102 keeps the executable thin: the library's Linux bootstrap
-//! facade owns the fixed Phase 101 profile and delegates to the validated
-//! signal-aware runtime. The binary owns only bounded stderr reporting and
-//! the simple success/failure process exit mapping.
+//! Phase 125 extends the thin executable boundary with one fail-closed
+//! device-identity custody preflight before entering the already-validated
+//! Phase 102 Linux runtime facade. Missing or invalid systemd-delivered
+//! identity material therefore fails before the Agent runtime directory,
+//! instance lock, or local socket can be created.
 
 use std::process::ExitCode;
 
 #[cfg(target_os = "linux")]
 fn main() -> ExitCode {
+    let _device_identity_signer =
+        match prw_device_identity_custody::load_ubuntu_enrollment_signer_from_systemd_credential()
+        {
+            Ok(signer) => signer,
+            Err(_) => {
+                eprintln!(
+                    "prw-agent event=startup_failure kind=device_identity exit=failure signal_mask_restore=not_applicable"
+                );
+                return ExitCode::FAILURE;
+            }
+        };
+
     match prw_agent::linux_bootstrap::run() {
         Ok(report) => {
             let counters = report.counters();
