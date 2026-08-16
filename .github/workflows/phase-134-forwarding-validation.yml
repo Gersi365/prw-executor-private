@@ -1,4 +1,4 @@
-name: Phase 134 Port Forwarding Foundation Validation
+name: Phase 134 A01 Port Forwarding Foundation Validation
 
 on:
   push:
@@ -28,13 +28,13 @@ jobs:
           test -f crates/prw-forwarding/src/lib.rs
           echo 'phase134_prerequisites=pass'
 
-      - name: Register crate and normalize locked graph
-        id: graph
+      - name: Register crate and apply exact first-run correctives
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
+
           cargo = Path('Cargo.toml')
           text = cargo.read_text()
           member = '    "crates/prw-forwarding",\n'
@@ -43,7 +43,31 @@ jobs:
               if text.count(needle) != 1:
                   raise SystemExit('forwarding workspace insertion point mismatch')
               cargo.write_text(text.replace(needle, needle + member))
+
+          source = Path('crates/prw-forwarding/src/lib.rs')
+          text = source.read_text()
+          old = '    const fn require_active(&self) -> Result<(), ForwardingError> {'
+          new = '    fn require_active(&self) -> Result<(), ForwardingError> {'
+          if old in text:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('require_active corrective shape mismatch')
+
+          old = '''        if self.sessions.contains_key(&id) {\n            return Err(ForwardingError::DuplicateSession);\n        }\n        if self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS {\n            return Err(ForwardingError::SessionCapacity);\n        }\n\n        match self.sessions.entry(id) {\n            Entry::Occupied(_) => Err(ForwardingError::DuplicateSession),\n            Entry::Vacant(entry) => {\n                let handle = self.backend.open(spec).map_err(|_| ForwardingError::Backend)?;'''
+          new = '''        let at_capacity = self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS;\n        match self.sessions.entry(id) {\n            Entry::Occupied(_) => Err(ForwardingError::DuplicateSession),\n            Entry::Vacant(entry) => {\n                if at_capacity {\n                    return Err(ForwardingError::SessionCapacity);\n                }\n                let handle = self.backend.open(spec).map_err(|_| ForwardingError::Backend)?;'''
+          if old in text:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit('Entry corrective shape mismatch')
+          source.write_text(text)
           PY
+          git diff --check
+
+      - name: Normalize locked graph
+        id: graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
           rustc --version
           cargo --version
           cargo fmt --all
@@ -144,7 +168,7 @@ jobs:
           Every forwarding record immutably snapshots WorkspaceId, UserId, DeviceId and authenticated PRW SessionId from a registry-current principal boundary. Backend open failure creates no record. Backend close failure retains a Failed record. Successful close returns Closed and removes the record. Workspace role metadata does not itself grant forwarding capability.
 
           VALIDATION
-          The authoritative run passed static no-network/no-shell boundary checks, focused prw-forwarding rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+          Initial run 31946876275 failed safely before focused tests because Rust 1.97.1 cannot use derived PartialEq inside the const require_active helper. This corrective removes only that invalid const qualifier and normalizes duplicate/capacity selection through HashMap Entry. The authoritative run then passes static no-network/no-shell boundary checks, focused prw-forwarding rustfmt/Clippy -D warnings/all-target tests, and full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
 
           DEFERRED
           Real TCP bind/accept/connect, byte pumping, half-close/backpressure, per-connection limits/timeouts, production forwarding capability policy, authenticated remote framing, public/LAN/reverse forwarding, UDP, SOCKS, DNS targets and Android/Desktop forwarding UI remain deferred. Phase 135 owns private remote connectivity/mesh path foundation; Phase 136 owns relay fallback.
