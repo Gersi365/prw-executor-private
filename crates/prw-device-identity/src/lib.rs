@@ -63,10 +63,15 @@ pub enum EnrollmentProofVerificationError {
 impl fmt::Display for EnrollmentProofVerificationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Submission(error) => write!(formatter, "enrollment proof submission rejected: {error}"),
+            Self::Submission(error) => {
+                write!(formatter, "enrollment proof submission rejected: {error}")
+            }
             Self::Message(error) => write!(formatter, "enrollment proof message rejected: {error}"),
             Self::DeviceIdentity(error) => {
-                write!(formatter, "enrollment proof device identity rejected: {error}")
+                write!(
+                    formatter,
+                    "enrollment proof device identity rejected: {error}"
+                )
             }
         }
     }

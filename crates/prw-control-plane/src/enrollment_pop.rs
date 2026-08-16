@@ -305,7 +305,9 @@ pub enum EnrollmentProofChallengeError {
 impl fmt::Display for EnrollmentProofChallengeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidLifetime => formatter.write_str("invalid enrollment proof challenge lifetime"),
+            Self::InvalidLifetime => {
+                formatter.write_str("invalid enrollment proof challenge lifetime")
+            }
         }
     }
 }
@@ -359,11 +361,15 @@ pub enum EnrollmentProofMessageError {
 impl fmt::Display for EnrollmentProofMessageError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::IdentifierOutOfBounds => formatter.write_str("enrollment proof identifier out of bounds"),
+            Self::IdentifierOutOfBounds => {
+                formatter.write_str("enrollment proof identifier out of bounds")
+            }
             Self::PublicIdentityOutOfBounds => {
                 formatter.write_str("enrollment proof public identity out of bounds")
             }
-            Self::UnsupportedAlgorithm => formatter.write_str("unsupported enrollment proof identity algorithm"),
+            Self::UnsupportedAlgorithm => {
+                formatter.write_str("unsupported enrollment proof identity algorithm")
+            }
             Self::UnsupportedPublicKeyEncoding => {
                 formatter.write_str("unsupported enrollment proof public-key encoding")
             }
@@ -393,7 +399,9 @@ pub fn encode_enrollment_proof_message(
     let user_id = bounded_identifier(request.user_id.as_str().as_bytes())?;
     let device_id = bounded_identifier(request.device_id.as_str().as_bytes())?;
     let public_identity = request.public_identity.as_bytes();
-    if public_identity.is_empty() || public_identity.len() > MAX_ENROLLMENT_PROOF_PUBLIC_IDENTITY_BYTES {
+    if public_identity.is_empty()
+        || public_identity.len() > MAX_ENROLLMENT_PROOF_PUBLIC_IDENTITY_BYTES
+    {
         return Err(EnrollmentProofMessageError::PublicIdentityOutOfBounds);
     }
 
@@ -401,7 +409,9 @@ pub fn encode_enrollment_proof_message(
         DeviceIdentityAlgorithm::EcdsaP256Sha256 => ECDSA_P256_SHA256_CODE,
     };
     let encoding_code = match request.public_identity.encoding() {
-        DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer => SUBJECT_PUBLIC_KEY_INFO_DER_CODE,
+        DeviceIdentityPublicKeyEncoding::SubjectPublicKeyInfoDer => {
+            SUBJECT_PUBLIC_KEY_INFO_DER_CODE
+        }
     };
 
     let message_len = ENROLLMENT_PROOF_DOMAIN_SEPARATOR
@@ -465,7 +475,8 @@ fn push_length_prefixed(
     output: &mut Vec<u8>,
     bytes: &[u8],
 ) -> Result<(), EnrollmentProofMessageError> {
-    let length = u32::try_from(bytes.len()).map_err(|_| EnrollmentProofMessageError::MessageTooLarge)?;
+    let length =
+        u32::try_from(bytes.len()).map_err(|_| EnrollmentProofMessageError::MessageTooLarge)?;
     output.extend_from_slice(&length.to_be_bytes());
     output.extend_from_slice(bytes);
     Ok(())
@@ -547,16 +558,16 @@ mod tests {
     #[test]
     fn canonical_message_has_exact_locked_bytes() {
         let nonce = EnrollmentProofNonce::new([0xaa; 32]);
-        let actual = encode_enrollment_proof_message(&request(), nonce).expect("encode proof message");
+        let actual =
+            encode_enrollment_proof_message(&request(), nonce).expect("encode proof message");
         let expected: Vec<u8> = vec![
-            0x50, 0x52, 0x57, 0x00, 0x45, 0x6e, 0x72, 0x6f, 0x6c, 0x6c, 0x6d, 0x65, 0x6e,
-            0x74, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x4f, 0x66, 0x50, 0x6f, 0x73, 0x73, 0x65,
-            0x73, 0x73, 0x69, 0x6f, 0x6e, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x65,
-            0x00, 0x00, 0x00, 0x01, 0x77, 0x00, 0x00, 0x00, 0x01, 0x75, 0x00, 0x00, 0x00,
-            0x01, 0x64, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03,
+            0x50, 0x52, 0x57, 0x00, 0x45, 0x6e, 0x72, 0x6f, 0x6c, 0x6c, 0x6d, 0x65, 0x6e, 0x74,
+            0x50, 0x72, 0x6f, 0x6f, 0x66, 0x4f, 0x66, 0x50, 0x6f, 0x73, 0x73, 0x65, 0x73, 0x73,
+            0x69, 0x6f, 0x6e, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x65, 0x00, 0x00, 0x00,
+            0x01, 0x77, 0x00, 0x00, 0x00, 0x01, 0x75, 0x00, 0x00, 0x00, 0x01, 0x64, 0x00, 0x01,
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+            0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
             0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
-            0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
-            0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
         ];
         assert_eq!(actual, expected);
     }
@@ -595,11 +606,9 @@ mod tests {
             &id,
             vec![0x55; MAX_ENROLLMENT_PROOF_PUBLIC_IDENTITY_BYTES],
         );
-        let message = encode_enrollment_proof_message(
-            &request,
-            EnrollmentProofNonce::new([3_u8; 32]),
-        )
-        .expect("maximum bounded message");
+        let message =
+            encode_enrollment_proof_message(&request, EnrollmentProofNonce::new([3_u8; 32]))
+                .expect("maximum bounded message");
         assert_eq!(message.len(), MAX_ENROLLMENT_PROOF_MESSAGE_BYTES);
         assert_eq!(message.len(), 4442);
     }
@@ -745,7 +754,9 @@ mod tests {
             state.challenge().nonce(),
             signature(),
         );
-        state.consume_verified(&old_proof, 150).expect("consume old");
+        state
+            .consume_verified(&old_proof, 150)
+            .expect("consume old");
         state
             .replace_challenge(EnrollmentProofNonce::new([11_u8; 32]), 201, 301)
             .expect("replace challenge");
