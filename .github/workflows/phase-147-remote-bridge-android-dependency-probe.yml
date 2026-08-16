@@ -1,0 +1,74 @@
+name: Phase 147 Remote Bridge Android Dependency Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-147-remote-bridge-android-dependency-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove Phase 146 closed baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-146-android-enrollment-device-management/PRW-PHASE-146-ANDROID-ENROLLMENT-DEVICE-MANAGEMENT-VALIDATION.txt
+          test -f "$report"
+          grep -Fq 'PERMANENT_ANDROID_CI_SUCCESS' "$report"
+          grep -Fq 'READY_FOR_PHASE_147' "$report"
+          test -f apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-remote-bridge' apps/android/native/Cargo.toml
+          echo phase147_probe_baseline=pass
+
+      - name: Prepare exact Rust target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android
+          rustc +1.97.1 --version
+          cargo +1.97.1 --version
+          echo phase147_probe_toolchain=pass
+
+      - name: Inject remote bridge dependency only in runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/android/native/Cargo.toml')
+          text = path.read_text()
+          marker = 'prw-remote-transport = { path = "../../../crates/prw-remote-transport" }\n'
+          replacement = marker + 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }\n'
+          if text.count(marker) != 1:
+              raise SystemExit('native dependency insertion boundary mismatch')
+          path.write_text(text.replace(marker, replacement, 1))
+          PY
+          grep -Fq 'prw-remote-bridge = { path = "../../../crates/prw-remote-bridge" }' apps/android/native/Cargo.toml
+          echo phase147_probe_injection=pass
+
+      - name: Probe Android target dependency graph and compile boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          cargo +1.97.1 tree --locked --target aarch64-linux-android > "$RUNNER_TEMP/phase147-android-tree.txt"
+          grep -Fq 'prw-remote-bridge' "$RUNNER_TEMP/phase147-android-tree.txt"
+          cargo +1.97.1 check --locked --lib --target aarch64-linux-android
+          echo phase147_remote_bridge_android_dependency_probe=pass
+
+      - name: Prove repository source was not materialized
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff -- apps/android/native/Cargo.toml apps/android/native/Cargo.lock > "$RUNNER_TEMP/phase147-probe.diff"
+          test -s "$RUNNER_TEMP/phase147-probe.diff"
+          git status --short
+          echo phase147_probe_no_materialization=pass
