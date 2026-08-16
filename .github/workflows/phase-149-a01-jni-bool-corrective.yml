@@ -1,0 +1,150 @@
+name: Phase 149 A01 JNI Boolean Corrective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-149-a01-jni-bool-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  revalidate-materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove A01 corrective baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report=logs/audits/phase-148-android-remote-files-transfers/PRW-PHASE-148-ANDROID-REMOTE-FILES-TRANSFERS-VALIDATION.txt
+          test -f "$report"
+          for token in PHASE_148_FUNCTIONALLY_VALIDATED MATERIALIZED_ON_MAIN PERMANENT_ANDROID_CI_SUCCESS ROOT_RUST_CI_SUCCESS READY_FOR_PHASE_149; do
+            grep -Fq "$token" "$report"
+          done
+          test -f .github/workflows/phase-149-android-forwarding-network-dns.yml
+          test -f contracts/ANDROID_FORWARDING_NETWORK_DNS_CONTRACT.md
+          test ! -f apps/android/native/src/network.rs
+          test ! -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt
+          ! grep -Fq 'prw-forwarding = ' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-connectivity = ' apps/android/native/Cargo.toml
+          ! grep -Fq 'prw-private-dns = ' apps/android/native/Cargo.toml
+          echo phase149_a01_baseline=pass
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Extract exact Phase 149 step bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/phase-149-android-forwarding-network-dns.yml').read_text()
+
+          def extract_run(step_name: str, next_step_name: str) -> str:
+              marker = f'      - name: {step_name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              body_start = source.index(run_marker, start) + len(run_marker)
+              end = source.index(f'      - name: {next_step_name}\n', body_start)
+              lines = source[body_start:end].splitlines()
+              return '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          pairs = [
+              ('Prepare exact validated Android and Rust toolchains', 'Materialize Phase 149 candidate source in runner'),
+              ('Materialize Phase 149 candidate source in runner', 'Validate Phase 149 native projection'),
+              ('Validate Phase 149 native projection', 'Validate Phase 149 Android UX'),
+              ('Validate Phase 149 Android UX', 'Prove Phase 149 authority and production boundaries'),
+              ('Prove Phase 149 authority and production boundaries', 'Revalidate root Rust workspace'),
+              ('Revalidate root Rust workspace', 'Write authoritative Phase 149 validation report'),
+              ('Write authoritative Phase 149 validation report', 'Stage only validated Phase 149 source and evidence'),
+              ('Stage only validated Phase 149 source and evidence', 'Commit and push validated Phase 149 source'),
+          ]
+          for index, pair in enumerate(pairs, 1):
+              Path(f'/tmp/phase149-a01-step-{index}.sh').write_text(extract_run(*pair))
+          PY
+          echo phase149_a01_extraction=pass
+
+      - name: Reconstruct exact Phase 149 candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase149-a01-step-1.sh)
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase149-a01-step-2.sh)
+          test -f apps/android/native/src/network.rs
+          test -f apps/android/app/src/main/kotlin/com/privateworkspace/prw/NetworkManagement.kt
+          echo phase149_a01_reconstruction=pass
+
+      - name: Apply only proven JNI boolean correction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/android/native/src/network.rs')
+          text = path.read_text()
+          replacements = [
+              ('                enabled != 0,\n', '                enabled,\n'),
+              ('                device_naming != 0,\n', '                device_naming,\n'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Phase149 A01 JNI boolean boundary mismatch for {old.strip()!r}: count={count}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          verified = path.read_text()
+          if 'enabled != 0' in verified or 'device_naming != 0' in verified:
+              raise SystemExit('Phase149 A01 stale JNI integer comparison remains')
+          if verified.count('                enabled,\n') != 1:
+              raise SystemExit('Phase149 A01 enabled bool proof failed')
+          if verified.count('                device_naming,\n') != 1:
+              raise SystemExit('Phase149 A01 device_naming bool proof failed')
+          PY
+          cd apps/android/native
+          cargo +1.97.1 fmt --all
+          cargo +1.97.1 fmt --all -- --check
+          echo phase149_a01_jni_boolean_correction=pass
+
+      - name: Re-run exact Phase 149 validation bodies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for step_script in /tmp/phase149-a01-step-{3..7}.sh; do
+            (cd "$GITHUB_WORKSPACE" && bash "$step_script")
+          done
+          report=logs/audits/phase-149-android-forwarding-network-dns/PRW-PHASE-149-ANDROID-FORWARDING-NETWORK-DNS-VALIDATION.txt
+          test -f "$report"
+          cat >> "$report" <<'EOF'
+
+          A01 JNI BOOLEAN CORRECTIVE EVIDENCE:
+          - Initial Phase 149 run 31973839629 proved the Phase 148 closure baseline, exact toolchain preparation and complete candidate reconstruction before stopping at native compilation.
+          - Rust 1.97.1 with jni 0.22.4 reported exactly two E0308 type mismatches in apps/android/native/src/network.rs: jboolean parameters enabled and device_naming are already Rust bool values, so comparisons against integer zero were invalid.
+          - A01 reconstructs the exact Phase 149 candidate and replaces only `enabled != 0` with `enabled` and `device_naming != 0` with `device_naming`, each under an exact one-occurrence boundary check.
+          - Forwarding encoding, connectivity selection, private-DNS validation semantics, Kotlin lifecycle state, dependency selection and production-network boundaries remain unchanged.
+          EOF
+          (cd "$GITHUB_WORKSPACE" && bash /tmp/phase149-a01-step-8.sh)
+          echo phase149_a01_revalidation_and_staging=pass
+
+      - name: Commit and push A01-validated Phase 149 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --cached --check
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git commit -m 'phase 149 a01: materialize validated Android forwarding network and DNS slice'
+          git push origin HEAD:main
+          echo phase149_a01_materialization=pass
