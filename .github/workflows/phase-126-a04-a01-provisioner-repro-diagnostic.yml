@@ -1,0 +1,89 @@
+name: Phase 126 A04-A01 Provisioner Reproducibility Diagnostic
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase-126-a04-a01-provisioner-repro-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare joint and sequential clean builds
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rustc --version
+          cargo --version
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          test "$(sha256sum Cargo.lock | cut -d' ' -f1)" = 'aa453a154754f1f8ca25a2752bf5bf38af763cc2da82089035bf8b725c400424'
+
+          rm -rf target-joint target-seq1 target-seq2
+
+          CARGO_TARGET_DIR="$PWD/target-joint" \
+            cargo build --release --locked -p prw-agent -p prw-device-identity-provisioning
+
+          CARGO_TARGET_DIR="$PWD/target-seq1" \
+            cargo build --release --locked -p prw-agent --bin prw-agent
+          CARGO_TARGET_DIR="$PWD/target-seq1" \
+            cargo build --release --locked -p prw-device-identity-provisioning --bin prw-device-identity-provision
+
+          CARGO_TARGET_DIR="$PWD/target-seq2" \
+            cargo build --release --locked -p prw-agent --bin prw-agent
+          CARGO_TARGET_DIR="$PWD/target-seq2" \
+            cargo build --release --locked -p prw-device-identity-provisioning --bin prw-device-identity-provision
+
+          joint_agent="$PWD/target-joint/release/prw-agent"
+          joint_prov="$PWD/target-joint/release/prw-device-identity-provision"
+          seq1_agent="$PWD/target-seq1/release/prw-agent"
+          seq1_prov="$PWD/target-seq1/release/prw-device-identity-provision"
+          seq2_agent="$PWD/target-seq2/release/prw-agent"
+          seq2_prov="$PWD/target-seq2/release/prw-device-identity-provision"
+
+          echo "joint_agent=$(sha256sum "$joint_agent" | cut -d' ' -f1)"
+          echo "joint_provisioner=$(sha256sum "$joint_prov" | cut -d' ' -f1)"
+          echo "seq1_agent=$(sha256sum "$seq1_agent" | cut -d' ' -f1)"
+          echo "seq1_provisioner=$(sha256sum "$seq1_prov" | cut -d' ' -f1)"
+          echo "seq2_agent=$(sha256sum "$seq2_agent" | cut -d' ' -f1)"
+          echo "seq2_provisioner=$(sha256sum "$seq2_prov" | cut -d' ' -f1)"
+
+          cmp -s "$seq1_agent" "$seq2_agent"
+          cmp -s "$seq1_prov" "$seq2_prov"
+          echo 'phase126_a04_a01_repeat_sequential=byte_identical'
+
+          if cmp -s "$joint_prov" "$seq1_prov"; then
+            echo 'phase126_a04_a01_joint_vs_sequential=byte_identical'
+          else
+            echo 'phase126_a04_a01_joint_vs_sequential=different'
+            echo '--- sha256 ---'
+            sha256sum "$joint_prov" "$seq1_prov"
+            echo '--- sizes ---'
+            stat -c '%n size=%s' "$joint_prov" "$seq1_prov"
+            echo '--- ELF notes joint ---'
+            readelf -n "$joint_prov" || true
+            echo '--- ELF notes sequential ---'
+            readelf -n "$seq1_prov" || true
+            echo '--- section hashes joint ---'
+            readelf -SW "$joint_prov" | sed -n '1,120p'
+            echo '--- section hashes sequential ---'
+            readelf -SW "$seq1_prov" | sed -n '1,120p'
+            echo '--- first differing byte offsets (bounded) ---'
+            cmp -l "$joint_prov" "$seq1_prov" | head -n 80 || true
+          fi
+
+          echo '--- feature tree joint selection ---'
+          CARGO_TARGET_DIR="$PWD/target-feature-joint" cargo tree --locked -e features -p prw-agent -p prw-device-identity-provisioning | sed -n '1,260p'
+          echo '--- feature tree provisioner-only selection ---'
+          CARGO_TARGET_DIR="$PWD/target-feature-provisioner" cargo tree --locked -e features -p prw-device-identity-provisioning | sed -n '1,260p'
+
+          test "$(sha256sum "$joint_agent" | cut -d' ' -f1)" = '4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
+          test "$(sha256sum "$joint_prov" | cut -d' ' -f1)" = 'a2ece50b0d2b85697c4297f19d0baa34e146d9586130c67db446339ffd29361b'
+          test "$(sha256sum "$seq1_agent" | cut -d' ' -f1)" = '4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e'
+          test "$(sha256sum "$seq1_prov" | cut -d' ' -f1)" = '4ce96901b88a5ab8301ef842e54f6551458757647523a820c04aabaa72c83dba'
+
+          echo 'phase126_a04_a01_classification=build_invocation_determinism_proven'
