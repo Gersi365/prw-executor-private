@@ -1,0 +1,239 @@
+Private Remote Workspace
+Phase 112 Production Device-Identity Verification Provider Lock
+
+STATUS: PASS / DEVICE_IDENTITY_VERIFICATION_PROVIDER_LOCKED / AWS_LC_RS_1_18_0 / ROLE_SCOPED_LOCK_ONLY / NARROW_PROVIDER_NEUTRAL_CRATE_REQUIRED / NO_SOURCE_IMPLEMENTATION_YET / NO_RUNTIME_INTEGRATION / NO_NETWORK_ACTIVATION
+AUDIT TYPE: SECURITY ARCHITECTURE DECISION LOCK
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Starting authoritative head: 3104301995c5056a1f6fe4b3bb8c583c21b22d7b
+Rust/Cargo baseline: 1.97.1 exact pin
+Workspace unsafe policy: unsafe_code = "forbid"
+Current validated Cargo.lock blob: 21388522416d65d0e7d62205de2af5207ceaf779
+
+AUTHORIZATION
+
+Standing user authorization is active for continued PRW project work without repeated routine approval requests. This decision remains constrained by the product contract, the existing security model, and explicit scope exclusions.
+
+AUTHORITATIVE PREDECESSOR
+
+Phase 111 validation report:
+logs/audits/phase-111-aws-lc-validation/PRW-PHASE-111-AWS-LC-VALIDATION.txt
+commit: 3104301995c5056a1f6fe4b3bb8c583c21b22d7b
+classification: PASS / AWS_LC_RS_1_18_0_COMPATIBILITY_PROVEN / LOCKED_PRW_P256_SPKI_DER_PROFILE_PROVEN / ANDROID_AARCH64_BUILD_STRATEGY_PROVEN / EXACT_LOCKFILE_PROMOTED / DEV_DEPENDENCY_ONLY / PRODUCTION_PROVIDER_NOT_YET_LOCKED
+
+Phase 111 produced the evidence required by Phase 005 and Phase 110 before a production provider decision could be made. It proved exact PRW P-256 SPKI/DER semantics, negative validation cases, Ubuntu/Rust 1.97.1 compatibility, Android aarch64 build strategy, deterministic lockfile integration, and the provider footprint tradeoff.
+
+DECISION
+
+PRW locks AWS-LC through aws-lc-rs version 1.18.0 as the initial production provider for one role only:
+
+DEVICE IDENTITY PUBLIC SIGNATURE VERIFICATION.
+
+This is not a global PRW cryptography provider lock.
+
+The following remain explicitly outside this lock:
+- network/transport identity;
+- mesh session key agreement;
+- TUN/data-plane encryption;
+- relay transport security selection;
+- control-plane TLS selection;
+- password/account authentication;
+- Android private-key provider/custody implementation;
+- Ubuntu private-key generation/storage implementation;
+- device identity signing implementation;
+- key attestation;
+- identity-key recovery or rotation protocol.
+
+LOCKED IDENTITY PROFILE
+
+The existing Phase 003/004 profile remains authoritative and unchanged:
+- signature algorithm: ECDSA over NIST P-256 with SHA-256;
+- public-key encoding: DER X.509 SubjectPublicKeyInfo;
+- SPKI algorithm identifier: id-ecPublicKey;
+- named curve: secp256r1 / NIST P-256;
+- signature encoding: DER RFC 3279 ECDSA-Sig-Value.
+
+Provider flexibility must not broaden this profile.
+
+PRODUCTION ABSTRACTION BOUNDARY
+
+Phase 113 implementation must introduce one narrow workspace crate:
+
+crates/prw-device-identity
+package name: prw-device-identity
+
+Purpose:
+- consume existing PRW typed public identity and signature values;
+- strictly validate the locked public-key profile;
+- verify signatures over caller-supplied message bytes;
+- expose bounded provider-neutral PRW errors.
+
+The crate must not expose AWS-LC types in its public API.
+
+The initial public API should remain minimal and provider-neutral, centered on one verification operation equivalent in semantics to:
+
+verify_device_identity_signature(public_identity, message, signature) -> Result<(), DeviceIdentityVerificationError>
+
+Exact naming may change only for Rust API quality without changing the locked semantics.
+
+PROVIDER-SPECIFIC IMPLEMENTATION BOUNDARY
+
+aws-lc-rs must remain an internal dependency of prw-device-identity.
+
+Required provider version:
+=1.18.0
+
+Required mode:
+non-FIPS AWS-LC path.
+
+No FIPS compliance claim is introduced.
+
+Phase 113 must attempt the narrowest viable feature set with default features disabled. The preferred first attempt is:
+
+default-features = false
+features = ["alloc", "non-fips"]
+
+Reason:
+The upstream 1.18.0 manifest declares default features including aws-lc-sys, alloc, ring-io, and ring-sig-verify. PRW's validated production design uses ParsedPublicKey plus canonical DER re-serialization rather than the ring-compatible unparsed verification surface. Features not required by the final implementation should not be enabled merely because they are defaults.
+
+This preferred feature set is not considered proven until Phase 113 compilation and all identity-profile tests pass. If an additional feature is technically required, Phase 113 must record the exact requirement and validate the smallest corrected feature set before promotion. No version change is authorized by this lock without a new evidence-producing audit decision.
+
+CANONICAL SPKI ENFORCEMENT
+
+Phase 111 proved that aws-lc-rs can accept a broader EC public-key input surface than PRW's locked protocol representation.
+
+Therefore Phase 113 must preserve the Phase 111 canonicalization guard:
+1. parse with the locked ECDSA P-256/SHA-256 verification algorithm;
+2. re-serialize the parsed public key as X.509 SubjectPublicKeyInfo DER;
+3. require byte-for-byte equality with the original PRW public identity bytes;
+4. reject alternate encodings, trailing bytes, malformed DER, wrong algorithm OID, wrong curve OID, and invalid/off-curve points;
+5. only then verify the DER ECDSA signature.
+
+The provider's parser convenience is not the PRW protocol contract.
+
+ERROR BOUNDARY
+
+The production crate must return bounded PRW-owned error classes. The minimum locked classes are:
+- UnsupportedProfile;
+- InvalidPublicKey;
+- NonCanonicalPublicKeyEncoding;
+- InvalidSignature.
+
+Provider error types, internal native error codes, and parsing implementation details must not escape through the public PRW API.
+
+PRIVATE-KEY BOUNDARY
+
+The production prw-device-identity crate introduced by this sequence is verification-only.
+
+It must not expose production APIs for:
+- key generation;
+- private-key import/export;
+- signing;
+- persistent private-key storage;
+- Android Keystore extraction;
+- Ubuntu secret storage;
+- key backup/recovery.
+
+Disposable signing keys may remain test-only fixtures where required to prove verification behavior.
+
+CRATE DEPENDENCY DIRECTION
+
+The new crate may depend on the existing transport-neutral domain types currently defined by prw-control-plane.
+
+prw-control-plane must not be changed to depend back on prw-device-identity in Phase 113. This prevents a dependency cycle and keeps the current domain-action crate provider-neutral.
+
+No existing Agent dependency on prw-device-identity is authorized by Phase 112.
+
+The resulting initial dependency direction is:
+
+prw-device-identity -> prw-control-plane -> prw-core
+prw-agent -/-> prw-device-identity
+
+A later enrollment/authentication orchestration layer may consume both prw-control-plane domain actions and prw-device-identity verification without forcing the domain crate to own the provider.
+
+FOOTPRINT TREATMENT
+
+Phase 111 measured an isolated release footprint delta of approximately 2,670,920 bytes for a small aws-lc-rs P-256 parsing probe relative to an empty Rust probe.
+
+This cost is accepted for the narrow device-identity verification role, but the architecture must not pull AWS-LC transitively into binaries that do not need device-identity verification.
+
+Phase 113 must prove that prw-agent remains outside the provider dependency path and that its release binary remains materially unchanged within normal toolchain/build variance.
+
+VALIDATION REQUIREMENTS FOR PHASE 113
+
+Before production source is classified implemented and validated, Phase 113 must prove:
+
+A. source boundary
+- new prw-device-identity crate only for production provider code;
+- provider-neutral public API;
+- no AWS-LC type leakage;
+- no private-key production APIs;
+- no prw-agent dependency on the new crate.
+
+B. exact identity behavior
+- all 12 Phase 111 validation cases remain PASS against the production API;
+- valid P-256 SPKI + DER signature succeeds;
+- raw SEC1, malformed/trailing DER, wrong OID, wrong curve, invalid point, P-384, modified message/signature, malformed DER signature, and fixed-width signature are rejected.
+
+C. build boundary
+- exact aws-lc-rs 1.18.0 pin;
+- smallest validated non-FIPS feature set;
+- deterministic Cargo.lock;
+- Rust/Cargo 1.97.1;
+- cargo metadata --locked;
+- rustfmt;
+- Clippy -D warnings;
+- all workspace/all-target tests;
+- all workspace/all-target builds;
+- Android aarch64 cargo check for the new production crate.
+
+D. footprint/dependency boundary
+- record prw-device-identity dependency tree;
+- prove prw-agent tree excludes aws-lc-rs/aws-lc-sys/prw-device-identity;
+- record prw-agent release size after the workspace change;
+- record a release-size measurement for a minimal consumer of prw-device-identity.
+
+SCOPE EXCLUSIONS
+
+Phase 112 and the immediately authorized Phase 113 implementation do not activate:
+- proof-of-possession protocol;
+- real enrollment approval/authentication;
+- account authentication;
+- control-plane HTTP/RPC listener;
+- database/persistence;
+- public networking;
+- STUN/ICE/TURN;
+- TUN/private addressing;
+- relay;
+- terminal/SSH/forwarding;
+- production file transfer;
+- DNS mutation;
+- privileged helper;
+- systemd/host deployment mutation;
+- Android Keystore production integration;
+- desktop/mobile UI integration.
+
+MUTATION STATEMENT
+
+Phase 112 is decision/audit work only.
+
+Authorized net repository mutation:
+- this single authoritative audit report.
+
+No Cargo manifest, Cargo.lock, Rust source, Android source, installed host file, service state, network configuration, private key, or deployment state is changed by Phase 112.
+
+NEXT SEQUENCE
+
+Standing authorization permits Phase 113 to begin without another approval request.
+
+Phase 113 should implement and validate the locked prw-device-identity production verification abstraction exactly within the boundaries above.
+
+FINAL CLASSIFICATION
+
+PASS / AWS_LC_RS_1_18_0_LOCKED_FOR_DEVICE_IDENTITY_PUBLIC_VERIFICATION_ONLY / GLOBAL_CRYPTO_PROVIDER_NOT_LOCKED / PRW_DEVICE_IDENTITY_CRATE_ARCHITECTURE_LOCKED / VERIFICATION_ONLY / CANONICAL_SPKI_REQUIRED / PRIVATE_KEY_APIS_FORBIDDEN / PHASE_113_AUTONOMOUSLY_AUTHORIZED / NO_RUNTIME_OR_HOST_MUTATION
+
+AUTHORITATIVE EVIDENCE
+
+This file is the single authoritative user-facing Phase 112 provider-lock decision report.
