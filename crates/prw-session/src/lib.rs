@@ -168,7 +168,8 @@ impl SessionAuthenticationService {
             .pending
             .get_mut(session_id)
             .ok_or(SessionServiceError::UnknownSession)?;
-        verify_session_auth_proof(state, proof, now_unix_seconds).map_err(map_verification_error)?;
+        verify_session_auth_proof(state, proof, now_unix_seconds)
+            .map_err(map_verification_error)?;
 
         let binding = state.bound_identity();
         let authenticated = AuthenticatedDeviceSession {
@@ -233,13 +234,10 @@ mod tests {
     use super::{SessionAuthenticationService, SessionServiceError};
 
     fn signer() -> UbuntuEnrollmentSigner {
-        let pkcs8 = EcdsaKeyPair::generate_pkcs8(
-            &ECDSA_P256_SHA256_ASN1_SIGNING,
-            &SystemRandom::new(),
-        )
-        .expect("generate disposable session test key");
-        UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
-            .expect("load disposable signer")
+        let pkcs8 =
+            EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+                .expect("generate disposable session test key");
+        UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("load disposable signer")
     }
 
     fn binding(
@@ -279,7 +277,10 @@ mod tests {
         assert_eq!(authenticated.public_identity(), &bound.public_identity);
         assert_eq!(service.pending_count(), 0);
         assert_eq!(service.authenticated_count(), 1);
-        assert_eq!(service.authenticated_session(&session_id), Some(&authenticated));
+        assert_eq!(
+            service.authenticated_session(&session_id),
+            Some(&authenticated)
+        );
         assert_eq!(
             service.submit_proof(&session_id, &proof, 1_002),
             Err(SessionServiceError::SessionAlreadyAuthenticated)
@@ -362,7 +363,11 @@ mod tests {
         let correct_proof = signer
             .sign_session_auth_proof(&bound, &challenge)
             .expect("correct proof");
-        assert!(service.submit_proof(&session_id, &correct_proof, 11).is_ok());
+        assert!(
+            service
+                .submit_proof(&session_id, &correct_proof, 11)
+                .is_ok()
+        );
     }
 
     #[test]
