@@ -296,6 +296,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-private-dns"
+version = "0.1.0"
+
+[[package]]
 name = "prw-registry"
 version = "0.1.0"
 dependencies = [

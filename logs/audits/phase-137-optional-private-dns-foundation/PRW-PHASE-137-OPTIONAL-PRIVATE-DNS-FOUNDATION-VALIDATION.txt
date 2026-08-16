@@ -1,0 +1,40 @@
+Private Remote Workspace
+Phase 137 — Optional Private DNS Foundation
+
+STATUS:
+PASS / CONTRACT_LOCKED / DEFAULT_DISABLED / STRICT_DNS_NAME_VALIDATION / BOUNDED_RESOLVER_AND_SPLIT_CONFIG / BASIC_CONNECTIVITY_DNS_INDEPENDENT / FULL_WORKSPACE_VALIDATION_PASS / PRODUCTION_DNS_NOT_ACTIVE
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-16
+Validation input head: 7b309ce5038235e6d4e66cec09eaccc3366a934b
+Authoritative validation run: 31948112821
+Cargo.lock SHA-256: 6e18cb66e465612b0a727249578d220ef692a7de9a272ab23d6850e2d79942dd
+prw-private-dns source SHA-256: 70caffac4403f04b214d66e9b2b9919f7046b36baa39cee6bc70761ea6353504
+
+CONTRACT
+contracts/OPTIONAL_PRIVATE_DNS_FOUNDATION_CONTRACT.md
+
+IMPLEMENTATION
+crates/prw-private-dns
+
+OPTIONAL/DISABLED OUTCOME
+PrivateDnsMode defaults to Disabled. A disabled configuration may retain already-valid device naming, resolver and split-domain settings without becoming active. Enabled is configuration state only and does not imply any operating-system resolver mutation.
+
+VALIDATION OUTCOME
+DeviceDnsLabel is canonical lowercase ASCII, 1..63 bytes, alphanumeric at both ends and otherwise limited to alphanumeric/hyphen. DnsDomainSuffix is canonical lowercase ASCII without trailing dot, total 1..253 bytes, with each label independently bounded/validated. Resolver endpoints are explicit IP plus non-zero port, reject unspecified/multicast/IPv4 limited broadcast, allow loopback, are bounded to four and reject duplicates. Split domains are bounded to sixteen, reject duplicates and require at least one explicit resolver. Device naming requires a device-domain suffix.
+
+CONNECTIVITY INDEPENDENCE
+prw-connectivity has no dependency on prw-private-dns and contains no private-DNS resolver API. Its explicit-IP candidate selection remains independent from DNS. Therefore disabling or failing optional DNS does not invalidate the Phase 135 basic path-selection model.
+
+VALIDATION
+The authoritative run passed static no-socket/no-OS-resolver-mutation checks, explicit connectivity-independence checks, focused prw-private-dns rustfmt/Clippy -D warnings/all-target tests, then full workspace/all-target rustfmt, Clippy, tests and build under the locked graph.
+
+DEFERRED
+DNS queries/responses, device-record catalog, private address publication, DNSSEC/search-domain policy, systemd-resolved/NetworkManager integration, Android DNS integration, OS split-DNS mutation, production rollback/restore and production activation remain deferred.
+
+PRODUCTION BOUNDARY
+No PowerCode resolver setting, /etc/resolv.conf state, systemd-resolved/NetworkManager state, DNS listener, DNS query path, route/firewall state or other user-impacting production networking state was created or mutated.
+
+FINAL CLASSIFICATION
+PHASE_137_DONE / NO_PRODUCTION_DNS_SIDE_EFFECT / AUTHORIZED_SOURCE_ROADMAP_THROUGH_137_COMPLETE

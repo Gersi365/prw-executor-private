@@ -4,7 +4,10 @@
 //! sockets, mutates no operating-system resolver state and is not a dependency of basic
 //! PRW connectivity.
 
-use std::{fmt, net::{IpAddr, Ipv4Addr}};
+use std::{
+    fmt,
+    net::{IpAddr, Ipv4Addr},
+};
 
 /// Maximum explicit custom resolver endpoints.
 pub const MAX_PRIVATE_DNS_RESOLVERS: usize = 4;
@@ -317,7 +320,7 @@ impl std::error::Error for PrivateDnsError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv6Addr};
+    use std::net::Ipv6Addr;
 
     fn resolver(port: u16) -> ResolverEndpoint {
         ResolverEndpoint::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port).expect("resolver")
@@ -366,7 +369,14 @@ mod tests {
     #[test]
     fn domain_suffixes_are_strictly_canonical_and_bounded() {
         assert_eq!(suffix("prw.internal").as_str(), "prw.internal");
-        for invalid in ["", ".prw", "prw.", "PRW.internal", "bad_name.internal", "a..b"] {
+        for invalid in [
+            "",
+            ".prw",
+            "prw.",
+            "PRW.internal",
+            "bad_name.internal",
+            "a..b",
+        ] {
             assert_eq!(
                 DnsDomainSuffix::new(invalid),
                 Err(PrivateDnsError::InvalidDomainSuffix)
@@ -415,13 +425,7 @@ mod tests {
             .map(|offset| resolver(53 + u16::try_from(offset).expect("small offset")))
             .collect();
         assert_eq!(
-            PrivateDnsConfig::new(
-                PrivateDnsMode::Disabled,
-                false,
-                None,
-                resolvers,
-                Vec::new(),
-            ),
+            PrivateDnsConfig::new(PrivateDnsMode::Disabled, false, None, resolvers, Vec::new(),),
             Err(PrivateDnsError::ResolverCapacity)
         );
 
@@ -467,13 +471,7 @@ mod tests {
     #[test]
     fn device_naming_requires_domain_and_split_dns_requires_resolver() {
         assert_eq!(
-            PrivateDnsConfig::new(
-                PrivateDnsMode::Enabled,
-                true,
-                None,
-                Vec::new(),
-                Vec::new(),
-            ),
+            PrivateDnsConfig::new(PrivateDnsMode::Enabled, true, None, Vec::new(), Vec::new(),),
             Err(PrivateDnsError::DeviceDomainRequired)
         );
         assert_eq!(

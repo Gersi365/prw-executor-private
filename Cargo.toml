@@ -20,6 +20,7 @@ members = [
     "crates/prw-forwarding",
     "crates/prw-connectivity",
     "crates/prw-relay",
+    "crates/prw-private-dns",
     "crates/prw-agent",
 ]
 
