@@ -9,26 +9,29 @@ AUTH_REPOSITORY_ID="1334911207"
 AUTH_COMMIT="01f5466504684ea6a2c504613901d24018485887"
 AUTHORITY_ROOT="GitHub Authority Snapshots/$AUTH_REPOSITORY_ID/$AUTH_COMMIT"
 AUTHORITY_MANIFEST="PHASE152_NEXT_AUTHORITY_MANIFEST.tsv"
+AGENT_AUTHORITY_MANIFEST="PHASE152_AGENT_AUTHORITY_MANIFEST.tsv"
+AGENT_BUNDLE="bundles/phase-152-agent-authority-bundle-01f54665.zip"
+AGENT_BUNDLE_SHA256="5c1d01ebebd7c33eba3bd813d501d7b39b3554f3ba4c2e8fd7f92ff0b2377771"
 
 APPLY=0
 SYNC_HOST_MIRROR=0
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage:
   tools/workspace-sync/prw-reconcile-from-drive.sh [--apply] [--sync-host-mirror]
 
-Default behavior is read-only with respect to the PRW workspace: source files are
-staged from the immutable Drive authority snapshot, verified against Git blob SHA,
-and compared with the local workspace. No project file is changed unless --apply
-is supplied.
+Default behavior is read-only with respect to PRW source files: immutable Drive
+authority inputs are staged, verified against the frozen GitHub commit, and
+compared with the local workspace. Audit evidence is written below logs/audits.
+No source file is changed unless --apply is supplied.
 
 Options:
   --apply             Apply only allowlisted, verified files to the local workspace.
   --sync-host-mirror  After a successful --apply, run the existing local->Drive
                       prw-sync.sh transaction so User Host Mirror is checksum-verified.
   -h, --help          Show this help.
-EOF
+USAGE
 }
 
 while (($#)); do
@@ -67,7 +70,7 @@ source "$CONFIG"
 : "${PRW_RCLONE_REMOTE:?PRW_RCLONE_REMOTE is required}"
 : "${PRW_DRIVE_ROOT_FOLDER_ID:?PRW_DRIVE_ROOT_FOLDER_ID is required}"
 
-for command_name in rclone flock sha1sum awk wc mktemp cp mv mkdir chmod sed; do
+for command_name in rclone flock sha1sum sha256sum awk wc mktemp cp mv mkdir chmod sed unzip head dirname date rm cat; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "$command_name is required for PRW Drive reconciliation." >&2
     exit 21
@@ -92,6 +95,8 @@ REMOTE="${PRW_RCLONE_REMOTE}:"
 DRIVE_ROOT_ARGS=(--drive-root-folder-id "$PRW_DRIVE_ROOT_FOLDER_ID")
 REMOTE_AUTHORITY="$REMOTE$AUTHORITY_ROOT"
 STAGED_MANIFEST="$STAGE/$AUTHORITY_MANIFEST"
+AGENT_BUNDLE_STAGE="$STAGE/phase-152-agent-authority-bundle-01f54665.zip"
+AGENT_STAGE="$STAGE/agent-authority"
 
 rclone copyto \
   "$REMOTE_AUTHORITY/$AUTHORITY_MANIFEST" \
@@ -110,13 +115,33 @@ if [[ "$header" != $'path\tgit_blob_sha' ]]; then
   exit 23
 fi
 
-is_allowlisted_path() {
+is_direct_allowlisted_path() {
   case "$1" in
     crates/prw-session/*|crates/prw-remote-transport/*|crates/prw-registry/*|crates/prw-terminal/*|crates/prw-forwarding/*|crates/prw-remote-bridge/*)
       return 0
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+is_agent_allowlisted_path() {
+  case "$1" in
+    crates/prw-agent/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+reject_forbidden_path() {
+  case "$1" in
+    Cargo.toml|Cargo.lock|.git/*|target/*|/*|*../*)
+      echo "Forbidden reconciliation path: $1" >&2
+      exit 26
       ;;
   esac
 }
@@ -132,40 +157,18 @@ git_blob_sha() {
 }
 
 printf 'status\tpath\texpected_git_blob\tactual_git_blob\tlocal_git_blob\n' > "$PREVIEW"
-
 verified_count=0
 change_count=0
 
-while IFS=$'\t' read -r path expected_blob; do
-  [[ "$path" == "path" ]] && continue
-  [[ -n "$path" && -n "$expected_blob" ]] || {
-    echo "Malformed manifest row." >&2
-    exit 24
-  }
-
-  if ! is_allowlisted_path "$path"; then
-    echo "Manifest path is outside the Phase 152 reconciliation allowlist: $path" >&2
-    exit 25
-  fi
-
-  case "$path" in
-    Cargo.toml|Cargo.lock|.git/*|target/*|/*|*../*)
-      echo "Forbidden reconciliation path: $path" >&2
-      exit 26
-      ;;
-  esac
-
-  staged="$STAGE/$path"
-  mkdir -p "$(dirname -- "$staged")"
-  rclone copyto \
-    "$REMOTE_AUTHORITY/$path" \
-    "$staged" \
-    "${DRIVE_ROOT_ARGS[@]}" \
-    --checksum
+compare_staged_file() {
+  local path="$1"
+  local expected_blob="$2"
+  local staged="$3"
+  local actual_blob destination local_blob status
 
   actual_blob="$(git_blob_sha "$staged")"
   if [[ "$actual_blob" != "$expected_blob" ]]; then
-    echo "Drive authority blob mismatch for $path: expected $expected_blob, got $actual_blob" >&2
+    echo "Authority blob mismatch for $path: expected $expected_blob, got $actual_blob" >&2
     exit 27
   fi
 
@@ -192,19 +195,98 @@ while IFS=$'\t' read -r path expected_blob; do
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\n' "$status" "$path" "$expected_blob" "$actual_blob" "$local_blob" >> "$PREVIEW"
+}
+
+while IFS=$'\t' read -r path expected_blob; do
+  [[ "$path" == "path" ]] && continue
+  [[ -n "$path" && -n "$expected_blob" ]] || {
+    echo "Malformed direct authority manifest row." >&2
+    exit 24
+  }
+  is_direct_allowlisted_path "$path" || {
+    echo "Direct manifest path is outside the Phase 152 reconciliation allowlist: $path" >&2
+    exit 25
+  }
+  reject_forbidden_path "$path"
+
+  staged="$STAGE/$path"
+  mkdir -p "$(dirname -- "$staged")"
+  rclone copyto \
+    "$REMOTE_AUTHORITY/$path" \
+    "$staged" \
+    "${DRIVE_ROOT_ARGS[@]}" \
+    --checksum
+  compare_staged_file "$path" "$expected_blob" "$staged"
 done < "$STAGED_MANIFEST"
 
-cat > "$AUDIT" <<EOF
+rclone copyto \
+  "$REMOTE_AUTHORITY/$AGENT_BUNDLE" \
+  "$AGENT_BUNDLE_STAGE" \
+  "${DRIVE_ROOT_ARGS[@]}" \
+  --checksum
+
+actual_agent_bundle_sha256="$(sha256sum "$AGENT_BUNDLE_STAGE" | awk '{print $1}')"
+if [[ "$actual_agent_bundle_sha256" != "$AGENT_BUNDLE_SHA256" ]]; then
+  echo "Agent authority bundle SHA-256 mismatch: expected $AGENT_BUNDLE_SHA256, got $actual_agent_bundle_sha256" >&2
+  exit 30
+fi
+
+mkdir -p "$AGENT_STAGE"
+unzip -q "$AGENT_BUNDLE_STAGE" -d "$AGENT_STAGE"
+
+if [[ "$(cat "$AGENT_STAGE/AUTHORITY_COMMIT")" != "$AUTH_COMMIT" ]]; then
+  echo "Agent authority commit mismatch." >&2
+  exit 31
+fi
+if [[ "$(cat "$AGENT_STAGE/AUTHORITY_REPOSITORY_ID")" != "$AUTH_REPOSITORY_ID" ]]; then
+  echo "Agent authority repository ID mismatch." >&2
+  exit 32
+fi
+
+AGENT_STAGED_MANIFEST="$AGENT_STAGE/$AGENT_AUTHORITY_MANIFEST"
+if [[ ! -s "$AGENT_STAGED_MANIFEST" ]]; then
+  echo "Agent authority manifest is missing or empty." >&2
+  exit 33
+fi
+agent_header="$(head -n 1 "$AGENT_STAGED_MANIFEST")"
+if [[ "$agent_header" != $'path\tgit_blob_sha' ]]; then
+  echo "Unexpected Agent authority manifest header." >&2
+  exit 34
+fi
+
+while IFS=$'\t' read -r path expected_blob; do
+  [[ "$path" == "path" ]] && continue
+  [[ -n "$path" && -n "$expected_blob" ]] || {
+    echo "Malformed Agent authority manifest row." >&2
+    exit 35
+  }
+  is_agent_allowlisted_path "$path" || {
+    echo "Agent manifest path is outside the Phase 152 Agent allowlist: $path" >&2
+    exit 36
+  }
+  reject_forbidden_path "$path"
+  staged="$AGENT_STAGE/$path"
+  [[ -f "$staged" ]] || {
+    echo "Agent authority file is absent from bundle: $path" >&2
+    exit 37
+  }
+  compare_staged_file "$path" "$expected_blob" "$staged"
+done < "$AGENT_STAGED_MANIFEST"
+
+cat > "$AUDIT" <<EOF_AUDIT
 # PRW Drive -> Local Reconciliation Audit
 
-Status: \`STAGED / VERIFIED / LOCAL_NOT_MUTATED\`
+Status: \`STAGED / VERIFIED / LOCAL_SOURCE_NOT_MUTATED\`
 
 - repository_root: \`$ROOT\`
 - generated_utc: \`$STAMP\`
 - authority_repository_id: \`$AUTH_REPOSITORY_ID\`
 - authority_commit: \`$AUTH_COMMIT\`
 - drive_authority_root: \`$AUTHORITY_ROOT\`
-- manifest: \`$AUTHORITY_MANIFEST\`
+- direct_manifest: \`$AUTHORITY_MANIFEST\`
+- agent_manifest: \`$AGENT_AUTHORITY_MANIFEST\`
+- agent_bundle: \`$AGENT_BUNDLE\`
+- agent_bundle_sha256: \`$AGENT_BUNDLE_SHA256\`
 - verified_files: \`$verified_count\`
 - local_changes_required: \`$change_count\`
 - root_cargo_workspace_activation: \`NOT_AUTHORIZED\`
@@ -214,7 +296,7 @@ Status: \`STAGED / VERIFIED / LOCAL_NOT_MUTATED\`
 - deployment_or_privileged_changes: \`NOT_AUTHORIZED\`
 
 Detailed comparison: \`${PREVIEW#$ROOT/}\`
-EOF
+EOF_AUDIT
 
 if ((!APPLY)); then
   echo "$AUDIT"
@@ -225,7 +307,11 @@ while IFS=$'\t' read -r status path expected_blob actual_blob local_blob; do
   [[ "$status" == "status" ]] && continue
   [[ "$status" == "MATCH" ]] && continue
 
-  staged="$STAGE/$path"
+  if is_agent_allowlisted_path "$path"; then
+    staged="$AGENT_STAGE/$path"
+  else
+    staged="$STAGE/$path"
+  fi
   destination="$ROOT/$path"
 
   if [[ -f "$destination" ]]; then
@@ -247,25 +333,25 @@ while IFS=$'\t' read -r status path expected_blob actual_blob local_blob; do
   fi
 done < "$PREVIEW"
 
-sed -i 's|^Status: `STAGED / VERIFIED / LOCAL_NOT_MUTATED`$|Status: `COMPLETE / LOCAL_RECONCILED_FROM_DRIVE`|' "$AUDIT"
-cat >> "$AUDIT" <<EOF
+sed -i 's|^Status: `STAGED / VERIFIED / LOCAL_SOURCE_NOT_MUTATED`$|Status: `COMPLETE / LOCAL_RECONCILED_FROM_DRIVE`|' "$AUDIT"
+cat >> "$AUDIT" <<EOF_APPLY
 
 ## Apply result
 
 - status: \`COMPLETE / LOCAL_RECONCILED_FROM_DRIVE\`
 - backup_root: \`${BACKUP_ROOT#$ROOT/}\`
 - post_apply_verification: \`GIT_BLOB_SHA_MATCH\`
-EOF
+EOF_APPLY
 
 if ((SYNC_HOST_MIRROR)); then
   "$SCRIPT_DIR/prw-sync.sh"
-  cat >> "$AUDIT" <<'EOF'
+  cat >> "$AUDIT" <<'EOF_SYNC'
 - host_mirror_sync: `REQUESTED / EXISTING_PRW_SYNC_COMPLETED`
-EOF
+EOF_SYNC
 else
-  cat >> "$AUDIT" <<'EOF'
+  cat >> "$AUDIT" <<'EOF_NOSYNC'
 - host_mirror_sync: `NOT_REQUESTED`
-EOF
+EOF_NOSYNC
 fi
 
 echo "$AUDIT"
