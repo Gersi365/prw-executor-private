@@ -26,7 +26,7 @@ use crate::state::{AgentAvailability, DesktopPresentationState};
 const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone)]
-pub(crate) struct StartupProbe {
+pub struct StartupProbe {
     pub(crate) status: Result<LocalAgentStatusSnapshot, DesktopIpcError>,
     pub(crate) private_dns: Result<LocalPrivateDnsSnapshot, DesktopIpcError>,
 }
@@ -53,7 +53,7 @@ impl StartupProbe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DesktopIpcError {
+pub enum DesktopIpcError {
     MissingRuntimeDirectory,
     InvalidRuntimeDirectory,
     RuntimeRootUnavailable,
@@ -137,7 +137,7 @@ impl fmt::Display for DesktopIpcError {
     }
 }
 
-pub(crate) fn query_startup() -> StartupProbe {
+pub fn query_startup() -> StartupProbe {
     let endpoint = endpoint_from_environment();
     let endpoint = match endpoint {
         Ok(endpoint) => endpoint,

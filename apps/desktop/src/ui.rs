@@ -3,12 +3,11 @@ use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::glib;
-use gtk::prelude::*;
 
 use crate::ipc;
 use crate::state::{DesktopPresentationState, NavigationDestination};
 
-pub(crate) fn build(app: &adw::Application) {
+pub fn build(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Private Remote Workspace")

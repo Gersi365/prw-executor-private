@@ -4,7 +4,7 @@ use prw_agent::local_commands::status_snapshot::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum NavigationDestination {
+pub enum NavigationDestination {
     #[default]
     Overview,
     Machines,
@@ -52,7 +52,7 @@ impl NavigationDestination {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum AgentAvailability {
+pub enum AgentAvailability {
     #[default]
     Unknown,
     Offline,
@@ -74,7 +74,7 @@ impl AgentAvailability {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AgentRuntimePresentation {
+pub enum AgentRuntimePresentation {
     Starting,
     Ready,
     Degraded,
@@ -107,7 +107,7 @@ impl From<LocalAgentRuntimeState> for AgentRuntimePresentation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PrivateDnsPresentation {
+pub struct PrivateDnsPresentation {
     pub(crate) enabled: bool,
     pub(crate) device_naming: bool,
     pub(crate) resolver_count: usize,
@@ -126,7 +126,7 @@ impl From<&LocalPrivateDnsSnapshot> for PrivateDnsPresentation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopPresentationState {
+pub struct DesktopPresentationState {
     pub(crate) availability: AgentAvailability,
     pub(crate) runtime: Option<AgentRuntimePresentation>,
     pub(crate) private_dns: Option<PrivateDnsPresentation>,
