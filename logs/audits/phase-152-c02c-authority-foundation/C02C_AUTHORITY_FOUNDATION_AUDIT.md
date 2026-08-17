@@ -6,25 +6,27 @@ Status: `SOURCE_SEAM_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED`
 - canonical_repository: `powercode2026/prw-executor-private`
 - frozen_predecessor: `01f5466504684ea6a2c504613901d24018485887`
 - branch: `phase-152-c02c-authority-foundation`
-- staged_head_before_audit: `ba3b7645807865dbeba08a4d3d1349a69b31b758`
+- implementation_head_before_audit_refresh: `1474eb2a0ed1ff80974a75bb7fcc5085b6bbe364`
 
 ## Scope
 
 C02c resumes Phase 152 implementation after successful real-host reconciliation. It locks and stages the smallest Agent-owned authority foundation needed before real provider adapters can be reviewed.
 
-Changed source/design files relative to the frozen predecessor:
+Changed files relative to the frozen predecessor at the implementation head:
 
 - `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md`
 - `crates/prw-agent/Cargo.toml`
 - `crates/prw-agent/src/local_commands.rs`
 - `crates/prw-agent/src/local_commands/management_authority.rs`
+- `crates/prw-agent/src/local_commands/management_dispatch.rs`
+- this audit file
 
-Static compare result before this audit file:
+Static compare result at implementation head plus audit:
 
-- branch relation: `ahead 4 / behind 0`
-- changed files: `4`
-- additions: `375`
-- deletions: `0`
+- branch relation: `ahead 6 / behind 0`
+- changed files: `6`
+- source/design/audit additions before audit refresh: `529`
+- source/design deletions before audit refresh: `16`
 - root `Cargo.toml`: `UNCHANGED`
 - root `Cargo.lock`: `UNCHANGED`
 - `crates/prw-agent/src/main.rs`: `UNCHANGED`
@@ -64,9 +66,20 @@ Its host-path constructor is crate-internal and named `open_trusted_root`; no pu
 - Terminal: `&LocalManagementRemoteSessionAuthority`;
 - Forwarding: `&LocalManagementRemoteSessionAuthority`.
 
-This source seam is deliberately not connected to `LocalManagementAuthorityContext` construction or provider dispatch yet. That preserves C02a fail-closed production behavior while making the real authority ingredients explicit and reviewable.
+The value reports one exact `LocalManagementAuthorityFamily`; file/transfer values expose only their anchored filesystem authority and terminal/forwarding values expose only their registry/session authority.
 
-## Dependency delta
+## Request-bound context seam
+
+`LocalManagementAuthorityContext::from_agent_owned_authority` is crate-internal and now requires:
+
+- an already-admitted `LocalManagementAdmission`; and
+- one `LocalManagementFamilyAuthority`.
+
+Construction returns `None` on family mismatch. On success the context copies request ID, authenticated kernel peer PID/UID/GID, exact admitted capability, canonical operation code, and required family only from the admission token.
+
+This constructor does not dispatch providers and does not make runtime management reachable. The existing processor still requires an explicitly supplied context and remains disconnected from the production server loop.
+
+## Dependency delta and cycle inspection
 
 `prw-agent` adds only existing workspace path dependencies needed by the authority seam:
 
@@ -76,13 +89,20 @@ This source seam is deliberately not connected to `LocalManagementAuthorityConte
 - `prw-session`;
 - `prw-terminal`.
 
+Static inspection of the frozen dependency manifests confirms no dependency returns to `prw-agent`:
+
+- `prw-file-service` depends on `rustix` and `aws-lc-rs`;
+- `prw-forwarding` depends on `prw-core` and `prw-registry`;
+- `prw-terminal` depends on `prw-core`, `prw-registry`, and `prw-session`;
+- `prw-registry` depends on `prw-connectivity`, `prw-control-plane`, `prw-core`, and `prw-session`.
+
 No external crate version is added and no lockfile is modified in this staged source change.
 
 ## Validation classification
 
 The build/test/clippy/format gate remains closed by project authorization. Therefore no Cargo command, formatter, linter, test, build, runtime execution, or deployment action is claimed for this branch.
 
-Current validation is limited to connector-grounded source/API inspection and exact GitHub compare scope.
+Current validation is limited to connector-grounded source/API inspection, dependency-cycle inspection, and exact GitHub compare scope.
 
 - source syntax/build validation: `NOT_RUN / GATE_CLOSED`
 - runtime validation: `NOT_RUN`
@@ -91,4 +111,4 @@ Current validation is limited to connector-grounded source/API inspection and ex
 
 ## Next implementation step
 
-The next C02c source step is to make `LocalManagementAuthorityContext` constructible only from an admitted request plus one `LocalManagementFamilyAuthority`, preserving exact request/caller/capability/operation/family matching. Provider adapters and runtime wiring remain later gates.
+The next C02c source step is a provider-adapter seam that consumes the already-bound family authority without constructing provider resources inside request decoding. It must remain test-only/crate-internal and must not be connected to the production server loop, policy defaults, `main.rs`, service manager, or deployment.
