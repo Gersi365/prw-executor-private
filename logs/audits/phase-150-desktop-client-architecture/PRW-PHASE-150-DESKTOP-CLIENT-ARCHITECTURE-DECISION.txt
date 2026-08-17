@@ -1,0 +1,90 @@
+Private Remote Workspace
+Phase 150 — Desktop Client Architecture Decision
+
+STATUS:
+PASS / EXPLICIT_USER_APPROVAL_RECORDED / RUST_GTK4_LIBADWAITA / GTK4_0_11_3_LIBADWAITA_0_9_1 / GTK_4_14_ADWAITA_1_5_COMPATIBILITY_FLOOR / UBUNTU_24_04_MINIMUM_BASELINE / FIXED_AUTHENTICATED_UNIX_IPC / AGENT_OWNS_HOST_AUTHORITY / NO_PRODUCTION_SIDE_EFFECT
+
+Repository: Gersi365/prw-executor-private
+Branch: main
+Date: 2026-08-17
+Decision input baseline: 63a036af6e2ec8fe1d7c43df51335c1a0ad12764
+Decision contract commit: 35ac6aad6e811e62676d92f251d8bcdf170f6f3f
+Decision contract: contracts/DESKTOP_CLIENT_ARCHITECTURE_DECISION.md
+
+APPROVAL:
+The user explicitly approved the Phase 150 recommendation on 2026-08-17 and authorized continued normal non-production work without requiring intervention at every step.
+
+LOCKED DESKTOP ARCHITECTURE:
+- Native Rust desktop application.
+- Existing repository Rust toolchain 1.97.1 remains authoritative.
+- GTK 4 through gtk4 crate 0.11.3.
+- libadwaita through libadwaita crate 0.9.1.
+- GTK feature floor v4_14.
+- libadwaita feature floor v1_5.
+- Ubuntu 24.04 LTS is the minimum initial desktop compatibility baseline, not a claim that it is the newest Ubuntu release.
+- No Electron, embedded-browser shell, Tauri, Slint, or second desktop UI framework is authorized by this decision.
+
+OFFICIAL SOURCE CHECKS AT DECISION DATE:
+- Official gtk-rs stable documentation reports gtk4 crate 0.11.3 and MSRV 1.83.
+- Official libadwaita-rs stable documentation reports libadwaita crate 0.9.1 and documents v1_5-gated APIs.
+- Ubuntu package metadata for noble/24.04 LTS reports GTK 4.14.2 and libadwaita 1.5.0 baselines.
+- These satisfy the selected Rust 1.97.1 and GTK/libadwaita compatibility floors.
+
+PROCESS OWNERSHIP:
+- Desktop UI is a separate unprivileged process.
+- Headless PRW Agent remains independent of the UI lifecycle.
+- Agent retains host runtime, policy, capability, private-key and privileged-operation authority.
+- UI intent never grants capability and success is not shown before authoritative acknowledgement.
+
+LOCAL IPC LOCK:
+- Fixed endpoint: $XDG_RUNTIME_DIR/private-remote-workspace/agent.sock.
+- Existing PRW runtime directory remains mode 0700.
+- Existing Agent socket remains mode 0600.
+- Existing Agent same-effective-UID SO_PEERCRED authorization remains mandatory before application-protocol reads.
+- Existing authenticated connection/session and bounded request/response contracts remain authoritative.
+- No TCP, abstract socket, /tmp, D-Bus, shell-command, or ambient-path fallback is authorized for desktop-to-Agent control.
+
+DESKTOP IPC ADAPTER REQUIREMENTS:
+- One narrow local IPC adapter isolates protocol mechanics from widgets.
+- Fixed trusted endpoint only.
+- Fail closed on unavailable or untrusted endpoint state.
+- Bounded request identifiers and explicit request/response correlation.
+- Transport, protocol, authorization, unsupported-command, conflict, and internal-Agent failures remain distinguishable.
+- No arbitrary text-to-command conversion.
+- Agent-side SO_PEERCRED remains mandatory and is not replaced by client validation.
+
+INITIAL INFORMATION ARCHITECTURE:
+- Overview.
+- Machines.
+- Sessions.
+- Files.
+- Transfers.
+- Activity.
+- Settings.
+- Dark-first PRW styling may be used only through platform-compatible GTK/libadwaita semantics while preserving accessibility, keyboard/focus behavior, text scaling and native controls.
+
+PHASE 151 AUTHORIZATION BOUNDARY:
+Phase 151 may implement the non-production Rust GTK/libadwaita desktop shell, deterministic application startup, navigation, presentation state, narrow local IPC client adapter, read-only GetAgentStatus and GetPrivateDnsConfig surfaces, explicit offline/error state, focused tests and CI/build validation.
+
+Phase 151 must not widen Agent commands merely to populate the UI. New later commands require separate typed contracts and validation.
+
+REMOTE-DESKTOP BOUNDARY:
+RustDesk-like capture/streaming, input injection, clipboard synchronization and multi-monitor handling remain outside the locked roadmap and require a separate explicit roadmap decision. No UI may falsely claim that capability exists.
+
+PACKAGING BOUNDARY:
+No .deb, Flatpak, AppImage, package repository, signing, auto-update, store publication, or production installation format is locked by Phase 150.
+
+PRODUCTION BOUNDARY:
+No production remote listener, STUN/ICE/TURN/relay activation, TUN/TAP/route mutation, firewall/NAT/router mutation, system resolver/private-DNS mutation, production Agent replacement/restart, production credential provisioning, distribution signing, production account/device cutover or remote-desktop activation was performed or authorized.
+
+VALIDATION:
+PASS repository baseline verified immediately before mutation at 63a036af6e2ec8fe1d7c43df51335c1a0ad12764.
+PASS Phase 149 final audit reported permanent Android CI SUCCESS and root Rust CI SUCCESS and READY_FOR_EXPLICIT_PHASE_150_ARCHITECTURE_DECISION.
+PASS productization roadmap identifies Phase 150 as desktop architecture decision and Phases 151-152 as desktop functional implementation.
+PASS existing same-UID Unix-domain IPC/security contracts were reused rather than redesigned.
+PASS existing Rust 1.97.1 toolchain lock was preserved.
+PASS decision contract was written and read back through GitHub at commit 35ac6aad6e811e62676d92f251d8bcdf170f6f3f.
+PASS no runtime, production service, network, DNS, database, credential, local Ubuntu host, or Android source mutation occurred in Phase 150.
+
+FINAL CLASSIFICATION:
+PHASE_150_DONE / RUST_GTK4_LIBADWAITA_DESKTOP_ARCHITECTURE_LOCKED / GTK4_0_11_3_LIBADWAITA_0_9_1 / GTK_4_14_ADWAITA_1_5_COMPATIBILITY_FLOOR / UBUNTU_24_04_MINIMUM_BASELINE / FIXED_AUTHENTICATED_UNIX_IPC / AGENT_OWNS_HOST_AUTHORITY / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_151
