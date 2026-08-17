@@ -35,7 +35,9 @@ pub(crate) fn build_bridge_management_request(
     request_id: LocalIpcRequestId,
     command: &BridgeCommand,
 ) -> Result<LocalIpcFrame, LocalManagementClientError> {
-    let bridge_payload = command.encode().map_err(LocalManagementClientError::Bridge)?;
+    let bridge_payload = command
+        .encode()
+        .map_err(LocalManagementClientError::Bridge)?;
     build_local_management_request_frame(request_id, &bridge_payload)
         .map_err(LocalManagementClientError::Local)
 }
@@ -72,7 +74,8 @@ mod tests {
             profile: TerminalProfile::BashShell,
             geometry: TerminalGeometry::new(120, 40).expect("valid terminal geometry"),
         };
-        let files = BridgeCommand::FileList(RemotePath::parse("docs").expect("valid relative path"));
+        let files =
+            BridgeCommand::FileList(RemotePath::parse("docs").expect("valid relative path"));
         let forward = BridgeCommand::ForwardOpen {
             forward_id: PortForwardId::new(152).expect("valid forward id"),
             spec: TcpForwardSpec::new(
