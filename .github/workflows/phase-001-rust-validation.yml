@@ -20,11 +20,19 @@ jobs:
   validate:
     name: Validate Rust workspace
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install desktop native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
 
       - name: Record toolchain
         run: |
@@ -32,6 +40,8 @@ jobs:
           cargo --version
           rustfmt --version
           cargo clippy --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
 
       - name: Verify locked dependency graph
         run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
