@@ -145,9 +145,7 @@ where
     }
 
     dispatcher.dispatch(&admission, authority).map_or_else(
-        |_| {
-            build_terminal_response_frame(request_id, LocalAgentResponseStatus::InternalError, &[])
-        },
+        |_| build_terminal_response_frame(request_id, LocalAgentResponseStatus::InternalError, &[]),
         |body| build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
     )
 }
