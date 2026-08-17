@@ -149,10 +149,10 @@ pub(crate) fn query_startup() -> StartupProbe {
         }
     };
 
-    let status_id = LocalIpcRequestId::new(1)
-        .map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
-    let dns_id = LocalIpcRequestId::new(2)
-        .map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
+    let status_id =
+        LocalIpcRequestId::new(1).map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
+    let dns_id =
+        LocalIpcRequestId::new(2).map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
 
     let status = status_id.and_then(|request_id| query_status(&endpoint, request_id));
     let private_dns = dns_id.and_then(|request_id| query_private_dns(&endpoint, request_id));
@@ -205,8 +205,8 @@ fn validate_endpoint(runtime_root: &Path) -> Result<PathBuf, DesktopIpcError> {
         return Err(DesktopIpcError::PrwRuntimeDirectoryUntrusted);
     }
 
-    let socket_metadata = fs::symlink_metadata(&socket_path)
-        .map_err(|_| DesktopIpcError::AgentSocketUnavailable)?;
+    let socket_metadata =
+        fs::symlink_metadata(&socket_path).map_err(|_| DesktopIpcError::AgentSocketUnavailable)?;
     if !socket_metadata.file_type().is_socket()
         || socket_metadata.uid() != expected_owner
         || mode_bits(&socket_metadata) != AGENT_SOCKET_MODE
@@ -236,13 +236,9 @@ fn query_private_dns(
     endpoint: &Path,
     request_id: LocalIpcRequestId,
 ) -> Result<LocalPrivateDnsSnapshot, DesktopIpcError> {
-    let frame = query_success_frame(
-        endpoint,
-        request_id,
-        LocalAgentCommand::GetPrivateDnsConfig,
-    )?;
-    let decoded = decode_success_private_dns_frame(&frame)
-        .map_err(|_| DesktopIpcError::ResponseInvalid)?;
+    let frame = query_success_frame(endpoint, request_id, LocalAgentCommand::GetPrivateDnsConfig)?;
+    let decoded =
+        decode_success_private_dns_frame(&frame).map_err(|_| DesktopIpcError::ResponseInvalid)?;
     ensure_response_id(request_id, decoded.request_id())?;
     Ok(decoded.snapshot().clone())
 }
@@ -267,8 +263,8 @@ fn query_success_frame(
         .map_err(|_| DesktopIpcError::RequestWriteFailed)?;
 
     let frame = read_frame(&mut stream).map_err(|_| DesktopIpcError::ResponseReadFailed)?;
-    let terminal = validate_terminal_response_frame(&frame)
-        .map_err(|_| DesktopIpcError::ResponseInvalid)?;
+    let terminal =
+        validate_terminal_response_frame(&frame).map_err(|_| DesktopIpcError::ResponseInvalid)?;
     ensure_response_id(request_id, terminal.request_id())?;
     if !terminal.status().is_success() {
         return Err(DesktopIpcError::AgentStatus(terminal.status()));

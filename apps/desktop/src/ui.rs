@@ -37,11 +37,7 @@ pub(crate) fn build(app: &adw::Application) {
 
     for destination in NavigationDestination::ALL.into_iter().skip(1) {
         let page = placeholder_page(destination);
-        stack.add_titled(
-            &page,
-            Some(destination.stack_name()),
-            destination.title(),
-        );
+        stack.add_titled(&page, Some(destination.stack_name()), destination.title());
     }
 
     let sidebar = gtk::StackSidebar::new();
@@ -131,11 +127,7 @@ fn placeholder_page(destination: NavigationDestination) -> gtk::Box {
     page
 }
 
-fn start_startup_probe(
-    agent_label: gtk::Label,
-    dns_label: gtk::Label,
-    detail_label: gtk::Label,
-) {
+fn start_startup_probe(agent_label: gtk::Label, dns_label: gtk::Label, detail_label: gtk::Label) {
     let (sender, receiver) = mpsc::sync_channel(1);
     let spawn_result = std::thread::Builder::new()
         .name("prw-desktop-readonly-agent-probe".to_owned())
@@ -178,9 +170,10 @@ fn render_state(
     dns_label: &gtk::Label,
     detail_label: &gtk::Label,
 ) {
-    let runtime = state
-        .runtime
-        .map_or("Not reported", crate::state::AgentRuntimePresentation::label);
+    let runtime = state.runtime.map_or(
+        "Not reported",
+        crate::state::AgentRuntimePresentation::label,
+    );
     agent_label.set_text(&format!(
         "Agent status\nAvailability: {}\nRuntime: {runtime}",
         state.availability.label()

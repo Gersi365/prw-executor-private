@@ -1,5 +1,7 @@
 use prw_agent::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
-use prw_agent::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+use prw_agent::local_commands::status_snapshot::{
+    LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum NavigationDestination {
@@ -169,7 +171,11 @@ impl DesktopPresentationState {
         self
     }
 
-    pub(crate) fn with_error(mut self, availability: AgentAvailability, detail: impl Into<String>) -> Self {
+    pub(crate) fn with_error(
+        mut self,
+        availability: AgentAvailability,
+        detail: impl Into<String>,
+    ) -> Self {
         self.availability = availability;
         self.detail = detail.into();
         self
@@ -197,10 +203,22 @@ mod tests {
     #[test]
     fn runtime_states_project_without_granting_capabilities() {
         for (runtime, expected) in [
-            (LocalAgentRuntimeState::Starting, AgentRuntimePresentation::Starting),
-            (LocalAgentRuntimeState::Ready, AgentRuntimePresentation::Ready),
-            (LocalAgentRuntimeState::Degraded, AgentRuntimePresentation::Degraded),
-            (LocalAgentRuntimeState::Stopping, AgentRuntimePresentation::Stopping),
+            (
+                LocalAgentRuntimeState::Starting,
+                AgentRuntimePresentation::Starting,
+            ),
+            (
+                LocalAgentRuntimeState::Ready,
+                AgentRuntimePresentation::Ready,
+            ),
+            (
+                LocalAgentRuntimeState::Degraded,
+                AgentRuntimePresentation::Degraded,
+            ),
+            (
+                LocalAgentRuntimeState::Stopping,
+                AgentRuntimePresentation::Stopping,
+            ),
         ] {
             let state = DesktopPresentationState::connecting()
                 .with_status(LocalAgentStatusSnapshot::current(runtime));
