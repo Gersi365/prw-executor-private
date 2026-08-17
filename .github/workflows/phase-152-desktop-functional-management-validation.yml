@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - phase-152-desktop-functional-management
+      - phase-152-c02a-proof-atomic2
   workflow_dispatch:
 
 permissions:
@@ -29,18 +30,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "phase-152-desktop-functional-management"
+          case "${GITHUB_REF_NAME}" in
+            phase-152-desktop-functional-management|phase-152-c02a-proof-atomic2)
+              ;;
+            *)
+              echo "Unexpected validation branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
           BASELINE=3aec5d9307edfa5abe53c4ebe169a2445599a2c0
           C01_SOURCE=daf126a8e77bd6e2fc03179fa167aca028a2e7c5
+          C02_CONTRACT=05b0a2ce54f18cab068220869c8103db39af7a73
           git merge-base --is-ancestor "${BASELINE}" HEAD
           git merge-base --is-ancestor "${C01_SOURCE}" HEAD
+          git merge-base --is-ancestor "${C02_CONTRACT}" HEAD
 
           mapfile -t changed < <(git diff --name-only "${BASELINE}..HEAD")
           printf 'Phase 152 candidate changed files:\n'
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
                 ;;
               *)
                 echo "Unexpected Phase 152 candidate path: ${path}" >&2
@@ -49,15 +59,15 @@ jobs:
             esac
           done
 
-          mapfile -t post_c01 < <(git diff --name-only "${C01_SOURCE}..HEAD")
-          printf 'Changes after validated C01 source commit:\n'
-          printf '  %s\n' "${post_c01[@]}"
-          for path in "${post_c01[@]}"; do
+          mapfile -t post_c02 < <(git diff --name-only "${C02_CONTRACT}..HEAD")
+          printf 'Changes after validated C02 contract head:\n'
+          printf '  %s\n' "${post_c02[@]}"
+          for path in "${post_c02[@]}"; do
             case "${path}" in
-              .github/workflows/phase-152-desktop-functional-management-validation.yml|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md)
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_dispatch.rs)
                 ;;
               *)
-                echo "C01 source tree drifted after ${C01_SOURCE}: ${path}" >&2
+                echo "C02a source scope drifted after ${C02_CONTRACT}: ${path}" >&2
                 exit 1
                 ;;
             esac
@@ -166,6 +176,7 @@ jobs:
             apps/desktop/src/management.rs
             apps/desktop/src/local_management_ipc.rs
             crates/prw-agent/src/local_commands/management_request.rs
+            crates/prw-agent/src/local_commands/management_dispatch.rs
           )
           forbidden='std::process::Command|Command::new|TcpListener|TcpStream|UdpSocket|UnixListener|UnixStream|std::fs::|File::create|OpenOptions|resolvectl|/etc/resolv.conf|NetworkManager|systemctl|nft|iptables|tun|tap'
           for target in "${targets[@]}"; do
@@ -195,6 +206,34 @@ jobs:
           rm -f "${production}"
           echo "C01 remains admission-only; provider dispatch and management success acknowledgement stay gated by C02"
 
+      - name: Confirm C02a is provider-neutral and non-activating
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=crates/prw-agent/src/local_commands/management_dispatch.rs
+          production=$(mktemp)
+          awk '/^#\[cfg\(test\)\]/{exit} {print}' "${target}" > "${production}"
+
+          grep -Fn 'pub(crate) struct LocalManagementAuthorityContext' "${production}"
+          grep -Fn 'pub(crate) trait LocalManagementProviderDispatcher' "${production}"
+          grep -Fn 'admit_authenticated_linux_management_request' "${production}"
+          grep -Fn 'build_terminal_response_frame' "${production}"
+          grep -Fn 'LocalAgentResponseStatus::Ok' "${production}"
+
+          forbidden='prw_registry|prw_terminal|prw_forwarding|prw_file_service|prw_file_transfer|RegistryValidatedPrincipal|AnchoredFileRoot|TerminalBroker|PortForwardBroker|UploadTransferManager|linux_bootstrap|server_connection_loop'
+          if grep -En "${forbidden}" "${production}"; then
+            echo "C02a must not bind real provider authority or runtime assembly" >&2
+            rm -f "${production}"
+            exit 1
+          fi
+          if grep -Fn 'for_test' "${production}"; then
+            echo "C02a test authority constructor leaked into production portion" >&2
+            rm -f "${production}"
+            exit 1
+          fi
+          rm -f "${production}"
+          echo "C02a remains provider-neutral: success is post-dispatch, real authority adapters remain gated by C02b"
+
       - name: Confirm validation did not mutate committed source
         shell: bash
         run: |
@@ -214,4 +253,4 @@ jobs:
           fi
 
           git diff --exit-code -- Cargo.lock
-          echo "Committed C01 source, manifests, contracts, workflow and lockfile remained unchanged throughout validation"
+          echo "Committed Phase 152 source, manifests, contracts, workflow and lockfile remained unchanged throughout validation"

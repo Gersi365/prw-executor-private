@@ -30,6 +30,11 @@ pub mod codec;
     reason = "pre-runtime inbound request state is intentionally crate-internal"
 )]
 pub(crate) mod inbound_state;
+#[allow(
+    dead_code,
+    reason = "C02a provider-neutral dispatch proof is intentionally not runtime-wired"
+)]
+pub(crate) mod management_dispatch;
 pub mod management_request;
 #[allow(
     dead_code,
