@@ -13,8 +13,6 @@ use super::management_request::LocalManagementAdmission;
 use crate::LocalIpcRequestId;
 
 #[cfg(target_os = "linux")]
-use prw_policy::PolicyEvaluator;
-#[cfg(target_os = "linux")]
 use super::LocalAgentResponseStatus;
 #[cfg(target_os = "linux")]
 use super::management_request::{
@@ -28,6 +26,8 @@ use super::terminal_response::builder::{
 use crate::frame_object::LocalIpcFrame;
 #[cfg(target_os = "linux")]
 use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
+#[cfg(target_os = "linux")]
+use prw_policy::PolicyEvaluator;
 
 /// Provider family required after canonical command admission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,36 +133,22 @@ where
     {
         Ok(admission) => admission,
         Err(error) => {
-            return build_terminal_response_frame(
-                request_id,
-                admission_failure_status(error),
-                &[],
-            );
+            return build_terminal_response_frame(request_id, admission_failure_status(error), &[]);
         }
     };
 
     let Some(authority) = authority else {
-        return build_terminal_response_frame(
-            request_id,
-            LocalAgentResponseStatus::Conflict,
-            &[],
-        );
+        return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
     };
     if !authority.matches(&admission) {
-        return build_terminal_response_frame(
-            request_id,
-            LocalAgentResponseStatus::Conflict,
-            &[],
-        );
+        return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
     }
 
     match dispatcher.dispatch(&admission, authority) {
         Ok(body) => build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
-        Err(_) => build_terminal_response_frame(
-            request_id,
-            LocalAgentResponseStatus::InternalError,
-            &[],
-        ),
+        Err(_) => {
+            build_terminal_response_frame(request_id, LocalAgentResponseStatus::InternalError, &[])
+        }
     }
 }
 
@@ -409,7 +395,10 @@ mod tests {
 
         assert_eq!(dispatcher.calls, 1);
         assert_status(&response, 205, LocalAgentResponseStatus::InternalError);
-        assert_ne!(response.header().kind(), crate::LocalIpcMessageKind::Response);
+        assert_ne!(
+            response.header().kind(),
+            crate::LocalIpcMessageKind::Response
+        );
     }
 
     #[test]
