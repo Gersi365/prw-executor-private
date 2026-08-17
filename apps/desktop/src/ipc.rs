@@ -20,6 +20,7 @@ use prw_agent::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
 use prw_agent::{
     AGENT_RUNTIME_DIRECTORY_MODE, AGENT_SOCKET_MODE, LocalIpcContract, LocalIpcRequestId,
 };
+use rustix::process::geteuid;
 
 use crate::state::{AgentAvailability, DesktopPresentationState};
 
@@ -182,14 +183,15 @@ fn endpoint_from_environment() -> Result<PathBuf, DesktopIpcError> {
 }
 
 fn validate_endpoint(runtime_root: &Path) -> Result<PathBuf, DesktopIpcError> {
+    let expected_owner = geteuid().as_raw();
     let root_metadata =
         fs::symlink_metadata(runtime_root).map_err(|_| DesktopIpcError::RuntimeRootUnavailable)?;
     if !root_metadata.file_type().is_dir()
+        || root_metadata.uid() != expected_owner
         || mode_bits(&root_metadata) != AGENT_RUNTIME_DIRECTORY_MODE
     {
         return Err(DesktopIpcError::RuntimeRootUntrusted);
     }
-    let expected_owner = root_metadata.uid();
 
     let socket_path = LocalIpcContract::socket_path(runtime_root);
     let runtime_directory = socket_path
