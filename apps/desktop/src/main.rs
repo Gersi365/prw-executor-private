@@ -1,7 +1,8 @@
 mod ipc;
 #[allow(
     clippy::missing_const_for_fn,
-    reason = "Phase 152 presentation transitions remain ordinary methods until the desktop management boundary is wired beyond Slice A"
+    clippy::redundant_pub_crate,
+    reason = "Phase 152 Slice A keeps explicit crate-scoped management boundaries and ordinary presentation transitions until desktop authority wiring"
 )]
 pub(crate) mod management;
 mod state;
