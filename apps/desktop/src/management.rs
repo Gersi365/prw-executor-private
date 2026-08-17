@@ -91,8 +91,7 @@ fn upload_plan(
     }
     let transfer_id =
         TransferId::from_hex(transfer_id).map_err(|_| ManagementError::InvalidTransfer)?;
-    let destination =
-        RemotePath::parse(destination).map_err(|_| ManagementError::InvalidPath)?;
+    let destination = RemotePath::parse(destination).map_err(|_| ManagementError::InvalidPath)?;
     UploadPlan::new(transfer_id, destination, total_bytes, sha256)
         .map_err(|_| ManagementError::InvalidTransfer)
 }
@@ -141,10 +140,8 @@ pub(crate) fn encode_forward_open(
     target_address: IpAddr,
     target_port: u16,
 ) -> Result<Vec<u8>, ManagementError> {
-    let forward_id =
-        PortForwardId::new(forward_id).map_err(|_| ManagementError::InvalidForward)?;
-    let bind =
-        LoopbackBind::new(family, bind_port).map_err(|_| ManagementError::InvalidForward)?;
+    let forward_id = PortForwardId::new(forward_id).map_err(|_| ManagementError::InvalidForward)?;
+    let bind = LoopbackBind::new(family, bind_port).map_err(|_| ManagementError::InvalidForward)?;
     let target = ForwardTarget::new(target_address, target_port)
         .map_err(|_| ManagementError::InvalidForward)?;
     bridge_payload(&BridgeCommand::ForwardOpen {
@@ -154,8 +151,7 @@ pub(crate) fn encode_forward_open(
 }
 
 pub(crate) fn encode_forward_close(forward_id: u64) -> Result<Vec<u8>, ManagementError> {
-    let forward_id =
-        PortForwardId::new(forward_id).map_err(|_| ManagementError::InvalidForward)?;
+    let forward_id = PortForwardId::new(forward_id).map_err(|_| ManagementError::InvalidForward)?;
     bridge_payload(&BridgeCommand::ForwardClose(forward_id))
 }
 
@@ -185,8 +181,8 @@ pub(crate) fn select_disposable_connectivity_path(
         disposable_candidate(2, ConnectivityPathKind::InternetDirect, 25_202)?,
         disposable_candidate(3, ConnectivityPathKind::Relay, 25_203)?,
     ];
-    let mut plan =
-        PeerConnectivityPlan::new(peer, candidates).map_err(|_| ManagementError::InvalidConnectivity)?;
+    let mut plan = PeerConnectivityPlan::new(peer, candidates)
+        .map_err(|_| ManagementError::InvalidConnectivity)?;
     for (id, observation) in [(1, local), (2, internet), (3, relay)] {
         plan.set_observation(
             CandidateId::new(id).map_err(|_| ManagementError::InvalidConnectivity)?,
@@ -227,14 +223,8 @@ pub(crate) fn validate_private_dns(
         .transpose()?
         .into_iter()
         .collect();
-    PrivateDnsConfig::new(
-        mode,
-        device_naming,
-        device_domain,
-        resolvers,
-        split_domains,
-    )
-    .map_err(|_| ManagementError::InvalidDns)
+    PrivateDnsConfig::new(mode, device_naming, device_domain, resolvers, split_domains)
+        .map_err(|_| ManagementError::InvalidDns)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -713,14 +703,16 @@ mod tests {
             .expect("forward close acknowledgement");
         assert_eq!(forward.state(), ForwardPresentationState::Closed);
 
-        assert!(encode_forward_open(
-            152,
-            LoopbackFamily::Ipv4,
-            41_152,
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            22
-        )
-        .is_err());
+        assert!(
+            encode_forward_open(
+                152,
+                LoopbackFamily::Ipv4,
+                41_152,
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                22
+            )
+            .is_err()
+        );
     }
 
     #[test]
