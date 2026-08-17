@@ -1,0 +1,181 @@
+name: PRW Phase 152 C02b Authority Assembly Audit
+
+on:
+  push:
+    branches:
+      - phase-152-c02b-authority-audit
+      - phase-152-desktop-functional-management
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-c02b-authority-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate C02b authority assembly audit gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout audited head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify C02b audit-only lineage and changed-file scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
+          git merge-base --is-ancestor "${C02A}" HEAD
+
+          mapfile -t changed < <(git diff --name-only "${C02A}..HEAD")
+          printf 'C02b audit-only changed files:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|.github/workflows/phase-152-c02b-authority-audit.yml)
+                ;;
+              *)
+                echo "Unexpected C02b audit-only path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
+            echo "C02b audit gate must not mutate Rust source, manifests, or lockfiles" >&2
+            exit 1
+          fi
+
+      - name: Verify C02a remains provider-neutral and non-activating
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'pub struct LocalManagementAuthorityContext' crates/prw-agent/src/local_commands/management_dispatch.rs
+          grep -Fn '#[cfg(test)]' crates/prw-agent/src/local_commands/management_dispatch.rs
+          grep -Fn 'const fn for_test(admission: &LocalManagementAdmission)' crates/prw-agent/src/local_commands/management_dispatch.rs
+          grep -Fn 'pub trait LocalManagementProviderDispatcher' crates/prw-agent/src/local_commands/management_dispatch.rs
+          grep -Fn 'This function is deliberately not connected to the local server loop in C02a.' crates/prw-agent/src/local_commands/management_dispatch.rs
+
+          for dependency in prw-registry prw-terminal prw-forwarding prw-file-service prw-file-transfer; do
+            if grep -Fq "${dependency} =" crates/prw-agent/Cargo.toml; then
+              echo "C02b audit expected no direct Agent provider dependency yet: ${dependency}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Audit production-local identity and runtime authority gap
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'use rustix::net::sockopt::socket_peercred;' crates/prw-agent/src/linux_identity.rs
+          grep -Fn 'pub struct LocalLinuxPeerCredentials' crates/prw-agent/src/linux_identity.rs
+          grep -Fn 'pub fn peer_credentials' crates/prw-agent/src/linux_identity.rs
+          grep -Fn 'policy: BoundedLocalReadPolicy' crates/prw-agent/src/linux_production_runtime_loop.rs
+          grep -Fn 'status_snapshot: LocalAgentStatusSnapshot' crates/prw-agent/src/linux_production_runtime_loop.rs
+          grep -Fn "private_dns_snapshot: &'a LocalPrivateDnsSnapshot" crates/prw-agent/src/linux_production_runtime_loop.rs
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+
+          runtime_surfaces=(
+            crates/prw-agent/src/linux_bootstrap.rs
+            crates/prw-agent/src/linux_production_runtime_loop.rs
+            crates/prw-agent/src/linux_authenticated_session.rs
+            crates/prw-agent/src/linux_session_worker.rs
+            crates/prw-agent/src/local_commands/server_connection_loop.rs
+          )
+          if grep -En 'RegistryValidatedPrincipal|TerminalPrincipal|ForwardingPrincipal|AnchoredFileRoot|UploadTransferManager|TerminalBroker|PortForwardBroker' "${runtime_surfaces[@]}"; then
+            echo "Unexpected real provider authority already present in production-local runtime chain" >&2
+            exit 1
+          fi
+          echo "Production-local runtime carries same-UID peer evidence plus policy/snapshots, but no real provider authority context"
+
+      - name: Audit real provider authority constructors
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'use prw_registry::RegistryValidatedPrincipal;' crates/prw-terminal/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal, session_id: SessionId) -> Self' crates/prw-terminal/src/lib.rs
+          grep -Fn 'use prw_registry::RegistryValidatedPrincipal;' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal, session_id: SessionId) -> Self' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'pub struct AnchoredFileRoot' crates/prw-file-service/src/lib.rs
+          grep -Fn 'pub fn open(path: &Path) -> Result<Self, FileServiceError>' crates/prw-file-service/src/lib.rs
+          grep -Fn "root: &'a AnchoredFileRoot" crates/prw-file-transfer/src/lib.rs
+          grep -Fn "pub fn new(root: &'a AnchoredFileRoot) -> Self" crates/prw-file-transfer/src/lib.rs
+
+      - name: Verify security-model constraints remain authoritative
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'The PRW Agent is a local enforcement boundary.' contracts/SECURITY_MODEL.md
+          grep -Fn 'File management must use typed operations and explicit authorization checks.' contracts/SECURITY_MODEL.md
+          grep -Fn 'Default file access should remain bounded by the effective local-user permissions unless an explicitly authorized privileged capability is introduced later.' contracts/SECURITY_MODEL.md
+
+      - name: Install locked desktop native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Record Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+
+      - name: Verify committed deterministic Cargo lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo generate-lockfile
+          git diff --exit-code -- Cargo.lock
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --workspace --all-targets
+
+      - name: Confirm audit gate did not mutate source authority surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
+          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
+            echo "C02b audit unexpectedly changed source/manifests/lockfiles" >&2
+            exit 1
+          fi
+          git diff --exit-code -- Cargo.lock
+          echo "C02b authority assembly audit is evidence-only; real provider authority remains unreachable in production"
