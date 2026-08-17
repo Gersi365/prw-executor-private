@@ -1,0 +1,127 @@
+name: PRW Phase 152 Desktop Functional Management Validation
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-functional-management
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-desktop-functional-management-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Phase 152 desktop functional management
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify candidate lineage and changed-file scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "phase-152-desktop-functional-management"
+          BASELINE=3aec5d9307edfa5abe53c4ebe169a2445599a2c0
+          git merge-base --is-ancestor "${BASELINE}" HEAD
+          mapfile -t changed < <(git diff --name-only "${BASELINE}..HEAD")
+          printf 'Phase 152 candidate changed files:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+                ;;
+              *)
+                echo "Unexpected Phase 152 Slice A path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Install locked desktop native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Record Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+
+      - name: Materialize deterministic Cargo lock candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          test -f Cargo.lock
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --workspace --all-targets
+
+      - name: Confirm desktop Slice A has no direct host-effect primitives
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=apps/desktop/src/management.rs
+          forbidden='std::process::Command|Command::new|TcpListener|TcpStream|UdpSocket|UnixListener|std::fs::|File::create|OpenOptions|resolvectl|/etc/resolv.conf|NetworkManager|systemctl|nft|iptables|tun|tap'
+          if grep -En "${forbidden}" "${target}"; then
+            echo "Forbidden direct host-effect primitive found in Phase 152 Slice A" >&2
+            exit 1
+          fi
+          echo "No direct process/filesystem/socket/DNS/system-service mutation primitive found in Slice A management projection"
+
+      - name: Commit validated generated lockfile if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.lock; then
+            echo "Cargo.lock already matches the validated dependency graph"
+            exit 0
+          fi
+          git diff -- Cargo.lock
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "phase 152: materialize validated desktop management lockfile"
+          git push origin HEAD:phase-152-desktop-functional-management
