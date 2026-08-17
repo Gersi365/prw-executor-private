@@ -1,0 +1,84 @@
+name: PRW Phase 152 Authority Bundle
+
+on:
+  push:
+    branches:
+      - phase-152-github-first-reconciliation
+    paths:
+      - .github/workflows/phase-152-authority-bundle.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-authority-bundle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Verify and package frozen Phase 152 closure source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout frozen authority commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 01f5466504684ea6a2c504613901d24018485887
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify allowlisted Git blobs and stage authority bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_head='01f5466504684ea6a2c504613901d24018485887'
+          test "$(git rev-parse HEAD)" = "$expected_head"
+
+          cat > /tmp/authority-manifest.tsv <<'EOF'
+          path	git_blob_sha
+          crates/prw-session/Cargo.toml	5b0e0ccad709cbbd0eb3f5f1d33759514cd692d5
+          crates/prw-session/src/lib.rs	9eccba113e852a658189d76d892fd4b9822d2e83
+          crates/prw-remote-transport/Cargo.toml	37055b7371cd6325438d8a2cbff00bd37773f6f6
+          crates/prw-remote-transport/src/lib.rs	35ffebccaf237fc6892dac0991a7c7fcd23576c8
+          crates/prw-remote-transport/tests/loopback.rs	97b8fb97e150ae14ddcc24457664a8ab77c11c72
+          crates/prw-registry/Cargo.toml	ec9215d9bad86ac9601e2f2d1bc0ed8461e724c1
+          crates/prw-registry/src/lib.rs	cd7eb52eea19354620ff8ad26c9b8aad3f9c5eb6
+          crates/prw-terminal/Cargo.toml	990d644bdaca761b71f3cac7fb8c8980fa466611
+          crates/prw-terminal/src/lib.rs	093d44bdc57cd0872cd830a7af44afe709a3d9bf
+          crates/prw-forwarding/Cargo.toml	ca94f03a2fadbadb2dcce71c4c006c48d3f323c3
+          crates/prw-forwarding/src/lib.rs	904a2422ba94d138122874af0b23906f4f68f7eb
+          crates/prw-remote-bridge/Cargo.toml	c060de750d88bc1cc4400a3948e08e8618bc4d59
+          crates/prw-remote-bridge/src/lib.rs	1573a12f39d75ec80f25adc6360ca108d2009af0
+          crates/prw-remote-bridge/tests/end_to_end.rs	be7cfbd7ae377bde9ffa3e2f42b7b674168d9fb8
+          EOF
+
+          stage="$RUNNER_TEMP/phase-152-authority-bundle"
+          mkdir -p "$stage"
+          cp /tmp/authority-manifest.tsv "$stage/PHASE152_NEXT_AUTHORITY_MANIFEST.tsv"
+          printf '%s\n' "$expected_head" > "$stage/AUTHORITY_COMMIT"
+          printf '%s\n' '1334911207' > "$stage/AUTHORITY_REPOSITORY_ID"
+
+          while IFS=$'\t' read -r path expected_blob; do
+            [[ "$path" == path ]] && continue
+            test -f "$path"
+            actual_blob="$(git hash-object "$path")"
+            if [[ "$actual_blob" != "$expected_blob" ]]; then
+              printf 'blob mismatch: %s expected=%s actual=%s\n' "$path" "$expected_blob" "$actual_blob" >&2
+              exit 1
+            fi
+            mkdir -p "$stage/$(dirname "$path")"
+            cp -- "$path" "$stage/$path"
+          done < /tmp/authority-manifest.tsv
+
+          (
+            cd "$stage"
+            find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          )
+
+      - name: Upload verified authority bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: phase-152-authority-bundle-01f54665
+          path: ${{ runner.temp }}/phase-152-authority-bundle
+          if-no-files-found: error
+          retention-days: 7
