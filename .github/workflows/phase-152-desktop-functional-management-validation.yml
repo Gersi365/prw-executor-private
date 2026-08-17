@@ -174,5 +174,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --exit-code
-          echo "Committed C01 source and lockfile remained unchanged throughout validation"
+          if ! git diff --quiet -- . ':(exclude)target/**'; then
+            echo "Validation mutated tracked content outside target/**:" >&2
+            git diff -- . ':(exclude)target/**' >&2
+            exit 1
+          fi
+
+          mapfile -t target_changed < <(git diff --name-only -- target/ | LC_ALL=C sort -u)
+          if ((${#target_changed[@]} > 0)); then
+            printf 'Tracked target/ build artifacts changed during validation (%d paths); excluded from source-cleanliness classification:\n' "${#target_changed[@]}"
+            printf '  %s\n' "${target_changed[@]}"
+          else
+            echo "No tracked target/ build artifact churn observed"
+          fi
+
+          git diff --exit-code -- Cargo.lock
+          echo "Committed C01 source, manifests, contracts, workflow and lockfile remained unchanged throughout validation"
