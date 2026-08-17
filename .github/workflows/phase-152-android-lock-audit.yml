@@ -1,0 +1,101 @@
+name: PRW Phase 152 Android Native Lock Audit
+
+on:
+  push:
+    branches:
+      - phase-152-android-lock-audit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-android-lock-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit Android native Cargo.lock drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify audit-only lineage and committed scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE=28d5d81fa156296416c7b204914b10d14e18abc5
+          test "${GITHUB_REF_NAME}" = phase-152-android-lock-audit
+          git merge-base --is-ancestor "${CANDIDATE}" HEAD
+
+          mapfile -t changed < <(git diff --name-only "${CANDIDATE}..HEAD")
+          printf 'Committed audit-branch changes:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-android-lock-audit.yml)
+                ;;
+              *)
+                echo "Unexpected committed Android lock-audit path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Record exact Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal
+          cargo +1.97.1 --version
+          rustc +1.97.1 --version
+
+      - name: Materialize Android native lockfile candidate and print exact diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android/native
+          cp Cargo.lock "${RUNNER_TEMP}/android-native-Cargo.lock.before"
+          cargo +1.97.1 generate-lockfile
+
+          mapfile -t changed < <(git diff --name-only)
+          printf 'Working-tree changes after cargo generate-lockfile:\n'
+          printf '  %s\n' "${changed[@]}"
+          if ((${#changed[@]} != 1)) || [[ "${changed[0]}" != "apps/android/native/Cargo.lock" ]]; then
+            echo "Lock regeneration changed an unexpected path set" >&2
+            git diff --stat >&2
+            exit 1
+          fi
+
+          echo '----- BEGIN ANDROID NATIVE CARGO.LOCK DIFF -----'
+          git diff --no-ext-diff --unified=5 -- Cargo.lock
+          echo '----- END ANDROID NATIVE CARGO.LOCK DIFF -----'
+
+          echo '----- BEGIN ANDROID NATIVE PACKAGE-LINE DELTA -----'
+          diff -u \
+            <(grep -E '^(name|version) = ' "${RUNNER_TEMP}/android-native-Cargo.lock.before") \
+            <(grep -E '^(name|version) = ' Cargo.lock) || true
+          echo '----- END ANDROID NATIVE PACKAGE-LINE DELTA -----'
+
+          git diff --check -- Cargo.lock
+
+      - name: Prove generated lockfile satisfies locked native metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android/native
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+          echo 'Generated Android native Cargo.lock is accepted by Cargo 1.97.1 under --locked'
+
+      - name: Restore audit working tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- apps/android/native/Cargo.lock
+          git diff --exit-code
+          echo 'Audit completed without committing or retaining generated lockfile changes'
