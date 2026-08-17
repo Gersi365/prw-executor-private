@@ -1390,6 +1390,7 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "prw-agent",
+ "rustix",
 ]
 
 [[package]]
