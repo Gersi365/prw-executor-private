@@ -25,7 +25,7 @@ source "$CONFIG"
 : "${PRW_RCLONE_REMOTE:?PRW_RCLONE_REMOTE is required}"
 : "${PRW_DRIVE_ROOT_FOLDER_ID:?PRW_DRIVE_ROOT_FOLDER_ID is required}"
 
-for command_name in rclone sha1sum sha256sum awk wc mktemp chmod bash tail grep sort date rm cat mkdir tee sed head cmp cp; do
+for command_name in rclone sha1sum sha256sum awk wc mktemp chmod bash tail grep sort date rm cat mkdir tee sed head cmp cp mv dirname; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "$command_name is required for controlled reconciliation apply." >&2
     exit 22
@@ -39,6 +39,9 @@ CONTROL_AUDIT="$AUDIT_DIR/CONTROLLED_APPLY_AUDIT.md"
 PREVIEW_LOG="$AUDIT_DIR/PRE_APPLY_OUTPUT.txt"
 APPLY_LOG="$AUDIT_DIR/APPLY_OUTPUT.txt"
 POST_LOG="$AUDIT_DIR/POST_APPLY_OUTPUT.txt"
+SYNC_LOG="$AUDIT_DIR/HOST_MIRROR_SYNC_OUTPUT.txt"
+RECONCILER_DEST="$ROOT/$RECONCILER_REL"
+SYNC_TOOL="$ROOT/tools/workspace-sync/prw-sync.sh"
 
 STAGE_RECONCILER="$(mktemp "${TMPDIR:-/tmp}/prw-reconciler-v2.XXXXXXXX")"
 trap 'rm -f -- "$STAGE_RECONCILER"' EXIT
@@ -101,11 +104,24 @@ actual_reconciler_sha256="$(sha256sum "$STAGE_RECONCILER" | awk '{print $1}')"
 actual_reconciler_blob="$(git_blob_sha "$STAGE_RECONCILER")"
 [[ "$actual_reconciler_blob" == "$EXPECTED_RECONCILER_GIT_BLOB" ]] || fail_audit "RECONCILER_GIT_BLOB_MISMATCH"
 bash -n "$STAGE_RECONCILER"
-chmod 0755 "$STAGE_RECONCILER"
+
+# The reconciler derives ROOT and locates prw-sync.sh from its own SCRIPT_DIR.
+# Therefore it MUST execute from the canonical workspace tools directory, never /tmp.
+mkdir -p "$(dirname -- "$RECONCILER_DEST")"
+if [[ -f "$RECONCILER_DEST" ]]; then
+  cp -a -- "$RECONCILER_DEST" "$AUDIT_DIR/prw-reconcile-from-drive.sh.before"
+fi
+cp -- "$STAGE_RECONCILER" "$RECONCILER_DEST.new.$$"
+chmod 0755 "$RECONCILER_DEST.new.$$"
+mv -- "$RECONCILER_DEST.new.$$" "$RECONCILER_DEST"
+
+[[ "$(sha256sum "$RECONCILER_DEST" | awk '{print $1}')" == "$EXPECTED_RECONCILER_SHA256" ]] || fail_audit "INSTALLED_RECONCILER_SHA256_MISMATCH"
+[[ "$(git_blob_sha "$RECONCILER_DEST")" == "$EXPECTED_RECONCILER_GIT_BLOB" ]] || fail_audit "INSTALLED_RECONCILER_GIT_BLOB_MISMATCH"
+bash -n "$RECONCILER_DEST"
 
 # PRE-APPLY: exact gate. Any deviation stops before mutation.
 set +e
-PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" 2>&1 | tee "$PREVIEW_LOG"
+PRW_WORKSPACE_ROOT="$ROOT" "$RECONCILER_DEST" 2>&1 | tee "$PREVIEW_LOG"
 pre_rc=${PIPESTATUS[0]}
 set -e
 ((pre_rc == 0)) || fail_audit "PRE_APPLY_PREVIEW_ERROR_$pre_rc"
@@ -134,13 +150,14 @@ grep -Fq 'Status: `STAGED / VERIFIED / LOCAL_SOURCE_NOT_MUTATED`' "$PRE_AUDIT" |
 [[ "$(awk -F $'\t' '$1=="DEFERRED_RUNTIME_GATE" && $2=="crates/prw-agent/tests/phase125_device_identity_bootstrap.rs" {print $5}' "$PRE_TSV")" == "-" ]] || fail_audit "DEFERRED_PHASE125_TEST_NOT_ABSENT"
 [[ "$(awk -F $'\t' '$1=="DEFERRED_RUNTIME_GATE" && $2=="crates/prw-agent/tests/phase_102_binary_bootstrap.rs" {print $5}' "$PRE_TSV")" == "-" ]] || fail_audit "DEFERRED_PHASE102_TEST_NOT_ABSENT"
 
-# APPLY: only the 90 non-deferred allowlisted files. Existing reconciler performs per-file backup + final Git-blob verification.
-# Then refresh User Host Mirror through the existing checksum-verified local->Drive sync transaction.
+# APPLY: only the 90 non-deferred allowlisted files. The reconciler performs
+# per-file backup + final Git-blob verification. Do NOT request host-mirror sync
+# from inside the reconciler because it still owns the workspace sync flock.
 set +e
-PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" --apply --sync-host-mirror 2>&1 | tee "$APPLY_LOG"
+PRW_WORKSPACE_ROOT="$ROOT" "$RECONCILER_DEST" --apply 2>&1 | tee "$APPLY_LOG"
 apply_rc=${PIPESTATUS[0]}
 set -e
-((apply_rc == 0)) || fail_audit "APPLY_OR_HOST_MIRROR_SYNC_ERROR_$apply_rc"
+((apply_rc == 0)) || fail_audit "APPLY_ERROR_$apply_rc"
 
 APPLY_AUDIT="$(tail -n 1 "$APPLY_LOG")"
 case "$APPLY_AUDIT" in
@@ -151,11 +168,20 @@ esac
 grep -Fq 'Status: `COMPLETE / LOCAL_RECONCILED_FROM_DRIVE`' "$APPLY_AUDIT" || fail_audit "APPLY_NOT_COMPLETE"
 grep -Fq -- '- post_apply_verification: `GIT_BLOB_SHA_MATCH`' "$APPLY_AUDIT" || fail_audit "POST_APPLY_GIT_BLOB_VERIFICATION_MISSING"
 grep -Fq -- '- deferred_runtime_gate_files: `3 / NOT_APPLIED`' "$APPLY_AUDIT" || fail_audit "DEFERRED_APPLY_GUARD_MISSING"
-grep -Fq -- '- host_mirror_sync: `REQUESTED / EXISTING_PRW_SYNC_COMPLETED`' "$APPLY_AUDIT" || fail_audit "HOST_MIRROR_SYNC_NOT_CONFIRMED"
+grep -Fq -- '- host_mirror_sync: `NOT_REQUESTED`' "$APPLY_AUDIT" || fail_audit "APPLY_SYNC_BOUNDARY_UNEXPECTED"
+
+# The reconciler process has exited, so its workspace-sync flock is released.
+# Now run the existing local->Drive checksum-verified Host Mirror transaction separately.
+[[ -f "$SYNC_TOOL" ]] || fail_audit "PRW_SYNC_TOOL_MISSING"
+set +e
+"$SYNC_TOOL" 2>&1 | tee "$SYNC_LOG"
+sync_rc=${PIPESTATUS[0]}
+set -e
+((sync_rc == 0)) || fail_audit "HOST_MIRROR_SYNC_ERROR_$sync_rc"
 
 # POST-APPLY preview: the 90 eligible files must all match authority; the same three runtime paths remain deferred.
 set +e
-PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" 2>&1 | tee "$POST_LOG"
+PRW_WORKSPACE_ROOT="$ROOT" "$RECONCILER_DEST" 2>&1 | tee "$POST_LOG"
 post_rc=${PIPESTATUS[0]}
 set -e
 ((post_rc == 0)) || fail_audit "POST_APPLY_PREVIEW_ERROR_$post_rc"
@@ -205,6 +231,7 @@ Status: \`PASS / LOCAL_RECONCILED / HOST_MIRROR_SYNCED / RUNTIME_GATE_PRESERVED\
 - deferred_runtime_gate_files: \`3 / NOT_APPLIED\`
 - local_changes_remaining: \`0\`
 - host_mirror_sync: \`COMPLETE / EXISTING_PRW_SYNC\`
+- host_mirror_sync_output_sha256: \`$(sha256sum "$SYNC_LOG" | awk '{print $1}')\`
 - root_cargo_sha256_before: \`$ROOT_CARGO_BEFORE\`
 - root_cargo_sha256_after: \`$ROOT_CARGO_AFTER\`
 - root_cargo_unchanged: \`YES\`
