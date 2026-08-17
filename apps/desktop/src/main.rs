@@ -1,5 +1,9 @@
 mod ipc;
-mod management;
+#[allow(
+    clippy::missing_const_for_fn,
+    reason = "Phase 152 presentation transitions remain ordinary methods until the desktop management boundary is wired beyond Slice A"
+)]
+pub(crate) mod management;
 mod state;
 mod ui;
 
