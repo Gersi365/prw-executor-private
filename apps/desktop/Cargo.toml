@@ -1,0 +1,13 @@
+[package]
+name = "prw-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+adw = { package = "libadwaita", version = "=0.9.1", features = ["v1_5"] }
+gtk = { package = "gtk4", version = "=0.11.3", features = ["v4_14"] }
+prw-agent = { path = "../../crates/prw-agent" }
+
+[lints]
+workspace = true
