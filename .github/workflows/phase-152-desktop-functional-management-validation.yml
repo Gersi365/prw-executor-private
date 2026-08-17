@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - phase-152-desktop-functional-management
-      - phase-152-c02a-proof-atomic2
+      - phase-152-c02b-promotion
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           case "${GITHUB_REF_NAME}" in
-            phase-152-desktop-functional-management|phase-152-c02a-proof-atomic2)
+            phase-152-desktop-functional-management|phase-152-c02b-promotion)
               ;;
             *)
               echo "Unexpected validation branch: ${GITHUB_REF_NAME}" >&2
@@ -41,16 +41,18 @@ jobs:
           BASELINE=3aec5d9307edfa5abe53c4ebe169a2445599a2c0
           C01_SOURCE=daf126a8e77bd6e2fc03179fa167aca028a2e7c5
           C02_CONTRACT=05b0a2ce54f18cab068220869c8103db39af7a73
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
           git merge-base --is-ancestor "${BASELINE}" HEAD
           git merge-base --is-ancestor "${C01_SOURCE}" HEAD
           git merge-base --is-ancestor "${C02_CONTRACT}" HEAD
+          git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
 
           mapfile -t changed < <(git diff --name-only "${BASELINE}..HEAD")
           printf 'Phase 152 candidate changed files:\n'
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml)
                 ;;
               *)
                 echo "Unexpected Phase 152 candidate path: ${path}" >&2
@@ -64,10 +66,24 @@ jobs:
           printf '  %s\n' "${post_c02[@]}"
           for path in "${post_c02[@]}"; do
             case "${path}" in
-              .github/workflows/phase-152-desktop-functional-management-validation.yml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_dispatch.rs)
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md)
                 ;;
               *)
-                echo "C02a source scope drifted after ${C02_CONTRACT}: ${path}" >&2
+                echo "C02 source/audit scope drifted after ${C02_CONTRACT}: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          mapfile -t post_c02b_audit < <(git diff --name-only "${C02B_AUDIT}..HEAD")
+          printf 'Workflow-only promotion changes after validated C02b audit head:\n'
+          printf '  %s\n' "${post_c02b_audit[@]}"
+          for path in "${post_c02b_audit[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml)
+                ;;
+              *)
+                echo "C02b promotion must remain workflow-only after ${C02B_AUDIT}: ${path}" >&2
                 exit 1
                 ;;
             esac
@@ -114,6 +130,23 @@ jobs:
 
           grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
           echo "C02 authority mismatch is preserved explicitly: registry principals and anchored roots are not fabricated in Agent"
+
+      - name: Verify C02b authority audit remains evidence-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
+          git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
+          grep -Fn 'Status: `AUDIT_ONLY_CONTRACT / NO_PROVIDER_WIRING / NO_PRODUCTION_ACTIVATION`' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'No fabricated remote principal.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'No request-selected filesystem root.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'Production bootstrap remains closed to management.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+
+          if git diff --name-only "${C02B_AUDIT}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
+            echo "C02b promotion introduced source, manifest, or lockfile mutation after the validated audit head" >&2
+            exit 1
+          fi
+          echo "C02b audit contract is promoted without real authority/provider implementation"
 
       - name: Install locked desktop native prerequisites
         shell: bash
@@ -271,4 +304,4 @@ jobs:
           fi
 
           git diff --exit-code -- Cargo.lock
-          echo "Committed Phase 152 source, manifests, contracts, workflow and lockfile remained unchanged throughout validation"
+          echo "Committed Phase 152 source, manifests, contracts, workflows and lockfile remained unchanged throughout validation"
