@@ -25,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify audit-only lineage and committed scope
+      - name: Verify isolated lineage and committed scope
         shell: bash
         run: |
           set -euo pipefail
@@ -34,14 +34,14 @@ jobs:
           git merge-base --is-ancestor "${CANDIDATE}" HEAD
 
           mapfile -t changed < <(git diff --name-only "${CANDIDATE}..HEAD")
-          printf 'Committed audit-branch changes:\n'
+          printf 'Committed Android lock branch changes:\n'
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              .github/workflows/phase-152-android-lock-audit.yml)
+              .github/workflows/phase-152-android-lock-audit.yml|.github/workflows/phase-152-android-lock-materialize.yml|apps/android/native/Cargo.lock)
                 ;;
               *)
-                echo "Unexpected committed Android lock-audit path: ${path}" >&2
+                echo "Unexpected committed Android lock path: ${path}" >&2
                 exit 1
                 ;;
             esac
@@ -55,7 +55,7 @@ jobs:
           cargo +1.97.1 --version
           rustc +1.97.1 --version
 
-      - name: Materialize Android native lockfile candidate and print exact diff
+      - name: Verify or materialize Android native lockfile candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -64,33 +64,27 @@ jobs:
           cargo +1.97.1 generate-lockfile
 
           mapfile -t changed < <(git diff --name-only)
-          printf 'Working-tree changes after cargo generate-lockfile:\n'
-          printf '  %s\n' "${changed[@]}"
-          if ((${#changed[@]} != 1)) || [[ "${changed[0]}" != "apps/android/native/Cargo.lock" ]]; then
+          if ((${#changed[@]} == 0)); then
+            echo 'Android native Cargo.lock is already current under Cargo 1.97.1'
+          elif ((${#changed[@]} == 1)) && [[ "${changed[0]}" == "apps/android/native/Cargo.lock" ]]; then
+            echo 'Working-tree drift is isolated to apps/android/native/Cargo.lock'
+            echo '----- BEGIN ANDROID NATIVE CARGO.LOCK DIFF -----'
+            git diff --no-ext-diff --unified=5 -- Cargo.lock
+            echo '----- END ANDROID NATIVE CARGO.LOCK DIFF -----'
+            git diff --check -- Cargo.lock
+          else
             echo "Lock regeneration changed an unexpected path set" >&2
-            git diff --stat >&2
+            printf '  %s\n' "${changed[@]}" >&2
             exit 1
           fi
 
-          echo '----- BEGIN ANDROID NATIVE CARGO.LOCK DIFF -----'
-          git diff --no-ext-diff --unified=5 -- Cargo.lock
-          echo '----- END ANDROID NATIVE CARGO.LOCK DIFF -----'
-
-          echo '----- BEGIN ANDROID NATIVE PACKAGE-LINE DELTA -----'
-          diff -u \
-            <(grep -E '^(name|version) = ' "${RUNNER_TEMP}/android-native-Cargo.lock.before") \
-            <(grep -E '^(name|version) = ' Cargo.lock) || true
-          echo '----- END ANDROID NATIVE PACKAGE-LINE DELTA -----'
-
-          git diff --check -- Cargo.lock
-
-      - name: Prove generated lockfile satisfies locked native metadata
+      - name: Prove lockfile satisfies locked native metadata
         shell: bash
         run: |
           set -euo pipefail
           cd apps/android/native
           cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
-          echo 'Generated Android native Cargo.lock is accepted by Cargo 1.97.1 under --locked'
+          echo 'Android native Cargo.lock is accepted by Cargo 1.97.1 under --locked'
 
       - name: Restore audit working tree
         shell: bash
@@ -98,4 +92,4 @@ jobs:
           set -euo pipefail
           git checkout -- apps/android/native/Cargo.lock
           git diff --exit-code
-          echo 'Audit completed without committing or retaining generated lockfile changes'
+          echo 'Audit completed without retaining working-tree changes'
