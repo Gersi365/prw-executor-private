@@ -83,11 +83,13 @@ count_status() {
   awk -F $'\t' -v wanted="$wanted" 'NR > 1 && $1 == wanted {n++} END {print n+0}' "$preview"
 }
 
+# Preserve explicit root-workspace gates byte-for-byte across this transaction.
 ROOT_CARGO_BEFORE="ABSENT"
 ROOT_LOCK_BEFORE="ABSENT"
 if [[ -f "$ROOT/Cargo.toml" ]]; then ROOT_CARGO_BEFORE="$(sha256sum "$ROOT/Cargo.toml" | awk '{print $1}')"; fi
 if [[ -f "$ROOT/Cargo.lock" ]]; then ROOT_LOCK_BEFORE="$(sha256sum "$ROOT/Cargo.lock" | awk '{print $1}')"; fi
 
+# Fetch the corrected, Drive-pinned reconciler and verify both SHA-256 and Git blob identity.
 rclone copyto \
   "${PRW_RCLONE_REMOTE}:$AUTHORITY_ROOT/$RECONCILER_REL" \
   "$STAGE_RECONCILER" \
@@ -101,6 +103,7 @@ actual_reconciler_blob="$(git_blob_sha "$STAGE_RECONCILER")"
 bash -n "$STAGE_RECONCILER"
 chmod 0755 "$STAGE_RECONCILER"
 
+# PRE-APPLY: exact gate. Any deviation stops before mutation.
 set +e
 PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" 2>&1 | tee "$PREVIEW_LOG"
 pre_rc=${PIPESTATUS[0]}
@@ -126,10 +129,13 @@ grep -Fq 'Status: `STAGED / VERIFIED / LOCAL_SOURCE_NOT_MUTATED`' "$PRE_AUDIT" |
 [[ "$(count_status "$PRE_TSV" DEFERRED_RUNTIME_GATE)" == "3" ]] || fail_audit "PRE_DEFERRED_ROWS_NOT_3"
 [[ "$(awk -F $'\t' 'NR > 1 && $1 ~ /^BLOCKED_/ {n++} END {print n+0}' "$PRE_TSV")" == "0" ]] || fail_audit "PRE_BLOCKED_NONZERO"
 
+# The deferred runtime boundary must be exactly the expected three paths and retain pre-existing host state.
 [[ "$(awk -F $'\t' '$1=="DEFERRED_RUNTIME_GATE" && $2=="crates/prw-agent/src/main.rs" {print $5}' "$PRE_TSV")" == "$EXPECTED_DEFERRED_MAIN_LOCAL_BLOB" ]] || fail_audit "DEFERRED_MAIN_HOST_BLOB_CHANGED"
 [[ "$(awk -F $'\t' '$1=="DEFERRED_RUNTIME_GATE" && $2=="crates/prw-agent/tests/phase125_device_identity_bootstrap.rs" {print $5}' "$PRE_TSV")" == "-" ]] || fail_audit "DEFERRED_PHASE125_TEST_NOT_ABSENT"
 [[ "$(awk -F $'\t' '$1=="DEFERRED_RUNTIME_GATE" && $2=="crates/prw-agent/tests/phase_102_binary_bootstrap.rs" {print $5}' "$PRE_TSV")" == "-" ]] || fail_audit "DEFERRED_PHASE102_TEST_NOT_ABSENT"
 
+# APPLY: only the 90 non-deferred allowlisted files. Existing reconciler performs per-file backup + final Git-blob verification.
+# Then refresh User Host Mirror through the existing checksum-verified local->Drive sync transaction.
 set +e
 PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" --apply --sync-host-mirror 2>&1 | tee "$APPLY_LOG"
 apply_rc=${PIPESTATUS[0]}
@@ -147,6 +153,7 @@ grep -Fq -- '- post_apply_verification: `GIT_BLOB_SHA_MATCH`' "$APPLY_AUDIT" || 
 grep -Fq -- '- deferred_runtime_gate_files: `3 / NOT_APPLIED`' "$APPLY_AUDIT" || fail_audit "DEFERRED_APPLY_GUARD_MISSING"
 grep -Fq -- '- host_mirror_sync: `REQUESTED / EXISTING_PRW_SYNC_COMPLETED`' "$APPLY_AUDIT" || fail_audit "HOST_MIRROR_SYNC_NOT_CONFIRMED"
 
+# POST-APPLY preview: the 90 eligible files must all match authority; the same three runtime paths remain deferred.
 set +e
 PRW_WORKSPACE_ROOT="$ROOT" "$STAGE_RECONCILER" 2>&1 | tee "$POST_LOG"
 post_rc=${PIPESTATUS[0]}
