@@ -30,6 +30,7 @@ pub mod codec;
     reason = "pre-runtime inbound request state is intentionally crate-internal"
 )]
 pub(crate) mod inbound_state;
+pub mod management_request;
 #[allow(
     dead_code,
     reason = "pre-runtime policy response pipeline is intentionally crate-internal"
