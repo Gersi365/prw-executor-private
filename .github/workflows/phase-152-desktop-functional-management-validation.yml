@@ -37,7 +37,7 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
                 ;;
               *)
                 echo "Unexpected Phase 152 candidate path: ${path}" >&2
@@ -46,24 +46,50 @@ jobs:
             esac
           done
 
-      - name: Record Slice C dependency and production-policy preconditions
+      - name: Materialize C01 whole-workspace dependency audit evidence
         shell: bash
         run: |
           set -euo pipefail
-          echo "Current prw-remote-bridge -> prw-agent edge:"
-          grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml
-          echo "Current bridge references to LocalAgentCommand/local_agent_command:"
-          git grep -n -E 'LocalAgentCommand|local_agent_command' -- crates/prw-remote-bridge || true
-          echo "Current prw-agent bridge dependency (expected absent before Slice C source mutation):"
-          if grep -Fn 'prw-remote-bridge' crates/prw-agent/Cargo.toml; then
-            echo "Unexpected pre-lock prw-agent -> prw-remote-bridge dependency" >&2
-            exit 1
-          fi
-          echo "BoundedLocalReadPolicy remains the production bootstrap policy and denies management capabilities:"
-          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
-          grep -Fn 'Capability::TerminalOpen' crates/prw-policy/src/lib.rs
-          grep -Fn 'Capability::FilesRead' crates/prw-policy/src/lib.rs
-          grep -Fn 'Capability::ForwardingCreate' crates/prw-policy/src/lib.rs
+          REPORT=logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt
+          mkdir -p "$(dirname "${REPORT}")"
+
+          {
+            echo "Private Remote Workspace — Phase 152 C01 Dependency Audit"
+            echo "status=AUDIT_ONLY"
+            echo "c00_validated_head=651e076cdcba0d6ae9e439eb7b381ccd2679a4b9"
+            echo "candidate_branch=phase-152-desktop-functional-management"
+            echo
+            echo "[current_dependency_edge]"
+            grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml
+            echo
+            echo "[reverse_dependency_precondition]"
+            if grep -Fn 'prw-remote-bridge' crates/prw-agent/Cargo.toml; then
+              echo "unexpected_prw_agent_to_remote_bridge_dependency=present"
+              exit 1
+            else
+              echo "prw_agent_to_remote_bridge_dependency=absent"
+            fi
+            echo
+            echo "[whole_repository_symbol_references]"
+            git grep -n -E 'LocalAgentCommand|local_agent_command' -- . \
+              ':(exclude)logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt' \
+              | LC_ALL=C sort || true
+            echo
+            echo "[rust_and_manifest_symbol_references]"
+            git grep -n -E 'LocalAgentCommand|local_agent_command' -- '*.rs' 'Cargo.toml' \
+              | LC_ALL=C sort || true
+            echo
+            echo "[production_policy_preconditions]"
+            grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+            grep -Fn 'Capability::TerminalOpen' crates/prw-policy/src/lib.rs
+            grep -Fn 'Capability::FilesRead' crates/prw-policy/src/lib.rs
+            grep -Fn 'Capability::ForwardingCreate' crates/prw-policy/src/lib.rs
+            echo
+            echo "classification=C01_DEPENDENCY_AUDIT_ONLY_NO_MANIFEST_OR_RUNTIME_MUTATION"
+          } > "${REPORT}.tmp"
+
+          mv "${REPORT}.tmp" "${REPORT}"
+          cat "${REPORT}"
 
       - name: Install locked desktop native prerequisites
         shell: bash
@@ -160,4 +186,20 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.lock
           git commit -m "phase 152: materialize validated desktop management lockfile"
+          git push origin HEAD:phase-152-desktop-functional-management
+
+      - name: Commit validated C01 dependency audit evidence if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPORT=logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt
+          if test -z "$(git status --porcelain -- "${REPORT}")"; then
+            echo "C01 dependency audit evidence already matches validated workspace state"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${REPORT}"
+          git diff --cached -- "${REPORT}"
+          git commit -m "phase 152: preserve C01 dependency audit evidence"
           git push origin HEAD:phase-152-desktop-functional-management
