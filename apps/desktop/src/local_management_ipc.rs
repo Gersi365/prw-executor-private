@@ -14,7 +14,7 @@ use prw_remote_bridge::{BridgeCommand, RemoteBridgeError};
 
 /// Pure client-side failure while composing one typed local management request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalManagementClientError {
+pub enum LocalManagementClientError {
     /// Canonical PRWC encoding rejected the typed operation.
     Bridge(RemoteBridgeError),
     /// Agent-owned local command-3 framing rejected the encoded body.
@@ -31,7 +31,7 @@ pub(crate) enum LocalManagementClientError {
 ///
 /// Preserves canonical PRWC encoding failures and bounded local framing
 /// failures without introducing an alternate command representation.
-pub(crate) fn build_bridge_management_request(
+pub fn build_bridge_management_request(
     request_id: LocalIpcRequestId,
     command: &BridgeCommand,
 ) -> Result<LocalIpcFrame, LocalManagementClientError> {
