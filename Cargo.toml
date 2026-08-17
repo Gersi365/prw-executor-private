@@ -26,6 +26,7 @@ members = [
     "crates/prw-remote-transport",
     "crates/prw-remote-bridge",
     "crates/prw-agent",
+    "apps/desktop",
 ]
 
 [workspace.package]
