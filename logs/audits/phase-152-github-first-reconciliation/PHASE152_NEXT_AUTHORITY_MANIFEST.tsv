@@ -1,0 +1,6 @@
+path	git_blob_sha
+crates/prw-session/Cargo.toml	5b0e0ccad709cbbd0eb3f5f1d33759514cd692d5
+crates/prw-session/src/lib.rs	9eccba113e852a658189d76d892fd4b9822d2e83
+crates/prw-remote-transport/Cargo.toml	37055b7371cd6325438d8a2cbff00bd37773f6f6
+crates/prw-remote-transport/src/lib.rs	35ffebccaf237fc6892dac0991a7c7fcd23576c8
+crates/prw-remote-transport/tests/loopback.rs	97b8fb97e150ae14ddcc24457664a8ab77c11c72
