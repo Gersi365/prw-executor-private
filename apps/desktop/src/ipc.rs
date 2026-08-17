@@ -151,8 +151,7 @@ pub(crate) fn query_startup() -> StartupProbe {
 
     let status_id =
         LocalIpcRequestId::new(1).map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
-    let dns_id =
-        LocalIpcRequestId::new(2).map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
+    let dns_id = LocalIpcRequestId::new(2).map_err(|_| DesktopIpcError::RequestIdGenerationFailed);
 
     let status = status_id.and_then(|request_id| query_status(&endpoint, request_id));
     let private_dns = dns_id.and_then(|request_id| query_private_dns(&endpoint, request_id));
