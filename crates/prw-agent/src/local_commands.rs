@@ -32,6 +32,11 @@ pub mod codec;
 pub(crate) mod inbound_state;
 #[allow(
     dead_code,
+    reason = "C02c Agent-owned authority foundation is intentionally not runtime-wired"
+)]
+pub(crate) mod management_authority;
+#[allow(
+    dead_code,
     reason = "C02a provider-neutral dispatch proof is intentionally not runtime-wired"
 )]
 pub(crate) mod management_dispatch;
