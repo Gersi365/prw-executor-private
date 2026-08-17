@@ -37,10 +37,10 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
                 ;;
               *)
-                echo "Unexpected Phase 152 Slice A path: ${path}" >&2
+                echo "Unexpected Phase 152 candidate path: ${path}" >&2
                 exit 1
                 ;;
             esac
@@ -99,17 +99,34 @@ jobs:
           set -euo pipefail
           cargo build --locked --workspace --all-targets
 
-      - name: Confirm desktop Slice A has no direct host-effect primitives
+      - name: Confirm Phase 152 desktop and Slice B framing have no direct host effects
         shell: bash
         run: |
           set -euo pipefail
-          target=apps/desktop/src/management.rs
-          forbidden='std::process::Command|Command::new|TcpListener|TcpStream|UdpSocket|UnixListener|std::fs::|File::create|OpenOptions|resolvectl|/etc/resolv.conf|NetworkManager|systemctl|nft|iptables|tun|tap'
-          if grep -En "${forbidden}" "${target}"; then
-            echo "Forbidden direct host-effect primitive found in Phase 152 Slice A" >&2
+          targets=(
+            apps/desktop/src/management.rs
+            apps/desktop/src/local_management_ipc.rs
+            crates/prw-agent/src/local_commands/management_request.rs
+          )
+          forbidden='std::process::Command|Command::new|TcpListener|TcpStream|UdpSocket|UnixListener|UnixStream|std::fs::|File::create|OpenOptions|resolvectl|/etc/resolv.conf|NetworkManager|systemctl|nft|iptables|tun|tap'
+          for target in "${targets[@]}"; do
+            if test -f "${target}" && grep -En "${forbidden}" "${target}"; then
+              echo "Forbidden direct host-effect primitive found in ${target}" >&2
+              exit 1
+            fi
+          done
+          echo "No direct process/filesystem/socket/DNS/system-service mutation primitive found in Phase 152 candidate surfaces"
+
+      - name: Confirm Slice B does not add live provider dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=crates/prw-agent/src/local_commands/management_request.rs
+          if test -f "${target}" && grep -En 'dispatch\(|provider\.|PolicyEvaluator|evaluate\(' "${target}"; then
+            echo "Slice B management framing must not perform policy/provider dispatch" >&2
             exit 1
           fi
-          echo "No direct process/filesystem/socket/DNS/system-service mutation primitive found in Slice A management projection"
+          echo "Slice B Agent module remains framing-only; live policy/provider dispatch stays gated by Slice C"
 
       - name: Commit validated generated lockfile if changed
         shell: bash
