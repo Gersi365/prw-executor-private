@@ -55,7 +55,7 @@ Result: `14 / 14 DRIVE_RAW_READBACK_GIT_BLOB_MATCH`.
 - Drive raw readback Git blob: `e41d4deda32418147c3f019cb0d27f67442ba23e`
 - Drive raw readback SHA-256: `b79c1a2733e671d69a601143c9e8714685d6f3b8211cb19dbe5591c8dabee931`
 - `bash -n`: PASS
-- `shellcheck`: NOT_AVAILABLE_IN_VALIDATION_RUNTIME`
+- `shellcheck`: NOT_AVAILABLE_IN_VALIDATION_RUNTIME
 
 The reconciler is dry-run by default, takes the same workspace-sync lock as the existing local-to-Drive transaction, stages files from the immutable authority snapshot, verifies each downloaded Git blob before comparison or mutation, backs up differing local files before replacement, and refuses paths outside the six-crate remaining Phase 152 closure boundary represented by the authority manifest.
 
