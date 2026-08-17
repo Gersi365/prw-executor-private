@@ -1,13 +1,13 @@
 # PRW Phase 152 GitHub-First Authority Provenance Closeout
 
-Status: `PASS / GITHUB_DRIVE_AUTHORITY_BYTE_CHAIN_VERIFIED / REAL_HOST_PREVIEW_COMPLETED / CORRECTED_PREVIEW_PENDING`
+Status: `PASS / GITHUB_DRIVE_AUTHORITY_BYTE_CHAIN_VERIFIED / REAL_HOST_RECONCILED / HOST_MIRROR_SYNC_VERIFIED`
 
 - repository_id: `1334911207`
 - canonical_repository: `powercode2026/prw-executor-private`
 - frozen_source_commit: `01f5466504684ea6a2c504613901d24018485887`
 - frozen_source_branch: `phase-152-desktop-functional-management`
 - reconciliation_branch: `phase-152-github-first-reconciliation`
-- reconciliation_head_observed_before_this_update: `85537595352d3658c18a773bdd5d357471e8a612`
+- reconciliation_head_before_completion_closeout: `acb1e849f88c3de61f03bf69711cf31c06e66bf2`
 
 ## Remaining non-Agent closure authority
 
@@ -33,11 +33,11 @@ Status: `PASS / GITHUB_DRIVE_AUTHORITY_BYTE_CHAIN_VERIFIED / REAL_HOST_PREVIEW_C
 - Agent manifest file verification: `79 / 79 GIT_BLOB_MATCH`
 - internal bundle `SHA256SUMS`: `84 / 84 MATCH`
 
-## Corrected reconciliation tooling chain
+## Corrected reconciliation boundary
 
-The reconciler continues to verify the full immutable `93`-file authority boundary, but three Agent binary-bootstrap paths are now explicitly classified `DEFERRED_RUNTIME_GATE` and are categorically skipped by `--apply` while runtime/systemd gates remain closed.
+The reconciler verifies the full immutable `93`-file authority boundary while three Agent binary-bootstrap paths remain explicitly classified `DEFERRED_RUNTIME_GATE` and categorically excluded from apply while runtime/systemd gates remain closed.
 
-- authority files verified by design: `93`
+- authority files verified: `93`
 - apply-eligible files: `90`
 - deferred runtime-gate files: `3`
 - deferred paths:
@@ -65,11 +65,21 @@ The reconciler continues to verify the full immutable `93`-file authority bounda
 - Drive raw readback: `MATCH`
 - `bash -n`: `PASS`
 
-Source mutation still requires explicit `--apply`. Host Mirror refresh additionally requires `--sync-host-mirror` and reuses the existing checksum-verified local-to-Drive sync transaction. Neither has been run on the real host in this reconciliation sequence.
+### Controlled apply runner v2
 
-## Real-host preview evidence
+The first controlled-apply runner attempt failed before source mutation because the reconciler was executed from a temporary path and therefore resolved the workspace root as `/`. The corrected runner installs/executes the verified reconciler at its canonical workspace path and performs the local-to-Drive Host Mirror sync only after the reconciler has exited and released its sync lock.
 
-The verified v1 bootstrap/reconciler was executed on the real Ubuntu workspace in preview mode only.
+- path: `tools/workspace-sync/prw-run-controlled-reconciliation-apply.sh`
+- Git blob: `a0efb18a460381b334706f10e71c3c8ea0add302`
+- SHA-256: `b45a1bf58f70e5e28d897d3942ba32a8208978ce7ffe7c50cd4c0ce69cc8942c`
+- size: `12295`
+- Drive file ID: `1aNEe2q9VDaCcr7_oCS42wdIcrQJtANz_`
+- Drive raw readback: `MATCH`
+- `bash -n`: `PASS`
+
+## Historical first real-host preview
+
+The verified first bootstrap/reconciler was executed on the real Ubuntu workspace in preview mode only.
 
 - workspace: `/home/gersi365/private-remote-workspace`
 - bootstrap evidence stamp: `20260817T192502Z`
@@ -82,17 +92,42 @@ The verified v1 bootstrap/reconciler was executed on the real Ubuntu workspace i
 - `DIFF`: `1`
 - reconciliation audit SHA-256: `128359315c2324b7fcbf89cc513848136218f2b61a09b1b49a1b2688a2810d76`
 - preview TSV SHA-256: `5fca12f6b72178c413025f8d57302bd3046fe018e181e7c3c33b79e21d45e0d8`
-- source apply: `NOT_PERFORMED`
 
-The single `DIFF` was `crates/prw-agent/src/main.rs`, where frozen authority blob `db6b8028c6df100a961a0fb5818347bea2fdc5c1` differed from host blob `d3124af74881f58535963a7bd0b790e49eba4d4b`. The two frozen binary-bootstrap integration tests were absent. Because these three paths cross the runtime/systemd boundary, the initial apply boundary was rejected before mutation and the reconciler was corrected GitHub-first.
+The single `DIFF` was `crates/prw-agent/src/main.rs`, where frozen authority blob `db6b8028c6df100a961a0fb5818347bea2fdc5c1` differed from host blob `d3124af74881f58535963a7bd0b790e49eba4d4b`. The two frozen binary-bootstrap integration tests were absent. Because these three paths cross the runtime/systemd boundary, the initial 93-file apply boundary was rejected before mutation and corrected to the 90-file apply-eligible boundary.
 
 The dedicated evidence record is `PHASE152_REAL_HOST_PREVIEW_AUDIT.md`, Git blob `80b5bd8f272eb9ed2fb243d32f922e0ed75c2a8f`.
 
-`LOCAL_RECONCILIATION=REAL_PREVIEW_COMPLETED / APPLY_NOT_PERFORMED / CORRECTED_SECOND_PREVIEW_REQUIRED`
+## Real-host controlled reconciliation completion
+
+The corrected controlled-apply runner was executed on the real Ubuntu host. Terminal evidence supplied from the host records the following sequence:
+
+- controlled transaction stamp: `20260817T203643Z`
+- pre-apply reconciliation audit: `logs/audits/drive-reconciliation/20260817T203649Z/RECONCILIATION_AUDIT.md`
+- apply reconciliation audit: `logs/audits/drive-reconciliation/20260817T203907Z/RECONCILIATION_AUDIT.md`
+- checksum Host Mirror sync audit: `logs/audits/workspace-sync/20260817T204206Z/SYNC_AUDIT.md`
+- post-apply reconciliation audit: `logs/audits/drive-reconciliation/20260817T204259Z/RECONCILIATION_AUDIT.md`
+- controlled audit: `logs/audits/controlled-reconciliation-apply/20260817T203643Z/CONTROLLED_APPLY_AUDIT.md`
+- controlled runner exit code: `0`
+- Drive check: `0 differences found`
+- Drive check: `318 matching files`
+
+The controlled runner contract exits successfully only after its exact pre-apply boundary checks, non-deferred apply, per-file Git-blob verification, separate Host Mirror sync, exact post-apply reconciliation checks, deferred-path preservation checks, and root `Cargo.toml` / `Cargo.lock` before-vs-after checks have all passed.
+
+Therefore the real-host reconciliation state is closed as:
+
+- `LOCAL_RECONCILIATION=PASS`
+- `APPLY_ELIGIBLE_FILES=90 / MATCH_AUTHORITY_AFTER_APPLY`
+- `DEFERRED_RUNTIME_GATE_FILES=3 / NOT_APPLIED`
+- `LOCAL_CHANGES_REMAINING_IN_APPLY_ELIGIBLE_BOUNDARY=0`
+- `USER_HOST_MIRROR=SYNCED / CHECKSUM_VERIFIED`
+- `DRIVE_POST_SYNC_DIFFERENCES=0`
+- `DRIVE_POST_SYNC_MATCHING_FILES=318`
+
+The source candidate itself remains frozen at `01f5466504684ea6a2c504613901d24018485887`; reconciliation completion does not authorize production runtime activation.
 
 ## Historical local topology corroboration
 
-Uploaded archive `20260817T115615Z.zip` was independently verified as historical evidence predating the reconciliation preview.
+Uploaded archive `20260817T115615Z.zip` was independently verified as historical evidence predating reconciliation.
 
 - archive SHA-256: `0fd5e6e5596e4cd15ab93136a382ea8c54829390174f786fa10e8309adfe15e4`
 - embedded `SHA256SUMS`: `24 / 24 PASS`
@@ -101,19 +136,7 @@ Uploaded archive `20260817T115615Z.zip` was independently verified as historical
 - historical `current_file_count=22`
 - historical `component_count=7`
 
-This corroborates that the Ubuntu workspace is an intentional non-Git Host Mirror. The later `fatal: not a git repository` result is not classified as reconciliation damage. The dedicated evidence record is `PHASE152_LOCAL_LAYOUT_CORROBORATION.md`, Git blob `d6eeaecc5688ed5f609979b2a15e179ca17b882f`.
-
-## Audit evidence mirror
-
-- `PHASE152_AGENT_AUTHORITY_AUDIT.md` GitHub/Drive Git blob: `31b8cba791e46ea580972d72df6f3e767ee35625`
-- `PHASE152_AGENT_AUTHORITY_AUDIT.md` Drive SHA-256: `96a5f8027bd05454959f3d59159b17c37e1b4d814c4b0e3aee9c7ec35dcc4999`
-- `PHASE152_LOCAL_BOOTSTRAP_READINESS.md` GitHub/Drive Git blob: `7d7dfbedfdef2b53e919992f1d74480d2b2704b5`
-- `PHASE152_LOCAL_BOOTSTRAP_READINESS.md` Drive SHA-256: `31a308e66fe64c4f1555e0705973e6766e7de231519b9d0e144dd4a76089e12c`
-- `RECONCILIATION_BOOTSTRAP_AUDIT.md` GitHub/Drive Git blob: `a3e6976fb8a8d20b9ead78ee4afdde87e2690698`
-- `PHASE152_REAL_HOST_PREVIEW_AUDIT.md` Git blob: `80b5bd8f272eb9ed2fb243d32f922e0ed75c2a8f`
-- `PHASE152_REAL_HOST_PREVIEW_AUDIT.md` Drive file ID: `1M0wLlzLP5bwrrOIFZApNDKENuBs6BlhQ`
-- `PHASE152_LOCAL_LAYOUT_CORROBORATION.md` Git blob: `d6eeaecc5688ed5f609979b2a15e179ca17b882f`
-- `PHASE152_LOCAL_LAYOUT_CORROBORATION.md` Drive file ID: `1-dWYKy-2lipmNfniLwaPEmoD5GEAbegx`
+This corroborates that the Ubuntu workspace is an intentional non-Git Host Mirror. The later `fatal: not a git repository` result is not reconciliation damage. The dedicated evidence record is `PHASE152_LOCAL_LAYOUT_CORROBORATION.md`, Git blob `d6eeaecc5688ed5f609979b2a15e179ca17b882f`.
 
 ## Review-container corrective event
 
@@ -126,12 +149,10 @@ Draft PR `#2` was briefly created as a review container with base `phase-152-des
 - workflow: `PRW Rust Validation`
 - job: `95476493438 / Validate Rust workspace`
 - final run status: `COMPLETED / SUCCESS`
-- completed UTC: `2026-08-17T19:18:59Z`
-- job completed Clippy, tests, and workspace build successfully
 - classification: `AUTOMATIC_EXISTING_CI / NOT_AUTHORIZED_AS_BUILD_GATE_EVIDENCE`
 - build gate after corrective action: `CLOSED`
 
-The successful automatic run is retained only as incident/provenance evidence. It does not retroactively authorize build/test/clippy and is not used as Phase 152 build-gate validation. PR `#2` remains closed and must not be reopened unless pull-request CI behavior is explicitly authorized or isolated from build/test/clippy execution.
+The automatic run is retained only as incident/provenance evidence. It does not retroactively authorize build/test/clippy and is not used as Phase 152 build-gate validation. PR `#2` remains closed.
 
 ## Preserved gates
 
@@ -141,16 +162,8 @@ The successful automatic run is retained only as incident/provenance evidence. I
 - systemd credential loading: `NOT_AUTHORIZED`
 - deployment: `NOT_AUTHORIZED`
 - privileged/system changes: `NOT_AUTHORIZED`
+- C03 production activation: `NOT_AUTHORIZED`
 
-## Next safe host action
+## Project continuation
 
-Run the Drive-pinned corrected bootstrap in preview mode. Before any controlled source apply, the second preview must establish:
-
-- `verified_files = 93`
-- `apply_eligible_files = 90`
-- `deferred_runtime_gate_files = 3`
-- `DEFERRED_RUNTIME_GATE = 3`
-- no apply-eligible `DIFF`
-- source apply still `NOT_PERFORMED`
-
-Only after that preview is inspected may the non-deferred 90-file boundary be considered for controlled materialization. Root Cargo/build/runtime/systemd/deployment gates remain independent and closed.
+Host reconciliation is no longer the active blocker. The next project work returns to the Phase 152 reviewed authority boundary described by PR #1: local-management principal semantics for terminal/forwarding, trusted Agent-owned filesystem-root configuration and ownership, provider lifecycle ownership/cleanup/rollback, and exact production policy configuration that may grant management capabilities. C03 remains separate and closed.
