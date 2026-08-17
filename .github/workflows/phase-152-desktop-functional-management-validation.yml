@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: prw-phase-152-desktop-functional-management-${{ github.ref }}
@@ -31,7 +31,10 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "phase-152-desktop-functional-management"
           BASELINE=3aec5d9307edfa5abe53c4ebe169a2445599a2c0
+          C01_SOURCE=daf126a8e77bd6e2fc03179fa167aca028a2e7c5
           git merge-base --is-ancestor "${BASELINE}" HEAD
+          git merge-base --is-ancestor "${C01_SOURCE}" HEAD
+
           mapfile -t changed < <(git diff --name-only "${BASELINE}..HEAD")
           printf 'Phase 152 candidate changed files:\n'
           printf '  %s\n' "${changed[@]}"
@@ -46,99 +49,36 @@ jobs:
             esac
           done
 
-      - name: Materialize deterministic C01 admission candidate
+          mapfile -t post_c01 < <(git diff --name-only "${C01_SOURCE}..HEAD")
+          printf 'Changes after validated C01 source commit:\n'
+          printf '  %s\n' "${post_c01[@]}"
+          for path in "${post_c01[@]}"; do
+            test "${path}" = ".github/workflows/phase-152-desktop-functional-management-validation.yml" || {
+              echo "C01 source tree drifted after ${C01_SOURCE}: ${path}" >&2
+              exit 1
+            }
+          done
+
+      - name: Verify committed C01 dependency and policy invariants
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_exact(path: str, old: str, new: str) -> None:
-              target = Path(path)
-              text = target.read_text()
-              if old in text:
-                  if text.count(old) != 1:
-                      raise SystemExit(f"expected exactly one source fragment in {path}")
-                  target.write_text(text.replace(old, new))
-                  return
-              if new in text:
-                  return
-              raise SystemExit(f"neither old nor desired source fragment found in {path}")
-
-          replace_exact(
-              "crates/prw-remote-bridge/Cargo.toml",
-              'prw-agent = { path = "../prw-agent" }\n',
-              "",
-          )
-          replace_exact(
-              "crates/prw-agent/Cargo.toml",
-              'prw-policy = { path = "../prw-policy" }\n',
-              'prw-policy = { path = "../prw-policy" }\nprw-remote-bridge = { path = "../prw-remote-bridge" }\n',
-          )
-          replace_exact(
-              "crates/prw-remote-bridge/src/lib.rs",
-              'use prw_agent::local_commands::LocalAgentCommand;\n',
-              "",
-          )
-          replace_exact(
-              "crates/prw-remote-bridge/src/lib.rs",
-              '''    /// Returns the existing local Agent command for an Agent-status operation.\n    #[must_use]\n    pub const fn local_agent_command(&self) -> Option<LocalAgentCommand> {\n        match self {\n            Self::AgentStatus => Some(LocalAgentCommand::GetAgentStatus),\n            _ => None,\n        }\n    }\n\n''',
-              "",
-          )
-          replace_exact(
-              "crates/prw-remote-bridge/tests/end_to_end.rs",
-              '''    assert_eq!(\n        commands[0].local_agent_command(),\n        Some(prw_agent::local_commands::LocalAgentCommand::GetAgentStatus)\n    );\n''',
-              "",
-          )
-
-          management = Path("crates/prw-agent/src/local_commands/management_request.rs")
-          text = management.read_text()
-          old_intro = '''//! Bounded framing for Phase 152 local typed management requests.\n//!\n//! This module owns only the additive local command-3 envelope. The embedded\n//! bytes remain opaque to `prw-agent` during Slice B and are validated through\n//! the canonical `prw-remote-bridge::BridgeCommand` codec at the existing\n//! integration boundary. No policy evaluation, provider dispatch, socket I/O,\n//! or host mutation occurs here.\n'''
-          new_intro = '''//! Bounded framing and C01 admission for Phase 152 local typed management requests.\n//!\n//! Slice B owns the additive local command-3 envelope. C01 additionally decodes\n//! the embedded bytes through canonical `prw_remote_bridge::BridgeCommand`, derives\n//! the exact capability from that decoded command, and evaluates caller-selected\n//! policy only when the caller is already represented by the Agent's typed\n//! same-UID authenticated Linux connection. C01 performs no provider dispatch,\n//! creates no management success acknowledgement, and performs no host mutation.\n'''
-          if old_intro in text:
-              text = text.replace(old_intro, new_intro)
-          elif new_intro not in text:
-              raise SystemExit("management request module intro drifted")
-
-          old_import = '''use std::fmt;\n\nuse crate::frame_object::{\n'''
-          new_import = '''use std::fmt;\n\nuse prw_policy::Capability;\n#[cfg(target_os = "linux")]\nuse prw_policy::{Decision, PolicyEvaluator};\nuse prw_remote_bridge::{BridgeCommand, RemoteBridgeError};\n\n#[cfg(target_os = "linux")]\nuse crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;\nuse crate::frame_object::{\n'''
-          if old_import in text:
-              text = text.replace(old_import, new_import)
-          elif new_import not in text:
-              raise SystemExit("management request import boundary drifted")
-
-          marker = '''/// Builds one local command-3 Request frame around an already encoded canonical PRWC payload.\n'''
-          admission = '''/// C01 token proving one canonical command passed authenticated local policy admission.\n///\n/// The caller fields are copied only from an `AuthenticatedLocalLinuxConnection`;\n/// request bytes cannot supply or override them. This token is admission evidence,\n/// not an execution result or success acknowledgement.\n#[derive(Debug, Clone, PartialEq, Eq)]\npub struct LocalManagementAdmission {\n    request_id: LocalIpcRequestId,\n    peer_pid: i32,\n    peer_uid: u32,\n    peer_gid: u32,\n    capability: Capability,\n    command: BridgeCommand,\n}\n\nimpl LocalManagementAdmission {\n    /// Returns the outer local IPC correlation identifier.\n    #[must_use]\n    pub const fn request_id(&self) -> LocalIpcRequestId {\n        self.request_id\n    }\n\n    /// Returns the authenticated kernel peer process identifier.\n    #[must_use]\n    pub const fn peer_pid(&self) -> i32 {\n        self.peer_pid\n    }\n\n    /// Returns the authenticated kernel peer user identifier.\n    #[must_use]\n    pub const fn peer_uid(&self) -> u32 {\n        self.peer_uid\n    }\n\n    /// Returns the authenticated kernel peer group identifier.\n    #[must_use]\n    pub const fn peer_gid(&self) -> u32 {\n        self.peer_gid\n    }\n\n    /// Returns the exact capability derived from the decoded canonical command.\n    #[must_use]\n    pub const fn capability(&self) -> Capability {\n        self.capability\n    }\n\n    /// Returns the canonical typed command admitted by policy.\n    #[must_use]\n    pub const fn command(&self) -> &BridgeCommand {\n        &self.command\n    }\n}\n\n/// C01 failure before any provider invocation or management success acknowledgement.\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum LocalManagementAdmissionError {\n    /// The Agent-owned outer command-3 envelope failed closed.\n    Framing(LocalManagementRequestDecodeError),\n    /// Canonical PRWC decoding rejected the embedded body.\n    CanonicalCommand(RemoteBridgeError),\n    /// The caller-selected policy denied the exact decoded-command capability.\n    CapabilityDenied,\n}\n\nimpl fmt::Display for LocalManagementAdmissionError {\n    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {\n        match self {\n            Self::Framing(_) => formatter.write_str("local management framing rejected request"),\n            Self::CanonicalCommand(_) => {\n                formatter.write_str("canonical local management command rejected request")\n            }\n            Self::CapabilityDenied => formatter.write_str("local management capability denied"),\n        }\n    }\n}\n\nimpl std::error::Error for LocalManagementAdmissionError {}\n\n/// Admits one local management request only for an already-authenticated Linux peer.\n///\n/// Canonical command decoding occurs before capability derivation and policy\n/// evaluation. The capability and caller identity are never accepted from request\n/// bytes. Successful return creates only a typed admission token; provider dispatch\n/// and response acknowledgement remain gated by later Slice C stages.\n///\n/// # Errors\n///\n/// Fails on outer framing, canonical PRWC decode, or exact capability denial.\n#[cfg(target_os = "linux")]\n#[allow(\n    dead_code,\n    reason = "C01 admission is intentionally not connected to provider dispatch before C02"\n)]\npub(crate) fn admit_authenticated_linux_management_request<E: PolicyEvaluator + ?Sized, S>(\n    frame: &LocalIpcFrame,\n    connection: &AuthenticatedLocalLinuxConnection<S>,\n    evaluator: &E,\n) -> Result<LocalManagementAdmission, LocalManagementAdmissionError> {\n    let envelope = decode_local_management_request_frame(frame)\n        .map_err(LocalManagementAdmissionError::Framing)?;\n    let command = BridgeCommand::decode(envelope.bridge_payload())\n        .map_err(LocalManagementAdmissionError::CanonicalCommand)?;\n    let capability = command.required_capability();\n    if evaluator.evaluate(capability) != Decision::Allow {\n        return Err(LocalManagementAdmissionError::CapabilityDenied);\n    }\n\n    let credentials = connection.peer_credentials();\n    Ok(LocalManagementAdmission {\n        request_id: envelope.request_id(),\n        peer_pid: credentials.pid(),\n        peer_uid: credentials.uid(),\n        peer_gid: credentials.gid(),\n        capability,\n        command,\n    })\n}\n\n'''
-          if "pub struct LocalManagementAdmission" not in text:
-              if text.count(marker) != 1:
-                  raise SystemExit("management request admission insertion marker drifted")
-              text = text.replace(marker, admission + marker)
-
-          test_marker = '''    #[test]\n    fn management_constants_lock_additive_command_and_bounds() {\n'''
-          c01_tests = '''    #[cfg(target_os = "linux")]\n    struct RecordingPolicy {\n        decision: Decision,\n        calls: Cell<usize>,\n        last_capability: Cell<Option<Capability>>,\n    }\n\n    #[cfg(target_os = "linux")]\n    impl RecordingPolicy {\n        const fn new(decision: Decision) -> Self {\n            Self {\n                decision,\n                calls: Cell::new(0),\n                last_capability: Cell::new(None),\n            }\n        }\n    }\n\n    #[cfg(target_os = "linux")]\n    impl PolicyEvaluator for RecordingPolicy {\n        fn evaluate(&self, capability: Capability) -> Decision {\n            self.calls.set(self.calls.get() + 1);\n            self.last_capability.set(Some(capability));\n            self.decision\n        }\n    }\n\n    #[cfg(target_os = "linux")]\n    fn authenticated_connection() -> AuthenticatedLocalLinuxConnection<UnixStream> {\n        let (server, _client) = UnixStream::pair().expect("anonymous local pair creates");\n        AuthenticatedLocalLinuxConnection::try_new(server)\n            .expect("same-UID local peer authenticates")\n    }\n\n    #[cfg(target_os = "linux")]\n    fn canonical_file_list_payload(path: &str) -> Vec<u8> {\n        let path = path.as_bytes();\n        let path_len = u16::try_from(path.len()).expect("test path length fits u16");\n        let mut payload = Vec::new();\n        payload.extend_from_slice(b"PRWC");\n        payload.extend_from_slice(&1_u16.to_be_bytes());\n        payload.extend_from_slice(&0_u16.to_be_bytes());\n        payload.extend_from_slice(&2_u16.to_be_bytes());\n        payload.extend_from_slice(&0_u16.to_be_bytes());\n        payload.extend_from_slice(&path_len.to_be_bytes());\n        payload.extend_from_slice(path);\n        payload\n    }\n\n    #[cfg(target_os = "linux")]\n    #[test]\n    fn c01_admission_binds_correlation_caller_and_canonical_capability() {\n        let connection = authenticated_connection();\n        let credentials = connection.peer_credentials();\n        let bridge_payload = canonical_file_list_payload("documents");\n        let request = build_local_management_request_frame(id(163), &bridge_payload)\n            .expect("canonical file-list management request builds");\n        let policy = RecordingPolicy::new(Decision::Allow);\n\n        let admitted = admit_authenticated_linux_management_request(&request, &connection, &policy)\n            .expect("authenticated allowed request admits");\n\n        assert_eq!(admitted.request_id(), id(163));\n        assert_eq!(admitted.peer_pid(), credentials.pid());\n        assert_eq!(admitted.peer_uid(), credentials.uid());\n        assert_eq!(admitted.peer_gid(), credentials.gid());\n        assert_eq!(admitted.capability(), Capability::FilesRead);\n        assert_eq!(admitted.command().required_capability(), Capability::FilesRead);\n        assert_eq!(policy.calls.get(), 1);\n        assert_eq!(policy.last_capability.get(), Some(Capability::FilesRead));\n    }\n\n    #[cfg(target_os = "linux")]\n    #[test]\n    fn c01_malformed_canonical_payload_never_reaches_policy() {\n        let connection = authenticated_connection();\n        let request = build_local_management_request_frame(id(164), b"not-prwc")\n            .expect("outer management framing remains valid");\n        let policy = RecordingPolicy::new(Decision::Allow);\n\n        assert_eq!(\n            admit_authenticated_linux_management_request(&request, &connection, &policy),\n            Err(LocalManagementAdmissionError::CanonicalCommand(\n                RemoteBridgeError::InvalidRequestPayload\n            ))\n        );\n        assert_eq!(policy.calls.get(), 0);\n        assert_eq!(policy.last_capability.get(), None);\n    }\n\n    #[cfg(target_os = "linux")]\n    #[test]\n    fn c01_production_local_read_policy_denies_management_without_token() {\n        let connection = authenticated_connection();\n        let bridge_payload = canonical_file_list_payload("documents");\n        let request = build_local_management_request_frame(id(165), &bridge_payload)\n            .expect("canonical file-list management request builds");\n        let policy = BoundedLocalReadPolicy::allow_local_reads();\n\n        assert_eq!(\n            admit_authenticated_linux_management_request(&request, &connection, &policy),\n            Err(LocalManagementAdmissionError::CapabilityDenied)\n        );\n    }\n\n'''
-          if "fn c01_admission_binds_correlation_caller_and_canonical_capability" not in text:
-              if text.count(test_marker) != 1:
-                  raise SystemExit("management request test insertion marker drifted")
-              text = text.replace(test_marker, c01_tests + test_marker)
-
-          old_test_import = '''mod tests {\n    use super::{\n'''
-          new_test_import = '''mod tests {\n    #[cfg(target_os = "linux")]\n    use std::cell::Cell;\n    #[cfg(target_os = "linux")]\n    use std::os::unix::net::UnixStream;\n\n    #[cfg(target_os = "linux")]\n    use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};\n    #[cfg(target_os = "linux")]\n    use prw_remote_bridge::RemoteBridgeError;\n\n    #[cfg(target_os = "linux")]\n    use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;\n\n    use super::{\n'''
-          if old_test_import in text:
-              text = text.replace(old_test_import, new_test_import)
-          elif new_test_import not in text:
-              raise SystemExit("management request test import boundary drifted")
-
-          old_super = '''        LocalManagementRequestBuildError, LocalManagementRequestDecodeError,\n        build_local_management_request_frame, decode_local_management_request_frame,\n'''
-          new_super = '''        LocalManagementRequestBuildError, LocalManagementRequestDecodeError,\n        build_local_management_request_frame, decode_local_management_request_frame,\n    };\n    #[cfg(target_os = "linux")]\n    use super::{\n        LocalManagementAdmissionError, admit_authenticated_linux_management_request,\n'''
-          if old_super in text:
-              text = text.replace(old_super, new_super)
-          elif new_super not in text:
-              raise SystemExit("management request super import boundary drifted")
-
-          management.write_text(text)
-          PY
-
-          echo "C01 deterministic candidate materialized in runner workspace"
+          if grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml; then
+            echo "C01 must not retain the bridge-to-Agent convenience dependency" >&2
+            exit 1
+          fi
+          grep -Fn 'prw-remote-bridge = { path = "../prw-remote-bridge" }' crates/prw-agent/Cargo.toml
+          if grep -En 'LocalAgentCommand|local_agent_command' crates/prw-remote-bridge/src/lib.rs crates/prw-remote-bridge/tests/end_to_end.rs; then
+            echo "C01 dependency inversion left a bridge-side Agent command reference" >&2
+            exit 1
+          fi
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+          grep -Fn 'BridgeCommand::decode' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'required_capability()' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'AuthenticatedLocalLinuxConnection' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'PolicyEvaluator' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'pub struct LocalManagementAdmission' crates/prw-agent/src/local_commands/management_request.rs
+          echo "Committed C01 dependency inversion and fail-closed policy boundary are present"
 
       - name: Install locked desktop native prerequisites
         shell: bash
@@ -161,45 +101,19 @@ jobs:
           rustfmt --version
           cargo clippy --version
 
-      - name: Materialize deterministic Cargo lock candidate
+      - name: Verify committed deterministic Cargo lockfile
         shell: bash
         run: |
           set -euo pipefail
-          cargo generate-lockfile
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
-          test -f Cargo.lock
-
-      - name: Format deterministic C01 source candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --all
+          cargo generate-lockfile
+          git diff --exit-code -- Cargo.lock
 
       - name: Check formatting
         shell: bash
         run: |
           set -euo pipefail
           cargo fmt --all -- --check
-
-      - name: Verify C01 dependency and production-policy invariants
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml; then
-            echo "C01 must remove the bridge-to-Agent convenience dependency" >&2
-            exit 1
-          fi
-          grep -Fn 'prw-remote-bridge = { path = "../prw-remote-bridge" }' crates/prw-agent/Cargo.toml
-          if grep -En 'LocalAgentCommand|local_agent_command' crates/prw-remote-bridge/src/lib.rs crates/prw-remote-bridge/tests/end_to_end.rs; then
-            echo "C01 dependency inversion left a bridge-side Agent command reference" >&2
-            exit 1
-          fi
-          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
-          grep -Fn 'BridgeCommand::decode' crates/prw-agent/src/local_commands/management_request.rs
-          grep -Fn 'required_capability()' crates/prw-agent/src/local_commands/management_request.rs
-          grep -Fn 'AuthenticatedLocalLinuxConnection' crates/prw-agent/src/local_commands/management_request.rs
-          grep -Fn 'PolicyEvaluator' crates/prw-agent/src/local_commands/management_request.rs
-          echo "C01 dependency inversion and fail-closed production-policy boundary are present"
 
       - name: Run Clippy
         shell: bash
@@ -256,26 +170,9 @@ jobs:
           rm -f "${production}"
           echo "C01 remains admission-only; provider dispatch and management success acknowledgement stay gated by C02"
 
-      - name: Commit validated C01 source candidate and generated lockfile if changed
+      - name: Confirm validation did not mutate committed source
         shell: bash
         run: |
           set -euo pipefail
-          paths=(
-            crates/prw-agent/Cargo.toml
-            crates/prw-agent/src/local_commands/management_request.rs
-            crates/prw-remote-bridge/Cargo.toml
-            crates/prw-remote-bridge/src/lib.rs
-            crates/prw-remote-bridge/tests/end_to_end.rs
-            Cargo.lock
-          )
-          if test -z "$(git status --porcelain -- "${paths[@]}")"; then
-            echo "C01 source candidate and Cargo.lock already match validated state"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${paths[@]}"
-          git diff --cached --check
-          git diff --cached -- "${paths[@]}"
-          git commit -m "phase 152: implement C01 authenticated local admission"
-          git push origin HEAD:phase-152-desktop-functional-management
+          git diff --exit-code
+          echo "Committed C01 source and lockfile remained unchanged throughout validation"
