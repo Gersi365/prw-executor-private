@@ -1,4 +1,5 @@
 mod ipc;
+mod management;
 mod state;
 mod ui;
 
