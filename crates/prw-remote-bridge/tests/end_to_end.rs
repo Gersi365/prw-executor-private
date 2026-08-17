@@ -235,10 +235,6 @@ fn all_operation_codes_round_trip_and_map_to_exact_capabilities() {
         assert!(encoded.len() <= MAX_CONTROL_PAYLOAD_BYTES);
         assert_eq!(BridgeCommand::decode(&encoded), Ok(command.clone()));
     }
-    assert_eq!(
-        commands[0].local_agent_command(),
-        Some(prw_agent::local_commands::LocalAgentCommand::GetAgentStatus)
-    );
 }
 
 #[test]

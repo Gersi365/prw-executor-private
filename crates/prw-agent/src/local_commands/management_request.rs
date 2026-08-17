@@ -1,16 +1,24 @@
-//! Bounded framing for Phase 152 local typed management requests.
+//! Bounded framing and C01 admission for Phase 152 local typed management requests.
 //!
-//! This module owns only the additive local command-3 envelope. The embedded
-//! bytes remain opaque to `prw-agent` during Slice B and are validated through
-//! the canonical `prw-remote-bridge::BridgeCommand` codec at the existing
-//! integration boundary. No policy evaluation, provider dispatch, socket I/O,
-//! or host mutation occurs here.
+//! Slice B owns the additive local command-3 envelope. C01 additionally decodes
+//! the embedded bytes through canonical `prw_remote_bridge::BridgeCommand`, derives
+//! the exact capability from that decoded command, and evaluates caller-selected
+//! policy only when the caller is already represented by the Agent's typed
+//! same-UID authenticated Linux connection. C01 performs no provider dispatch,
+//! creates no management success acknowledgement, and performs no host mutation.
 
 use std::fmt;
+
+use prw_policy::Capability;
+#[cfg(target_os = "linux")]
+use prw_policy::{Decision, PolicyEvaluator};
+use prw_remote_bridge::{BridgeCommand, RemoteBridgeError};
 
 use crate::frame_object::{
     LocalIpcFrame, LocalIpcFrameError, LocalIpcPayload, LocalIpcPayloadError,
 };
+#[cfg(target_os = "linux")]
+use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 use crate::{
     LocalIpcFrameHeader, LocalIpcFrameHeaderError, LocalIpcMessageKind, LocalIpcProtocolVersion,
     LocalIpcRequestId,
@@ -45,6 +53,124 @@ impl LocalManagementRequestEnvelope {
     pub const fn bridge_payload(&self) -> &[u8] {
         self.bridge_payload.as_slice()
     }
+}
+
+/// C01 token proving one canonical command passed authenticated local policy admission.
+///
+/// The caller fields are copied only from an `AuthenticatedLocalLinuxConnection`;
+/// request bytes cannot supply or override them. This token is admission evidence,
+/// not an execution result or success acknowledgement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalManagementAdmission {
+    request_id: LocalIpcRequestId,
+    peer_pid: i32,
+    peer_uid: u32,
+    peer_gid: u32,
+    capability: Capability,
+    command: BridgeCommand,
+}
+
+impl LocalManagementAdmission {
+    /// Returns the outer local IPC correlation identifier.
+    #[must_use]
+    pub const fn request_id(&self) -> LocalIpcRequestId {
+        self.request_id
+    }
+
+    /// Returns the authenticated kernel peer process identifier.
+    #[must_use]
+    pub const fn peer_pid(&self) -> i32 {
+        self.peer_pid
+    }
+
+    /// Returns the authenticated kernel peer user identifier.
+    #[must_use]
+    pub const fn peer_uid(&self) -> u32 {
+        self.peer_uid
+    }
+
+    /// Returns the authenticated kernel peer group identifier.
+    #[must_use]
+    pub const fn peer_gid(&self) -> u32 {
+        self.peer_gid
+    }
+
+    /// Returns the exact capability derived from the decoded canonical command.
+    #[must_use]
+    pub const fn capability(&self) -> Capability {
+        self.capability
+    }
+
+    /// Returns the canonical typed command admitted by policy.
+    #[must_use]
+    pub const fn command(&self) -> &BridgeCommand {
+        &self.command
+    }
+}
+
+/// C01 failure before any provider invocation or management success acknowledgement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalManagementAdmissionError {
+    /// The Agent-owned outer command-3 envelope failed closed.
+    Framing(LocalManagementRequestDecodeError),
+    /// Canonical PRWC decoding rejected the embedded body.
+    CanonicalCommand(RemoteBridgeError),
+    /// The caller-selected policy denied the exact decoded-command capability.
+    CapabilityDenied,
+}
+
+impl fmt::Display for LocalManagementAdmissionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Framing(_) => formatter.write_str("local management framing rejected request"),
+            Self::CanonicalCommand(_) => {
+                formatter.write_str("canonical local management command rejected request")
+            }
+            Self::CapabilityDenied => formatter.write_str("local management capability denied"),
+        }
+    }
+}
+
+impl std::error::Error for LocalManagementAdmissionError {}
+
+/// Admits one local management request only for an already-authenticated Linux peer.
+///
+/// Canonical command decoding occurs before capability derivation and policy
+/// evaluation. The capability and caller identity are never accepted from request
+/// bytes. Successful return creates only a typed admission token; provider dispatch
+/// and response acknowledgement remain gated by later Slice C stages.
+///
+/// # Errors
+///
+/// Fails on outer framing, canonical PRWC decode, or exact capability denial.
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "C01 admission is intentionally not connected to provider dispatch before C02"
+)]
+pub(crate) fn admit_authenticated_linux_management_request<E: PolicyEvaluator + ?Sized, S>(
+    frame: &LocalIpcFrame,
+    connection: &AuthenticatedLocalLinuxConnection<S>,
+    evaluator: &E,
+) -> Result<LocalManagementAdmission, LocalManagementAdmissionError> {
+    let envelope = decode_local_management_request_frame(frame)
+        .map_err(LocalManagementAdmissionError::Framing)?;
+    let command = BridgeCommand::decode(envelope.bridge_payload())
+        .map_err(LocalManagementAdmissionError::CanonicalCommand)?;
+    let capability = command.required_capability();
+    if evaluator.evaluate(capability) != Decision::Allow {
+        return Err(LocalManagementAdmissionError::CapabilityDenied);
+    }
+
+    let credentials = connection.peer_credentials();
+    Ok(LocalManagementAdmission {
+        request_id: envelope.request_id(),
+        peer_pid: credentials.pid(),
+        peer_uid: credentials.uid(),
+        peer_gid: credentials.gid(),
+        capability,
+        command,
+    })
 }
 
 /// Builds one local command-3 Request frame around an already encoded canonical PRWC payload.
@@ -210,12 +336,27 @@ impl std::error::Error for LocalManagementRequestDecodeError {}
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use std::cell::Cell;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::net::UnixStream;
+
+    #[cfg(target_os = "linux")]
+    use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
+    #[cfg(target_os = "linux")]
+    use prw_remote_bridge::RemoteBridgeError;
+
+    #[cfg(target_os = "linux")]
+    use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
+
     use super::{
         LOCAL_MANAGEMENT_BRIDGE_COMMAND_CODE, LOCAL_MANAGEMENT_BRIDGE_MAX_PAYLOAD_LENGTH,
         LOCAL_MANAGEMENT_REQUEST_MAX_PAYLOAD_LENGTH, LOCAL_MANAGEMENT_REQUEST_PREFIX_LENGTH,
         LocalManagementRequestBuildError, LocalManagementRequestDecodeError,
         build_local_management_request_frame, decode_local_management_request_frame,
     };
+    #[cfg(target_os = "linux")]
+    use super::{LocalManagementAdmissionError, admit_authenticated_linux_management_request};
     use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::{
         LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion, LocalIpcRequestId,
@@ -235,6 +376,114 @@ mod tests {
         )
         .expect("valid local header");
         LocalIpcFrame::new(header, payload).expect("matching frame")
+    }
+
+    #[cfg(target_os = "linux")]
+    struct RecordingPolicy {
+        decision: Decision,
+        calls: Cell<usize>,
+        last_capability: Cell<Option<Capability>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl RecordingPolicy {
+        const fn new(decision: Decision) -> Self {
+            Self {
+                decision,
+                calls: Cell::new(0),
+                last_capability: Cell::new(None),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl PolicyEvaluator for RecordingPolicy {
+        fn evaluate(&self, capability: Capability) -> Decision {
+            self.calls.set(self.calls.get() + 1);
+            self.last_capability.set(Some(capability));
+            self.decision
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn authenticated_connection() -> AuthenticatedLocalLinuxConnection<UnixStream> {
+        let (server, _client) = UnixStream::pair().expect("anonymous local pair creates");
+        AuthenticatedLocalLinuxConnection::try_new(server)
+            .expect("same-UID local peer authenticates")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn canonical_file_list_payload(path: &str) -> Vec<u8> {
+        let path = path.as_bytes();
+        let path_len = u16::try_from(path.len()).expect("test path length fits u16");
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"PRWC");
+        payload.extend_from_slice(&1_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&2_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&path_len.to_be_bytes());
+        payload.extend_from_slice(path);
+        payload
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn c01_admission_binds_correlation_caller_and_canonical_capability() {
+        let connection = authenticated_connection();
+        let credentials = connection.peer_credentials();
+        let bridge_payload = canonical_file_list_payload("documents");
+        let request = build_local_management_request_frame(id(163), &bridge_payload)
+            .expect("canonical file-list management request builds");
+        let policy = RecordingPolicy::new(Decision::Allow);
+
+        let admitted = admit_authenticated_linux_management_request(&request, &connection, &policy)
+            .expect("authenticated allowed request admits");
+
+        assert_eq!(admitted.request_id(), id(163));
+        assert_eq!(admitted.peer_pid(), credentials.pid());
+        assert_eq!(admitted.peer_uid(), credentials.uid());
+        assert_eq!(admitted.peer_gid(), credentials.gid());
+        assert_eq!(admitted.capability(), Capability::FilesRead);
+        assert_eq!(
+            admitted.command().required_capability(),
+            Capability::FilesRead
+        );
+        assert_eq!(policy.calls.get(), 1);
+        assert_eq!(policy.last_capability.get(), Some(Capability::FilesRead));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn c01_malformed_canonical_payload_never_reaches_policy() {
+        let connection = authenticated_connection();
+        let request = build_local_management_request_frame(id(164), b"not-prwc")
+            .expect("outer management framing remains valid");
+        let policy = RecordingPolicy::new(Decision::Allow);
+
+        assert_eq!(
+            admit_authenticated_linux_management_request(&request, &connection, &policy),
+            Err(LocalManagementAdmissionError::CanonicalCommand(
+                RemoteBridgeError::InvalidRequestPayload
+            ))
+        );
+        assert_eq!(policy.calls.get(), 0);
+        assert_eq!(policy.last_capability.get(), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn c01_production_local_read_policy_denies_management_without_token() {
+        let connection = authenticated_connection();
+        let bridge_payload = canonical_file_list_payload("documents");
+        let request = build_local_management_request_frame(id(165), &bridge_payload)
+            .expect("canonical file-list management request builds");
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
+
+        assert_eq!(
+            admit_authenticated_linux_management_request(&request, &connection, &policy),
+            Err(LocalManagementAdmissionError::CapabilityDenied)
+        );
     }
 
     #[test]
