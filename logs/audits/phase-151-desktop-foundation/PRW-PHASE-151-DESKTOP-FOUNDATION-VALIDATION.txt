@@ -1,0 +1,95 @@
+Private Remote Workspace — Phase 151 Desktop Foundation Validation Audit
+
+Status: DONE
+Date: 2026-08-17
+Repository: Gersi365/prw-executor-private
+Validated source head: aa3b5ef02a273a3fe152bd65025b38670f64b180
+
+SCOPE
+
+Phase 151 established the first native Linux desktop application foundation authorized by the Phase 150 desktop architecture decision.
+
+The materialized foundation includes:
+- apps/desktop as a Rust workspace member;
+- GTK 4 + libadwaita native application shell;
+- stable navigation surfaces for Overview, Machines, Sessions, Files, Transfers, Activity, and Settings;
+- a bounded read-only local Agent startup probe;
+- typed reuse of existing Agent local IPC codecs for GetAgentStatus and GetPrivateDnsConfig only;
+- no duplicated Agent host authority in the GUI.
+
+LOCKED DEPENDENCY BASELINE
+
+Rust/Cargo: 1.97.1
+GTK Rust binding: gtk4 = 0.11.3, API floor v4_14
+libadwaita Rust binding: libadwaita = 0.9.2, API floor v1_5
+Linux syscall provider: rustix = 1.1.4, reused from the existing repository dependency family
+Initial Linux compatibility floor: Ubuntu 24.04 LTS
+
+The Phase 150-A01 dependency corrective changed only the libadwaita high-level Rust binding pin from 0.9.1 to 0.9.2 after a real validator compile demonstrated an upstream companion-version mismatch. The GTK binding and architecture choice were preserved.
+
+LOCAL IPC TRUST BOUNDARY
+
+The desktop client derives only the fixed existing endpoint:
+$XDG_RUNTIME_DIR/private-remote-workspace/agent.sock
+
+Before connection, the desktop client fails closed unless:
+- XDG_RUNTIME_DIR is absolute;
+- the runtime root is a directory with mode 0700;
+- the runtime root owner equals the desktop process effective UID;
+- the PRW runtime child directory is a directory with mode 0700 and the same effective UID owner;
+- agent.sock is a Unix-domain socket with mode 0600 and the same effective UID owner.
+
+The Agent remains authoritative for same-effective-UID peer authorization using the existing Linux peer-credential boundary.
+
+No TCP fallback, shell bridge, arbitrary-command proxy, privileged desktop helper, or alternate endpoint was introduced.
+
+FUNCTIONAL BOUNDARY
+
+Phase 151 is intentionally read-only.
+
+The desktop source reads only:
+- GetAgentStatus;
+- GetPrivateDnsConfig.
+
+It does not implement terminal execution, file operations, transfers, forwarding mutation, network mutation, DNS mutation, remote desktop capture/streaming, input injection, clipboard synchronization, or multi-monitor control.
+
+VALIDATION EVIDENCE
+
+Final isolated desktop validation workflow:
+- GitHub Actions run: 31995984109
+- validated head: aa3b5ef02a273a3fe152bd65025b38670f64b180
+- result: SUCCESS
+- Ubuntu runner compatibility evidence: Ubuntu 24.04, GTK 4.14.5, libadwaita 1.5.0
+- Rust/Cargo toolchain: 1.97.1
+- Cargo-generated lockfile materialization: PASS
+- locked metadata: PASS
+- cargo fmt --all -- --check: PASS
+- cargo clippy --locked --workspace --all-targets --all-features -- -D warnings: PASS
+- workspace tests: PASS
+- workspace build: PASS
+
+Main-branch regression validation for the same source head:
+- root Rust CI run 31996235935: SUCCESS
+- permanent Android validation run 31996235954: SUCCESS
+
+CORRECTIVES OBSERVED DURING VALIDATION
+
+1. The Phase 151 validator was corrected to use cargo generate-lockfile before locked validation. This was classified as a validator/tooling defect, not an application source defect.
+2. Deterministic rustfmt deltas were applied without semantic changes.
+3. libadwaita 0.9.1 was corrected to 0.9.2 under the Phase 150-A01 companion patch decision after upstream dependency compilation evidence.
+4. Clippy findings were limited to one unused import and redundant pub(crate) visibility inside private modules; these were corrected without behavior expansion.
+5. The desktop local IPC trust check was hardened to bind runtime-root ownership to the process effective UID, preserving the existing Linux security contract.
+
+NO PRODUCTION SIDE EFFECTS
+
+Validation used GitHub-hosted disposable runners and repository source mutations only.
+No production deployment, production service mutation, live host Agent mutation, production network activation, database mutation, authentication-policy mutation, or user data operation occurred.
+
+PHASE 152 READINESS
+
+Phase 151 does not authorize UI shortcuts that bypass Agent policy.
+The current local IPC protocol 1.0 remains a fixed read-only request surface for GetAgentStatus and GetPrivateDnsConfig. Phase 152 functional management surfaces must introduce any additional Agent operations through explicit typed protocol contracts, versioning, policy/capability enforcement, and validation while preserving Agent authority.
+
+CLASSIFICATION
+
+PHASE_151_DONE / NATIVE_GTK_LIBADWAITA_DESKTOP_FOUNDATION / AUTHENTICATED_READ_ONLY_LOCAL_AGENT_IPC / EFFECTIVE_UID_BOUND_TRUST / LOCKFILE_MATERIALIZED / FINAL_VALIDATION_SUCCESS / MAIN_ROOT_RUST_CI_SUCCESS / MAIN_ANDROID_CI_SUCCESS / NO_PRODUCTION_SIDE_EFFECT / READY_FOR_PHASE_152
