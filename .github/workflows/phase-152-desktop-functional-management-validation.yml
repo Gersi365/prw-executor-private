@@ -214,8 +214,8 @@ jobs:
           production=$(mktemp)
           awk '/^#\[cfg\(test\)\]/{exit} {print}' "${target}" > "${production}"
 
-          grep -Fn 'pub(crate) struct LocalManagementAuthorityContext' "${production}"
-          grep -Fn 'pub(crate) trait LocalManagementProviderDispatcher' "${production}"
+          grep -Fn 'pub struct LocalManagementAuthorityContext' "${production}"
+          grep -Fn 'pub trait LocalManagementProviderDispatcher' "${production}"
           grep -Fn 'admit_authenticated_linux_management_request' "${production}"
           grep -Fn 'build_terminal_response_frame' "${production}"
           grep -Fn 'LocalAgentResponseStatus::Ok' "${production}"
