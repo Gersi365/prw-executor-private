@@ -4,3 +4,12 @@ crates/prw-session/src/lib.rs	9eccba113e852a658189d76d892fd4b9822d2e83
 crates/prw-remote-transport/Cargo.toml	37055b7371cd6325438d8a2cbff00bd37773f6f6
 crates/prw-remote-transport/src/lib.rs	35ffebccaf237fc6892dac0991a7c7fcd23576c8
 crates/prw-remote-transport/tests/loopback.rs	97b8fb97e150ae14ddcc24457664a8ab77c11c72
+crates/prw-registry/Cargo.toml	ec9215d9bad86ac9601e2f2d1bc0ed8461e724c1
+crates/prw-registry/src/lib.rs	cd7eb52eea19354620ff8ad26c9b8aad3f9c5eb6
+crates/prw-terminal/Cargo.toml	990d644bdaca761b71f3cac7fb8c8980fa466611
+crates/prw-terminal/src/lib.rs	093d44bdc57cd0872cd830a7af44afe709a3d9bf
+crates/prw-forwarding/Cargo.toml	ca94f03a2fadbadb2dcce71c4c006c48d3f323c3
+crates/prw-forwarding/src/lib.rs	904a2422ba94d138122874af0b23906f4f68f7eb
+crates/prw-remote-bridge/Cargo.toml	c060de750d88bc1cc4400a3948e08e8618bc4d59
+crates/prw-remote-bridge/src/lib.rs	1573a12f39d75ec80f25adc6360ca108d2009af0
+crates/prw-remote-bridge/tests/end_to_end.rs	be7cfbd7ae377bde9ffa3e2f42b7b674168d9fb8
