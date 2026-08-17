@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - phase-152-c02b-authority-audit
+      - phase-152-c02b-promotion
       - phase-152-desktop-functional-management
   workflow_dispatch:
 
@@ -26,31 +27,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify C02b audit-only lineage and changed-file scope
+      - name: Verify C02b audit and promotion lineage/scope
         shell: bash
         run: |
           set -euo pipefail
           C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
           git merge-base --is-ancestor "${C02A}" HEAD
 
-          mapfile -t changed < <(git diff --name-only "${C02A}..HEAD")
-          printf 'C02b audit-only changed files:\n'
+          case "${GITHUB_REF_NAME}" in
+            phase-152-c02b-authority-audit)
+              baseline="${C02A}"
+              allowed='contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|.github/workflows/phase-152-c02b-authority-audit.yml'
+              ;;
+            phase-152-c02b-promotion|phase-152-desktop-functional-management)
+              git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
+              baseline="${C02B_AUDIT}"
+              allowed='.github/workflows/phase-152-c02b-authority-audit.yml|.github/workflows/phase-152-desktop-functional-management-validation.yml'
+              ;;
+            *)
+              echo "Unexpected C02b audit branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          mapfile -t changed < <(git diff --name-only "${baseline}..HEAD")
+          printf 'C02b audit/promotion changed files since %s:\n' "${baseline}"
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
-            case "${path}" in
-              contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|.github/workflows/phase-152-c02b-authority-audit.yml)
+            case "|${allowed}|" in
+              *"|${path}|"*)
                 ;;
               *)
-                echo "Unexpected C02b audit-only path: ${path}" >&2
+                echo "Unexpected C02b audit/promotion path: ${path}" >&2
                 exit 1
                 ;;
             esac
           done
 
           if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
-            echo "C02b audit gate must not mutate Rust source, manifests, or lockfiles" >&2
+            echo "C02b audit/promotion must not mutate Rust source, manifests, or lockfiles" >&2
             exit 1
           fi
+
+          test -f contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'Status: `AUDIT_ONLY_CONTRACT / NO_PROVIDER_WIRING / NO_PRODUCTION_ACTIVATION`' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
 
       - name: Verify C02a remains provider-neutral and non-activating
         shell: bash
@@ -168,14 +189,14 @@ jobs:
           set -euo pipefail
           cargo build --locked --workspace --all-targets
 
-      - name: Confirm audit gate did not mutate source authority surfaces
+      - name: Confirm audit/promotion did not mutate source authority surfaces
         shell: bash
         run: |
           set -euo pipefail
           C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
           if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
-            echo "C02b audit unexpectedly changed source/manifests/lockfiles" >&2
+            echo "C02b audit/promotion unexpectedly changed source/manifests/lockfiles" >&2
             exit 1
           fi
           git diff --exit-code -- Cargo.lock
-          echo "C02b authority assembly audit is evidence-only; real provider authority remains unreachable in production"
+          echo "C02b authority assembly remains evidence-only; real provider authority remains unreachable in production"
