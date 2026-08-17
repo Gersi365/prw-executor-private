@@ -1,0 +1,166 @@
+name: PRW Phase 152 Android Native Lock Materialize
+
+on:
+  push:
+    branches:
+      - phase-152-android-lock-audit
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-android-lock-materialize-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    name: Materialize audited Android native Cargo.lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify isolated lineage and committed scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE=28d5d81fa156296416c7b204914b10d14e18abc5
+          test "${GITHUB_REF_NAME}" = phase-152-android-lock-audit
+          git merge-base --is-ancestor "${CANDIDATE}" HEAD
+
+          mapfile -t changed < <(git diff --name-only "${CANDIDATE}..HEAD")
+          printf 'Committed Android lock materialization scope:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-android-lock-audit.yml|.github/workflows/phase-152-android-lock-materialize.yml|apps/android/native/Cargo.lock)
+                ;;
+              *)
+                echo "Unexpected committed Android lock materialization path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Record exact Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal
+          cargo +1.97.1 --version
+          rustc +1.97.1 --version
+
+      - name: Generate and classify exact lockfile delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android/native
+          cp Cargo.lock "${RUNNER_TEMP}/android-native-Cargo.lock.before"
+          cargo +1.97.1 generate-lockfile
+
+          if git diff --quiet -- Cargo.lock; then
+            echo 'Android native Cargo.lock is already current; no commit required'
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only)
+          if ((${#changed[@]} != 1)) || [[ "${changed[0]}" != "apps/android/native/Cargo.lock" ]]; then
+            echo 'Generation changed unexpected paths' >&2
+            printf '  %s\n' "${changed[@]}" >&2
+            exit 1
+          fi
+
+          BEFORE="${RUNNER_TEMP}/android-native-Cargo.lock.before" AFTER=Cargo.lock python3 - <<'PY'
+          import os
+          import tomllib
+
+          with open(os.environ['BEFORE'], 'rb') as f:
+              before = tomllib.load(f)
+          with open(os.environ['AFTER'], 'rb') as f:
+              after = tomllib.load(f)
+
+          def package_map(doc):
+              result = {}
+              for package in doc.get('package', []):
+                  key = (package['name'], package['version'], package.get('source'))
+                  if key in result:
+                      raise SystemExit(f'duplicate package identity in lockfile: {key!r}')
+                  result[key] = package
+              return result
+
+          before_map = package_map(before)
+          after_map = package_map(after)
+          removed = set(before_map) - set(after_map)
+          added = set(after_map) - set(before_map)
+
+          expected_removed_names = {
+              'nix',
+              'prw-agent',
+              'prw-device-identity-custody',
+              'prw-files',
+              'prw-network',
+          }
+          removed_names = {key[0] for key in removed}
+          if removed_names != expected_removed_names or len(removed) != len(expected_removed_names):
+              raise SystemExit(f'unexpected removed package identities: {sorted(removed)!r}')
+          if added:
+              raise SystemExit(f'unexpected added package identities: {sorted(added)!r}')
+
+          changed_common = [
+              key for key in set(before_map) & set(after_map)
+              if before_map[key] != after_map[key]
+          ]
+          if len(changed_common) != 1 or changed_common[0][0] != 'prw-remote-bridge':
+              raise SystemExit(f'unexpected changed common package records: {changed_common!r}')
+
+          key = changed_common[0]
+          before_deps = set(before_map[key].get('dependencies', []))
+          after_deps = set(after_map[key].get('dependencies', []))
+          if before_deps - after_deps != {'prw-agent'} or after_deps - before_deps:
+              raise SystemExit(
+                  f'unexpected prw-remote-bridge dependency delta: '
+                  f'removed={sorted(before_deps-after_deps)!r}, '
+                  f'added={sorted(after_deps-before_deps)!r}'
+              )
+
+          print('Lock delta classification: deterministic pruning after bridge-to-Agent dependency removal')
+          print('Removed package nodes:', ', '.join(sorted(expected_removed_names)))
+          print('Changed common record: prw-remote-bridge removes only prw-agent dependency')
+          PY
+
+          read -r additions deletions _ < <(git diff --numstat -- Cargo.lock)
+          test "${additions}" = 0
+          test "${deletions}" -gt 0
+          git diff --check -- Cargo.lock
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+
+          echo '----- AUDITED GENERATED LOCK DIFF -----'
+          git diff --no-ext-diff --unified=5 -- Cargo.lock
+          echo '----- END AUDITED GENERATED LOCK DIFF -----'
+
+      - name: Commit only audited lockfile when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- apps/android/native/Cargo.lock; then
+            echo 'No lockfile change to commit'
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only)
+          if ((${#changed[@]} != 1)) || [[ "${changed[0]}" != "apps/android/native/Cargo.lock" ]]; then
+            echo 'Refusing to commit unexpected path set' >&2
+            printf '  %s\n' "${changed[@]}" >&2
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/android/native/Cargo.lock
+          git commit -m 'phase 152: refresh Android native lockfile after C01 inversion'
+          git push origin HEAD:phase-152-android-lock-audit
