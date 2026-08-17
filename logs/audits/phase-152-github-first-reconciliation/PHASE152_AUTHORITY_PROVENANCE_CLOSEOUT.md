@@ -72,3 +72,30 @@ The current connected-tool runtime does not expose `/home/gersi365/private-remot
 `LOCAL_RECONCILIATION=READY_BUT_NOT_EXECUTED`
 
 The next real-host action is the verified bootstrap in preview mode. Apply must remain separate and only follow inspection of the generated `PREVIEW.tsv` and reconciliation audit.
+
+## Review-container corrective event
+
+A draft review container was briefly created as PR `#2` with base
+`phase-152-desktop-functional-management` and head
+`phase-152-github-first-reconciliation`. Its diff contained only workflow,
+audit, and reconciliation-tooling paths; no `crates/`, `apps/`, root Cargo, or
+runtime source paths were changed by creating the PR.
+
+The repository's pre-existing pull-request-triggered `PRW Rust Validation`
+workflow automatically started run `32059250680`. Job inspection showed that,
+after prerequisite/format checks, the workflow proceeds through Clippy, tests,
+and workspace build. Because the Phase 152 build gate remains explicitly closed,
+PR `#2` was immediately closed to prevent future pull-request retriggers from
+subsequent branch commits. The connected GitHub tool surface exposes no workflow
+cancel action, so the already-started run could not be cancelled from this
+session.
+
+- PR `#2`: `CLOSED / DRAFT / UNMERGED`
+- PR base SHA: `01f5466504684ea6a2c504613901d24018485887`
+- PR head SHA at close: `ea3085eb6360d7d7c1e6b0448ae68439d659dcc4`
+- accidentally triggered run: `32059250680`
+- classification: `AUTOMATIC_EXISTING_CI / NOT_AUTHORIZED_AS_BUILD_GATE_EVIDENCE`
+- build gate after corrective action: `CLOSED`
+
+No additional PR review container should be opened until pull-request CI behavior
+is explicitly authorized or isolated from build/test/clippy execution.
