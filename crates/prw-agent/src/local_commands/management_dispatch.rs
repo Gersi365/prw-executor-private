@@ -1,14 +1,15 @@
-//! C02a provider-neutral dispatch proof for authenticated local management requests.
+//! C02a/C02c provider-neutral dispatch boundary for authenticated local management requests.
 //!
-//! This module proves ordering only: C01 admission must succeed, an Agent-owned
-//! authority context must match the exact caller/request/capability/operation/provider
-//! family, and only then may a provider-neutral dispatcher be invoked. No production
-//! constructor for authority context exists in C02a, no real provider crate is linked,
-//! and this module is not wired into the runtime server loop or Linux bootstrap.
+//! C02a proves ordering: C01 admission must succeed, an Agent-owned authority context
+//! must match the exact caller/request/capability/operation/provider family, and only
+//! then may a provider-neutral dispatcher be invoked. C02c adds a crate-internal
+//! construction seam that requires real family-specific Agent-owned authority evidence.
+//! No real provider adapter is wired into the runtime server loop or Linux bootstrap.
 
 use prw_policy::Capability;
 use prw_remote_bridge::BridgeCommand;
 
+use super::management_authority::LocalManagementFamilyAuthority;
 use super::management_request::LocalManagementAdmission;
 use crate::LocalIpcRequestId;
 
@@ -44,10 +45,11 @@ pub enum LocalManagementAuthorityFamily {
     Forwarding,
 }
 
-/// Opaque C02a authority token that cannot be constructed by production callers.
+/// Opaque request-bound authority token.
 ///
-/// C02b must add reviewed constructors that derive this token from real Agent-owned
-/// authority objects. Until then, construction exists only in this module's tests.
+/// C02c permits crate-internal construction only when a matching
+/// [`LocalManagementFamilyAuthority`] already exists outside request decoding.
+/// The token remains correlation evidence rather than a provider object itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalManagementAuthorityContext {
     request_id: LocalIpcRequestId,
@@ -60,6 +62,31 @@ pub struct LocalManagementAuthorityContext {
 }
 
 impl LocalManagementAuthorityContext {
+    /// Binds one admitted request to already-existing Agent-owned family authority.
+    ///
+    /// Returns `None` when the supplied authority family is not the family required by
+    /// the canonical admitted command. Request ID, kernel peer credentials, capability,
+    /// operation code and provider family are copied only from the admission token.
+    pub(crate) fn from_agent_owned_authority(
+        admission: &LocalManagementAdmission,
+        authority: LocalManagementFamilyAuthority<'_>,
+    ) -> Option<Self> {
+        let required_family = required_authority_family(admission.command());
+        if authority.family() != required_family {
+            return None;
+        }
+
+        Some(Self {
+            request_id: admission.request_id(),
+            peer_pid: admission.peer_pid(),
+            peer_uid: admission.peer_uid(),
+            peer_gid: admission.peer_gid(),
+            capability: admission.capability(),
+            operation_code: admission.command().operation_code(),
+            family: required_family,
+        })
+    }
+
     fn matches(&self, admission: &LocalManagementAdmission) -> bool {
         self.request_id == admission.request_id()
             && self.peer_pid == admission.peer_pid()
@@ -86,7 +113,7 @@ impl LocalManagementAuthorityContext {
 
 /// Provider-neutral C02a dispatch boundary.
 ///
-/// C02a tests implement this trait with deterministic spies only. No production
+/// Current tests implement this trait with deterministic spies only. No production
 /// terminal, file, transfer or forwarding provider implements it in this gate.
 pub trait LocalManagementProviderDispatcher {
     /// Provider-neutral bounded dispatch error.
@@ -104,14 +131,14 @@ pub trait LocalManagementProviderDispatcher {
     ) -> Result<Vec<u8>, Self::Error>;
 }
 
-/// Executes the C02a provider-neutral ordering proof for one authenticated Linux peer.
+/// Executes the provider-neutral ordering proof for one authenticated Linux peer.
 ///
 /// Admission failures are converted to correlated fail-closed local terminal errors.
 /// Missing/stale/mismatched authority fails with `Conflict` before dispatcher invocation.
 /// Dispatcher failure produces `InternalError`. `Ok` is constructed only after the
 /// dispatcher returns success.
 ///
-/// This function is deliberately not connected to the local server loop in C02a.
+/// This function remains deliberately disconnected from the local server loop in C02c.
 ///
 /// # Errors
 ///
@@ -200,6 +227,7 @@ mod tests {
     use crate::LocalIpcRequestId;
     use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
     use crate::local_commands::LocalAgentResponseStatus;
+    use crate::local_commands::management_authority::LocalManagementFamilyAuthority;
     use crate::local_commands::management_request::{
         admit_authenticated_linux_management_request, build_local_management_request_frame,
     };
@@ -400,10 +428,26 @@ mod tests {
     }
 
     #[test]
+    fn agent_owned_family_mismatch_refuses_context_construction() {
+        let connection = authenticated_connection();
+        let request = file_list_request(206);
+        let admission =
+            admit_authenticated_linux_management_request(&request, &connection, &AllowAll)
+                .expect("allowed request admits");
+
+        let context = LocalManagementAuthorityContext::from_agent_owned_authority(
+            &admission,
+            LocalManagementFamilyAuthority::agent(),
+        );
+
+        assert_eq!(context, None);
+    }
+
+    #[test]
     fn stale_or_wrong_family_authority_stops_before_dispatch() {
         let connection = authenticated_connection();
-        let first = file_list_request(206);
-        let second = file_list_request(207);
+        let first = file_list_request(207);
+        let second = file_list_request(208);
         let stale = authority_for(&first, &connection);
         let mut dispatcher = SpyDispatcher::default();
 
@@ -416,7 +460,7 @@ mod tests {
         )
         .expect("stale authority conflict builds");
         assert_eq!(dispatcher.calls, 0);
-        assert_status(&stale_response, 207, LocalAgentResponseStatus::Conflict);
+        assert_status(&stale_response, 208, LocalAgentResponseStatus::Conflict);
 
         let mut wrong_family = authority_for(&second, &connection);
         wrong_family.family = LocalManagementAuthorityFamily::Terminal;
@@ -431,7 +475,7 @@ mod tests {
         assert_eq!(dispatcher.calls, 0);
         assert_status(
             &wrong_family_response,
-            207,
+            208,
             LocalAgentResponseStatus::Conflict,
         );
     }
