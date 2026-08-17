@@ -56,7 +56,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo metadata --no-deps --format-version 1 > /dev/null
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
           test -f Cargo.lock
 
       - name: Check formatting
