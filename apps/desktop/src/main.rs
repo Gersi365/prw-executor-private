@@ -1,4 +1,5 @@
 mod ipc;
+mod local_management_ipc;
 #[allow(
     clippy::missing_const_for_fn,
     clippy::redundant_pub_crate,
