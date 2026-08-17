@@ -112,7 +112,7 @@ fi
 
 is_allowlisted_path() {
   case "$1" in
-    crates/prw-session/*|crates/prw-remote-transport/*)
+    crates/prw-session/*|crates/prw-remote-transport/*|crates/prw-registry/*|crates/prw-terminal/*|crates/prw-forwarding/*|crates/prw-remote-bridge/*)
       return 0
       ;;
     *)
