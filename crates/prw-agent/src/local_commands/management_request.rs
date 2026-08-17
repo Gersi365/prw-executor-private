@@ -67,13 +67,13 @@ pub fn build_local_management_request_frame(
 
     let bridge_payload_length = u32::try_from(bridge_payload.len())
         .map_err(|_| LocalManagementRequestBuildError::BridgePayloadTooLarge)?;
-    let mut bytes = Vec::with_capacity(LOCAL_MANAGEMENT_REQUEST_PREFIX_LENGTH + bridge_payload.len());
+    let mut bytes =
+        Vec::with_capacity(LOCAL_MANAGEMENT_REQUEST_PREFIX_LENGTH + bridge_payload.len());
     bytes.extend_from_slice(&LOCAL_MANAGEMENT_BRIDGE_COMMAND_CODE.to_be_bytes());
     bytes.extend_from_slice(&bridge_payload_length.to_be_bytes());
     bytes.extend_from_slice(bridge_payload);
 
-    let payload =
-        LocalIpcPayload::new(bytes).map_err(LocalManagementRequestBuildError::Payload)?;
+    let payload = LocalIpcPayload::new(bytes).map_err(LocalManagementRequestBuildError::Payload)?;
     let header = LocalIpcFrameHeader::new(
         LocalIpcProtocolVersion::current(),
         LocalIpcMessageKind::Request,
@@ -186,10 +186,18 @@ impl fmt::Display for LocalManagementRequestDecodeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonRequestKind => formatter.write_str("local management frame is not a Request"),
-            Self::PrefixTooShort => formatter.write_str("local management payload prefix is truncated"),
-            Self::WrongCommand => formatter.write_str("local management payload has wrong command code"),
-            Self::EmptyBridgePayload => formatter.write_str("local management bridge payload is empty"),
-            Self::BridgePayloadTooLarge => formatter.write_str("local management bridge payload exceeds PRWC bound"),
+            Self::PrefixTooShort => {
+                formatter.write_str("local management payload prefix is truncated")
+            }
+            Self::WrongCommand => {
+                formatter.write_str("local management payload has wrong command code")
+            }
+            Self::EmptyBridgePayload => {
+                formatter.write_str("local management bridge payload is empty")
+            }
+            Self::BridgePayloadTooLarge => {
+                formatter.write_str("local management bridge payload exceeds PRWC bound")
+            }
             Self::LengthMismatch { declared, actual } => write!(
                 formatter,
                 "local management bridge payload length mismatch: declared {declared}, actual {actual}"
@@ -281,11 +289,7 @@ mod tests {
 
     #[test]
     fn wrong_command_and_non_request_kind_fail_closed() {
-        let wrong_command = frame(
-            LocalIpcMessageKind::Request,
-            156,
-            vec![0, 4, 0, 0, 0, 1, 9],
-        );
+        let wrong_command = frame(LocalIpcMessageKind::Request, 156, vec![0, 4, 0, 0, 0, 1, 9]);
         assert_eq!(
             decode_local_management_request_frame(&wrong_command),
             Err(LocalManagementRequestDecodeError::WrongCommand)
@@ -310,11 +314,7 @@ mod tests {
             Err(LocalManagementRequestDecodeError::PrefixTooShort)
         );
 
-        let truncated = frame(
-            LocalIpcMessageKind::Request,
-            159,
-            vec![0, 3, 0, 0, 0, 2, 9],
-        );
+        let truncated = frame(LocalIpcMessageKind::Request, 159, vec![0, 3, 0, 0, 0, 2, 9]);
         assert_eq!(
             decode_local_management_request_frame(&truncated),
             Err(LocalManagementRequestDecodeError::LengthMismatch {
@@ -336,11 +336,7 @@ mod tests {
             })
         );
 
-        let empty = frame(
-            LocalIpcMessageKind::Request,
-            161,
-            vec![0, 3, 0, 0, 0, 0],
-        );
+        let empty = frame(LocalIpcMessageKind::Request, 161, vec![0, 3, 0, 0, 0, 0]);
         assert_eq!(
             decode_local_management_request_frame(&empty),
             Err(LocalManagementRequestDecodeError::EmptyBridgePayload)
