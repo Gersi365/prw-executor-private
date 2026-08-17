@@ -26,8 +26,12 @@ authority inputs are staged, verified against the frozen GitHub commit, and
 compared with the local workspace. Audit evidence is written below logs/audits.
 No source file is changed unless --apply is supplied.
 
+Three Agent binary-bootstrap paths remain verified authority inputs but are
+explicitly deferred from local source apply while runtime/systemd gates remain
+closed. They appear as DEFERRED_RUNTIME_GATE in PREVIEW.tsv.
+
 Options:
-  --apply             Apply only allowlisted, verified files to the local workspace.
+  --apply             Apply only allowlisted, verified, non-deferred files to the local workspace.
   --sync-host-mirror  After a successful --apply, run the existing local->Drive
                       prw-sync.sh transaction so User Host Mirror is checksum-verified.
   -h, --help          Show this help.
@@ -137,6 +141,19 @@ is_agent_allowlisted_path() {
   esac
 }
 
+is_deferred_agent_runtime_path() {
+  case "$1" in
+    crates/prw-agent/src/main.rs|\
+    crates/prw-agent/tests/phase125_device_identity_bootstrap.rs|\
+    crates/prw-agent/tests/phase_102_binary_bootstrap.rs)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 reject_forbidden_path() {
   case "$1" in
     Cargo.toml|Cargo.lock|.git/*|target/*|/*|*../*)
@@ -159,6 +176,7 @@ git_blob_sha() {
 printf 'status\tpath\texpected_git_blob\tactual_git_blob\tlocal_git_blob\n' > "$PREVIEW"
 verified_count=0
 change_count=0
+deferred_count=0
 
 compare_staged_file() {
   local path="$1"
@@ -195,6 +213,33 @@ compare_staged_file() {
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\n' "$status" "$path" "$expected_blob" "$actual_blob" "$local_blob" >> "$PREVIEW"
+}
+
+record_deferred_file() {
+  local path="$1"
+  local expected_blob="$2"
+  local staged="$3"
+  local actual_blob destination local_blob
+
+  actual_blob="$(git_blob_sha "$staged")"
+  if [[ "$actual_blob" != "$expected_blob" ]]; then
+    echo "Deferred authority blob mismatch for $path: expected $expected_blob, got $actual_blob" >&2
+    exit 38
+  fi
+
+  verified_count=$((verified_count + 1))
+  deferred_count=$((deferred_count + 1))
+  destination="$ROOT/$path"
+  if [[ -f "$destination" ]]; then
+    local_blob="$(git_blob_sha "$destination")"
+  elif [[ -e "$destination" ]]; then
+    local_blob="NON_REGULAR"
+  else
+    local_blob="-"
+  fi
+
+  printf 'DEFERRED_RUNTIME_GATE\t%s\t%s\t%s\t%s\n' \
+    "$path" "$expected_blob" "$actual_blob" "$local_blob" >> "$PREVIEW"
 }
 
 while IFS=$'\t' read -r path expected_blob; do
@@ -270,8 +315,14 @@ while IFS=$'\t' read -r path expected_blob; do
     echo "Agent authority file is absent from bundle: $path" >&2
     exit 37
   }
-  compare_staged_file "$path" "$expected_blob" "$staged"
+  if is_deferred_agent_runtime_path "$path"; then
+    record_deferred_file "$path" "$expected_blob" "$staged"
+  else
+    compare_staged_file "$path" "$expected_blob" "$staged"
+  fi
 done < "$AGENT_STAGED_MANIFEST"
+
+eligible_count=$((verified_count - deferred_count))
 
 cat > "$AUDIT" <<EOF_AUDIT
 # PRW Drive -> Local Reconciliation Audit
@@ -288,7 +339,10 @@ Status: \`STAGED / VERIFIED / LOCAL_SOURCE_NOT_MUTATED\`
 - agent_bundle: \`$AGENT_BUNDLE\`
 - agent_bundle_sha256: \`$AGENT_BUNDLE_SHA256\`
 - verified_files: \`$verified_count\`
+- apply_eligible_files: \`$eligible_count\`
+- deferred_runtime_gate_files: \`$deferred_count\`
 - local_changes_required: \`$change_count\`
+- deferred_paths: \`crates/prw-agent/src/main.rs; crates/prw-agent/tests/phase125_device_identity_bootstrap.rs; crates/prw-agent/tests/phase_102_binary_bootstrap.rs\`
 - root_cargo_workspace_activation: \`NOT_AUTHORIZED\`
 - build_test_clippy: \`NOT_AUTHORIZED\`
 - runtime_signing: \`NOT_AUTHORIZED\`
@@ -306,6 +360,7 @@ fi
 while IFS=$'\t' read -r status path expected_blob actual_blob local_blob; do
   [[ "$status" == "status" ]] && continue
   [[ "$status" == "MATCH" ]] && continue
+  [[ "$status" == "DEFERRED_RUNTIME_GATE" ]] && continue
 
   if is_agent_allowlisted_path "$path"; then
     staged="$AGENT_STAGE/$path"
@@ -341,6 +396,7 @@ cat >> "$AUDIT" <<EOF_APPLY
 - status: \`COMPLETE / LOCAL_RECONCILED_FROM_DRIVE\`
 - backup_root: \`${BACKUP_ROOT#$ROOT/}\`
 - post_apply_verification: \`GIT_BLOB_SHA_MATCH\`
+- deferred_runtime_gate_files: \`$deferred_count / NOT_APPLIED\`
 EOF_APPLY
 
 if ((SYNC_HOST_MIRROR)); then
