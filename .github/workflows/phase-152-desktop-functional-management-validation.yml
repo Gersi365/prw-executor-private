@@ -37,7 +37,7 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
                 ;;
               *)
                 echo "Unexpected Phase 152 candidate path: ${path}" >&2
@@ -45,6 +45,25 @@ jobs:
                 ;;
             esac
           done
+
+      - name: Record Slice C dependency and production-policy preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Current prw-remote-bridge -> prw-agent edge:"
+          grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml
+          echo "Current bridge references to LocalAgentCommand/local_agent_command:"
+          git grep -n -E 'LocalAgentCommand|local_agent_command' -- crates/prw-remote-bridge || true
+          echo "Current prw-agent bridge dependency (expected absent before Slice C source mutation):"
+          if grep -Fn 'prw-remote-bridge' crates/prw-agent/Cargo.toml; then
+            echo "Unexpected pre-lock prw-agent -> prw-remote-bridge dependency" >&2
+            exit 1
+          fi
+          echo "BoundedLocalReadPolicy remains the production bootstrap policy and denies management capabilities:"
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+          grep -Fn 'Capability::TerminalOpen' crates/prw-policy/src/lib.rs
+          grep -Fn 'Capability::FilesRead' crates/prw-policy/src/lib.rs
+          grep -Fn 'Capability::ForwardingCreate' crates/prw-policy/src/lib.rs
 
       - name: Install locked desktop native prerequisites
         shell: bash
