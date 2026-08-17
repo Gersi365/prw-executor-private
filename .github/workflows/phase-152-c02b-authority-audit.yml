@@ -5,6 +5,7 @@ on:
     branches:
       - phase-152-c02b-authority-audit
       - phase-152-c02b-promotion
+      - phase-152-c02b-android-lock-scope-corrective
       - phase-152-desktop-functional-management
   workflow_dispatch:
 
@@ -33,6 +34,8 @@ jobs:
           set -euo pipefail
           C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
           C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
+          ANDROID_LOCK=apps/android/native/Cargo.lock
+          ANDROID_LOCK_BLOB=d7c974bf532fa0c4e402e0122dcf3d97499eddab
           git merge-base --is-ancestor "${C02A}" HEAD
 
           case "${GITHUB_REF_NAME}" in
@@ -40,10 +43,10 @@ jobs:
               baseline="${C02A}"
               allowed='contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|.github/workflows/phase-152-c02b-authority-audit.yml'
               ;;
-            phase-152-c02b-promotion|phase-152-desktop-functional-management)
+            phase-152-c02b-promotion|phase-152-c02b-android-lock-scope-corrective|phase-152-desktop-functional-management)
               git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
               baseline="${C02B_AUDIT}"
-              allowed='.github/workflows/phase-152-c02b-authority-audit.yml|.github/workflows/phase-152-desktop-functional-management-validation.yml'
+              allowed='.github/workflows/phase-152-c02b-authority-audit.yml|.github/workflows/phase-152-desktop-functional-management-validation.yml|apps/android/native/Cargo.lock'
               ;;
             *)
               echo "Unexpected C02b audit branch: ${GITHUB_REF_NAME}" >&2
@@ -65,9 +68,24 @@ jobs:
             esac
           done
 
-          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
-            echo "C02b audit/promotion must not mutate Rust source, manifests, or lockfiles" >&2
+          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$'; then
+            echo "C02b audit/promotion must not mutate Rust source, manifests, or the root lockfile" >&2
             exit 1
+          fi
+
+          if git diff --name-only "${baseline}..HEAD" -- "${ANDROID_LOCK}" | grep -Fqx "${ANDROID_LOCK}"; then
+            actual_android_lock_blob=$(git rev-parse "HEAD:${ANDROID_LOCK}")
+            if [[ "${actual_android_lock_blob}" != "${ANDROID_LOCK_BLOB}" ]]; then
+              echo "Android native lockfile does not match the separately audited blob: ${actual_android_lock_blob}" >&2
+              exit 1
+            fi
+
+            android_lock_delta=$(git diff --numstat "${C02B_AUDIT}..HEAD" -- "${ANDROID_LOCK}")
+            if [[ "${android_lock_delta}" != $'0\t49\tapps/android/native/Cargo.lock' ]]; then
+              echo "Android native lock corrective drifted from the audited 0-addition/49-deletion delta: ${android_lock_delta}" >&2
+              exit 1
+            fi
+            echo "Android native lock corrective matches the separately audited blob and exact 0-addition/49-deletion delta"
           fi
 
           test -f contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
@@ -194,9 +212,21 @@ jobs:
         run: |
           set -euo pipefail
           C02A=05b27e31024fbca480df1f0b09d959a8d4ffbb77
-          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$'; then
-            echo "C02b audit/promotion unexpectedly changed source/manifests/lockfiles" >&2
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
+          ANDROID_LOCK=apps/android/native/Cargo.lock
+          ANDROID_LOCK_BLOB=d7c974bf532fa0c4e402e0122dcf3d97499eddab
+
+          if git diff --name-only "${C02A}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$'; then
+            echo "C02b audit/promotion unexpectedly changed Rust source, manifests, or the root lockfile" >&2
             exit 1
           fi
+
+          if git diff --name-only "${C02B_AUDIT}..HEAD" -- "${ANDROID_LOCK}" | grep -Fqx "${ANDROID_LOCK}"; then
+            actual_android_lock_blob=$(git rev-parse "HEAD:${ANDROID_LOCK}")
+            [[ "${actual_android_lock_blob}" == "${ANDROID_LOCK_BLOB}" ]]
+            android_lock_delta=$(git diff --numstat "${C02B_AUDIT}..HEAD" -- "${ANDROID_LOCK}")
+            [[ "${android_lock_delta}" == $'0\t49\tapps/android/native/Cargo.lock' ]]
+          fi
+
           git diff --exit-code -- Cargo.lock
-          echo "C02b authority assembly remains evidence-only; real provider authority remains unreachable in production"
+          echo "C02b authority assembly remains evidence-only; only the separately audited Android native deterministic lock refresh is tolerated, and real provider authority remains unreachable in production"
