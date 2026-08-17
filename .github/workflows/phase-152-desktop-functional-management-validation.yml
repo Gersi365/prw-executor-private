@@ -40,7 +40,7 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml)
                 ;;
               *)
                 echo "Unexpected Phase 152 candidate path: ${path}" >&2
@@ -53,10 +53,14 @@ jobs:
           printf 'Changes after validated C01 source commit:\n'
           printf '  %s\n' "${post_c01[@]}"
           for path in "${post_c01[@]}"; do
-            test "${path}" = ".github/workflows/phase-152-desktop-functional-management-validation.yml" || {
-              echo "C01 source tree drifted after ${C01_SOURCE}: ${path}" >&2
-              exit 1
-            }
+            case "${path}" in
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md)
+                ;;
+              *)
+                echo "C01 source tree drifted after ${C01_SOURCE}: ${path}" >&2
+                exit 1
+                ;;
+            esac
           done
 
       - name: Verify committed C01 dependency and policy invariants
@@ -79,6 +83,27 @@ jobs:
           grep -Fn 'PolicyEvaluator' crates/prw-agent/src/local_commands/management_request.rs
           grep -Fn 'pub struct LocalManagementAdmission' crates/prw-agent/src/local_commands/management_request.rs
           echo "Committed C01 dependency inversion and fail-closed policy boundary are present"
+
+      - name: Verify C02 authority-context preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'pub trait CapabilityDispatcher' crates/prw-remote-bridge/src/lib.rs
+          grep -Fn 'principal: RegistryValidatedPrincipal' crates/prw-remote-bridge/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal' crates/prw-terminal/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'pub struct AnchoredFileRoot' crates/prw-file-service/src/lib.rs
+          grep -Fn "pub fn new(root: &'a AnchoredFileRoot)" crates/prw-file-transfer/src/lib.rs
+
+          for dependency in prw-registry prw-terminal prw-forwarding prw-file-service prw-file-transfer; do
+            if grep -Fq "${dependency} =" crates/prw-agent/Cargo.toml; then
+              echo "C02a precondition expected no direct Agent provider dependency yet: ${dependency}" >&2
+              exit 1
+            fi
+          done
+
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+          echo "C02 authority mismatch is preserved explicitly: registry principals and anchored roots are not fabricated in Agent"
 
       - name: Install locked desktop native prerequisites
         shell: bash
