@@ -67,7 +67,7 @@ source "$CONFIG"
 : "${PRW_RCLONE_REMOTE:?PRW_RCLONE_REMOTE is required}"
 : "${PRW_DRIVE_ROOT_FOLDER_ID:?PRW_DRIVE_ROOT_FOLDER_ID is required}"
 
-for command_name in rclone flock sha1sum awk wc mktemp cp mv mkdir chmod; do
+for command_name in rclone flock sha1sum awk wc mktemp cp mv mkdir chmod sed; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "$command_name is required for PRW Drive reconciliation." >&2
     exit 21
