@@ -226,13 +226,31 @@ jobs:
             rm -f "${production}"
             exit 1
           fi
-          if grep -Fn 'for_test' "${production}"; then
-            echo "C02a test authority constructor leaked into production portion" >&2
+
+          if ! awk '
+            /^[[:space:]]*#\[cfg\(test\)\][[:space:]]*$/ {
+              cfg_test = 1
+              next
+            }
+            cfg_test && /^[[:space:]]*const fn for_test\(/ {
+              found = 1
+              cfg_test = 0
+              next
+            }
+            {
+              cfg_test = 0
+            }
+            END {
+              exit found ? 0 : 1
+            }
+          ' "${target}"; then
+            echo "C02a test authority constructor is not directly guarded by #[cfg(test)]" >&2
             rm -f "${production}"
             exit 1
           fi
+
           rm -f "${production}"
-          echo "C02a remains provider-neutral: success is post-dispatch, real authority adapters remain gated by C02b"
+          echo "C02a remains provider-neutral: test-only authority construction is cfg(test), success is post-dispatch, and real authority adapters remain gated by C02b"
 
       - name: Confirm validation did not mutate committed source
         shell: bash
