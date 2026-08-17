@@ -31,7 +31,7 @@ use prw_policy::PolicyEvaluator;
 
 /// Provider family required after canonical command admission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalManagementAuthorityFamily {
+pub enum LocalManagementAuthorityFamily {
     /// Agent-owned status authority.
     Agent,
     /// Descriptor-anchored bounded file-service authority.
@@ -49,7 +49,7 @@ pub(crate) enum LocalManagementAuthorityFamily {
 /// C02b must add reviewed constructors that derive this token from real Agent-owned
 /// authority objects. Until then, construction exists only in this module's tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LocalManagementAuthorityContext {
+pub struct LocalManagementAuthorityContext {
     request_id: LocalIpcRequestId,
     peer_pid: i32,
     peer_uid: u32,
@@ -71,7 +71,7 @@ impl LocalManagementAuthorityContext {
     }
 
     #[cfg(test)]
-    fn for_test(admission: &LocalManagementAdmission) -> Self {
+    const fn for_test(admission: &LocalManagementAdmission) -> Self {
         Self {
             request_id: admission.request_id(),
             peer_pid: admission.peer_pid(),
@@ -88,7 +88,7 @@ impl LocalManagementAuthorityContext {
 ///
 /// C02a tests implement this trait with deterministic spies only. No production
 /// terminal, file, transfer or forwarding provider implements it in this gate.
-pub(crate) trait LocalManagementProviderDispatcher {
+pub trait LocalManagementProviderDispatcher {
     /// Provider-neutral bounded dispatch error.
     type Error;
 
@@ -117,7 +117,7 @@ pub(crate) trait LocalManagementProviderDispatcher {
 ///
 /// Returns only terminal-response frame construction failures.
 #[cfg(target_os = "linux")]
-pub(crate) fn process_authenticated_linux_management_request<E, D, S>(
+pub fn process_authenticated_linux_management_request<E, D, S>(
     frame: &LocalIpcFrame,
     connection: &AuthenticatedLocalLinuxConnection<S>,
     evaluator: &E,
@@ -144,12 +144,12 @@ where
         return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
     }
 
-    match dispatcher.dispatch(&admission, authority) {
-        Ok(body) => build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
-        Err(_) => {
+    dispatcher.dispatch(&admission, authority).map_or_else(
+        |_| {
             build_terminal_response_frame(request_id, LocalAgentResponseStatus::InternalError, &[])
-        }
-    }
+        },
+        |body| build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
+    )
 }
 
 #[cfg(target_os = "linux")]
