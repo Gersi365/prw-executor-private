@@ -1,0 +1,108 @@
+name: PRW Phase 152 Android Native Lock Validation
+
+on:
+  push:
+    branches:
+      - phase-152-android-lock-audit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-android-lock-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate audited Android native lock refresh
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify isolated lineage and scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CANDIDATE=28d5d81fa156296416c7b204914b10d14e18abc5
+          test "${GITHUB_REF_NAME}" = phase-152-android-lock-audit
+          git merge-base --is-ancestor "${CANDIDATE}" HEAD
+
+          mapfile -t changed < <(git diff --name-only "${CANDIDATE}..HEAD")
+          printf 'Android lock validation branch changes:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-android-lock-audit.yml|.github/workflows/phase-152-android-lock-materialize.yml|.github/workflows/phase-152-android-lock-validation.yml|apps/android/native/Cargo.lock)
+                ;;
+              *)
+                echo "Unexpected Android lock validation path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          test -f apps/android/native/Cargo.lock
+          if git diff --name-only "${CANDIDATE}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$'; then
+            echo 'Android lock corrective must not change Rust source or Cargo manifests' >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Prepare exact Android and Rust toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          rustup component add --toolchain 1.97.1-x86_64-unknown-linux-gnu rustfmt clippy
+          rustup target add --toolchain 1.97.1-x86_64-unknown-linux-gnu aarch64-linux-android x86_64-linux-android
+          cargo +1.97.1 install --locked cargo-ndk --version 4.1.2
+
+      - name: Verify Android native lockfile is current
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 generate-lockfile
+          git diff --exit-code -- Cargo.lock
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Validate native adapter
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 fmt --all -- --check
+          cargo +1.97.1 clippy --locked --all-targets --all-features -- -D warnings
+          cargo +1.97.1 test --locked --all-targets
+
+      - name: Validate Android application
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+          test -s app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Confirm validation did not mutate committed files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --exit-code
+          echo 'Audited Android native lock refresh validates without tracked-file mutation'
