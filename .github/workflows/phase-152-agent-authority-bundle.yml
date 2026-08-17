@@ -1,0 +1,80 @@
+name: PRW Phase 152 Agent Authority Bundle
+
+on:
+  push:
+    branches:
+      - phase-152-github-first-reconciliation
+    paths:
+      - .github/workflows/phase-152-agent-authority-bundle.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-agent-authority-bundle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Verify and package frozen Phase 152 Agent source tree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout frozen authority commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 01f5466504684ea6a2c504613901d24018485887
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify frozen Agent trees and stage authority bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_head='01f5466504684ea6a2c504613901d24018485887'
+          expected_repo_id='1334911207'
+          expected_cargo_blob='858e062528ab888c91ec8723ce25e0d1fb78dfaa'
+          expected_src_tree='59973a1dbc7698906dc30bea50f2369e2f83d9b1'
+          expected_tests_tree='1729b632a0260971362246ba70724f8b71b49693'
+
+          test "$(git rev-parse HEAD)" = "$expected_head"
+          test "$(git hash-object crates/prw-agent/Cargo.toml)" = "$expected_cargo_blob"
+          test "$(git rev-parse "$expected_head:crates/prw-agent/src")" = "$expected_src_tree"
+          test "$(git rev-parse "$expected_head:crates/prw-agent/tests")" = "$expected_tests_tree"
+
+          stage="$RUNNER_TEMP/phase-152-agent-authority-bundle"
+          mkdir -p "$stage/crates"
+          cp -a crates/prw-agent "$stage/crates/prw-agent"
+          printf '%s\n' "$expected_head" > "$stage/AUTHORITY_COMMIT"
+          printf '%s\n' "$expected_repo_id" > "$stage/AUTHORITY_REPOSITORY_ID"
+          printf '%s\n' "$expected_src_tree" > "$stage/AGENT_SRC_TREE"
+          printf '%s\n' "$expected_tests_tree" > "$stage/AGENT_TESTS_TREE"
+
+          {
+            printf 'path\tgit_blob_sha\n'
+            git ls-tree -r "$expected_head" crates/prw-agent \
+              | awk '$2 == "blob" {print $4 "\t" $3}'
+          } > "$stage/PHASE152_AGENT_AUTHORITY_MANIFEST.tsv"
+
+          while IFS=$'\t' read -r path expected_blob; do
+            [[ "$path" == path ]] && continue
+            test -f "$path"
+            actual_blob="$(git hash-object "$path")"
+            if [[ "$actual_blob" != "$expected_blob" ]]; then
+              printf 'Agent blob mismatch: %s expected=%s actual=%s\n' "$path" "$expected_blob" "$actual_blob" >&2
+              exit 1
+            fi
+          done < "$stage/PHASE152_AGENT_AUTHORITY_MANIFEST.tsv"
+
+          (
+            cd "$stage"
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          )
+
+      - name: Upload verified Agent authority bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: phase-152-agent-authority-bundle-01f54665
+          path: ${{ runner.temp }}/phase-152-agent-authority-bundle
+          if-no-files-found: error
+          retention-days: 7
