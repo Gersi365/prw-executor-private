@@ -38,7 +38,7 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           for path in "${changed[@]}"; do
             case "${path}" in
-              .github/workflows/phase-152-android-lock-audit.yml|.github/workflows/phase-152-android-lock-materialize.yml|apps/android/native/Cargo.lock)
+              .github/workflows/phase-152-android-lock-audit.yml|.github/workflows/phase-152-android-lock-materialize.yml|.github/workflows/phase-152-android-lock-validation.yml|apps/android/native/Cargo.lock)
                 ;;
               *)
                 echo "Unexpected committed Android lock materialization path: ${path}" >&2
