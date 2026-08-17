@@ -1,0 +1,461 @@
+Private Remote Workspace — Phase 152 C01 Dependency Audit
+status=AUDIT_ONLY
+c00_validated_head=651e076cdcba0d6ae9e439eb7b381ccd2679a4b9
+candidate_branch=phase-152-desktop-functional-management
+
+[current_dependency_edge]
+9:prw-agent = { path = "../prw-agent" }
+
+[reverse_dependency_precondition]
+prw_agent_to_remote_bridge_dependency=absent
+
+[whole_repository_symbol_references]
+.github/workflows/phase-152-desktop-functional-management-validation.yml:74:            git grep -n -E 'LocalAgentCommand|local_agent_command' -- . \
+.github/workflows/phase-152-desktop-functional-management-validation.yml:79:            git grep -n -E 'LocalAgentCommand|local_agent_command' -- '*.rs' 'Cargo.toml' \
+Binary file target/debug/deps/libprw_agent-3cc505723ef43b1b.rmeta matches
+Binary file target/debug/deps/libprw_agent-dec1dc8179eb787c.rlib matches
+Binary file target/debug/deps/libprw_agent-dec1dc8179eb787c.rmeta matches
+Binary file target/debug/deps/phase_102_binary_bootstrap-e884992bc6474c6d matches
+Binary file target/debug/deps/prw_agent-4eebd4ebd6f84f35 matches
+Binary file target/debug/deps/prw_agent-a1b5c2c04170161f matches
+Binary file target/debug/incremental/phase_102_binary_bootstrap-0fob5c3ph51ub/s-hle8mzxi4y-17la2ux-cwpvy23antrykodwvb9qi6pqk/4ulhqwnz9ktvy2zsjzphmvm5l.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/1elzmp9wozze63t6y2zy9vap3.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/2xttmjujqonxybbypdpelhzzv.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/3h2hadowruhik8ri6jdg65p7f.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/3j2ztp0m1peljnf9167fb7q6w.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/3rpe3kyediqswzhsfd3064b07.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/504tqixp1lct0m2hcbzrnpbn4.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/5cpdgg65wje4bao493tg7kqyt.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/6qbqzseyefcuy3mic1mzz5wp2.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/85hq930joxqyb5z70yj47i1x5.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/89eb48wh4mid6u46unvmdaucn.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/8epou6hsgcqbw9m1qqfqf1i88.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/8icglcrjp6l4wrcrddzcimwfw.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/ddjmxe7iwwtskayecj20chyi8.o matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/metadata.rmeta matches
+Binary file target/debug/incremental/prw_agent-0gz6vjy3fb2lm/s-hle8my31hj-0a0czfr-13jsa41lfmzxs2mezsml6gbcf/query-cache.bin matches
+Binary file target/debug/incremental/prw_agent-22qt233vnbtyq/s-hle8mqtfmm-0vq3an0-dgashs3mspwxgddz616y1em5f/metadata.rmeta matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/09hihkihxlej5t8ro87jdldl4.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/1e0vocigs3y8dyjholb1hz5oa.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/1e39dnfc2b0qyek6xv1hx8a1k.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/1ftdd4tyf0fq7qq3b5go4p8qx.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/26k62au11zcfzj0ikaxq1kodc.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/29fiusryi0mqvl9j94r216n6m.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/2gz30nhpaph5xbug49wdcctr0.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/2jfnrqh63w6va6luwofi29gtd.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/2w6qc29mw2gcgjsqpve2kpy5n.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/398o1gv2dss1beldx3xgfe15g.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/3ye8lix5nji9mg5bz9nfc2osr.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/45v0ero4c5yvlizdl6etyi5lh.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/48dj7sclair19ovvq36tj1dgy.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/4loivbbx65fxkoin1l8zgi246.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/4wqkhebz8d4kj3xw1mdbn1bng.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/566871gxgexr4edrmq1q1wiyd.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/5wdha6dvur2qvoi5pmhnecz51.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/7dmhp9blk6uax178i8mhqrsfe.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/810kzt3uugodb58en5xhndjsu.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/8ewytjt1rpuupxu9nqpyz4dn6.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/8o5004qx1p6ofjwp5o32jkifr.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/970t5r7t5sqi5h4gd7igs1xf9.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/971ftm605pni4seo1b3qzig2x.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/9xwgjx767t66qsa1zcxkzvdqd.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/abbora8jpebi311wr0xng8cfr.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/au16ourlxy7gdeknxky8j4eh8.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/b73i55yjnenjrs455bfevm4o6.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/bg3gktljjezvd2xifbh4cpwux.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/biulob9xluhci5vf8wvgs0jw5.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/bo394gtirrj9oa0lz91bha1al.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/c8x971xc2ss5pquyzj9606rad.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/cx1lr1y3lprdh9lab0yeiu9wl.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/diqoz1wrs8rxhjq2wgmy9hspn.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/eqm9gc7av7mc2j53r5x9287gl.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/esidkeieiamvxlojxoq6bp62t.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/ezvoko63hpwih63g94r2ubraz.o matches
+Binary file target/debug/incremental/prw_agent-340um3qm0dmsl/s-hle8n0w7rb-13913ap-8p5usvtmi5r2ohkng7nzx9j6v/query-cache.bin matches
+Binary file target/debug/incremental/prw_agent-3fmc0m7bc1t59/s-hle8ms66jp-1kytyf7-1w4aupspbxfqgknc375id0y7r/query-cache.bin matches
+Binary file target/debug/libprw_agent.rlib matches
+Binary file target/debug/prw-agent matches
+apps/desktop/src/ipc.rs:19:use prw_agent::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+apps/desktop/src/ipc.rs:229:    let frame = query_success_frame(endpoint, request_id, LocalAgentCommand::GetAgentStatus)?;
+apps/desktop/src/ipc.rs:240:    let frame = query_success_frame(endpoint, request_id, LocalAgentCommand::GetPrivateDnsConfig)?;
+apps/desktop/src/ipc.rs:250:    command: LocalAgentCommand,
+apps/desktop/src/local_management_ipc.rs:95:            prw_agent::local_commands::LocalAgentCommand::GetAgentStatus
+apps/desktop/src/local_management_ipc.rs:99:            prw_agent::local_commands::LocalAgentCommand::GetPrivateDnsConfig
+contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md:16:- `prw-remote-bridge` depends on `prw-agent` only for the narrow `LocalAgentCommand` convenience mapping used by `BridgeCommand::AgentStatus`;
+contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md:27:2. `BridgeCommand::local_agent_command()` remains unchanged in Slice B.
+contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md:159:1. `git grep` all `LocalAgentCommand` and `local_agent_command` references in the workspace;
+contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md:58:The audited source dependency is used for the narrow `BridgeCommand::AgentStatus -> LocalAgentCommand::GetAgentStatus` convenience adapter. `prw-agent` currently has no `prw-remote-bridge` dependency.
+contracts/END_TO_END_AUTHENTICATED_CAPABILITY_BRIDGE_CONTRACT.md:118:- `prw_agent::local_commands::LocalAgentCommand::GetAgentStatus`.
+contracts/LOCAL_COMMAND_CONTRACT.md:45:- one typed `LocalAgentCommand`.
+contracts/LOCAL_COMMAND_REQUEST_CODEC_CONTRACT.md:52:The encoder receives a typed `LocalAgentCommand` and returns exactly two bytes.
+contracts/LOCAL_REQUEST_FRAME_CONTRACT.md:14:- a typed `LocalAgentCommand`.
+crates/prw-agent/src/linux_authenticated_session.rs:169:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_authenticated_session.rs:231:        write_local_command_request(&mut client, id(330), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:233:        write_local_command_request(&mut client, id(331), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:290:        write_local_command_request(&mut request, id(332), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:321:        write_local_command_request(&mut client, id(333), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:247:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:329:        write_local_command_request(&mut client, id(700), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:438:        write_local_command_request(&mut client, id(701), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:554:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:561:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_one_shot_scheduler.rs:184:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_one_shot_scheduler.rs:263:        write_local_command_request(&mut client, id(600), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_production_runtime_loop.rs:314:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_production_runtime_loop.rs:414:                        LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_runtime_orchestration.rs:518:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_runtime_orchestration.rs:646:        write_local_command_request(&mut client, id(700), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_runtime_orchestration.rs:751:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_session_worker.rs:161:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_session_worker.rs:229:        write_local_command_request(&mut client, id(400), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:183:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_session_worker_thread.rs:248:        write_local_command_request(&mut client, id(500), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:295:        write_local_command_request(&mut client, id(501), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:333:        write_local_command_request(&mut client, id(502), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:375:        write_local_command_request(&mut client, id(503), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands.rs:169:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands.rs:175:    pub const fn new(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Self {
+crates/prw-agent/src/local_commands.rs:190:    pub const fn command(self) -> LocalAgentCommand {
+crates/prw-agent/src/local_commands.rs:225:        LocalAgentCommand, LocalAgentRequestEnvelope, LocalAgentResponseEnvelope,
+crates/prw-agent/src/local_commands.rs:232:        assert_eq!(LocalAgentCommand::GetAgentStatus.code(), 1);
+crates/prw-agent/src/local_commands.rs:233:        assert_eq!(LocalAgentCommand::GetPrivateDnsConfig.code(), 2);
+crates/prw-agent/src/local_commands.rs:235:            LocalAgentCommand::from_code(1),
+crates/prw-agent/src/local_commands.rs:236:            Some(LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands.rs:239:            LocalAgentCommand::from_code(2),
+crates/prw-agent/src/local_commands.rs:240:            Some(LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands.rs:242:        assert_eq!(LocalAgentCommand::from_code(3), None);
+crates/prw-agent/src/local_commands.rs:269:        let request = LocalAgentRequestEnvelope::new(request_id, LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands.rs:273:        assert_eq!(request.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands.rs:84:pub enum LocalAgentCommand {
+crates/prw-agent/src/local_commands.rs:91:impl LocalAgentCommand {
+crates/prw-agent/src/local_commands/admission.rs:105:            required_capability(LocalAgentCommand::GetAgentStatus),
+crates/prw-agent/src/local_commands/admission.rs:109:            required_capability(LocalAgentCommand::GetPrivateDnsConfig),
+crates/prw-agent/src/local_commands/admission.rs:10:use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/admission.rs:116:        let request = LocalAgentRequestEnvelope::new(id(190), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:121:        assert_eq!(admitted.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:127:            LocalAgentRequestEnvelope::new(id(191), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/admission.rs:137:        let request = LocalAgentRequestEnvelope::new(id(192), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:31:    pub const fn command(self) -> LocalAgentCommand {
+crates/prw-agent/src/local_commands/admission.rs:38:pub const fn required_capability(command: LocalAgentCommand) -> Capability {
+crates/prw-agent/src/local_commands/admission.rs:40:        LocalAgentCommand::GetAgentStatus => Capability::AgentStatusRead,
+crates/prw-agent/src/local_commands/admission.rs:41:        LocalAgentCommand::GetPrivateDnsConfig => Capability::PrivateDnsConfigRead,
+crates/prw-agent/src/local_commands/admission.rs:75:    use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:111:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:179:                &mut Cursor::new(request_bytes(id(300), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:200:        let mut input = request_bytes(id(301), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:236:            CountingReader::new(request_bytes(id(302), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:267:                &mut Cursor::new(request_bytes(id(303), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:83:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:157:        write_local_command_request(&mut bytes, id(280), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:183:        write_local_command_request(&mut bytes, id(281), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:210:        write_local_command_request(&mut bytes, id(282), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:83:    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:125:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:174:            CountingReader::new(request_bytes(id(290), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:225:        let mut input = Cursor::new(request_bytes(id(291), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:256:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:287:        let mut input = request_bytes(id(293), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:317:        let mut input = Cursor::new(request_bytes(id(294), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:98:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/codec.rs:17:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/codec.rs:32:) -> Result<LocalAgentCommand, LocalAgentRequestDecodeError> {
+crates/prw-agent/src/local_commands/codec.rs:37:    LocalAgentCommand::from_code(code).ok_or(LocalAgentRequestDecodeError::UnknownCommand)
+crates/prw-agent/src/local_commands/codec.rs:68:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/codec.rs:78:            encode_request_command(LocalAgentCommand::GetAgentStatus),
+crates/prw-agent/src/local_commands/codec.rs:82:            encode_request_command(LocalAgentCommand::GetPrivateDnsConfig),
+crates/prw-agent/src/local_commands/codec.rs:90:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/codec.rs:91:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/codec.rs:9:use super::LocalAgentCommand;
+crates/prw-agent/src/local_commands/inbound_state.rs:120:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/inbound_state.rs:148:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/inbound_state.rs:196:        let mut reader = Cursor::new(request_bytes(id(240), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/inbound_state.rs:272:            CountingReader::new(request_bytes(id(242), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/inbound_state.rs:297:        let mut reader = Cursor::new(request_bytes(id(243), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/policy_response.rs:117:        let request = LocalAgentRequestEnvelope::new(id(200), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/policy_response.rs:137:            LocalAgentRequestEnvelope::new(id(201), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/policy_response.rs:158:            LocalAgentRequestEnvelope::new(id(202), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/policy_response.rs:174:        let request = LocalAgentRequestEnvelope::new(id(203), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/policy_response.rs:74:        LocalAgentCommand, LocalAgentRequestEnvelope, LocalAgentResponseStatus,
+crates/prw-agent/src/local_commands/request_frame.rs:107:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame.rs:125:            (LocalAgentCommand::GetAgentStatus, [0, 1]),
+crates/prw-agent/src/local_commands/request_frame.rs:126:            (LocalAgentCommand::GetPrivateDnsConfig, [0, 2]),
+crates/prw-agent/src/local_commands/request_frame.rs:25:use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/request_frame.rs:41:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:113:        write_local_command_request(&mut bytes, id(273), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:54:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:79:        write_local_command_request(&mut bytes, id(270), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:89:        assert_eq!(request.command(), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:95:        write_local_command_request(&mut bytes, id(271), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:97:        write_local_command_request(&mut bytes, id(272), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:104:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:123:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:13:use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:147:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:172:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:195:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:210:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:69:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:116:        write_local_command_request(&mut bytes, id(141), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:118:        write_local_command_request(&mut bytes, id(142), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:126:        assert_eq!(first.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/request_frame/stream.rs:128:        assert_eq!(second.command(), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/request_frame/stream.rs:134:        write_local_command_request(&mut bytes, id(143), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:16:use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/request_frame/stream.rs:176:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:30:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:84:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/stream.rs:97:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:98:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:108:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:12:use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:132:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:152:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:171:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:39:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:67:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:86:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:132:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:155:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_processor.rs:209:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:73:    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+crates/prw-agent/src/local_commands/request_response_transaction.rs:110:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/request_response_transaction.rs:159:            CountingReader::new(request_bytes(id(230), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:186:        let mut reader = Cursor::new(request_bytes(id(231), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:215:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_response_transaction.rs:285:        let mut reader = Cursor::new(request_bytes(id(234), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:80:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/responder.rs:101:            LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/responder.rs:10:use super::LocalAgentCommand;
+crates/prw-agent/src/local_commands/responder.rs:118:            LocalAgentRequestEnvelope::new(id(181), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/responder.rs:39:        LocalAgentCommand::GetAgentStatus => {
+crates/prw-agent/src/local_commands/responder.rs:43:        LocalAgentCommand::GetPrivateDnsConfig => {
+crates/prw-agent/src/local_commands/responder.rs:70:    use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/response_writer.rs:108:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/response_writer.rs:141:        let request = build_local_command_request_frame(id(221), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/server_connection_loop.rs:109:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/server_connection_loop.rs:172:        let mut bytes = request_bytes(id(320), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:175:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/server_connection_loop.rs:205:        let mut bytes = request_bytes(id(322), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:206:        bytes.extend(request_bytes(id(323), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_loop.rs:269:        let mut bytes = request_bytes(id(324), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:270:        let mut second = request_bytes(id(325), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:305:                &mut Cursor::new(request_bytes(id(326), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_loop.rs:82:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/server_connection_state.rs:193:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/server_connection_state.rs:213:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/server_connection_state.rs:259:        let mut input = Cursor::new(request_bytes(id(250), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:322:        let mut input = Cursor::new(request_bytes(id(252), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:351:            Cursor::new(request_bytes(id(253), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:371:            CountingReader::new(request_bytes(id(254), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:421:        let mut bytes = request_bytes(id(310), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_state.rs:424:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/server_connection_state.rs:473:        let mut bytes = request_bytes(id(312), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_state.rs:506:                &mut Cursor::new(request_bytes(id(313), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_state.rs:531:                &mut Cursor::new(request_bytes(id(314), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_state.rs:543:            CountingReader::new(request_bytes(id(315), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/tests/phase_102_binary_bootstrap.rs:19:use prw_agent::local_commands::LocalAgentCommand;
+crates/prw-agent/tests/phase_102_binary_bootstrap.rs:229:    write_local_command_request(stream, request_id, LocalAgentCommand::GetAgentStatus)
+crates/prw-remote-bridge/src/lib.rs:13:use prw_agent::local_commands::LocalAgentCommand;
+crates/prw-remote-bridge/src/lib.rs:217:    pub const fn local_agent_command(&self) -> Option<LocalAgentCommand> {
+crates/prw-remote-bridge/src/lib.rs:219:            Self::AgentStatus => Some(LocalAgentCommand::GetAgentStatus),
+crates/prw-remote-bridge/tests/end_to_end.rs:239:        commands[0].local_agent_command(),
+crates/prw-remote-bridge/tests/end_to_end.rs:240:        Some(prw_agent::local_commands::LocalAgentCommand::GetAgentStatus)
+docs/architecture/PHASE_015_LOCAL_COMMAND_REQUEST_CODEC.md:41:`LocalAgentCommand::code()` remains the stable typed-to-numeric mapping.
+docs/architecture/PHASE_015_LOCAL_COMMAND_REQUEST_CODEC.md:43:Phase 015 adds `LocalAgentCommand::from_code()` as the inverse mapping used by the codec.
+docs/architecture/PHASE_031_LOCAL_REQUEST_FRAME.md:9:`LocalAgentCommand`
+logs/audits/phase-008-implementation/PRW-PHASE-008-IMPLEMENTATION-VALIDATION.txt:40:- Added LocalAgentCommand.
+logs/audits/phase-015-implementation/PRW-PHASE-015-IMPLEMENTATION-VALIDATION.txt:36:- Added LocalAgentCommand::from_code() as the inverse of the existing stable code() mapping.
+logs/audits/phase-015-implementation/PRW-PHASE-015-IMPLEMENTATION-VALIDATION.txt:67:- Exact cause: rustfmt required formatting-only reflow in one codec test assertion and one LocalAgentCommand::from_code test assertion.
+
+[rust_and_manifest_symbol_references]
+apps/desktop/src/ipc.rs:19:use prw_agent::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+apps/desktop/src/ipc.rs:229:    let frame = query_success_frame(endpoint, request_id, LocalAgentCommand::GetAgentStatus)?;
+apps/desktop/src/ipc.rs:240:    let frame = query_success_frame(endpoint, request_id, LocalAgentCommand::GetPrivateDnsConfig)?;
+apps/desktop/src/ipc.rs:250:    command: LocalAgentCommand,
+apps/desktop/src/local_management_ipc.rs:95:            prw_agent::local_commands::LocalAgentCommand::GetAgentStatus
+apps/desktop/src/local_management_ipc.rs:99:            prw_agent::local_commands::LocalAgentCommand::GetPrivateDnsConfig
+crates/prw-agent/src/linux_authenticated_session.rs:169:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_authenticated_session.rs:231:        write_local_command_request(&mut client, id(330), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:233:        write_local_command_request(&mut client, id(331), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:290:        write_local_command_request(&mut request, id(332), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_authenticated_session.rs:321:        write_local_command_request(&mut client, id(333), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:247:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:329:        write_local_command_request(&mut client, id(700), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:438:        write_local_command_request(&mut client, id(701), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:554:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_bounded_scheduler_cycle.rs:561:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_one_shot_scheduler.rs:184:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_one_shot_scheduler.rs:263:        write_local_command_request(&mut client, id(600), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_production_runtime_loop.rs:314:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_production_runtime_loop.rs:414:                        LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_runtime_orchestration.rs:518:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_runtime_orchestration.rs:646:        write_local_command_request(&mut client, id(700), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_runtime_orchestration.rs:751:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/linux_session_worker.rs:161:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_session_worker.rs:229:        write_local_command_request(&mut client, id(400), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:183:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/linux_session_worker_thread.rs:248:        write_local_command_request(&mut client, id(500), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:295:        write_local_command_request(&mut client, id(501), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:333:        write_local_command_request(&mut client, id(502), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/linux_session_worker_thread.rs:375:        write_local_command_request(&mut client, id(503), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands.rs:169:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands.rs:175:    pub const fn new(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Self {
+crates/prw-agent/src/local_commands.rs:190:    pub const fn command(self) -> LocalAgentCommand {
+crates/prw-agent/src/local_commands.rs:225:        LocalAgentCommand, LocalAgentRequestEnvelope, LocalAgentResponseEnvelope,
+crates/prw-agent/src/local_commands.rs:232:        assert_eq!(LocalAgentCommand::GetAgentStatus.code(), 1);
+crates/prw-agent/src/local_commands.rs:233:        assert_eq!(LocalAgentCommand::GetPrivateDnsConfig.code(), 2);
+crates/prw-agent/src/local_commands.rs:235:            LocalAgentCommand::from_code(1),
+crates/prw-agent/src/local_commands.rs:236:            Some(LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands.rs:239:            LocalAgentCommand::from_code(2),
+crates/prw-agent/src/local_commands.rs:240:            Some(LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands.rs:242:        assert_eq!(LocalAgentCommand::from_code(3), None);
+crates/prw-agent/src/local_commands.rs:269:        let request = LocalAgentRequestEnvelope::new(request_id, LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands.rs:273:        assert_eq!(request.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands.rs:84:pub enum LocalAgentCommand {
+crates/prw-agent/src/local_commands.rs:91:impl LocalAgentCommand {
+crates/prw-agent/src/local_commands/admission.rs:105:            required_capability(LocalAgentCommand::GetAgentStatus),
+crates/prw-agent/src/local_commands/admission.rs:109:            required_capability(LocalAgentCommand::GetPrivateDnsConfig),
+crates/prw-agent/src/local_commands/admission.rs:10:use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/admission.rs:116:        let request = LocalAgentRequestEnvelope::new(id(190), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:121:        assert_eq!(admitted.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:127:            LocalAgentRequestEnvelope::new(id(191), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/admission.rs:137:        let request = LocalAgentRequestEnvelope::new(id(192), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/admission.rs:31:    pub const fn command(self) -> LocalAgentCommand {
+crates/prw-agent/src/local_commands/admission.rs:38:pub const fn required_capability(command: LocalAgentCommand) -> Capability {
+crates/prw-agent/src/local_commands/admission.rs:40:        LocalAgentCommand::GetAgentStatus => Capability::AgentStatusRead,
+crates/prw-agent/src/local_commands/admission.rs:41:        LocalAgentCommand::GetPrivateDnsConfig => Capability::PrivateDnsConfigRead,
+crates/prw-agent/src/local_commands/admission.rs:75:    use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:111:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:179:                &mut Cursor::new(request_bytes(id(300), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:200:        let mut input = request_bytes(id(301), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:236:            CountingReader::new(request_bytes(id(302), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:267:                &mut Cursor::new(request_bytes(id(303), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/boundary_inbound_state.rs:83:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:157:        write_local_command_request(&mut bytes, id(280), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:183:        write_local_command_request(&mut bytes, id(281), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:210:        write_local_command_request(&mut bytes, id(282), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/boundary_policy_processor.rs:83:    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:125:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:174:            CountingReader::new(request_bytes(id(290), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:225:        let mut input = Cursor::new(request_bytes(id(291), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:256:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:287:        let mut input = request_bytes(id(293), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:317:        let mut input = Cursor::new(request_bytes(id(294), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/boundary_request_response_transaction.rs:98:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/codec.rs:17:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/codec.rs:32:) -> Result<LocalAgentCommand, LocalAgentRequestDecodeError> {
+crates/prw-agent/src/local_commands/codec.rs:37:    LocalAgentCommand::from_code(code).ok_or(LocalAgentRequestDecodeError::UnknownCommand)
+crates/prw-agent/src/local_commands/codec.rs:68:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/codec.rs:78:            encode_request_command(LocalAgentCommand::GetAgentStatus),
+crates/prw-agent/src/local_commands/codec.rs:82:            encode_request_command(LocalAgentCommand::GetPrivateDnsConfig),
+crates/prw-agent/src/local_commands/codec.rs:90:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/codec.rs:91:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/codec.rs:9:use super::LocalAgentCommand;
+crates/prw-agent/src/local_commands/inbound_state.rs:120:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/inbound_state.rs:148:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/inbound_state.rs:196:        let mut reader = Cursor::new(request_bytes(id(240), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/inbound_state.rs:272:            CountingReader::new(request_bytes(id(242), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/inbound_state.rs:297:        let mut reader = Cursor::new(request_bytes(id(243), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/policy_response.rs:117:        let request = LocalAgentRequestEnvelope::new(id(200), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/policy_response.rs:137:            LocalAgentRequestEnvelope::new(id(201), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/policy_response.rs:158:            LocalAgentRequestEnvelope::new(id(202), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/policy_response.rs:174:        let request = LocalAgentRequestEnvelope::new(id(203), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/policy_response.rs:74:        LocalAgentCommand, LocalAgentRequestEnvelope, LocalAgentResponseStatus,
+crates/prw-agent/src/local_commands/request_frame.rs:107:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame.rs:125:            (LocalAgentCommand::GetAgentStatus, [0, 1]),
+crates/prw-agent/src/local_commands/request_frame.rs:126:            (LocalAgentCommand::GetPrivateDnsConfig, [0, 2]),
+crates/prw-agent/src/local_commands/request_frame.rs:25:use super::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/request_frame.rs:41:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:113:        write_local_command_request(&mut bytes, id(273), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:54:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:79:        write_local_command_request(&mut bytes, id(270), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:89:        assert_eq!(request.command(), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:95:        write_local_command_request(&mut bytes, id(271), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/boundary_stream.rs:97:        write_local_command_request(&mut bytes, id(272), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:104:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:123:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:13:use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:147:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:172:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:195:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:210:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/send_state.rs:69:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:116:        write_local_command_request(&mut bytes, id(141), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:118:        write_local_command_request(&mut bytes, id(142), LocalAgentCommand::GetPrivateDnsConfig)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:126:        assert_eq!(first.command(), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/request_frame/stream.rs:128:        assert_eq!(second.command(), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/request_frame/stream.rs:134:        write_local_command_request(&mut bytes, id(143), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/request_frame/stream.rs:16:use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/request_frame/stream.rs:176:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:30:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:84:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/stream.rs:97:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/stream.rs:98:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:108:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:12:use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:132:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:152:                LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:171:                LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:39:    command: LocalAgentCommand,
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:67:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/request_frame/transaction.rs:86:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:132:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:155:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_processor.rs:209:            LocalAgentCommand::GetAgentStatus,
+crates/prw-agent/src/local_commands/request_processor.rs:73:    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+crates/prw-agent/src/local_commands/request_response_transaction.rs:110:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/request_response_transaction.rs:159:            CountingReader::new(request_bytes(id(230), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:186:        let mut reader = Cursor::new(request_bytes(id(231), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:215:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/request_response_transaction.rs:285:        let mut reader = Cursor::new(request_bytes(id(234), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/request_response_transaction.rs:80:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/responder.rs:101:            LocalAgentRequestEnvelope::new(id(180), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/responder.rs:10:use super::LocalAgentCommand;
+crates/prw-agent/src/local_commands/responder.rs:118:            LocalAgentRequestEnvelope::new(id(181), LocalAgentCommand::GetPrivateDnsConfig);
+crates/prw-agent/src/local_commands/responder.rs:39:        LocalAgentCommand::GetAgentStatus => {
+crates/prw-agent/src/local_commands/responder.rs:43:        LocalAgentCommand::GetPrivateDnsConfig => {
+crates/prw-agent/src/local_commands/responder.rs:70:    use crate::local_commands::{LocalAgentCommand, LocalAgentRequestEnvelope};
+crates/prw-agent/src/local_commands/response_writer.rs:108:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/response_writer.rs:141:        let request = build_local_command_request_frame(id(221), LocalAgentCommand::GetAgentStatus)
+crates/prw-agent/src/local_commands/server_connection_loop.rs:109:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/server_connection_loop.rs:172:        let mut bytes = request_bytes(id(320), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:175:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/server_connection_loop.rs:205:        let mut bytes = request_bytes(id(322), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:206:        bytes.extend(request_bytes(id(323), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_loop.rs:269:        let mut bytes = request_bytes(id(324), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:270:        let mut second = request_bytes(id(325), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_loop.rs:305:                &mut Cursor::new(request_bytes(id(326), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_loop.rs:82:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/server_connection_state.rs:193:    use crate::local_commands::LocalAgentCommand;
+crates/prw-agent/src/local_commands/server_connection_state.rs:213:    fn request_bytes(request_id: LocalIpcRequestId, command: LocalAgentCommand) -> Vec<u8> {
+crates/prw-agent/src/local_commands/server_connection_state.rs:259:        let mut input = Cursor::new(request_bytes(id(250), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:322:        let mut input = Cursor::new(request_bytes(id(252), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:351:            Cursor::new(request_bytes(id(253), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:371:            CountingReader::new(request_bytes(id(254), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/src/local_commands/server_connection_state.rs:421:        let mut bytes = request_bytes(id(310), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_state.rs:424:            LocalAgentCommand::GetPrivateDnsConfig,
+crates/prw-agent/src/local_commands/server_connection_state.rs:473:        let mut bytes = request_bytes(id(312), LocalAgentCommand::GetAgentStatus);
+crates/prw-agent/src/local_commands/server_connection_state.rs:506:                &mut Cursor::new(request_bytes(id(313), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_state.rs:531:                &mut Cursor::new(request_bytes(id(314), LocalAgentCommand::GetAgentStatus)),
+crates/prw-agent/src/local_commands/server_connection_state.rs:543:            CountingReader::new(request_bytes(id(315), LocalAgentCommand::GetAgentStatus));
+crates/prw-agent/tests/phase_102_binary_bootstrap.rs:19:use prw_agent::local_commands::LocalAgentCommand;
+crates/prw-agent/tests/phase_102_binary_bootstrap.rs:229:    write_local_command_request(stream, request_id, LocalAgentCommand::GetAgentStatus)
+crates/prw-remote-bridge/src/lib.rs:13:use prw_agent::local_commands::LocalAgentCommand;
+crates/prw-remote-bridge/src/lib.rs:217:    pub const fn local_agent_command(&self) -> Option<LocalAgentCommand> {
+crates/prw-remote-bridge/src/lib.rs:219:            Self::AgentStatus => Some(LocalAgentCommand::GetAgentStatus),
+crates/prw-remote-bridge/tests/end_to_end.rs:239:        commands[0].local_agent_command(),
+crates/prw-remote-bridge/tests/end_to_end.rs:240:        Some(prw_agent::local_commands::LocalAgentCommand::GetAgentStatus)
+
+[production_policy_preconditions]
+318:        BoundedLocalReadPolicy::allow_local_reads(),
+491:        let policy = BoundedLocalReadPolicy::allow_local_reads();
+89:            Capability::TerminalOpen
+157:            Capability::TerminalOpen,
+91:            | Capability::FilesRead
+125:        assert_ne!(Capability::AgentStatusRead, Capability::FilesRead);
+126:        assert_ne!(Capability::PrivateDnsConfigRead, Capability::FilesRead);
+159:            Capability::FilesRead,
+94:            | Capability::ForwardingCreate
+162:            Capability::ForwardingCreate,
+
+classification=C01_DEPENDENCY_AUDIT_ONLY_NO_MANIFEST_OR_RUNTIME_MUTATION

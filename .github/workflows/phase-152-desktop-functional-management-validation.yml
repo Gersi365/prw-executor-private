@@ -1,0 +1,321 @@
+name: PRW Phase 152 Desktop Functional Management Validation
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-functional-management
+      - phase-152-c02b-promotion
+      - phase-152-android-lock-promotion
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-desktop-functional-management-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Phase 152 desktop functional management
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify candidate lineage and changed-file scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            phase-152-desktop-functional-management|phase-152-c02b-promotion|phase-152-android-lock-promotion)
+              ;;
+            *)
+              echo "Unexpected validation branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          BASELINE=3aec5d9307edfa5abe53c4ebe169a2445599a2c0
+          C01_SOURCE=daf126a8e77bd6e2fc03179fa167aca028a2e7c5
+          C02_CONTRACT=05b0a2ce54f18cab068220869c8103db39af7a73
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
+          git merge-base --is-ancestor "${BASELINE}" HEAD
+          git merge-base --is-ancestor "${C01_SOURCE}" HEAD
+          git merge-base --is-ancestor "${C02_CONTRACT}" HEAD
+          git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
+
+          mapfile -t changed < <(git diff --name-only "${BASELINE}..HEAD")
+          printf 'Phase 152 candidate changed files:\n'
+          printf '  %s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              apps/desktop/Cargo.toml|apps/desktop/src/main.rs|apps/desktop/src/management.rs|apps/desktop/src/local_management_ipc.rs|apps/android/native/Cargo.lock|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_request.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|crates/prw-remote-bridge/Cargo.toml|crates/prw-remote-bridge/src/lib.rs|crates/prw-remote-bridge/tests/end_to_end.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_LOCAL_IPC_DEPENDENCY_CORRECTIVE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C_AUTHORITY_GATE.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02_PROVIDER_PROOF.md|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md|logs/audits/phase-152-desktop-functional-management/c01-dependency-audit.txt|Cargo.lock|.github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml)
+                ;;
+              *)
+                echo "Unexpected Phase 152 candidate path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          mapfile -t post_c02 < <(git diff --name-only "${C02_CONTRACT}..HEAD")
+          printf 'Changes after validated C02 contract head:\n'
+          printf '  %s\n' "${post_c02[@]}"
+          for path in "${post_c02[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml|apps/android/native/Cargo.lock|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_dispatch.rs|contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md)
+                ;;
+              *)
+                echo "C02 source/audit scope drifted after ${C02_CONTRACT}: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          mapfile -t post_c02b_audit < <(git diff --name-only "${C02B_AUDIT}..HEAD")
+          printf 'Promotion changes after validated C02b audit head:\n'
+          printf '  %s\n' "${post_c02b_audit[@]}"
+          for path in "${post_c02b_audit[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-desktop-functional-management-validation.yml|.github/workflows/phase-152-c02b-authority-audit.yml|apps/android/native/Cargo.lock)
+                ;;
+              *)
+                echo "C02b promotion drifted outside workflow scope plus the audited Android native lock corrective after ${C02B_AUDIT}: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Verify committed C01 dependency and policy invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fn 'prw-agent = { path = "../prw-agent" }' crates/prw-remote-bridge/Cargo.toml; then
+            echo "C01 must not retain the bridge-to-Agent convenience dependency" >&2
+            exit 1
+          fi
+          grep -Fn 'prw-remote-bridge = { path = "../prw-remote-bridge" }' crates/prw-agent/Cargo.toml
+          if grep -En 'LocalAgentCommand|local_agent_command' crates/prw-remote-bridge/src/lib.rs crates/prw-remote-bridge/tests/end_to_end.rs; then
+            echo "C01 dependency inversion left a bridge-side Agent command reference" >&2
+            exit 1
+          fi
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+          grep -Fn 'BridgeCommand::decode' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'required_capability()' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'AuthenticatedLocalLinuxConnection' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'PolicyEvaluator' crates/prw-agent/src/local_commands/management_request.rs
+          grep -Fn 'pub struct LocalManagementAdmission' crates/prw-agent/src/local_commands/management_request.rs
+          echo "Committed C01 dependency inversion and fail-closed policy boundary are present"
+
+      - name: Verify C02 authority-context preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'pub trait CapabilityDispatcher' crates/prw-remote-bridge/src/lib.rs
+          grep -Fn 'principal: RegistryValidatedPrincipal' crates/prw-remote-bridge/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal' crates/prw-terminal/src/lib.rs
+          grep -Fn 'pub fn from_registry(principal: &RegistryValidatedPrincipal' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'pub struct AnchoredFileRoot' crates/prw-file-service/src/lib.rs
+          grep -Fn "pub fn new(root: &'a AnchoredFileRoot)" crates/prw-file-transfer/src/lib.rs
+
+          for dependency in prw-registry prw-terminal prw-forwarding prw-file-service prw-file-transfer; do
+            if grep -Fq "${dependency} =" crates/prw-agent/Cargo.toml; then
+              echo "C02a precondition expected no direct Agent provider dependency yet: ${dependency}" >&2
+              exit 1
+            fi
+          done
+
+          grep -Fn 'BoundedLocalReadPolicy::allow_local_reads()' crates/prw-agent/src/linux_bootstrap.rs
+          echo "C02 authority mismatch is preserved explicitly: registry principals and anchored roots are not fabricated in Agent"
+
+      - name: Verify C02b authority audit remains evidence-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          C02B_AUDIT=e3af15f55aefdbed8b8472f85fc1816c24241a78
+          ANDROID_LOCK_BLOB=d7c974bf532fa0c4e402e0122dcf3d97499eddab
+          git merge-base --is-ancestor "${C02B_AUDIT}" HEAD
+          grep -Fn 'Status: `AUDIT_ONLY_CONTRACT / NO_PROVIDER_WIRING / NO_PRODUCTION_ACTIVATION`' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'No fabricated remote principal.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'No request-selected filesystem root.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+          grep -Fn 'Production bootstrap remains closed to management.' contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02B_AUTHORITY_ASSEMBLY_GATE.md
+
+          actual_android_lock_blob=$(git rev-parse HEAD:apps/android/native/Cargo.lock)
+          if [[ "${actual_android_lock_blob}" != "${ANDROID_LOCK_BLOB}" ]]; then
+            echo "Android native Cargo.lock does not match the isolated audited blob: ${actual_android_lock_blob}" >&2
+            exit 1
+          fi
+
+          android_lock_delta=$(git diff --numstat "${C02B_AUDIT}..HEAD" -- apps/android/native/Cargo.lock)
+          if [[ "${android_lock_delta}" != $'0\t49\tapps/android/native/Cargo.lock' ]]; then
+            echo "Android native lock corrective drifted from the audited 0-addition/49-deletion delta: ${android_lock_delta}" >&2
+            exit 1
+          fi
+
+          if git diff --name-only "${C02B_AUDIT}..HEAD" | grep -E '(^|/).*\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$'; then
+            echo "C02b promotion introduced Rust source, manifest, or root lockfile mutation after the validated audit head" >&2
+            exit 1
+          fi
+          echo "C02b remains non-activating; the only added lock mutation is the separately audited Android native deterministic refresh"
+
+      - name: Install locked desktop native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Record Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+
+      - name: Verify committed deterministic Cargo lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo generate-lockfile
+          git diff --exit-code -- Cargo.lock
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --workspace --all-targets
+
+      - name: Confirm Phase 152 production candidate surfaces have no direct host effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=(
+            apps/desktop/src/management.rs
+            apps/desktop/src/local_management_ipc.rs
+            crates/prw-agent/src/local_commands/management_request.rs
+            crates/prw-agent/src/local_commands/management_dispatch.rs
+          )
+          forbidden='std::process::Command|Command::new|TcpListener|TcpStream|UdpSocket|UnixListener|UnixStream|std::fs::|File::create|OpenOptions|resolvectl|/etc/resolv.conf|NetworkManager|systemctl|nft|iptables|tun|tap'
+          for target in "${targets[@]}"; do
+            production=$(mktemp)
+            awk '/^#\[cfg\(test\)\]/{exit} {print}' "${target}" > "${production}"
+            if grep -En "${forbidden}" "${production}"; then
+              echo "Forbidden direct host-effect primitive found in production portion of ${target}" >&2
+              rm -f "${production}"
+              exit 1
+            fi
+            rm -f "${production}"
+          done
+          echo "No direct process/filesystem/socket/DNS/system-service mutation primitive found in Phase 152 production candidate surfaces"
+
+      - name: Confirm C01 stops before provider dispatch or success acknowledgement
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=crates/prw-agent/src/local_commands/management_request.rs
+          production=$(mktemp)
+          awk '/^#\[cfg\(test\)\]/{exit} {print}' "${target}" > "${production}"
+          if grep -En 'dispatch\(|provider\.|CapabilityDispatcher|LocalAgentResponseStatus::Ok|LocalIpcMessageKind::Response|ControlMessageKind::Response' "${production}"; then
+            echo "C01 must stop at typed policy admission without provider dispatch or success acknowledgement" >&2
+            rm -f "${production}"
+            exit 1
+          fi
+          rm -f "${production}"
+          echo "C01 remains admission-only; provider dispatch and management success acknowledgement stay gated by C02"
+
+      - name: Confirm C02a is provider-neutral and non-activating
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=crates/prw-agent/src/local_commands/management_dispatch.rs
+          production=$(mktemp)
+          awk '/^#\[cfg\(test\)\]/{exit} {print}' "${target}" > "${production}"
+
+          grep -Fn 'pub struct LocalManagementAuthorityContext' "${production}"
+          grep -Fn 'pub trait LocalManagementProviderDispatcher' "${production}"
+          grep -Fn 'admit_authenticated_linux_management_request' "${production}"
+          grep -Fn 'build_terminal_response_frame' "${production}"
+          grep -Fn 'LocalAgentResponseStatus::Ok' "${production}"
+
+          forbidden='prw_registry|prw_terminal|prw_forwarding|prw_file_service|prw_file_transfer|RegistryValidatedPrincipal|AnchoredFileRoot|TerminalBroker|PortForwardBroker|UploadTransferManager|linux_bootstrap|server_connection_loop'
+          if grep -En "${forbidden}" "${production}"; then
+            echo "C02a must not bind real provider authority or runtime assembly" >&2
+            rm -f "${production}"
+            exit 1
+          fi
+
+          if ! awk '
+            /^[[:space:]]*#\[cfg\(test\)\][[:space:]]*$/ {
+              cfg_test = 1
+              next
+            }
+            cfg_test && /^[[:space:]]*const fn for_test\(/ {
+              found = 1
+              cfg_test = 0
+              next
+            }
+            {
+              cfg_test = 0
+            }
+            END {
+              exit found ? 0 : 1
+            }
+          ' "${target}"; then
+            echo "C02a test authority constructor is not directly guarded by #[cfg(test)]" >&2
+            rm -f "${production}"
+            exit 1
+          fi
+
+          rm -f "${production}"
+          echo "C02a remains provider-neutral: test-only authority construction is cfg(test), success is post-dispatch, and real authority adapters remain gated by C02b"
+
+      - name: Confirm validation did not mutate committed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- . ':(exclude)target/**'; then
+            echo "Validation mutated tracked content outside target/**:" >&2
+            git diff -- . ':(exclude)target/**' >&2
+            exit 1
+          fi
+
+          mapfile -t target_changed < <(git diff --name-only -- target/ | LC_ALL=C sort -u)
+          if ((${#target_changed[@]} > 0)); then
+            printf 'Tracked target/ build artifacts changed during validation (%d paths); excluded from source-cleanliness classification:\n' "${#target_changed[@]}"
+            printf '  %s\n' "${target_changed[@]}"
+          else
+            echo "No tracked target/ build artifact churn observed"
+          fi
+
+          git diff --exit-code -- Cargo.lock
+          echo "Committed Phase 152 source, manifests, contracts, workflows and lockfile remained unchanged throughout validation"
