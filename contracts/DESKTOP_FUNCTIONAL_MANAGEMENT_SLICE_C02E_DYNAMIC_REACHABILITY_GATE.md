@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Gate
 
-Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / AUTHENTICATED_CANDIDATE_PUBLICATION_PROVENANCE_STAGED / SESSION_WORKSPACE_REGISTRY_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / CANDIDATE_ID_NON_REBINDABLE / AUTHENTICATED_CANDIDATE_PUBLICATION_PROVENANCE_STAGED / SESSION_WORKSPACE_REGISTRY_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor: `phase-152-c02d-provider-backend-design`
 
@@ -66,6 +66,10 @@ The refresh operation must:
 - enforce the existing maximum of 16 candidates;
 - reject duplicate candidate IDs;
 - reject duplicate exact `(path kind, endpoint)` candidates;
+- treat each `CandidateId` as stable for the lifetime of the plan;
+- permit an existing `CandidateId` to survive a refresh only when it still denotes the exact same path kind and endpoint;
+- require a fresh `CandidateId` when path kind or endpoint changes;
+- reject any attempt to rebind an existing `CandidateId` to another candidate before mutation;
 - replace the prior candidate set atomically on success;
 - discard stale candidate observations;
 - initialize every refreshed candidate observation to `Unknown`;
@@ -73,6 +77,8 @@ The refresh operation must:
 - leave the complete prior candidate/observation state unchanged if validation fails.
 
 Resetting observations is required because reachability evidence for an old network path must not be silently transferred to a newly signaled endpoint set.
+
+The non-rebinding rule additionally prevents a late Phase 141 reachability update correlated only by an older `CandidateId` from being applied to a different newly signaled endpoint that reused that same identifier.
 
 ## Authenticated requester and workspace admission rule
 
@@ -118,17 +124,34 @@ This means an authenticated requester cannot publish candidates under its own id
 
 The staged type exists only in integration-test source. It is a design/provenance specification, not a production control-plane object and not a new discovery authority.
 
+## Phase 141 correlation and refresh boundary
+
+Phase 141's `IceConnectivitySession` owns one bounded set of remote candidate correlations and its selected-pair update carries the correlated Phase 135 `CandidateId`.
+
+C02e therefore requires candidate identity stability across refresh:
+
+- an endpoint/path change must receive a new candidate ID;
+- a removed old candidate ID is rejected by the refreshed plan;
+- an old ID cannot be rebound to a new endpoint;
+- observations are reset on every successful refresh.
+
+This prevents old ICE correlation from becoming reachability evidence for a different endpoint merely because an identifier was reused.
+
+C02e does not claim that this solves general signaling replay/freshness. A late update for the exact same unchanged candidate still requires the later authenticated coordination adapter to preserve appropriate freshness semantics.
+
 ## Wire and control-transport boundary
 
 C02e deliberately does not invent a candidate-update wire encoding.
 
 The existing Phase 129 control transport already provides a bounded generic frame envelope and Phase 139 assigns candidate exchange to the authenticated control-plane coordination path, but the repository does not yet contain a reviewed candidate-update application payload schema or a production adapter that binds such a payload to an authenticated PRW session.
 
+Phase 128 provides server-owned, single-use freshness for session authentication, but Phase 129 generic control-frame `request_id` is only specified as non-zero and is not a candidate-publication replay authority. C02e therefore must not infer replay protection from the transport envelope alone.
+
 Therefore C02e locks the semantic requirement without activating transport:
 
 `authenticated publisher session -> current publisher DeviceId + TransportIdentity -> bounded validated candidate publication -> current same-workspace requester admission -> transactional target plan refresh`
 
-A later separately reviewed adapter may serialize/deserialize this semantic object only if it preserves the same identity derivation, current-registry checks, bounds and fail-closed ordering. Raw unauthenticated endpoint injection remains forbidden.
+A later separately reviewed adapter may serialize/deserialize this semantic object only if it preserves the same identity derivation, current-registry checks, bounds, freshness/replay semantics and fail-closed ordering. Raw unauthenticated endpoint injection remains forbidden.
 
 ## Registry/discovery relationship
 
@@ -172,6 +195,7 @@ C02e must not:
 
 - derive PRW identity from IP address;
 - persist a candidate IP as a substitute for `DeviceId`;
+- rebind an existing plan-scoped `CandidateId` to a different path or endpoint;
 - let a candidate publisher name an arbitrary target device instead of deriving identity from the authenticated publisher;
 - accept a publication from a publisher session that is no longer registry-current;
 - consume a publication when the requester session is no longer registry-current;
@@ -182,7 +206,7 @@ C02e must not:
 - carry reachability observations across candidate refresh;
 - accept more than 16 candidates;
 - preserve removed candidates as still selectable;
-- treat generic TLS/control-frame validity alone as PRW session authentication;
+- treat generic TLS/control-frame validity alone as PRW session authentication or candidate-publication freshness;
 - expose a raw unauthenticated endpoint injection path;
 - introduce DNS/hostname resolution into `prw-connectivity` candidate endpoints;
 - perform socket I/O;
@@ -204,6 +228,7 @@ Connectivity:
 - successful refresh replaces stale endpoints;
 - refreshed observations begin `Unknown`;
 - removed candidate IDs fail closed;
+- rebinding an existing candidate ID to a different endpoint fails before mutation;
 - invalid refresh leaves the previous plan state unchanged.
 
 Bridge admission ordering:
@@ -228,8 +253,9 @@ Required future separately-authorized validation:
 - run the staged connectivity and bridge integration tests;
 - confirm existing path-selection ordering remains unchanged;
 - confirm registry/session/provenance error ordering remains fail-closed;
+- confirm candidate ID non-rebinding prevents old correlation from targeting a changed endpoint;
 - workspace formatting/lints/tests/build remain clean in the authorized scope.
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / AUTHENTICATED_PUBLISHER_IDENTITY_DERIVED / SESSION_WORKSPACE_TARGET_REGISTRY_ORDER_LOCKED / STALE_CROSS_WORKSPACE_OR_RETARGETED_PUBLICATION_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_ADAPTER_UNSELECTED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / CANDIDATE_ID_NON_REBINDABLE / AUTHENTICATED_PUBLISHER_IDENTITY_DERIVED / SESSION_WORKSPACE_TARGET_REGISTRY_ORDER_LOCKED / STALE_CROSS_WORKSPACE_RETARGETED_OR_REBOUND_STATE_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_AND_REPLAY_ADAPTER_UNSELECTED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
