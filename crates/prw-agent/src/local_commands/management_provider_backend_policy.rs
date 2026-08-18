@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use prw_forwarding::TcpForwardSpec;
+use prw_forwarding::{ForwardTarget, TcpForwardSpec};
 use prw_terminal::TerminalProfile;
 
 /// Maximum simultaneous accepted connections owned by one forwarding session.
@@ -18,6 +18,8 @@ use prw_terminal::TerminalProfile;
 pub(crate) const MAX_FORWARD_CONNECTIONS_PER_SESSION: usize = 32;
 /// Maximum simultaneous forwarding connections owned by one Agent provider lifecycle.
 pub(crate) const MAX_FORWARD_CONNECTIONS_AGGREGATE: usize = 32;
+/// Maximum exact target endpoints selectable by one Agent-owned egress policy.
+pub(crate) const MAX_FORWARD_EGRESS_TARGETS: usize = 32;
 /// Bounded target-connect budget inherited from the existing Phase 140 operation timeout.
 pub(crate) const FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Bounded forwarding inactivity budget inherited from the Phase 140 idle timeout.
@@ -79,6 +81,67 @@ impl ForwardingEgressPolicy for DenyAllForwardingEgressPolicy {
     }
 }
 
+/// Failure while assembling a bounded exact-target forwarding policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExactForwardingEgressPolicyError {
+    /// More exact target entries were supplied than the locked policy bound.
+    TooManyTargets,
+}
+
+/// Agent-owned bounded allowlist of exact validated forwarding targets.
+///
+/// The allowlist stores only typed IP-address + port targets. It cannot represent
+/// hostnames, CIDRs, port ranges, wildcard targets, bind-address changes, or raw
+/// request text. Assembly is crate-internal and therefore remains outside request
+/// decoding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExactForwardingEgressPolicy {
+    allowed_targets: Box<[ForwardTarget]>,
+}
+
+impl ExactForwardingEgressPolicy {
+    /// Builds one bounded target allowlist, removing duplicate exact targets.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExactForwardingEgressPolicyError::TooManyTargets`] when the
+    /// caller supplies more than [`MAX_FORWARD_EGRESS_TARGETS`] entries.
+    pub(crate) fn try_from_targets(
+        targets: &[ForwardTarget],
+    ) -> Result<Self, ExactForwardingEgressPolicyError> {
+        if targets.len() > MAX_FORWARD_EGRESS_TARGETS {
+            return Err(ExactForwardingEgressPolicyError::TooManyTargets);
+        }
+
+        let mut allowed_targets = Vec::with_capacity(targets.len());
+        for target in targets {
+            if !allowed_targets.contains(target) {
+                allowed_targets.push(*target);
+            }
+        }
+
+        Ok(Self {
+            allowed_targets: allowed_targets.into_boxed_slice(),
+        })
+    }
+
+    /// Returns the number of unique exact targets in the policy.
+    #[must_use]
+    pub(crate) fn target_count(&self) -> usize {
+        self.allowed_targets.len()
+    }
+}
+
+impl ForwardingEgressPolicy for ExactForwardingEgressPolicy {
+    fn evaluate(&self, spec: TcpForwardSpec) -> ForwardingEgressDecision {
+        if self.allowed_targets.contains(&spec.target()) {
+            ForwardingEgressDecision::Allow
+        } else {
+            ForwardingEgressDecision::Deny
+        }
+    }
+}
+
 /// Locked TCP half-close behavior for a future forwarding pump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ForwardingHalfClosePolicy {
@@ -120,18 +183,23 @@ mod tests {
     use prw_terminal::TerminalProfile;
 
     use super::{
-        DenyAllForwardingEgressPolicy, FORWARD_CONNECT_TIMEOUT, FORWARD_COPY_BUFFER_BYTES,
+        DenyAllForwardingEgressPolicy, ExactForwardingEgressPolicy,
+        ExactForwardingEgressPolicyError, FORWARD_CONNECT_TIMEOUT, FORWARD_COPY_BUFFER_BYTES,
         FORWARD_IDLE_TIMEOUT, FORWARDING_CLOSE_ORDER, ForwardingCloseStage,
         ForwardingEgressDecision, ForwardingEgressPolicy, ForwardingHalfClosePolicy,
         LinuxTerminalLaunchTemplateId, MAX_FORWARD_CONNECTIONS_AGGREGATE,
-        MAX_FORWARD_CONNECTIONS_PER_SESSION, forwarding_half_close_policy,
+        MAX_FORWARD_CONNECTIONS_PER_SESSION, MAX_FORWARD_EGRESS_TARGETS,
+        forwarding_half_close_policy,
     };
 
-    fn spec(bind_port: u16, target_port: u16) -> TcpForwardSpec {
+    fn target(address: Ipv4Addr, port: u16) -> ForwardTarget {
+        ForwardTarget::new(IpAddr::V4(address), port).expect("valid explicit target")
+    }
+
+    fn spec(bind_port: u16, target: ForwardTarget) -> TcpForwardSpec {
         TcpForwardSpec::new(
             LoopbackBind::new(LoopbackFamily::Ipv4, bind_port).expect("valid loopback bind"),
-            ForwardTarget::new(IpAddr::V4(Ipv4Addr::LOCALHOST), target_port)
-                .expect("valid explicit target"),
+            target,
         )
     }
 
@@ -150,44 +218,52 @@ mod tests {
     #[test]
     fn default_forwarding_egress_policy_is_deny_all() {
         let policy = DenyAllForwardingEgressPolicy;
+        let ssh = target(Ipv4Addr::LOCALHOST, 22);
+        let https = target(Ipv4Addr::LOCALHOST, 443);
+        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Deny);
         assert_eq!(
-            policy.evaluate(spec(2200, 22)),
+            policy.evaluate(spec(8443, https)),
             ForwardingEgressDecision::Deny
         );
-        assert_eq!(
-            policy.evaluate(spec(8443, 443)),
-            ForwardingEgressDecision::Deny
-        );
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    struct ExactSpecPolicy {
-        allowed: TcpForwardSpec,
-    }
-
-    impl ForwardingEgressPolicy for ExactSpecPolicy {
-        fn evaluate(&self, spec: TcpForwardSpec) -> ForwardingEgressDecision {
-            if spec == self.allowed {
-                ForwardingEgressDecision::Allow
-            } else {
-                ForwardingEgressDecision::Deny
-            }
-        }
     }
 
     #[test]
-    fn policy_boundary_can_allow_only_one_exact_validated_spec() {
-        let allowed = spec(2200, 22);
-        let policy = ExactSpecPolicy { allowed };
+    fn exact_target_policy_allows_only_configured_ip_port_targets() {
+        let ssh = target(Ipv4Addr::new(10, 0, 0, 10), 22);
+        let policy = ExactForwardingEgressPolicy::try_from_targets(&[ssh])
+            .expect("one exact target is within policy bound");
 
-        assert_eq!(policy.evaluate(allowed), ForwardingEgressDecision::Allow);
+        assert_eq!(policy.target_count(), 1);
+        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Allow);
+        assert_eq!(policy.evaluate(spec(2201, ssh)), ForwardingEgressDecision::Allow);
         assert_eq!(
-            policy.evaluate(spec(2201, 22)),
+            policy.evaluate(spec(2200, target(Ipv4Addr::new(10, 0, 0, 10), 23))),
             ForwardingEgressDecision::Deny
         );
         assert_eq!(
-            policy.evaluate(spec(2200, 23)),
+            policy.evaluate(spec(2200, target(Ipv4Addr::new(10, 0, 0, 11), 22))),
             ForwardingEgressDecision::Deny
+        );
+    }
+
+    #[test]
+    fn exact_target_policy_is_bounded_and_deduplicated() {
+        let ssh = target(Ipv4Addr::new(10, 0, 0, 10), 22);
+        let deduplicated = ExactForwardingEgressPolicy::try_from_targets(&[ssh, ssh])
+            .expect("duplicates remain inside input bound");
+        assert_eq!(deduplicated.target_count(), 1);
+
+        let too_many = (0..=MAX_FORWARD_EGRESS_TARGETS)
+            .map(|index| {
+                target(
+                    Ipv4Addr::new(10, 0, 0, u8::try_from(index + 1).expect("test octet fits")),
+                    22,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ExactForwardingEgressPolicy::try_from_targets(&too_many),
+            Err(ExactForwardingEgressPolicyError::TooManyTargets)
         );
     }
 
@@ -195,6 +271,7 @@ mod tests {
     fn forwarding_worker_bounds_match_locked_transport_precedent() {
         assert_eq!(MAX_FORWARD_CONNECTIONS_PER_SESSION, 32);
         assert_eq!(MAX_FORWARD_CONNECTIONS_AGGREGATE, 32);
+        assert_eq!(MAX_FORWARD_EGRESS_TARGETS, 32);
         assert!(MAX_FORWARD_CONNECTIONS_PER_SESSION <= MAX_FORWARD_CONNECTIONS_AGGREGATE);
         assert_eq!(FORWARD_CONNECT_TIMEOUT, Duration::from_secs(5));
         assert_eq!(FORWARD_IDLE_TIMEOUT, Duration::from_secs(30));
