@@ -6,6 +6,8 @@ on:
       - phase-152-c02e-dynamic-reachability-design
     paths-ignore:
       - "logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_*.txt"
+      - ".github/workflows/phase-152-c02e-tranche1-validation.yml"
+      - ".github/workflows/phase-152-c02e-freshness-reference-clippy-corrective.yml"
   workflow_dispatch:
 
 permissions:
