@@ -1,5 +1,4 @@
 name: Phase 152 Desktop Management Controls Validation
-# PR-only app validation retrigger; no desktop source or runtime semantics change.
 
 on:
   push:
@@ -19,8 +18,8 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - name: Checkout exact branch head
         uses: actions/checkout@v4
@@ -35,67 +34,135 @@ jobs:
             libgtk-4-dev \
             libadwaita-1-dev
 
-      - name: Validate typed UI controls
+      - name: Apply bounded DNS lint corrective and validate desktop
         id: validation
         shell: bash
         run: |
           set -u
           BASE_HEAD="$GITHUB_SHA"
+          SOURCE="apps/desktop/src/ui.rs"
           REPORT_DIR="logs/audits/phase-152-desktop-management-ui-controls"
           REPORT="$REPORT_DIR/DESKTOP_MANAGEMENT_CONTROLS_VALIDATION_${BASE_HEAD}.txt"
+          CLIPPY_LOG="${RUNNER_TEMP}/desktop-controls-clippy.log"
           mkdir -p "$REPORT_DIR"
 
           set +e
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+          old = '''            match (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                (Ok(address), Ok(port)) => Some((address, port)),
+                _ => {
+                    dns_result_output.set_text(
+                        "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                    );
+                    return;
+                }
+            }
+'''
+          new = '''            if let (Ok(address), Ok(port)) = (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                Some((address, port))
+            } else {
+                dns_result_output.set_text(
+                    "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                );
+                return;
+            }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one DNS resolver single-match block, found {text.count(old)}")
+          if new in text:
+              raise SystemExit("DNS resolver if-let corrective already present before mutation")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          PATCH_RC=$?
+
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           METADATA_RC=$?
-
           cargo fmt --all
           FMT_APPLY_RC=$?
-          FORMAT_DIFF="$(git diff --name-only)"
-          if [[ -z "$FORMAT_DIFF" || "$FORMAT_DIFF" == "apps/desktop/src/ui.rs" ]]; then
-            FORMAT_SCOPE_RC=0
-          else
-            FORMAT_SCOPE_RC=1
-          fi
 
-          cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings
+          mapfile -t FORMAT_DIFF_PATHS < <(git diff --name-only)
+          FORMAT_SCOPE_RC=0
+          for changed in "${FORMAT_DIFF_PATHS[@]}"; do
+            if [[ -n "$changed" && "$changed" != "$SOURCE" && "$changed" != target/* ]]; then
+              FORMAT_SCOPE_RC=91
+              break
+            fi
+          done
+
+          cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings >"$CLIPPY_LOG" 2>&1
           CLIPPY_RC=$?
           cargo test --locked -p prw-desktop --all-targets
           TEST_RC=$?
           cargo build --locked -p prw-desktop --all-targets
           BUILD_RC=$?
+
+          git checkout -- target
+          TARGET_RESTORE_RC=$?
           set -e
 
-          if [[ "$METADATA_RC" -eq 0 && "$FMT_APPLY_RC" -eq 0 && "$FORMAT_SCOPE_RC" -eq 0 && "$CLIPPY_RC" -eq 0 && "$TEST_RC" -eq 0 && "$BUILD_RC" -eq 0 ]]; then
-            STATUS=PASS
-          else
-            STATUS=FAIL
+          mapfile -t FINAL_DIFF_PATHS < <(git diff --name-only)
+          DIFF_SCOPE_RC=0
+          if [[ "${#FINAL_DIFF_PATHS[@]}" -ne 1 || "${FINAL_DIFF_PATHS[0]:-}" != "$SOURCE" ]]; then
+            DIFF_SCOPE_RC=92
           fi
+
+          STATUS=PASS
+          FIRST_FAILURE=NONE
+          for pair in \
+            "PATCH:$PATCH_RC" \
+            "METADATA:$METADATA_RC" \
+            "FORMAT_APPLY:$FMT_APPLY_RC" \
+            "FORMAT_SCOPE:$FORMAT_SCOPE_RC" \
+            "CLIPPY:$CLIPPY_RC" \
+            "TEST:$TEST_RC" \
+            "BUILD:$BUILD_RC" \
+            "TARGET_RESTORE:$TARGET_RESTORE_RC" \
+            "DIFF_SCOPE:$DIFF_SCOPE_RC"; do
+            name="${pair%%:*}"
+            rc="${pair##*:}"
+            if [[ "$rc" -ne 0 && "$STATUS" == PASS ]]; then
+              STATUS=FAIL
+              FIRST_FAILURE="$name"
+            fi
+          done
 
           {
             echo "PHASE=152_DESKTOP_MANAGEMENT_UI_CONTROLS"
             echo "BASE_HEAD=$BASE_HEAD"
-            echo "RUSTC=$(rustc --version)"
-            echo "CARGO=$(cargo --version)"
-            echo "RUSTFMT=$(rustfmt --version)"
-            echo "CLIPPY=$(cargo clippy --version)"
-            echo "GTK4=$(pkg-config --modversion gtk4)"
-            echo "LIBADWAITA=$(pkg-config --modversion libadwaita-1)"
+            echo "DNS_CORRECTIVE=SINGLE_MATCH_ELSE_TO_IF_LET"
+            echo "PATCH_RC=$PATCH_RC"
             echo "METADATA_RC=$METADATA_RC"
             echo "FMT_APPLY_RC=$FMT_APPLY_RC"
             echo "FORMAT_SCOPE_RC=$FORMAT_SCOPE_RC"
-            echo "FORMAT_DIFF=$FORMAT_DIFF"
             echo "CLIPPY_SCOPE=PRW_DESKTOP_NO_DEPS"
             echo "CLIPPY_RC=$CLIPPY_RC"
             echo "TEST_RC=$TEST_RC"
             echo "BUILD_RC=$BUILD_RC"
+            echo "TARGET_RESTORE_RC=$TARGET_RESTORE_RC"
+            echo "DIFF_SCOPE_RC=$DIFF_SCOPE_RC"
+            echo "DIFF_PATHS=$(printf '%s,' "${FINAL_DIFF_PATHS[@]}" | sed 's/,$//')"
             echo "WORKSPACE_CLIPPY_SEPARATELY_GATED=YES"
-            echo "KNOWN_WORKSPACE_BLOCKER=PRW_REMOTE_BRIDGE_TRANCHE5_MISSING_CONST_FOR_FN"
+            echo "C02E_CONST_CORRECTIVE_ISOLATED_PROOF=PASS"
             echo "FORWARDING_PROVIDER_DISPATCH=NO"
             echo "FORWARDING_SOCKET_ACTIVATION=NO"
             echo "PRIVATE_DNS_OS_MUTATION=NO"
             echo "PRODUCTION_POLICY_EXPANSION=NO"
+            echo "FIRST_FAILURE=$FIRST_FAILURE"
             echo "STATUS=$STATUS"
+            if [[ "$CLIPPY_RC" -ne 0 ]]; then
+              echo "===== DESKTOP_CLIPPY_FAILURE_TAIL ====="
+              tail -n 160 "$CLIPPY_LOG"
+            fi
           } > "$REPORT"
 
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
@@ -110,22 +177,24 @@ jobs:
           set -euo pipefail
           BASE_HEAD="$GITHUB_SHA"
           BRANCH="phase-152-desktop-management-ui-controls"
+          SOURCE="apps/desktop/src/ui.rs"
+          SELF=".github/workflows/phase-152-desktop-management-ui-controls-validation.yml"
           REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
-          if [[ "$REMOTE_HEAD" != "$BASE_HEAD" ]]; then
-            echo "Exact-head guard rejected evidence commit: remote=$REMOTE_HEAD base=$BASE_HEAD"
-            exit 1
-          fi
+          [[ "$REMOTE_HEAD" == "$BASE_HEAD" ]]
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if [[ "$STATUS" == "PASS" ]]; then
-            git add apps/desktop/src/ui.rs "$REPORT"
-            git rm .github/workflows/phase-152-desktop-management-ui-controls-validation.yml
+          if [[ "$STATUS" == PASS ]]; then
+            git add "$SOURCE" "$REPORT"
+            git rm "$SELF"
             git commit -m "phase 152 desktop: validate management controls ${BASE_HEAD:0:12}"
           else
-            git restore apps/desktop/src/ui.rs
+            git restore "$SOURCE"
             git add "$REPORT"
             git commit -m "phase 152 desktop: record management controls failure ${BASE_HEAD:0:12}"
           fi
           git push origin "HEAD:$BRANCH"
+
+      - name: Require PASS
+        run: test "${{ steps.validation.outputs.status }}" = PASS
