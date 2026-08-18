@@ -1,4 +1,4 @@
-name: PRW Phase 152 Inherited Lock Probe
+name: PRW Phase 152 Exact Inherited Lock Materializer
 
 on:
   push:
@@ -11,11 +11,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-inherited-lock-probe
+  group: prw-phase-152-exact-inherited-lock-materializer
   cancel-in-progress: true
 
 jobs:
-  probe:
+  materialize:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -24,71 +24,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Probe lock candidate and capture result
-        id: probe
+      - name: Materialize exact inherited lock correction
+        id: materialize
         shell: bash
         run: |
-          set -u -o pipefail
+          set -euo pipefail
           BASE_HEAD="$(git rev-parse HEAD)"
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_LOCK_PROBE_${BASE_HEAD}.txt"
+          test "${BASE_HEAD}" = "${GITHUB_SHA}"
+          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
+          C02D=857583b25ed1206317641a93fd8f927819c954d8
+          git merge-base --is-ancestor "${C02D}" HEAD
+          test "$(git merge-base "${C02D}" HEAD)" = "${C02D}"
+
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_LOCK_MATERIALIZATION_${BASE_HEAD}.txt"
           mkdir -p "$(dirname "${REPORT}")"
-          : > "${REPORT}"
-          overall=0
-          failure=NONE
-          record() { printf '%s\n' "$*" | tee -a "${REPORT}"; }
-          fail() { if [[ "${overall}" -eq 0 ]]; then overall=1; failure="$1"; fi; record "FAILURE_${1}=1"; }
-
-          record STATUS=RUNNING
-          record "BASE_HEAD=${BASE_HEAD}"
-          record "RUN_ID=${GITHUB_RUN_ID}"
-          record "GITHUB_SHA=${GITHUB_SHA}"
-          [[ "${BASE_HEAD}" = "${GITHUB_SHA}" ]] || fail checkout_head_mismatch
-          [[ "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design" ]] || fail wrong_branch
-          git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD || fail c02d_not_ancestor
-
-          rustc --version 2>&1 | tee -a "${REPORT}" || fail rustc_version
-          cargo --version 2>&1 | tee -a "${REPORT}" || fail cargo_version
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
           cp target/.rustc_info.json "${RUNNER_TEMP}/rustc_info.before.json"
-          record "LOCK_BEFORE_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
 
-          python3 - <<'PY' || exit 70
+          before_sha="$(sha256sum Cargo.lock | awk '{print $1}')"
+          test "${before_sha}" = "1f42f678b8c83ee4ce6c35d30a1bf30aff1d20006f1ce9495afa5df3cf47a5dc"
+
+          python3 - <<'PY'
           import json, tomllib
           from pathlib import Path
           d=tomllib.loads(Path('Cargo.lock').read_text())
-          ext=sorted((p['name'],p['version'],p.get('source'),p.get('checksum')) for p in d['package'] if p.get('source') is not None)
-          ident=sorted((p['name'],p['version']) for p in d['package'] if p.get('source') is None)
-          deps={p['name']:sorted(p.get('dependencies',[])) for p in d['package'] if p.get('source') is None}
-          Path('/tmp/ext-before.json').write_text(json.dumps(ext,sort_keys=True))
-          Path('/tmp/ident-before.json').write_text(json.dumps(ident,sort_keys=True))
-          Path('/tmp/deps-before.json').write_text(json.dumps(deps,sort_keys=True))
+          Path('/tmp/ext-before.json').write_text(json.dumps(sorted((p['name'],p['version'],p.get('source'),p.get('checksum')) for p in d['package'] if p.get('source') is not None),sort_keys=True))
+          Path('/tmp/ident-before.json').write_text(json.dumps(sorted((p['name'],p['version']) for p in d['package'] if p.get('source') is None),sort_keys=True))
+          Path('/tmp/deps-before.json').write_text(json.dumps({p['name']:sorted(p.get('dependencies',[])) for p in d['package'] if p.get('source') is None},sort_keys=True))
           PY
 
-          if [[ "${overall}" -eq 0 ]]; then
-            set +e
-            cargo metadata --format-version 1 > /dev/null 2> "${RUNNER_TEMP}/metadata.stderr"
-            metadata_rc=$?
-            set -u -o pipefail
-            record "CARGO_METADATA_RC=${metadata_rc}"
-            cat "${RUNNER_TEMP}/metadata.stderr" >> "${REPORT}"
-            [[ "${metadata_rc}" -eq 0 ]] || fail cargo_metadata
-          fi
+          cargo metadata --format-version 1 > /dev/null
+          mapfile -t changed < <(git diff --name-only)
+          test "${#changed[@]}" -eq 2
+          printf '%s\n' "${changed[@]}" | grep -Fx Cargo.lock
+          printf '%s\n' "${changed[@]}" | grep -Fx target/.rustc_info.json
 
-          if [[ "${overall}" -eq 0 ]]; then
-            mapfile -t changed < <(git diff --name-only)
-            record "CHANGED_PATH_COUNT=${#changed[@]}"
-            printf 'CHANGED_PATH=%s\n' "${changed[@]}" | tee -a "${REPORT}"
-            unexpected=0
-            for path in "${changed[@]}"; do
-              [[ "${path}" = Cargo.lock || "${path}" = target/.rustc_info.json ]] || unexpected=1
-            done
-            [[ "${unexpected}" -eq 0 ]] || fail unexpected_materialization_path
-            printf '%s\n' "${changed[@]}" | grep -Fx Cargo.lock >/dev/null || fail cargo_lock_not_changed
-          fi
-
-          if [[ "${overall}" -eq 0 ]]; then
-            set +e
-            python3 - <<'PY' > "${RUNNER_TEMP}/semantic.out" 2>&1
+          python3 - <<'PY' > "${RUNNER_TEMP}/semantic.out"
           import json, tomllib
           from pathlib import Path
           be=[tuple(x) for x in json.loads(Path('/tmp/ext-before.json').read_text())]
@@ -98,44 +70,55 @@ jobs:
           ae=sorted((p['name'],p['version'],p.get('source'),p.get('checksum')) for p in d['package'] if p.get('source') is not None)
           ai=sorted((p['name'],p['version']) for p in d['package'] if p.get('source') is None)
           ad={p['name']:sorted(p.get('dependencies',[])) for p in d['package'] if p.get('source') is None}
-          print('EXTERNAL_REMOVED=',sorted(set(be)-set(ae)))
-          print('EXTERNAL_ADDED=',sorted(set(ae)-set(be)))
-          print('LOCAL_IDENTITY_REMOVED=',sorted(set(bi)-set(ai)))
-          print('LOCAL_IDENTITY_ADDED=',sorted(set(ai)-set(bi)))
+          assert ae == be, 'external package identity drift'
+          assert ai == bi, 'local package identity drift'
           changes={}
           for name in sorted(set(bd)|set(ad)):
               b=set(bd.get(name,[])); a=set(ad.get(name,[]))
-              if a!=b: changes[name]={'added':sorted(a-b),'removed':sorted(b-a)}
-          print('LOCAL_DEPENDENCY_CHANGES=',json.dumps(changes,sort_keys=True))
+              if a != b: changes[name]={'added':sorted(a-b),'removed':sorted(b-a)}
+          expected={'prw-agent':{'added':['prw-file-service','prw-file-transfer','prw-forwarding','prw-registry','prw-session','prw-terminal'],'removed':[]}}
+          assert changes == expected, f'unexpected local dependency delta: {changes}'
+          print('EXTERNAL_PACKAGE_IDENTITY_DRIFT=NONE')
+          print('WORKSPACE_PACKAGE_IDENTITY_DRIFT=NONE')
+          print('LOCAL_DEPENDENCY_CHANGES='+json.dumps(changes,sort_keys=True))
           PY
-            semantic_rc=$?
-            set -u -o pipefail
-            cat "${RUNNER_TEMP}/semantic.out" | tee -a "${REPORT}"
-            record "SEMANTIC_PROBE_RC=${semantic_rc}"
-          fi
 
-          record "LOCK_CANDIDATE_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
-          cp "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          candidate_sha="$(sha256sum Cargo.lock | awk '{print $1}')"
+          test "${candidate_sha}" = "c22b0efad4fc6e9e404ce68d182da6713296f88039338429a3af983b409b24cb"
+          cargo metadata --locked --format-version 1 > /dev/null
+          git diff --check -- Cargo.lock
+
           cp "${RUNNER_TEMP}/rustc_info.before.json" target/.rustc_info.json
-          git restore --source=HEAD -- Cargo.lock target/.rustc_info.json
-          if git diff --quiet -- Cargo.lock target/.rustc_info.json; then record POST_RESTORE_AUTHORITY_STATE=UNCHANGED; else fail post_restore_drift; fi
-          record STATUS=DIAGNOSTIC_ONLY_NO_LOCK_COMMIT
-          record "PROBE_RC=${overall}"
-          printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
+          git restore --source=HEAD -- target/.rustc_info.json
+          test -z "$(git diff --name-only | grep -v '^Cargo.lock$' || true)"
 
-      - name: Commit probe evidence only
-        if: always()
+          {
+            echo 'STATUS=PASS_TOOL_MATERIALIZED_INHERITED_LOCK_RECONCILIATION'
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "RUN_ID=${GITHUB_RUN_ID}"
+            echo "RUSTC=$(rustc --version)"
+            echo "CARGO=$(cargo --version)"
+            echo "LOCK_BEFORE_SHA256=${before_sha}"
+            echo "LOCK_AFTER_SHA256=${candidate_sha}"
+            cat "${RUNNER_TEMP}/semantic.out"
+            echo 'LOCKED_METADATA_RECHECK=PASS'
+            echo 'MANIFEST_MUTATION=NONE'
+            echo 'CACHE_MUTATION_COMMITTED=NO'
+            echo 'LOCK_MATERIALIZER=cargo metadata --format-version 1'
+          } > "${REPORT}"
+
+      - name: Commit exact lock and evidence
         shell: bash
         env:
-          REPORT: ${{ steps.probe.outputs.report }}
+          REPORT: ${{ steps.materialize.outputs.report }}
         run: |
           set -euo pipefail
           test -n "${REPORT}"
           test -f "${REPORT}"
-          git restore --source=HEAD -- Cargo.lock target/.rustc_info.json
+          test "$(git diff --name-only)" = "Cargo.lock"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${REPORT}"
+          git add Cargo.lock "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: record inherited lock probe ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: reconcile inherited workspace lock ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
