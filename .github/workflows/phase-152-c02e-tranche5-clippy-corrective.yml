@@ -1,0 +1,151 @@
+name: Phase 152 C02e Tranche5 Clippy Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-tranche5-clippy-corrective
+    paths:
+      - "crates/prw-remote-bridge/src/reachability_freshness_wire.rs"
+      - ".github/workflows/phase-152-c02e-tranche5-clippy-corrective.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-c02e-tranche5-clippy-corrective
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact corrective head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+
+      - name: Apply one-line const corrective and validate
+        id: validate
+        shell: bash
+        run: |
+          set -u
+          BASE_HEAD="$GITHUB_SHA"
+          SOURCE="crates/prw-remote-bridge/src/reachability_freshness_wire.rs"
+          REPORT_DIR="logs/audits/phase-152-c02e-dynamic-reachability-design"
+          REPORT="$REPORT_DIR/C02E_TRANCHE5_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
+          mkdir -p "$REPORT_DIR"
+          BEFORE_SHA="$(sha256sum "$SOURCE" | awk '{print $1}')"
+
+          set +e
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("crates/prw-remote-bridge/src/reachability_freshness_wire.rs")
+          text = path.read_text()
+          old = "pub fn bootstrap_token_delivery(\n"
+          new = "pub const fn bootstrap_token_delivery(\n"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one bootstrap function, found {text.count(old)}")
+          if new in text:
+              raise SystemExit("const corrective already present before mutation")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          PATCH_RC=$?
+
+          cargo fmt --all -- --check
+          FORMAT_RC=$?
+          cargo test --locked -p prw-remote-bridge --test reachability_freshness_wire
+          FOCUSED_TEST_RC=$?
+          cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+          FOCUSED_CLIPPY_RC=$?
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          WORKSPACE_CLIPPY_RC=$?
+          set -e
+
+          AFTER_SHA="$(sha256sum "$SOURCE" | awk '{print $1}')"
+          mapfile -t DIFF_PATHS < <(git diff --name-only)
+          DIFF_SCOPE_RC=0
+          if [[ "${#DIFF_PATHS[@]}" -ne 1 || "${DIFF_PATHS[0]:-}" != "$SOURCE" ]]; then
+            DIFF_SCOPE_RC=91
+          fi
+
+          STATUS=PASS
+          FIRST_FAILURE=NONE
+          for pair in \
+            "PATCH:$PATCH_RC" \
+            "FORMAT:$FORMAT_RC" \
+            "FOCUSED_TEST:$FOCUSED_TEST_RC" \
+            "FOCUSED_CLIPPY:$FOCUSED_CLIPPY_RC" \
+            "WORKSPACE_CLIPPY:$WORKSPACE_CLIPPY_RC" \
+            "DIFF_SCOPE:$DIFF_SCOPE_RC"; do
+            name="${pair%%:*}"
+            rc="${pair##*:}"
+            if [[ "$rc" -ne 0 && "$STATUS" == PASS ]]; then
+              STATUS=FAIL
+              FIRST_FAILURE="$name"
+            fi
+          done
+
+          {
+            echo "PHASE=152_C02E_TRANCHE5_CLIPPY_CORRECTIVE"
+            echo "BASE_HEAD=$BASE_HEAD"
+            echo "SOURCE=$SOURCE"
+            echo "SOURCE_SHA256_BEFORE=$BEFORE_SHA"
+            echo "SOURCE_SHA256_AFTER=$AFTER_SHA"
+            echo "PATCH_RC=$PATCH_RC"
+            echo "FORMAT_RC=$FORMAT_RC"
+            echo "FOCUSED_TEST_RC=$FOCUSED_TEST_RC"
+            echo "FOCUSED_CLIPPY_RC=$FOCUSED_CLIPPY_RC"
+            echo "WORKSPACE_CLIPPY_RC=$WORKSPACE_CLIPPY_RC"
+            echo "DIFF_SCOPE_RC=$DIFF_SCOPE_RC"
+            echo "DIFF_PATHS=$(printf '%s,' "${DIFF_PATHS[@]}" | sed 's/,$//')"
+            echo "SEMANTIC_CHANGE=CONST_QUALIFIER_ONLY"
+            echo "NETWORK_RUNTIME_ACTIVATION=NO"
+            echo "AGENT_BOOTSTRAP_ACTIVATION=NO"
+            echo "FIRST_FAILURE=$FIRST_FAILURE"
+            echo "STATUS=$STATUS"
+          } > "$REPORT"
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "base_head=$BASE_HEAD" >> "$GITHUB_OUTPUT"
+          echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact-head corrective evidence
+        shell: bash
+        env:
+          STATUS: ${{ steps.validate.outputs.status }}
+          BASE_HEAD: ${{ steps.validate.outputs.base_head }}
+          REPORT: ${{ steps.validate.outputs.report }}
+        run: |
+          set -euo pipefail
+          BRANCH="phase-152-c02e-tranche5-clippy-corrective"
+          SOURCE="crates/prw-remote-bridge/src/reachability_freshness_wire.rs"
+          SELF=".github/workflows/phase-152-c02e-tranche5-clippy-corrective.yml"
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | awk '{print $1}')"
+          [[ "$REMOTE_HEAD" == "$BASE_HEAD" ]]
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ "$STATUS" == PASS ]]; then
+            git add "$SOURCE" "$REPORT"
+            git rm "$SELF"
+            git commit -m "phase 152 c02e: prove tranche5 clippy corrective ${BASE_HEAD:0:12}"
+          else
+            git restore "$SOURCE"
+            git add "$REPORT"
+            git commit -m "phase 152 c02e: record tranche5 clippy corrective failure ${BASE_HEAD:0:12}"
+          fi
+          git push origin "HEAD:$BRANCH"
+
+      - name: Require PASS
+        run: test "${{ steps.validate.outputs.status }}" = PASS
