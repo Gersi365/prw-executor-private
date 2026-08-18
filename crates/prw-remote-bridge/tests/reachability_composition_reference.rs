@@ -364,7 +364,7 @@ fn stale_transport_admission_failure_preserves_plan_and_traversal() {
     )
     .expect("current target publication");
     let mut owner = ReachabilityCompositionReference::new(
-        fixture.plan.clone(),
+        fixture.plan,
         TestTraversalLifecycle::BeforeRefresh,
     );
     let before = owner.plan().clone();
