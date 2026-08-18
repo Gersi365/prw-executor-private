@@ -41,7 +41,7 @@ pub(super) enum LocalManagementSuccessBodyEncodeError {
     DirectoryEntryCount,
     /// One provider entry name did not fit the locked two-byte name-length field.
     DirectoryEntryNameLength,
-    /// Encoded result exceeded the existing local terminal-response body bound.
+    /// Encoded result exceeded the existing local terminal response body bound.
     BodyTooLarge,
 }
 
@@ -69,9 +69,7 @@ pub(super) fn build_management_provider_response(
                     &[],
                 )
             },
-            |body| {
-                build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body)
-            },
+            |body| build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
         ),
         Err(error) => build_terminal_response_frame(request_id, error_status(error), &[]),
     }
