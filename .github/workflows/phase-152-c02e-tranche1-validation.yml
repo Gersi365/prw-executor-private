@@ -4,14 +4,16 @@ on:
   push:
     branches:
       - phase-152-c02e-dynamic-reachability-design
+    paths-ignore:
+      - "logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_*.txt"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: prw-phase-152-c02e-tranche1-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -25,121 +27,126 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require exact C02e branch and frozen predecessor lineage
+      - name: Run Tranche 1 and capture auditable result
+        id: validation
         shell: bash
         run: |
-          set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
-          C02D=857583b25ed1206317641a93fd8f927819c954d8
-          actual_head="$(git rev-parse HEAD)"
-          test "${actual_head}" = "${GITHUB_SHA}"
-          git merge-base --is-ancestor "${C02D}" HEAD
-          test "$(git merge-base "${C02D}" HEAD)" = "${C02D}"
-          echo "C02e Tranche 1 validation head: ${actual_head}"
+          set -u -o pipefail
 
-      - name: Install and record native workspace prerequisites
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            pkg-config \
-            libgtk-4-dev \
-            libadwaita-1-dev
-          pkg-config --modversion gtk4
-          pkg-config --modversion libadwaita-1
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_${GITHUB_SHA}.txt"
+          mkdir -p "$(dirname "${REPORT}")"
+          : > "${REPORT}"
 
-      - name: Record toolchain and immutable dependency baseline
-        shell: bash
-        run: |
-          set -euo pipefail
-          rustc --version
-          cargo --version
-          rustfmt --version
-          cargo clippy --version
-          sha256sum \
-            Cargo.toml \
-            Cargo.lock \
-            crates/prw-remote-bridge/Cargo.toml \
-            | tee "${RUNNER_TEMP}/c02e-tranche1-pre.sha256"
+          overall=0
+          first_failure=""
+
+          record() {
+            printf '%s\n' "$*" | tee -a "${REPORT}"
+          }
+
+          gate() {
+            local name="$1"
+            local command="$2"
+
+            if [[ "${overall}" -ne 0 ]]; then
+              record "GATE_${name}=SKIPPED_AFTER_${first_failure}"
+              return 0
+            fi
+
+            record "===== GATE ${name} ====="
+            set +e
+            bash -o pipefail -c "${command}" 2>&1 | tee -a "${REPORT}"
+            local rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "GATE_${name}_RC=${rc}"
+
+            if [[ "${rc}" -ne 0 ]]; then
+              overall="${rc}"
+              first_failure="${name}"
+            fi
+          }
+
+          record "STATUS=RUNNING"
+          record "WORKFLOW=phase-152-c02e-tranche1-validation.yml"
+          record "RUN_ID=${GITHUB_RUN_ID}"
+          record "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
+          record "REF=${GITHUB_REF_NAME}"
+          record "HEAD=${GITHUB_SHA}"
+          record "FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8"
+          record "RUNNER_OS=${RUNNER_OS}"
+
+          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD && test \"$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)\" = \"857583b25ed1206317641a93fd8f927819c954d8\""
+
+          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev && pkg-config --modversion gtk4 && pkg-config --modversion libadwaita-1"
+
+          gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
+
+          record "===== PRE_VALIDATION_HASHES ====="
+          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" | tee -a "${REPORT}"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
 
-      - name: Verify locked metadata preflight
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo metadata --locked --no-deps --format-version 1 > /dev/null
-          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml
+          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml"
+          gate focused_fmt "cargo fmt --all -- --check"
+          gate focused_clippy "cargo clippy --locked -p prw-connectivity -p prw-remote-bridge --all-targets --all-features -- -D warnings"
+          gate focused_connectivity_tests "cargo test --locked -p prw-connectivity --all-targets"
+          gate focused_remote_bridge_tests "cargo test --locked -p prw-remote-bridge --all-targets"
+          gate locked_metadata_recheck "cargo metadata --locked --no-deps --format-version 1 > /dev/null && cmp -s \"${RUNNER_TEMP}/Cargo.lock.before\" Cargo.lock && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml"
+          gate workspace_fmt "cargo fmt --all -- --check"
+          gate workspace_clippy "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
+          gate workspace_tests "cargo test --locked --workspace --all-targets"
+          gate workspace_build "cargo build --locked --workspace --all-targets"
 
-      - name: Check formatting
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --all -- --check
+          record "===== POST_VALIDATION_HASHES ====="
+          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-post.sha256" | tee -a "${REPORT}"
 
-      - name: Run focused C02e Clippy
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy --locked \
-            -p prw-connectivity \
-            -p prw-remote-bridge \
-            --all-targets \
-            --all-features \
-            -- -D warnings
+          drift_rc=0
+          diff -u "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" "${RUNNER_TEMP}/c02e-tranche1-post.sha256" >> "${REPORT}" 2>&1 || drift_rc=$?
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift_rc=$?
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml >> "${REPORT}" 2>&1 || drift_rc=$?
+          record "ZERO_DEPENDENCY_DRIFT_RC=${drift_rc}"
 
-      - name: Run focused C02e tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked -p prw-connectivity --all-targets
-          cargo test --locked -p prw-remote-bridge --all-targets
+          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then
+            overall="${drift_rc}"
+            first_failure="dependency_source_drift"
+          fi
 
-      - name: Reverify locked metadata before workspace authority gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo metadata --locked --no-deps --format-version 1 > /dev/null
-          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
-          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml
+          if [[ "${overall}" -eq 0 ]]; then
+            record "STATUS=PASS"
+            record "FIRST_FAILURE=NONE"
+          else
+            record "STATUS=FAIL"
+            record "FIRST_FAILURE=${first_failure}"
+          fi
 
-      - name: Run full workspace formatting authority gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --all -- --check
+          record "VALIDATION_RC=${overall}"
+          printf 'validation_rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
+          printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
 
-      - name: Run full workspace Clippy authority gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-
-      - name: Run full workspace tests authority gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --workspace --all-targets
-
-      - name: Run full workspace build authority gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build --locked --workspace --all-targets
-
-      - name: Verify zero dependency/source drift
+      - name: Commit validation evidence to the branch
         if: always()
         shell: bash
+        env:
+          REPORT: ${{ steps.validation.outputs.report }}
         run: |
           set -euo pipefail
-          sha256sum \
-            Cargo.toml \
-            Cargo.lock \
-            crates/prw-remote-bridge/Cargo.toml \
-            | tee "${RUNNER_TEMP}/c02e-tranche1-post.sha256"
-          diff -u \
-            "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" \
-            "${RUNNER_TEMP}/c02e-tranche1-post.sha256"
-          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
-          git diff --exit-code
-          echo 'C02e Tranche 1 produced no tracked source/dependency drift'
+          test -n "${REPORT}"
+          test -f "${REPORT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${REPORT}"
+          git diff --cached --exit-code >/dev/null 2>&1 && {
+            echo "Validation report was not staged" >&2
+            exit 1
+          }
+          git commit -m "phase 152 c02e: record tranche1 validation ${GITHUB_SHA::12}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Fail job when validation failed
+        if: always()
+        shell: bash
+        env:
+          VALIDATION_RC: ${{ steps.validation.outputs.validation_rc }}
+        run: |
+          set -euo pipefail
+          test -n "${VALIDATION_RC}"
+          test "${VALIDATION_RC}" -eq 0
