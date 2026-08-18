@@ -1,0 +1,176 @@
+PHASE=152-C02e-Tranche4-ProductionOwner
+BASE_HEAD=f34f59a0f8324026c784bf68f118f4399f8c07c3
+RUSTC=rustc 1.97.1 (8bab26f4f 2026-07-14)
+CARGO=cargo 1.97.1 (c980f4866 2026-06-30)
+RUSTFMT=rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+CLIPPY=clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GTK4=4.14.5
+LIBADWAITA=1.5.0
+LOCK_SHA256_EXPECTED=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+LOCK_SHA256_BEFORE=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+LOCK_SHA256_AFTER=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+ROOT_MANIFEST_SHA256_BEFORE=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+ROOT_MANIFEST_SHA256_AFTER=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+BRIDGE_MANIFEST_SHA256_BEFORE=4da3fbd299be9e141e26925135e1c972b010506191734474b128bea752cd8334
+BRIDGE_MANIFEST_SHA256_AFTER=4da3fbd299be9e141e26925135e1c972b010506191734474b128bea752cd8334
+ROOT_SOURCE_SHA256_BEFORE=c26c63d14c90997f4b207183fe298be3bcfe6679e4596b123b5136dd8a6c869e
+ROOT_SOURCE_SHA256_AFTER=c26c63d14c90997f4b207183fe298be3bcfe6679e4596b123b5136dd8a6c869e
+OWNER_SOURCE_SHA256_BEFORE=027977a95f7c4491fbfa5e7eb3df1391eaa2223cf20ec5d4ba7b93a3e71a022d
+OWNER_SOURCE_SHA256_AFTER=027977a95f7c4491fbfa5e7eb3df1391eaa2223cf20ec5d4ba7b93a3e71a022d
+TEST_SHA256_BEFORE=c137d5ad2aca1ff31dec014877399a3322a575d9f8313fe4cb857d2a36bdaa94
+TEST_SHA256_AFTER=c137d5ad2aca1ff31dec014877399a3322a575d9f8313fe4cb857d2a36bdaa94
+LOCK_AUDIT_RC=0
+DEPENDENCY_AUDIT_RC=0
+LOCKED_METADATA_RC=0
+FORMAT_RC=1
+FOCUSED_TEST_RC=SKIPPED
+FOCUSED_CLIPPY_RC=SKIPPED
+FOCUSED_DOMAIN_CLIPPY_RC=SKIPPED
+WORKSPACE_CLIPPY_RC=SKIPPED
+WORKSPACE_TESTS_RC=SKIPPED
+WORKSPACE_BUILD_RC=SKIPPED
+PRE_NORMALIZE_DRIFT_RC=0
+TARGET_RESTORE_RC=0
+HASH_DRIFT_RC=0
+FINAL_DRIFT_RC=0
+PRE_NORMALIZE_TRACKED_DIFF=target/.rustc_info.json
+FINAL_TRACKED_DIFF=
+OWNER_PLACEMENT=PRW_REMOTE_BRIDGE
+PHASE141_NORMAL_DEPENDENCY=YES
+PHASE141_DEV_DUPLICATE=NO
+PERSISTENCE_CAS_SEAM=YES
+PERSISTENCE_BACKEND_SELECTED=NO
+PERSISTENCE_SERIALIZATION_SELECTED=NO
+DISTRIBUTED_RUNTIME_TENANCY_SELECTED=NO
+WIRE_KIND_SELECTION=NO
+NETWORK_RUNTIME_ACTIVATION=NO
+AGENT_BOOTSTRAP_ACTIVATION=NO
+FIRST_FAILURE=FORMAT
+STATUS=FAIL
+
+===== FORMAT FAILURE TAIL =====
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/src/reachability_owner.rs:281:
+ impl fmt::Display for ReachabilityOwnerError {
+     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+         match self {
+-            Self::Candidate(error) => write!(formatter, "reachability candidate transition failed: {error}"),
++            Self::Candidate(error) => write!(
++                formatter,
++                "reachability candidate transition failed: {error}"
++            ),
+             Self::Snapshot(error) => write!(formatter, "reachability snapshot rejected: {error}"),
+             Self::StalePublicationFreshness => {
+                 formatter.write_str("candidate publication freshness is stale")
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/src/reachability_owner.rs:292:
+             Self::ReplacementFreshnessUnchanged => {
+                 formatter.write_str("replacement reachability freshness must change")
+             }
+-            Self::TokenSource(error) => write!(formatter, "reachability token source failed: {error}"),
+-            Self::Persistence(error) => write!(formatter, "reachability persistence failed: {error}"),
++            Self::TokenSource(error) => {
++                write!(formatter, "reachability token source failed: {error}")
++            }
++            Self::Persistence(error) => {
++                write!(formatter, "reachability persistence failed: {error}")
++            }
+             Self::DurableStateOutOfSync => {
+                 formatter.write_str("durable reachability state is ahead of the local owner")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/src/reachability_owner.rs:308:
+             Self::NoCurrentTraversal => formatter.write_str("no current traversal session exists"),
+             Self::Traversal(error) => write!(formatter, "current traversal failed: {error}"),
+             Self::TraversalFactory(error) => {
+-                write!(formatter, "replacement traversal construction failed: {error}")
++                write!(
++                    formatter,
++                    "replacement traversal construction failed: {error}"
++                )
+             }
+-            Self::Registry(error) => write!(formatter, "current reachability registry check failed: {error}"),
++            Self::Registry(error) => write!(
++                formatter,
++                "current reachability registry check failed: {error}"
++            ),
+             Self::TransportStillCurrent => {
+                 formatter.write_str("reachability transport identity is still current")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/src/reachability_owner.rs:455:
+             staged_plan.peer().clone(),
+             replacement_freshness,
+         );
+-        let staged_snapshot = ReachabilityDurableSnapshot::new(
+-            staged_plan.clone(),
+-            staged_freshness.clone(),
+-        )
+-        .map_err(ReachabilityOwnerError::Snapshot)?;
++        let staged_snapshot =
++            ReachabilityDurableSnapshot::new(staged_plan.clone(), staged_freshness.clone())
++                .map_err(ReachabilityOwnerError::Snapshot)?;
+ 
+         match self
+             .store
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/src/reachability_owner.rs:630:
+     fn require_current(&self) -> Result<(), ReachabilityOwnerError> {
+         match self.mode {
+             ReachabilityOwnerMode::Current => Ok(()),
+-            ReachabilityOwnerMode::RecoveryRequired => Err(ReachabilityOwnerError::RecoveryRequired),
++            ReachabilityOwnerMode::RecoveryRequired => {
++                Err(ReachabilityOwnerError::RecoveryRequired)
++            }
+             ReachabilityOwnerMode::Retired => Err(ReachabilityOwnerError::Retired),
+         }
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs:228:
+ }
+ 
+ fn candidate(id: u64, kind: ConnectivityPathKind, port: u16) -> ConnectivityCandidate {
+-    ConnectivityCandidate::new(CandidateId::new(id).expect("candidate id"), kind, endpoint(port))
++    ConnectivityCandidate::new(
++        CandidateId::new(id).expect("candidate id"),
++        kind,
++        endpoint(port),
++    )
+ }
+ 
+ fn fixture() -> Fixture {
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs:337:
+     )
+     .expect("authenticated publication");
+     let outcome = owner
+-        .commit_candidate_publication(
+-            &fixture.registry,
+-            &fixture.requester,
+-            &publication,
+-            current,
+-        )
++        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
+         .expect("durable publication commit");
+ 
+     assert_eq!(outcome.replacement_freshness(), replacement);
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs:510:
+     )
+     .expect("publication");
+     owner
+-        .commit_candidate_publication(
+-            &fixture.registry,
+-            &fixture.requester,
+-            &publication,
+-            current,
+-        )
++        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
+         .expect("commit");
+ 
+     assert_eq!(
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs:543:
+         .expect("current traversal");
+     fixture
+         .registry
+-        .rotate_transport_identity(
+-            &fixture.target_device_id,
+-            fixture.transport,
+-            transport(22),
+-        )
++        .rotate_transport_identity(&fixture.target_device_id, fixture.transport, transport(22))
+         .expect("authoritative transport rotation");
+ 
+     owner
