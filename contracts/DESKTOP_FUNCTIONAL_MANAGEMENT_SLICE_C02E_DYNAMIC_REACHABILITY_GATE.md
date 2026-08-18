@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Gate
 
-Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / REGISTRY_CURRENT_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / SESSION_WORKSPACE_REGISTRY_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor: `phase-152-c02d-provider-backend-design`
 
@@ -29,6 +29,8 @@ It reuses the existing `prw-connectivity` Phase 135 types:
 - `ReachabilityObservation`
 - `PeerConnectivityPlan`
 
+It reuses `WorkspaceDeviceRegistry` as the authority for current session/device/transport state.
+
 It also preserves the existing Phase 139 transport architecture:
 
 `DeviceId -> current TransportIdentity -> candidate exchange -> selected explicit IP/UDP candidate -> authenticated QUIC/TLS transport`
@@ -36,6 +38,8 @@ It also preserves the existing Phase 139 transport architecture:
 The deterministic preference remains:
 
 `LocalDirect -> InternetDirect -> Relay -> Offline`
+
+Phase 141 remains the Sans-I/O ICE/STUN layer. Successful ICE selection produces reachability evidence correlated to an existing candidate; it does not become a PRW identity or authorization authority.
 
 ## Identity rule
 
@@ -70,33 +74,53 @@ The refresh operation must:
 
 Resetting observations is required because reachability evidence for an old network path must not be silently transferred to a newly signaled endpoint set.
 
-## Registry-current refresh admission rule
+## Authenticated requester and workspace admission rule
 
-Before a later runtime integration may apply a refreshed candidate set to an existing peer plan, the plan's current identity must be revalidated against the current registry state.
+A later runtime integration must not apply a target candidate refresh merely because a candidate vector is syntactically valid.
 
-The locked ordering is:
+The required admission order is now locked as:
 
-1. read the existing plan's `DeviceId` and `TransportIdentity`;
-2. call the current registry transport-identity validation boundary;
-3. if the device is unknown, revoked, unbound, or the transport identity is stale/mismatched, fail before candidate mutation;
-4. only after successful registry revalidation may `PeerConnectivityPlan::refresh_candidates(...)` run;
-5. candidate validation failure must still preserve the complete pre-refresh plan state.
+1. revalidate the requester's `AuthenticatedDeviceSession` through `WorkspaceDeviceRegistry::validate_authenticated_session(...)`;
+2. locate the target `DeviceId` from the existing `PeerConnectivityPlan` in the current registry;
+3. require the target registered device to belong to the same `WorkspaceId` as the current registry-validated requester;
+4. revalidate the plan's exact target `TransportIdentity` through `WorkspaceDeviceRegistry::validate_transport_identity(...)`;
+5. only after all current identity/workspace checks pass may `PeerConnectivityPlan::refresh_candidates(...)` validate and mutate transient endpoints.
 
-This ordering prevents a stale network update from surviving either device revocation or transport-key/certificate rotation.
+Any failure before step 5 must leave the complete plan state unchanged.
 
-C02e stages this ordering in `prw-remote-bridge` integration-test source because that crate already depends on both `prw-registry` and `prw-connectivity`. It does not add a new dependency cycle or modify runtime wiring.
+This ordering closes these stale-authority cases before endpoint mutation:
 
-The production source of candidate updates still requires authenticated current control-plane/session signaling before runtime activation. C02e does not claim that arbitrary candidate vectors are authenticated merely because registry identity revalidation succeeds.
+- requester membership suspension/removal;
+- requester device revocation or authenticated-session/registry mismatch;
+- cross-workspace target access;
+- target device revocation;
+- target transport identity rotation leaving the plan's old transport identity stale.
+
+C02e stages this order in `prw-remote-bridge` integration-test source because that crate already depends on session, registry and connectivity domains. No Cargo edge or runtime wiring is added.
+
+## Candidate provenance boundary
+
+Current session/workspace/target registry validation answers **who may participate and which target identity is current**.
+
+It does not, by itself, prove that arbitrary candidate bytes came from an authenticated control-plane signaling channel.
+
+Production candidate provenance therefore remains a separate later boundary. A future signaling adapter must correlate a bounded candidate update to the already admitted workspace/target identity and must not expose a raw unauthenticated endpoint injection path.
+
+C02e deliberately does not invent a new wire format because the current control transport supplies a generic bounded frame envelope while the repository does not yet contain a reviewed candidate-update application payload schema.
 
 ## Registry/discovery relationship
 
 The higher-level product flow is:
 
-`authenticated PRW device/session identity`
+`authenticated PRW requester session`
 
-`-> current registry/control-plane state`
+`-> current registry principal`
 
-`-> bounded current candidate set`
+`-> same-workspace current target device + target TransportIdentity`
+
+`-> authenticated control-plane candidate state`
+
+`-> bounded transient candidate refresh`
 
 `-> provider reachability observations`
 
@@ -104,7 +128,7 @@ The higher-level product flow is:
 
 `-> authenticated transport establishment`
 
-The source of refreshed production candidates remains outside C02e. Existing control-plane signaling, NAT traversal and relay components own candidate discovery/exchange according to their respective contracts.
+The source of refreshed production candidates remains outside C02e. Existing control-plane transport, NAT traversal and relay components own their respective transport/protocol responsibilities.
 
 ## Forwarding relationship
 
@@ -125,8 +149,10 @@ C02e must not:
 - carry reachability observations across candidate refresh;
 - accept more than 16 candidates;
 - preserve removed candidates as still selectable;
-- apply a candidate refresh after current-registry device revocation;
-- apply a candidate refresh after the plan's transport identity becomes stale due to rotation;
+- apply a refresh when the requester session is no longer registry-current;
+- apply a cross-workspace target refresh;
+- apply a candidate refresh after current-registry target device revocation;
+- apply a candidate refresh after the plan's target transport identity becomes stale due to rotation;
 - treat registry identity validation alone as authentication of arbitrary candidate bytes;
 - introduce DNS/hostname resolution into `prw-connectivity` candidate endpoints;
 - perform socket I/O;
@@ -142,22 +168,29 @@ Source tests are authored but are not execution evidence while the build/test ga
 
 Current staged test coverage includes:
 
+Connectivity:
+
 - successful refresh preserves `PeerConnectivityIdentity`;
 - successful refresh replaces stale endpoints;
 - refreshed observations begin `Unknown`;
 - removed candidate IDs fail closed;
-- invalid refresh leaves the previous plan state unchanged;
-- current registry transport identity permits refresh;
-- transport identity rotation rejects a stale plan before endpoint mutation;
-- device revocation rejects refresh before endpoint mutation.
+- invalid refresh leaves the previous plan state unchanged.
+
+Bridge admission ordering:
+
+- current requester session + same workspace + current target transport permits refresh;
+- target transport identity rotation rejects a stale plan before endpoint mutation;
+- target device revocation rejects refresh before endpoint mutation;
+- requester membership suspension rejects refresh before endpoint mutation;
+- cross-workspace target rejects refresh before endpoint mutation.
 
 Required future separately-authorized validation:
 
 - run the staged connectivity and bridge integration tests;
 - confirm existing path-selection ordering remains unchanged;
-- confirm registry error ordering remains fail-closed;
+- confirm registry/session error ordering remains fail-closed;
 - workspace formatting/lints/tests/build remain clean in the authorized scope.
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / REGISTRY_CURRENT_REFRESH_ORDER_LOCKED / STALE_TRANSPORT_AND_REVOKED_DEVICE_FAIL_BEFORE_MUTATION / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / SESSION_WORKSPACE_TARGET_REGISTRY_ORDER_LOCKED / STALE_OR_CROSS_WORKSPACE_AUTHORITY_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_PROVENANCE_STILL_UNSELECTED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
