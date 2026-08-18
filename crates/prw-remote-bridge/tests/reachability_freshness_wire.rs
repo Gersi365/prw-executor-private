@@ -190,11 +190,7 @@ fn fixture() -> Fixture {
         &target_binding,
         "session-target-tranche5-wire",
     );
-    let other = authenticated_session(
-        &other_signer,
-        &other_binding,
-        "session-other-tranche5-wire",
-    );
+    let other = authenticated_session(&other_signer, &other_binding, "session-other-tranche5-wire");
     let target_device_id = target_binding.device_id.clone();
     let transport = transport(31);
     let other_transport = transport(32);
@@ -249,7 +245,8 @@ fn store_for(
             CandidatePublicationFreshnessRecord::retired(fixture.plan.peer().clone())
         }
     };
-    let snapshot = ReachabilityDurableSnapshot::new(fixture.plan.clone(), record).expect("snapshot");
+    let snapshot =
+        ReachabilityDurableSnapshot::new(fixture.plan.clone(), record).expect("snapshot");
     MemoryStore::seeded(snapshot)
 }
 
@@ -257,12 +254,14 @@ fn store_for(
 fn request_delivery_and_failure_round_trip_with_exact_outer_kinds() {
     let transport = transport(41);
     let token = freshness(42);
-    let request = ReachabilityFreshnessWireMessage::current_token_resynchronization_request(transport);
+    let request =
+        ReachabilityFreshnessWireMessage::current_token_resynchronization_request(transport);
     let request_frame = request.into_control_frame(7).expect("request frame");
     assert_eq!(request_frame.kind(), ControlMessageKind::Request);
     assert_eq!(request_frame.request_id(), 7);
     assert_eq!(
-        ReachabilityFreshnessWireMessage::from_control_frame(&request_frame).expect("decode request"),
+        ReachabilityFreshnessWireMessage::from_control_frame(&request_frame)
+            .expect("decode request"),
         request
     );
 
@@ -292,7 +291,8 @@ fn request_delivery_and_failure_round_trip_with_exact_outer_kinds() {
 #[test]
 fn malformed_or_wrong_outer_kind_payloads_fail_closed() {
     let transport = transport(43);
-    let request = ReachabilityFreshnessWireMessage::current_token_resynchronization_request(transport);
+    let request =
+        ReachabilityFreshnessWireMessage::current_token_resynchronization_request(transport);
     let mut payload = request.encode();
     payload[10] = 1;
     assert_eq!(
@@ -435,7 +435,10 @@ fn currentness_is_revalidated_before_durable_lookup() {
         &mut store,
     )
     .expect_err("other device cannot obtain target token");
-    assert!(matches!(error, FreshnessResynchronizationError::Registry(_)));
+    assert!(matches!(
+        error,
+        FreshnessResynchronizationError::Registry(_)
+    ));
     assert_eq!(
         error.wire_failure_code(),
         FreshnessWireFailureCode::CurrentnessRejected
@@ -459,7 +462,10 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
     )
     .expect_err("recovery state blocks token");
     assert_eq!(recovery, FreshnessResynchronizationError::RecoveryRequired);
-    assert_eq!(recovery.wire_failure_code(), FreshnessWireFailureCode::RecoveryRequired);
+    assert_eq!(
+        recovery.wire_failure_code(),
+        FreshnessWireFailureCode::RecoveryRequired
+    );
 
     let (mut retired_store, _) =
         store_for(&fixture, CandidatePublicationFreshnessLifecycle::Retired);
@@ -471,7 +477,10 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
     )
     .expect_err("retired state blocks token");
     assert_eq!(retired, FreshnessResynchronizationError::Retired);
-    assert_eq!(retired.wire_failure_code(), FreshnessWireFailureCode::Retired);
+    assert_eq!(
+        retired.wire_failure_code(),
+        FreshnessWireFailureCode::Retired
+    );
 
     let (mut missing_store, missing_handle) = store_for(
         &fixture,
@@ -485,7 +494,10 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
         &mut missing_store,
     )
     .expect_err("missing state blocks token");
-    assert_eq!(missing, FreshnessResynchronizationError::DurableStateMissing);
+    assert_eq!(
+        missing,
+        FreshnessResynchronizationError::DurableStateMissing
+    );
     assert_eq!(
         missing.wire_failure_code(),
         FreshnessWireFailureCode::DurableStateMissing

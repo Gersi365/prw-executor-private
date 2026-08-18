@@ -210,8 +210,7 @@ impl ReachabilityFreshnessWireMessage {
         }
         let major = u16::from_be_bytes([payload[4], payload[5]]);
         let minor = u16::from_be_bytes([payload[6], payload[7]]);
-        if major != REACHABILITY_FRESHNESS_WIRE_MAJOR
-            || minor != REACHABILITY_FRESHNESS_WIRE_MINOR
+        if major != REACHABILITY_FRESHNESS_WIRE_MAJOR || minor != REACHABILITY_FRESHNESS_WIRE_MINOR
         {
             return Err(ReachabilityFreshnessWireError::InvalidPayload);
         }
@@ -229,9 +228,8 @@ impl ReachabilityFreshnessWireMessage {
                 Ok(Self::CurrentTokenResynchronizationRequest { transport_identity })
             }
             OP_TOKEN_DELIVERY if body.len() == 68 => {
-                let reason = FreshnessTokenDeliveryReason::try_from(u16::from_be_bytes([
-                    body[0], body[1],
-                ]))?;
+                let reason =
+                    FreshnessTokenDeliveryReason::try_from(u16::from_be_bytes([body[0], body[1]]))?;
                 if u16::from_be_bytes([body[2], body[3]]) != 0 {
                     return Err(ReachabilityFreshnessWireError::InvalidPayload);
                 }
@@ -250,9 +248,8 @@ impl ReachabilityFreshnessWireMessage {
                 })
             }
             OP_FAILURE if body.len() == 4 => {
-                let code = FreshnessWireFailureCode::try_from(u16::from_be_bytes([
-                    body[0], body[1],
-                ]))?;
+                let code =
+                    FreshnessWireFailureCode::try_from(u16::from_be_bytes([body[0], body[1]]))?;
                 if u16::from_be_bytes([body[2], body[3]]) != 0 {
                     return Err(ReachabilityFreshnessWireError::InvalidPayload);
                 }
@@ -353,7 +350,8 @@ where
         .validate_transport_identity(principal.device_id(), presented_transport_identity)
         .map_err(FreshnessResynchronizationError::Registry)?;
 
-    let peer = PeerConnectivityIdentity::new(principal.device_id().clone(), presented_transport_identity);
+    let peer =
+        PeerConnectivityIdentity::new(principal.device_id().clone(), presented_transport_identity);
     let snapshot = store
         .load_current(&peer)
         .map_err(FreshnessResynchronizationError::Persistence)?
@@ -397,11 +395,15 @@ pub enum ReachabilityFreshnessWireError {
 impl fmt::Display for ReachabilityFreshnessWireError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidPayload => formatter.write_str("invalid reachability freshness wire payload"),
+            Self::InvalidPayload => {
+                formatter.write_str("invalid reachability freshness wire payload")
+            }
             Self::WrongControlMessageKind => {
                 formatter.write_str("reachability freshness outer control kind mismatch")
             }
-            Self::Transport(error) => write!(formatter, "reachability freshness frame rejected: {error}"),
+            Self::Transport(error) => {
+                write!(formatter, "reachability freshness frame rejected: {error}")
+            }
             Self::BootstrapRecordRequired => {
                 formatter.write_str("bootstrap freshness delivery requires new-lifecycle state")
             }
@@ -410,7 +412,6 @@ impl fmt::Display for ReachabilityFreshnessWireError {
 }
 
 impl std::error::Error for ReachabilityFreshnessWireError {}
-
 
 /// Fail-closed authenticated current-token resynchronization failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -449,12 +450,20 @@ impl FreshnessResynchronizationError {
 impl fmt::Display for FreshnessResynchronizationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Registry(error) => write!(formatter, "freshness resync currentness rejected: {error}"),
-            Self::DurableStateMissing => formatter.write_str("freshness resync durable state missing"),
-            Self::SnapshotPeerMismatch => formatter.write_str("freshness resync durable peer mismatch"),
+            Self::Registry(error) => {
+                write!(formatter, "freshness resync currentness rejected: {error}")
+            }
+            Self::DurableStateMissing => {
+                formatter.write_str("freshness resync durable state missing")
+            }
+            Self::SnapshotPeerMismatch => {
+                formatter.write_str("freshness resync durable peer mismatch")
+            }
             Self::RecoveryRequired => formatter.write_str("freshness resync recovery required"),
             Self::Retired => formatter.write_str("freshness resync lifecycle retired"),
-            Self::Persistence(error) => write!(formatter, "freshness resync persistence failed: {error}"),
+            Self::Persistence(error) => {
+                write!(formatter, "freshness resync persistence failed: {error}")
+            }
         }
     }
 }
