@@ -1,10 +1,10 @@
-name: PRW Phase 152 C02d Provider Cleanup Validation
+name: PRW Phase 152 C02d Provider Design Validation
 
 on:
   workflow_dispatch:
     inputs:
       expected_head:
-        description: Exact C02d commit SHA approved for provider cleanup validation
+        description: Exact C02d commit SHA approved for provider design validation
         required: true
         type: string
 
@@ -12,12 +12,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: prw-phase-152-c02d-provider-cleanup-validation-${{ github.ref }}
+  group: prw-phase-152-c02d-provider-design-validation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   validate:
-    name: Validate C02d provider-neutral cleanup recovery
+    name: Validate C02d provider cleanup and pure policy seams
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
@@ -55,6 +55,8 @@ jobs:
             case "${path}" in
               .github/workflows/phase-152-c02d-provider-cleanup-validation.yml|\
               contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md|\
+              crates/prw-agent/src/local_commands.rs|\
+              crates/prw-agent/src/local_commands/management_provider_backend_policy.rs|\
               crates/prw-terminal/src/lib.rs|\
               crates/prw-forwarding/src/lib.rs|\
               logs/audits/phase-152-c02d-provider-backend-design/C02D_PROVIDER_BACKEND_AUDIT.md)
@@ -80,24 +82,32 @@ jobs:
             fi
           done
 
-      - name: Verify cleanup recovery and non-activation invariants
+      - name: Verify cleanup recovery and pure-policy invariants
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fn 'Status: `DESIGN_LOCK / PROVIDER_CLEANUP_RECOVERY / NO_OS_IO / NO_RUNTIME_ACTIVATION`' \
+          grep -F 'NO_OS_IO / NO_RUNTIME_ACTIVATION' \
             contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md
           grep -Fn 'pub fn retry_failed_close(' crates/prw-terminal/src/lib.rs
           grep -Fn 'pub fn retry_failed_close(' crates/prw-forwarding/src/lib.rs
           grep -Fn 'failed_close_can_be_retried_to_closed_and_removed' crates/prw-terminal/src/lib.rs
           grep -Fn 'failed_close_can_be_retried_to_closed_and_removed' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'pub(crate) mod management_provider_backend_policy;' \
+            crates/prw-agent/src/local_commands.rs
+          grep -Fn 'pub(crate) enum LinuxTerminalLaunchTemplateId' \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
+          grep -Fn 'pub(crate) trait ForwardingEgressPolicy' \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
+          grep -Fn 'pub(crate) struct DenyAllForwardingEgressPolicy' \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
 
           if git diff --name-only 6141ecf08976e26c99329592d52cbd8d736b0edf..HEAD \
-            | grep -E '^crates/prw-agent/|^crates/prw-policy/|^apps/'; then
-            echo 'C02d provider-neutral cleanup slice escaped its locked boundary' >&2
+            | grep -E '^apps/|^crates/prw-agent/src/main\.rs$|^crates/prw-agent/src/linux_|^crates/prw-policy/'; then
+            echo 'C02d escaped its locked provider-design boundary' >&2
             exit 1
           fi
 
-          echo 'C02d remains provider-neutral and runtime-unwired'
+          echo 'C02d remains OS-I/O-free and runtime-unwired'
 
       - name: Verify locked dependency graph remains deterministic
         shell: bash
@@ -115,7 +125,7 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
 
-      - name: Run provider cleanup Clippy scope
+      - name: Run provider design Clippy scope
         shell: bash
         run: |
           set -euo pipefail
@@ -125,8 +135,12 @@ jobs:
             --all-targets \
             --all-features \
             -- -D warnings
+          cargo clippy --locked \
+            -p prw-agent \
+            --lib \
+            -- -D warnings
 
-      - name: Run provider cleanup tests
+      - name: Run provider design tests
         shell: bash
         run: |
           set -euo pipefail
@@ -134,8 +148,12 @@ jobs:
             -p prw-terminal \
             -p prw-forwarding \
             --all-targets
+          cargo test --locked \
+            -p prw-agent \
+            --lib \
+            management_provider_backend_policy
 
-      - name: Build provider cleanup scope
+      - name: Build provider design scope
         shell: bash
         run: |
           set -euo pipefail
@@ -143,6 +161,9 @@ jobs:
             -p prw-terminal \
             -p prw-forwarding \
             --all-targets
+          cargo build --locked \
+            -p prw-agent \
+            --lib
 
       - name: Reconfirm no source drift after validation
         if: always()
