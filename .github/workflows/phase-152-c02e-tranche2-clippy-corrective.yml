@@ -1,0 +1,99 @@
+name: PRW Phase 152 C02e Tranche2 Clippy Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - ".github/workflows/phase-152-c02e-tranche2-clippy-corrective.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-tranche2-clippy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    name: Correct only Tranche2 integration lint findings
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact corrective base
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact lint correctives
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          TEST="crates/prw-remote-bridge/tests/reachability_phase141_integration.rs"
+          MANIFEST="crates/prw-remote-bridge/Cargo.toml"
+
+          LOCK_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          MANIFEST_BEFORE="$(sha256sum "${MANIFEST}" | awk '{print $1}')"
+
+          python3 - "${TEST}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          old = ".map(|session| session as *const IceConnectivitySession)"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one traversal_ptr ref-as-ptr occurrence, found {text.count(old)}")
+          text = text.replace(old, ".map(std::ptr::from_ref)")
+
+          old = "stale.as_ref() as *const IceConnectivitySession"
+          if text.count(old) != 2:
+              raise SystemExit(f"expected two stale-session ref-as-ptr occurrences, found {text.count(old)}")
+          text = text.replace(old, "std::ptr::from_ref(stale.as_ref())")
+
+          old = '''        vec![retained],
+    )
+    .expect("publication");
+    let (session, mut peer) = ice_pair(retained, 43001);'''
+          new = '''        vec![retained],
+    )
+    .expect("publication");
+    assert_eq!(publication.candidates(), &[retained]);
+    let (session, mut peer) = ice_pair(retained, 43001);'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one publication assertion insertion point, found {text.count(old)}")
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+
+          rustfmt --edition 2024 "${TEST}"
+          rustfmt --edition 2024 --check "${TEST}"
+
+          LOCK_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          MANIFEST_AFTER="$(sha256sum "${MANIFEST}" | awk '{print $1}')"
+          [[ "${LOCK_BEFORE}" == "${LOCK_AFTER}" ]]
+          [[ "${MANIFEST_BEFORE}" == "${MANIFEST_AFTER}" ]]
+
+          mapfile -t CHANGED < <(git diff --name-only)
+          if [[ ${#CHANGED[@]} -ne 1 || "${CHANGED[0]}" != "${TEST}" ]]; then
+            printf 'unexpected corrective mutation set:\n' >&2
+            printf '%s\n' "${CHANGED[@]}" >&2
+            exit 91
+          fi
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          if [[ "${REMOTE_HEAD}" != "${BASE_HEAD}" ]]; then
+            echo "branch advanced during lint corrective" >&2
+            exit 92
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${TEST}"
+          git commit -m "phase 152 c02e: correct tranche2 integration lints"
+          git push origin "HEAD:${BRANCH}"
