@@ -1,0 +1,99 @@
+name: PRW Phase 152 C02e Freshness Reference Clippy Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - '.github/workflows/phase-152-c02e-freshness-reference-clippy-corrective.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-freshness-reference-clippy-corrective
+  cancel-in-progress: true
+
+jobs:
+  correct:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact test-reference Clippy correctives
+        id: corrective
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_HEAD="$(git rev-parse HEAD)"
+          test "${BASE_HEAD}" = "${GITHUB_SHA}"
+          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
+          git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_FRESHNESS_REFERENCE_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
+          mkdir -p "$(dirname "${REPORT}")"
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs')
+          s=p.read_text()
+          old_use='''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    validate_authenticated_publication_admission,\n};\n'''
+          new_use='''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    refresh_from_authenticated_publication, validate_authenticated_publication_admission,\n};\n'''
+          if s.count(old_use) != 1:
+              raise SystemExit(f'use block count != 1: {s.count(old_use)}')
+          s=s.replace(old_use,new_use,1)
+          anchor='''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n'''
+          linkage='''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n// This reference harness intentionally performs admission, freshness comparison, staging, and\n// commit explicitly. Keep the lower authenticated-refresh adapter compile-linked without\n// invoking it here, so the reference does not bypass the freshness boundary it is proving.\nconst _: fn(\n    &WorkspaceDeviceRegistry,\n    &AuthenticatedDeviceSession,\n    &AuthenticatedCandidatePublication,\n    &mut PeerConnectivityPlan,\n) -> Result<(), CandidateReachabilityError> = refresh_from_authenticated_publication;\n\n'''
+          if s.count(anchor) != 1:
+              raise SystemExit(f'linkage anchor count != 1: {s.count(anchor)}')
+          s=s.replace(anchor,linkage,1)
+          for old,new in [
+              ('    fn with_current_freshness(\n','    const fn with_current_freshness(\n'),
+              ('    fn without_current_freshness(\n','    const fn without_current_freshness(\n'),
+              ('    fn plan(&self) -> &PeerConnectivityPlan {\n','    const fn plan(&self) -> &PeerConnectivityPlan {\n'),
+          ]:
+              if s.count(old) != 1:
+                  raise SystemExit(f'expected one occurrence of {old!r}, got {s.count(old)}')
+              s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+
+          test "$(git diff --name-only)" = "crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs"
+          cargo fmt --all -- --check
+          cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
+          diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after"
+          git diff --check -- crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs
+          {
+            echo 'STATUS=PASS_EXACT_FRESHNESS_REFERENCE_CLIPPY_CORRECTIVE'
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "RUN_ID=${GITHUB_RUN_ID}"
+            echo 'SOURCE_MUTATION=crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs'
+            echo 'DEAD_CODE_CORRECTIVE=anonymous compile-time function-pointer reference; no allow attribute'
+            echo 'CONST_FN_CORRECTIVES=with_current_freshness,without_current_freshness,plan'
+            echo 'CARGO_FMT_CHECK=PASS'
+            echo 'FOCUSED_PRW_REMOTE_BRIDGE_CLIPPY=PASS'
+            echo 'DEPENDENCY_STATE=UNCHANGED'
+            echo 'RUNTIME_NETWORK_ACTIVATION=NONE'
+          } > "${REPORT}"
+
+      - name: Commit corrective and evidence
+        shell: bash
+        env:
+          REPORT: ${{ steps.corrective.outputs.report }}
+        run: |
+          set -euo pipefail
+          test -n "${REPORT}"; test -f "${REPORT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs "${REPORT}"
+          git diff --cached --check
+          git commit -m "phase 152 c02e: satisfy freshness reference lints ${GITHUB_SHA::12}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
