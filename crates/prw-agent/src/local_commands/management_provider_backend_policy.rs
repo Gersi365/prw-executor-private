@@ -2,11 +2,28 @@
 //!
 //! This module deliberately performs no PTY, process, socket, thread, or runtime
 //! operation. It separates provider-owned terminal template selection and
-//! forwarding egress authorization from request decoding before any concrete
+//! forwarding egress/lifecycle policy from request decoding before any concrete
 //! Linux adapter is introduced.
+
+use std::time::Duration;
 
 use prw_forwarding::TcpForwardSpec;
 use prw_terminal::TerminalProfile;
+
+/// Maximum simultaneous accepted connections owned by one forwarding session.
+///
+/// This reuses the existing Phase 140 remote-transport concurrency precedent of
+/// 32 remotely initiated bidirectional streams rather than introducing a wider
+/// forwarding-specific concurrency surface.
+pub(crate) const MAX_FORWARD_CONNECTIONS_PER_SESSION: usize = 32;
+/// Maximum simultaneous forwarding connections owned by one Agent provider lifecycle.
+pub(crate) const MAX_FORWARD_CONNECTIONS_AGGREGATE: usize = 32;
+/// Bounded target-connect budget inherited from the existing Phase 140 operation timeout.
+pub(crate) const FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Bounded forwarding inactivity budget inherited from the Phase 140 idle timeout.
+pub(crate) const FORWARD_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Per-direction forwarding copy buffer bound matching the existing 64 KiB transport bound.
+pub(crate) const FORWARD_COPY_BUFFER_BYTES: usize = 65_536;
 
 /// Provider-owned terminal launch-template identifier.
 ///
@@ -62,16 +79,52 @@ impl ForwardingEgressPolicy for DenyAllForwardingEgressPolicy {
     }
 }
 
+/// Locked TCP half-close behavior for a future forwarding pump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ForwardingHalfClosePolicy {
+    /// Propagate EOF to the peer write half, then continue draining the opposite
+    /// direction until its EOF, explicit cancellation, or idle-timeout expiry.
+    PropagateEofAndDrainPeer,
+}
+
+/// One ordered provider-close stage for a future forwarding handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ForwardingCloseStage {
+    /// Stop accepting new loopback connections first.
+    StopAccepting,
+    /// Cancel or close every currently owned forwarding connection next.
+    CancelActiveConnections,
+    /// Join every owned connection/pump worker before close can succeed.
+    JoinWorkers,
+}
+
+/// Locked forwarding close ordering used by later concrete provider review.
+pub(crate) const FORWARDING_CLOSE_ORDER: [ForwardingCloseStage; 3] = [
+    ForwardingCloseStage::StopAccepting,
+    ForwardingCloseStage::CancelActiveConnections,
+    ForwardingCloseStage::JoinWorkers,
+];
+
+/// Returns the locked forwarding half-close behavior.
+#[must_use]
+pub(crate) const fn forwarding_half_close_policy() -> ForwardingHalfClosePolicy {
+    ForwardingHalfClosePolicy::PropagateEofAndDrainPeer
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
+    use std::time::Duration;
 
     use prw_forwarding::{ForwardTarget, LoopbackBind, LoopbackFamily, TcpForwardSpec};
     use prw_terminal::TerminalProfile;
 
     use super::{
-        DenyAllForwardingEgressPolicy, ForwardingEgressDecision, ForwardingEgressPolicy,
-        LinuxTerminalLaunchTemplateId,
+        DenyAllForwardingEgressPolicy, FORWARD_CONNECT_TIMEOUT, FORWARD_COPY_BUFFER_BYTES,
+        FORWARD_IDLE_TIMEOUT, FORWARDING_CLOSE_ORDER, ForwardingCloseStage,
+        ForwardingEgressDecision, ForwardingEgressPolicy, ForwardingHalfClosePolicy,
+        LinuxTerminalLaunchTemplateId, MAX_FORWARD_CONNECTIONS_AGGREGATE,
+        MAX_FORWARD_CONNECTIONS_PER_SESSION, forwarding_half_close_policy,
     };
 
     fn spec(bind_port: u16, target_port: u16) -> TcpForwardSpec {
@@ -135,6 +188,32 @@ mod tests {
         assert_eq!(
             policy.evaluate(spec(2200, 23)),
             ForwardingEgressDecision::Deny
+        );
+    }
+
+    #[test]
+    fn forwarding_worker_bounds_match_locked_transport_precedent() {
+        assert_eq!(MAX_FORWARD_CONNECTIONS_PER_SESSION, 32);
+        assert_eq!(MAX_FORWARD_CONNECTIONS_AGGREGATE, 32);
+        assert!(MAX_FORWARD_CONNECTIONS_PER_SESSION <= MAX_FORWARD_CONNECTIONS_AGGREGATE);
+        assert_eq!(FORWARD_CONNECT_TIMEOUT, Duration::from_secs(5));
+        assert_eq!(FORWARD_IDLE_TIMEOUT, Duration::from_secs(30));
+        assert_eq!(FORWARD_COPY_BUFFER_BYTES, 65_536);
+    }
+
+    #[test]
+    fn forwarding_half_close_and_teardown_order_are_explicit() {
+        assert_eq!(
+            forwarding_half_close_policy(),
+            ForwardingHalfClosePolicy::PropagateEofAndDrainPeer
+        );
+        assert_eq!(
+            FORWARDING_CLOSE_ORDER,
+            [
+                ForwardingCloseStage::StopAccepting,
+                ForwardingCloseStage::CancelActiveConnections,
+                ForwardingCloseStage::JoinWorkers,
+            ]
         );
     }
 }
