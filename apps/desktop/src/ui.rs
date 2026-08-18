@@ -15,6 +15,7 @@ use crate::management;
 use crate::state::{DesktopPresentationState, NavigationDestination};
 
 const EMPTY_LOCAL_ACTIVITY: &str = "No local validation events yet.";
+const MAX_LOCAL_ACTIVITY_ENTRIES: usize = 50;
 const DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID: u64 = 152_500;
 
 pub fn build(app: &adw::Application) {
@@ -431,9 +432,15 @@ fn activity_page(activity_log: &gtk::Label) -> gtk::Box {
     );
     page.append(&section_label("Local validation activity"));
     page.append(&detail_label(
-        "These entries describe only typed request validation or disposable selection previews inside the desktop process. They are not evidence of remote execution.",
+        "The newest 50 local typed-validation or disposable-preview events are retained in this desktop process. They are not evidence of remote execution.",
     ));
     page.append(activity_log);
+    let clear_activity = gtk::Button::with_label("Clear local activity");
+    let activity_log_to_clear = activity_log.clone();
+    clear_activity.connect_clicked(move |_| {
+        activity_log_to_clear.set_text(EMPTY_LOCAL_ACTIVITY);
+    });
+    page.append(&clear_activity);
     page.append(&section_label("Authoritative outcomes"));
     page.append(&detail_label(
         "No local management operation is dispatched by this UI tranche, so the application intentionally does not fabricate an authoritative remote history.",
@@ -638,7 +645,7 @@ const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
 }
 
 fn local_management_envelope_status(bridge_payload: &[u8], operation: &str) -> (String, String) {
-    let payload_len = LocalIpcRequestId::new(DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID)
+    let preview = LocalIpcRequestId::new(DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID)
         .ok()
         .and_then(|request_id| {
             local_management_ipc::build_encoded_bridge_management_request(
@@ -647,19 +654,27 @@ fn local_management_envelope_status(bridge_payload: &[u8], operation: &str) -> (
             )
             .ok()
         })
-        .map(|frame| frame.payload().as_bytes().len());
+        .map(|frame| {
+            (
+                frame.header().request_id().get(),
+                frame.payload().as_bytes().len(),
+            )
+        });
 
-    match payload_len {
-        Some(payload_len) => (
-            format!("Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."),
+    match preview {
+        Some((request_id, payload_len)) => (
             format!(
-                "LOCAL: {operation} intent + Agent command-3 envelope constructed; NOT DISPATCHED"
+                "Preview request ID {request_id}; Agent command-3 local envelope: {payload_len} payload bytes. Policy: NOT EVALUATED. NOT DISPATCHED."
+            ),
+            format!(
+                "LOCAL: {operation} preview request {request_id}; command-3 envelope constructed; policy NOT EVALUATED; NOT DISPATCHED"
             ),
         ),
         None => (
-            "Agent command-3 local envelope preview was rejected. NOT DISPATCHED.".to_owned(),
+            "Agent command-3 local envelope preview was rejected. Policy: NOT EVALUATED. NOT DISPATCHED."
+                .to_owned(),
             format!(
-                "LOCAL: {operation} intent validated; Agent command-3 envelope rejected; NOT DISPATCHED"
+                "LOCAL: {operation} intent validated; Agent command-3 envelope rejected; policy NOT EVALUATED; NOT DISPATCHED"
             ),
         ),
     }
@@ -673,11 +688,14 @@ fn local_activity_label() -> gtk::Label {
 
 fn record_local_activity(activity_log: &gtk::Label, entry: &str) {
     let current = activity_log.text();
-    if current == EMPTY_LOCAL_ACTIVITY {
-        activity_log.set_text(entry);
+    let mut entries = if current == EMPTY_LOCAL_ACTIVITY {
+        Vec::new()
     } else {
-        activity_log.set_text(&format!("{current}\n{entry}"));
-    }
+        current.lines().map(str::to_owned).collect::<Vec<_>>()
+    };
+    entries.push(entry.to_owned());
+    let first_kept = entries.len().saturating_sub(MAX_LOCAL_ACTIVITY_ENTRIES);
+    activity_log.set_text(&entries[first_kept..].join("\n"));
 }
 
 fn section_label(title: &str) -> gtk::Label {
