@@ -1,0 +1,127 @@
+name: Phase 152 Desktop Management Controls Validation
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-management-ui-controls
+    paths:
+      - "apps/desktop/src/ui.rs"
+      - ".github/workflows/phase-152-desktop-management-ui-controls-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-desktop-management-ui-controls-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install desktop native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+
+      - name: Validate typed UI controls
+        id: validation
+        shell: bash
+        run: |
+          set -u
+          BASE_HEAD="$GITHUB_SHA"
+          REPORT_DIR="logs/audits/phase-152-desktop-management-ui-controls"
+          REPORT="$REPORT_DIR/DESKTOP_MANAGEMENT_CONTROLS_VALIDATION_${BASE_HEAD}.txt"
+          mkdir -p "$REPORT_DIR"
+
+          set +e
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          METADATA_RC=$?
+
+          cargo fmt --all
+          FMT_APPLY_RC=$?
+          FORMAT_DIFF="$(git diff --name-only)"
+          if [[ -z "$FORMAT_DIFF" || "$FORMAT_DIFF" == "apps/desktop/src/ui.rs" ]]; then
+            FORMAT_SCOPE_RC=0
+          else
+            FORMAT_SCOPE_RC=1
+          fi
+
+          cargo clippy --locked -p prw-desktop --all-targets --all-features -- -D warnings
+          CLIPPY_RC=$?
+          cargo test --locked -p prw-desktop --all-targets
+          TEST_RC=$?
+          cargo build --locked -p prw-desktop --all-targets
+          BUILD_RC=$?
+          set -e
+
+          if [[ "$METADATA_RC" -eq 0 && "$FMT_APPLY_RC" -eq 0 && "$FORMAT_SCOPE_RC" -eq 0 && "$CLIPPY_RC" -eq 0 && "$TEST_RC" -eq 0 && "$BUILD_RC" -eq 0 ]]; then
+            STATUS=PASS
+          else
+            STATUS=FAIL
+          fi
+
+          {
+            echo "PHASE=152_DESKTOP_MANAGEMENT_UI_CONTROLS"
+            echo "BASE_HEAD=$BASE_HEAD"
+            echo "RUSTC=$(rustc --version)"
+            echo "CARGO=$(cargo --version)"
+            echo "RUSTFMT=$(rustfmt --version)"
+            echo "CLIPPY=$(cargo clippy --version)"
+            echo "GTK4=$(pkg-config --modversion gtk4)"
+            echo "LIBADWAITA=$(pkg-config --modversion libadwaita-1)"
+            echo "METADATA_RC=$METADATA_RC"
+            echo "FMT_APPLY_RC=$FMT_APPLY_RC"
+            echo "FORMAT_SCOPE_RC=$FORMAT_SCOPE_RC"
+            echo "FORMAT_DIFF=$FORMAT_DIFF"
+            echo "CLIPPY_RC=$CLIPPY_RC"
+            echo "TEST_RC=$TEST_RC"
+            echo "BUILD_RC=$BUILD_RC"
+            echo "FORWARDING_PROVIDER_DISPATCH=NO"
+            echo "FORWARDING_SOCKET_ACTIVATION=NO"
+            echo "PRIVATE_DNS_OS_MUTATION=NO"
+            echo "PRODUCTION_POLICY_EXPANSION=NO"
+            echo "STATUS=$STATUS"
+          } > "$REPORT"
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact-head evidence
+        shell: bash
+        env:
+          STATUS: ${{ steps.validation.outputs.status }}
+          REPORT: ${{ steps.validation.outputs.report }}
+        run: |
+          set -euo pipefail
+          BASE_HEAD="$GITHUB_SHA"
+          BRANCH="phase-152-desktop-management-ui-controls"
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          if [[ "$REMOTE_HEAD" != "$BASE_HEAD" ]]; then
+            echo "Exact-head guard rejected evidence commit: remote=$REMOTE_HEAD base=$BASE_HEAD"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ "$STATUS" == "PASS" ]]; then
+            git add apps/desktop/src/ui.rs "$REPORT"
+            git rm .github/workflows/phase-152-desktop-management-ui-controls-validation.yml
+            git commit -m "phase 152 desktop: validate management controls ${BASE_HEAD:0:12}"
+          else
+            git restore apps/desktop/src/ui.rs
+            git add "$REPORT"
+            git commit -m "phase 152 desktop: record management controls failure ${BASE_HEAD:0:12}"
+          fi
+          git push origin "HEAD:$BRANCH"
