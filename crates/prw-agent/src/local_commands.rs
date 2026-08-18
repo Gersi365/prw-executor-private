@@ -47,6 +47,11 @@ pub(crate) mod management_dispatch;
 pub(crate) mod management_execution;
 #[allow(
     dead_code,
+    reason = "C02d pure provider backend policy seam is intentionally not runtime-wired"
+)]
+pub(crate) mod management_provider_backend_policy;
+#[allow(
+    dead_code,
     reason = "C02c provider lifecycle ownership seam is intentionally not runtime-wired"
 )]
 pub(crate) mod management_provider_lifecycle;
