@@ -1,0 +1,421 @@
+name: Phase 152 Desktop Activity Corrective PR
+
+on:
+  pull_request:
+    branches:
+      - phase-152-desktop-activity-corrective-ci-base
+
+permissions:
+  contents: write
+
+jobs:
+  correct-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+
+      - name: Guard exact source branch and blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ github.event.pull_request.head.ref }}" = "phase-152-desktop-activity-corrective-run"
+          test "$(git hash-object apps/desktop/src/ui.rs)" = "e2fcf4e8149ccb7413cea272779ec7009044e962"
+
+      - name: Apply exact UI-only corrective
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "NavigationDestination::Activity => activity_page(activity_log),",
+              "NavigationDestination::Activity => activity_page(&activity_log),",
+              "activity caller",
+          )
+          replace_once(
+              "fn activity_page(activity_log: gtk::Label) -> gtk::Box {",
+              "fn activity_page(activity_log: &gtk::Label) -> gtk::Box {",
+              "activity signature",
+          )
+          replace_once(
+              "    page.append(&activity_log);",
+              "    page.append(activity_log);",
+              "activity append",
+          )
+
+          old = '''        match parsed {
+            (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) => {
+                match management::encode_forward_open(
+                    forward_id,
+                    family,
+                    bind_port,
+                    target_address,
+                    target_port,
+                ) {
+                    Ok(payload) => {
+                        forward_result_output.set_text(&format!(
+                            "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                            payload.len()
+                        ));
+                        record_local_activity(
+                            &activity_log,
+                            "LOCAL: forwarding intent validated; no listener opened",
+                        );
+                    }
+                    Err(_) => {
+                        forward_result_output.set_text(
+                            "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
+                        );
+                        record_local_activity(
+                            &activity_log,
+                            "LOCAL: forwarding intent rejected by typed validation",
+                        );
+                    }
+                }
+            }
+            _ => {
+                forward_result_output.set_text(
+                    "Forward ID, bind port, explicit target IP and target port must be valid typed values.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: forwarding input rejected before canonical request construction",
+                );
+            }
+        }
+'''
+          new = '''        if let (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) = parsed {
+            if let Ok(payload) = management::encode_forward_open(
+                forward_id,
+                family,
+                bind_port,
+                target_address,
+                target_port,
+            ) {
+                forward_result_output.set_text(&format!(
+                    "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                    payload.len()
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: forwarding intent validated; no listener opened",
+                );
+            } else {
+                forward_result_output.set_text(
+                    "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: forwarding intent rejected by typed validation",
+                );
+            }
+        } else {
+            forward_result_output.set_text(
+                "Forward ID, bind port, explicit target IP and target port must be valid typed values.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: forwarding input rejected before canonical request construction",
+            );
+        }
+'''
+          replace_once(old, new, "forwarding matches")
+
+          old = '''        match parsed {
+            (Ok(session_id), Ok(columns), Ok(rows)) => match management::encode_terminal_open(
+                session_id,
+                TerminalProfile::BashShell,
+                columns,
+                rows,
+            ) {
+                Ok(payload) => {
+                    result_output.set_text(&format!(
+                        "Validated canonical terminal-open request: {} bytes. Not dispatched; authoritative state remains unchanged.",
+                        payload.len()
+                    ));
+                    record_local_activity(
+                        &activity_log,
+                        "LOCAL: terminal-open intent validated; session not opened",
+                    );
+                }
+                Err(_) => {
+                    result_output.set_text(
+                        "Rejected by typed terminal/bridge validation. No request was dispatched.",
+                    );
+                    record_local_activity(
+                        &activity_log,
+                        "LOCAL: terminal-open intent rejected by typed validation",
+                    );
+                }
+            },
+            _ => {
+                result_output.set_text(
+                    "Session ID, columns and rows must be valid positive integer values within terminal bounds.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: terminal input rejected before canonical request construction",
+                );
+            }
+        }
+'''
+          new = '''        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {
+            if let Ok(payload) = management::encode_terminal_open(
+                session_id,
+                TerminalProfile::BashShell,
+                columns,
+                rows,
+            ) {
+                result_output.set_text(&format!(
+                    "Validated canonical terminal-open request: {} bytes. Not dispatched; authoritative state remains unchanged.",
+                    payload.len()
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: terminal-open intent validated; session not opened",
+                );
+            } else {
+                result_output.set_text(
+                    "Rejected by typed terminal/bridge validation. No request was dispatched.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: terminal-open intent rejected by typed validation",
+                );
+            }
+        } else {
+            result_output.set_text(
+                "Session ID, columns and rows must be valid positive integer values within terminal bounds.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: terminal input rejected before canonical request construction",
+            );
+        }
+'''
+          replace_once(old, new, "terminal matches")
+
+          old = '''        match management::encode_file_list(path_input.text().as_str()) {
+            Ok(payload) => {
+                result_output.set_text(&format!(
+                    "Validated canonical file-list request: {} bytes. No filesystem operation was performed.",
+                    payload.len()
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: file-list intent validated; filesystem not read",
+                );
+            }
+            Err(_) => {
+                result_output.set_text(
+                    "Rejected by RemotePath/bridge validation. Absolute or escaping paths are not accepted.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: file-list intent rejected by path/bridge validation",
+                );
+            }
+        }
+'''
+          new = '''        if let Ok(payload) = management::encode_file_list(path_input.text().as_str()) {
+            result_output.set_text(&format!(
+                "Validated canonical file-list request: {} bytes. No filesystem operation was performed.",
+                payload.len()
+            ));
+            record_local_activity(
+                &activity_log,
+                "LOCAL: file-list intent validated; filesystem not read",
+            );
+        } else {
+            result_output.set_text(
+                "Rejected by RemotePath/bridge validation. Absolute or escaping paths are not accepted.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: file-list intent rejected by path/bridge validation",
+            );
+        }
+'''
+          replace_once(old, new, "file-list match")
+
+          old = '''        match management::encode_upload_begin(
+            transfer_id_input.text().as_str(),
+            destination_input.text().as_str(),
+            total_bytes,
+            [1; 32],
+        ) {
+            Ok(payload) => {
+                result_output.set_text(&format!(
+                    "Validated canonical upload-begin request: {} bytes. Committed progress remains 0 until an authoritative acknowledgement.",
+                    payload.len()
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: upload-begin intent validated; committed progress remains 0",
+                );
+            }
+            Err(_) => {
+                result_output.set_text(
+                    "Rejected by transfer/path/bridge validation. No upload state was advanced.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: upload-begin intent rejected; upload state unchanged",
+                );
+            }
+        }
+'''
+          new = '''        if let Ok(payload) = management::encode_upload_begin(
+            transfer_id_input.text().as_str(),
+            destination_input.text().as_str(),
+            total_bytes,
+            [1; 32],
+        ) {
+            result_output.set_text(&format!(
+                "Validated canonical upload-begin request: {} bytes. Committed progress remains 0 until an authoritative acknowledgement.",
+                payload.len()
+            ));
+            record_local_activity(
+                &activity_log,
+                "LOCAL: upload-begin intent validated; committed progress remains 0",
+            );
+        } else {
+            result_output.set_text(
+                "Rejected by transfer/path/bridge validation. No upload state was advanced.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: upload-begin intent rejected; upload state unchanged",
+            );
+        }
+'''
+          replace_once(old, new, "upload match")
+
+          old_settings = '''fn settings_page(activity_log: gtk::Label) -> gtk::Box {
+    let page = page_shell(
+        "Settings",
+        "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
+    );
+    page.append(&section_label("Private DNS"));
+    page.append(&detail_label(
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
+    ));
+'''
+          new_settings = '''fn settings_shell() -> gtk::Box {
+    let page = page_shell(
+        "Settings",
+        "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
+    );
+    page.append(&section_label("Private DNS"));
+    page.append(&detail_label(
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
+    ));
+    page
+}
+
+fn settings_page(activity_log: gtk::Label) -> gtk::Box {
+    let page = settings_shell();
+'''
+          replace_once(old_settings, new_settings, "settings split")
+
+          old = '''        match management::validate_private_dns(
+            enabled_input.is_active(),
+            device_naming_input.is_active(),
+            device_domain_input.text().as_str(),
+            resolver,
+            split_domain_input.text().as_str(),
+        ) {
+            Ok(_) => {
+                dns_result_output.set_text(
+                    "Validated private-DNS requested configuration. OS-applied state remains unchanged and is not claimed by this UI.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: private-DNS requested configuration validated; OS state unchanged",
+                );
+            }
+            Err(_) => {
+                dns_result_output.set_text(
+                    "Rejected by typed private-DNS validation. No operating-system DNS state was changed.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: private-DNS request rejected by typed validation",
+                );
+            }
+        }
+'''
+          new = '''        if management::validate_private_dns(
+            enabled_input.is_active(),
+            device_naming_input.is_active(),
+            device_domain_input.text().as_str(),
+            resolver,
+            split_domain_input.text().as_str(),
+        )
+        .is_ok()
+        {
+            dns_result_output.set_text(
+                "Validated private-DNS requested configuration. OS-applied state remains unchanged and is not claimed by this UI.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: private-DNS requested configuration validated; OS state unchanged",
+            );
+        } else {
+            dns_result_output.set_text(
+                "Rejected by typed private-DNS validation. No operating-system DNS state was changed.",
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: private-DNS request rejected by typed validation",
+            );
+        }
+'''
+          replace_once(old, new, "private DNS match")
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          test "$(git diff --name-only | sort)" = "apps/desktop/src/ui.rs"
+
+      - name: Install desktop native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev
+
+      - name: Validate corrected workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace
+          cargo build --locked --workspace
+
+      - name: Commit corrected UI to run branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only | sort)" = "apps/desktop/src/ui.rs"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/src/ui.rs
+          git commit -m "phase 152 desktop: prove activity feed corrective"
+          git push origin HEAD:phase-152-desktop-activity-corrective-run
