@@ -1,0 +1,60 @@
+name: PRW Phase 152 C02e Tranche4 Rustfmt Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - ".github/workflows/phase-152-c02e-tranche4-format-corrective.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-tranche4-format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact rustfmt corrective
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          SELF=".github/workflows/phase-152-c02e-tranche4-format-corrective.yml"
+          BASE_HEAD="$(git rev-parse HEAD)"
+
+          cargo fmt --all
+
+          mapfile -t CHANGED < <(git diff --name-only)
+          if [[ ${#CHANGED[@]} -eq 0 ]]; then
+            echo "rustfmt produced no corrective diff" >&2
+            exit 1
+          fi
+          for path in "${CHANGED[@]}"; do
+            case "${path}" in
+              crates/prw-remote-bridge/src/reachability_owner.rs|crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs) ;;
+              *) echo "unexpected rustfmt diff: ${path}" >&2; exit 1 ;;
+            esac
+          done
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          if [[ "${REMOTE_HEAD}" != "${BASE_HEAD}" ]]; then
+            echo "branch advanced during corrective: base=${BASE_HEAD} remote=${REMOTE_HEAD}" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/prw-remote-bridge/src/reachability_owner.rs \
+            crates/prw-remote-bridge/tests/reachability_owner_production_seam.rs
+          git rm "${SELF}"
+          git commit -m "phase 152 c02e: apply tranche4 rustfmt corrective ${BASE_HEAD:0:12}"
+          git push origin "HEAD:${BRANCH}"
