@@ -1,0 +1,2369 @@
+STATUS=RUNNING
+WORKFLOW=phase-152-c02e-tranche1-validation.yml
+RUN_ID=32133016432
+RUN_ATTEMPT=1
+REF=phase-152-c02e-dynamic-reachability-design
+HEAD=4e271cd4529198882c6228a17504000d5e19942e
+FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
+RUNNER_OS=Linux
+===== GATE lineage =====
+GATE_lineage_RC=0
+===== GATE native_prerequisites =====
+Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+Get:6 https://packages.microsoft.com/repos/azure-cli noble InRelease [3564 B]
+Get:7 https://dl.google.com/linux/chrome-stable/deb stable InRelease [2548 B]
+Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:9 https://packages.microsoft.com/repos/azure-cli noble/main amd64 Packages [2452 B]
+Get:10 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages [1416 B]
+Get:11 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [288 kB]
+Get:12 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.4 kB]
+Get:13 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [329 kB]
+Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1208 kB]
+Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [284 kB]
+Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [181 kB]
+Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [336 kB]
+Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1452 kB]
+Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [330 kB]
+Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [12.6 kB]
+Get:23 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:24 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [5760 B]
+Get:25 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [12.7 kB]
+Get:26 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [934 kB]
+Get:27 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [202 kB]
+Get:28 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+Get:29 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1201 kB]
+Get:30 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [240 kB]
+Get:31 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.2 kB]
+Get:32 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1330 kB]
+Get:33 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [304 kB]
+Get:34 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse Translation-en [10.9 kB]
+Fetched 11.3 MB in 2s (6643 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+pkg-config is already the newest version (1.8.1-2build1).
+The following additional packages will be installed:
+  gir1.2-adw-1 gir1.2-appstream-1.0 gir1.2-freedesktop gir1.2-freedesktop-dev
+  gir1.2-gdkpixbuf-2.0 gir1.2-glib-2.0-dev gir1.2-graphene-1.0 gir1.2-gtk-4.0
+  gir1.2-harfbuzz-0.0 gir1.2-pango-1.0 libadwaita-1-0 libappstream-dev
+  libblkid-dev libbrotli-dev libbz2-dev libcairo-script-interpreter2
+  libcairo2-dev libdatrie-dev libdeflate-dev libegl-dev libegl-mesa0 libegl1
+  libegl1-mesa-dev libepoxy-dev libfontconfig-dev libfreetype-dev
+  libfribidi-dev libgdk-pixbuf-2.0-dev libgdk-pixbuf2.0-bin
+  libgirepository-2.0-0 libgl-dev libgles-dev libgles1 libgles2 libglib2.0-dev
+  libglib2.0-dev-bin libglvnd-core-dev libglvnd-dev libglx-dev
+  libgraphene-1.0-0 libgraphene-1.0-dev libgraphite2-dev libgtk-4-1
+  libgtk-4-common libharfbuzz-cairo0 libharfbuzz-dev libharfbuzz-gobject0
+  libharfbuzz-icu0 libharfbuzz-subset0 libice-dev libjbig-dev libjpeg-dev
+  libjpeg-turbo8-dev libjpeg8-dev liblerc-dev liblzma-dev libmount-dev
+  libopengl-dev libopengl0 libpango1.0-dev libpangoxft-1.0-0 libpixman-1-dev
+  libpng-dev libpthread-stubs0-dev libselinux1-dev libsepol-dev
+  libsharpyuv-dev libsm-dev libthai-dev libtiff-dev libtiffxx6 libvulkan-dev
+  libwayland-bin libwayland-dev libwayland-server0 libwebp-dev libwebpdecoder3
+  libx11-dev libxau-dev libxcb-render0-dev libxcb-shm0-dev libxcb1-dev
+  libxcomposite-dev libxcursor-dev libxdamage-dev libxdmcp-dev libxext-dev
+  libxfixes-dev libxft-dev libxi-dev libxinerama-dev libxkbcommon-dev
+  libxrandr-dev libxrender-dev pango1.0-tools uuid-dev wayland-protocols
+  x11proto-core-dev x11proto-dev xorg-sgml-doctools xtrans-dev
+Suggested packages:
+  libadwaita-1-doc libcairo2-doc libdatrie-doc freetype2-doc libglib2.0-doc
+  libxml2-utils libgraphene-doc libgraphite2-utils gvfs libgtk-4-doc
+  gtk-4-examples libice-doc liblzma-doc libpango1.0-doc libsm-doc libthai-doc
+  libwayland-doc libx11-doc libxcb-doc libxext-doc graphicsmagick
+Recommended packages:
+  bzip2-doc libgtk-4-bin librsvg2-common libgtk-4-media-gstreamer libpng-tools
+The following NEW packages will be installed:
+  gir1.2-adw-1 gir1.2-appstream-1.0 gir1.2-freedesktop gir1.2-freedesktop-dev
+  gir1.2-gdkpixbuf-2.0 gir1.2-glib-2.0-dev gir1.2-graphene-1.0 gir1.2-gtk-4.0
+  gir1.2-harfbuzz-0.0 gir1.2-pango-1.0 libadwaita-1-0 libadwaita-1-dev
+  libappstream-dev libblkid-dev libbrotli-dev libbz2-dev
+  libcairo-script-interpreter2 libcairo2-dev libdatrie-dev libdeflate-dev
+  libegl-dev libegl-mesa0 libegl1 libegl1-mesa-dev libepoxy-dev
+  libfontconfig-dev libfreetype-dev libfribidi-dev libgdk-pixbuf-2.0-dev
+  libgdk-pixbuf2.0-bin libgirepository-2.0-0 libgl-dev libgles-dev libgles1
+  libgles2 libglib2.0-dev libglib2.0-dev-bin libglvnd-core-dev libglvnd-dev
+  libglx-dev libgraphene-1.0-0 libgraphene-1.0-dev libgraphite2-dev libgtk-4-1
+  libgtk-4-common libgtk-4-dev libharfbuzz-cairo0 libharfbuzz-dev
+  libharfbuzz-gobject0 libharfbuzz-icu0 libharfbuzz-subset0 libice-dev
+  libjbig-dev libjpeg-dev libjpeg-turbo8-dev libjpeg8-dev liblerc-dev
+  liblzma-dev libmount-dev libopengl-dev libopengl0 libpango1.0-dev
+  libpangoxft-1.0-0 libpixman-1-dev libpng-dev libpthread-stubs0-dev
+  libselinux1-dev libsepol-dev libsharpyuv-dev libsm-dev libthai-dev
+  libtiff-dev libtiffxx6 libvulkan-dev libwayland-bin libwayland-dev
+  libwayland-server0 libwebp-dev libwebpdecoder3 libx11-dev libxau-dev
+  libxcb-render0-dev libxcb-shm0-dev libxcb1-dev libxcomposite-dev
+  libxcursor-dev libxdamage-dev libxdmcp-dev libxext-dev libxfixes-dev
+  libxft-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev
+  libxrender-dev pango1.0-tools uuid-dev wayland-protocols x11proto-core-dev
+  x11proto-dev xorg-sgml-doctools xtrans-dev
+0 upgraded, 103 newly installed, 0 to remove and 12 not upgraded.
+Need to get 19.3 MB of archives.
+After this operation, 129 MB of additional disk space will be used.
+Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+Get:2 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-freedesktop amd64 1.80.1-1 [49.7 kB]
+Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-gdkpixbuf-2.0 amd64 2.42.10+dfsg-3ubuntu3.3 [9482 B]
+Get:4 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgraphene-1.0-0 amd64 1.10.8-3build2 [46.2 kB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-graphene-1.0 amd64 1.10.8-3build2 [11.1 kB]
+Get:6 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-gobject0 amd64 8.3.0-2build2 [34.3 kB]
+Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-harfbuzz-0.0 amd64 8.3.0-2build2 [44.5 kB]
+Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpangoxft-1.0-0 amd64 1.52.1+ds-1build1 [20.3 kB]
+Get:9 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-pango-1.0 amd64 1.52.1+ds-1build1 [34.8 kB]
+Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libcairo-script-interpreter2 amd64 1.18.0-3build1 [60.3 kB]
+Get:11 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles2 amd64 1.7.0-1build1 [17.1 kB]
+Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-common all 4.14.5+ds-0ubuntu0.10 [1497 kB]
+Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-1 amd64 4.14.5+ds-0ubuntu0.10 [3295 kB]
+Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-gtk-4.0 amd64 4.14.5+ds-0ubuntu0.10 [223 kB]
+Get:15 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libadwaita-1-0 amd64 1.5.0-1ubuntu2 [408 kB]
+Get:16 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-adw-1 amd64 1.5.0-1ubuntu2 [41.8 kB]
+Get:17 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-appstream-1.0 amd64 1.0.2-1build6 [29.3 kB]
+Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-glib-2.0-dev amd64 2.80.0-6ubuntu3.8 [848 kB]
+Get:19 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-freedesktop-dev amd64 1.80.1-1 [28.8 kB]
+Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-dev-bin amd64 2.80.0-6ubuntu3.8 [138 kB]
+Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 uuid-dev amd64 2.39.3-9ubuntu6.5 [33.5 kB]
+Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libblkid-dev amd64 2.39.3-9ubuntu6.5 [204 kB]
+Get:23 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsepol-dev amd64 3.5-2build1 [384 kB]
+Get:24 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libselinux1-dev amd64 3.5-2ubuntu2.1 [164 kB]
+Get:25 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libmount-dev amd64 2.39.3-9ubuntu6.5 [14.9 kB]
+Get:26 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgirepository-2.0-0 amd64 2.80.0-6ubuntu3.8 [73.6 kB]
+Get:27 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-dev amd64 2.80.0-6ubuntu3.8 [1860 kB]
+Get:28 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libappstream-dev amd64 1.0.2-1build6 [103 kB]
+Get:29 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libbrotli-dev amd64 1.1.0-2build2 [353 kB]
+Get:30 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libbz2-dev amd64 1.0.8-5.1build0.1 [33.6 kB]
+Get:31 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libpng-dev amd64 1.6.43-5ubuntu0.6 [265 kB]
+Get:32 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libfreetype-dev amd64 2.13.2+dfsg-1ubuntu0.1 [575 kB]
+Get:33 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libfontconfig-dev amd64 2.15.0-1.1ubuntu2 [161 kB]
+Get:34 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpixman-1-dev amd64 0.42.2-1build1 [296 kB]
+Get:35 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xorg-sgml-doctools all 1:1.11-1.1 [10.9 kB]
+Get:36 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 x11proto-dev all 2023.2-1 [602 kB]
+Get:37 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 x11proto-core-dev all 2023.2-1 [2444 B]
+Get:38 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libice-dev amd64 2:1.0.10-1build3 [51.0 kB]
+Get:39 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsm-dev amd64 2:1.2.3-1build3 [17.8 kB]
+Get:40 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxau-dev amd64 1:1.0.9-1build6 [9570 B]
+Get:41 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxdmcp-dev amd64 1:1.1.3-0ubuntu6 [26.5 kB]
+Get:42 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xtrans-dev all 1.4.0-1 [68.9 kB]
+Get:43 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpthread-stubs0-dev amd64 0.4-1build3 [4746 B]
+Get:44 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb1-dev amd64 1.15-1ubuntu2 [85.8 kB]
+Get:45 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libx11-dev amd64 2:1.8.7-1build1 [732 kB]
+Get:46 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb-render0-dev amd64 1.15-1ubuntu2 [19.6 kB]
+Get:47 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb-shm0-dev amd64 1.15-1ubuntu2 [8246 B]
+Get:48 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxext-dev amd64 2:1.3.4-1build2 [83.5 kB]
+Get:49 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxrender-dev amd64 1:0.9.10-1.1build1 [26.3 kB]
+Get:50 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libcairo2-dev amd64 1.18.0-3build1 [41.1 kB]
+Get:51 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libegl-mesa0 amd64 25.2.8-0ubuntu0.24.04.2 [117 kB]
+Get:52 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libegl1 amd64 1.7.0-1build1 [28.7 kB]
+Get:53 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglx-dev amd64 1.7.0-1build1 [14.2 kB]
+Get:54 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgl-dev amd64 1.7.0-1build1 [102 kB]
+Get:55 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libegl-dev amd64 1.7.0-1build1 [18.2 kB]
+Get:56 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglvnd-core-dev amd64 1.7.0-1build1 [13.6 kB]
+Get:57 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles1 amd64 1.7.0-1build1 [11.6 kB]
+Get:58 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles-dev amd64 1.7.0-1build1 [50.5 kB]
+Get:59 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libopengl0 amd64 1.7.0-1build1 [32.8 kB]
+Get:60 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libopengl-dev amd64 1.7.0-1build1 [3454 B]
+Get:61 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglvnd-dev amd64 1.7.0-1build1 [3198 B]
+Get:62 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libegl1-mesa-dev amd64 25.2.8-0ubuntu0.24.04.2 [26.7 kB]
+Get:63 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libepoxy-dev amd64 1.5.10-1build1 [132 kB]
+Get:64 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgdk-pixbuf2.0-bin amd64 2.42.10+dfsg-3ubuntu3.3 [13.9 kB]
+Get:65 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg-turbo8-dev amd64 2.1.5-2ubuntu2 [295 kB]
+Get:66 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg8-dev amd64 8c-2ubuntu11 [1484 B]
+Get:67 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg-dev amd64 8c-2ubuntu11 [1482 B]
+Get:68 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjbig-dev amd64 2.1-6.1ubuntu2 [27.9 kB]
+Get:69 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 liblzma-dev amd64 5.6.1+really5.4.5-1ubuntu0.3 [176 kB]
+Get:70 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwebpdecoder3 amd64 1.3.2-0.4build3 [114 kB]
+Get:71 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsharpyuv-dev amd64 1.3.2-0.4build3 [16.0 kB]
+Get:72 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwebp-dev amd64 1.3.2-0.4build3 [367 kB]
+Get:73 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libtiffxx6 amd64 4.5.1+git230720-4ubuntu2.5 [5642 B]
+Get:74 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdeflate-dev amd64 1.19-1build1.1 [50.9 kB]
+Get:75 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 liblerc-dev amd64 4.0.0+ds-4ubuntu2 [182 kB]
+Get:76 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libtiff-dev amd64 4.5.1+git230720-4ubuntu2.5 [338 kB]
+Get:77 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgdk-pixbuf-2.0-dev amd64 2.42.10+dfsg-3ubuntu3.3 [47.9 kB]
+Get:78 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgraphene-1.0-dev amd64 1.10.8-3build2 [58.6 kB]
+Get:79 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libfribidi-dev amd64 1.0.13-3build1 [64.8 kB]
+Get:80 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-icu0 amd64 8.3.0-2build2 [13.3 kB]
+Get:81 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-subset0 amd64 8.3.0-2build2 [448 kB]
+Get:82 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-cairo0 amd64 8.3.0-2build2 [26.2 kB]
+Get:83 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgraphite2-dev amd64 1.3.14-2ubuntu0.24.04.1 [14.7 kB]
+Get:84 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-dev amd64 8.3.0-2build2 [142 kB]
+Get:85 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libdatrie-dev amd64 0.2.13-3build1 [19.4 kB]
+Get:86 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libthai-dev amd64 0.1.29-2build1 [26.6 kB]
+Get:87 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxft-dev amd64 2.3.6-1build1 [64.3 kB]
+Get:88 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 pango1.0-tools amd64 1.52.1+ds-1build1 [36.7 kB]
+Get:89 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpango1.0-dev amd64 1.52.1+ds-1build1 [147 kB]
+Get:90 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-server0 amd64 1.22.0-2.1build1 [33.9 kB]
+Get:91 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-bin amd64 1.22.0-2.1build1 [20.6 kB]
+Get:92 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-dev amd64 1.22.0-2.1build1 [71.3 kB]
+Get:93 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxfixes-dev amd64 1:6.0.0-2build1 [12.1 kB]
+Get:94 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcomposite-dev amd64 1:0.4.5-1build3 [9374 B]
+Get:95 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcursor-dev amd64 1:1.2.1-1build1 [31.8 kB]
+Get:96 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxdamage-dev amd64 1:1.1.6-1build1 [5270 B]
+Get:97 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxi-dev amd64 2:1.8.1-1build1 [194 kB]
+Get:98 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxinerama-dev amd64 2:1.1.4-3build1 [7988 B]
+Get:99 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxkbcommon-dev amd64 1.6.0-1build1 [56.3 kB]
+Get:100 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxrandr-dev amd64 2:1.5.2-2build1 [26.4 kB]
+Get:101 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libvulkan-dev amd64 1.3.275.0-1build1 [1239 kB]
+Get:102 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 wayland-protocols all 1.45-1~ubuntu0.24.04.2 [114 kB]
+Get:103 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-dev amd64 4.14.5+ds-0ubuntu0.10 [939 kB]
+Get:104 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libadwaita-1-dev amd64 1.5.0-1ubuntu2 [157 kB]
+Fetched 19.3 MB in 10s (2006 kB/s)
+Selecting previously unselected package gir1.2-freedesktop:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 203139 files and directories currently installed.)
+Preparing to unpack .../000-gir1.2-freedesktop_1.80.1-1_amd64.deb ...
+Unpacking gir1.2-freedesktop:amd64 (1.80.1-1) ...
+Selecting previously unselected package gir1.2-gdkpixbuf-2.0:amd64.
+Preparing to unpack .../001-gir1.2-gdkpixbuf-2.0_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking gir1.2-gdkpixbuf-2.0:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libgraphene-1.0-0:amd64.
+Preparing to unpack .../002-libgraphene-1.0-0_1.10.8-3build2_amd64.deb ...
+Unpacking libgraphene-1.0-0:amd64 (1.10.8-3build2) ...
+Selecting previously unselected package gir1.2-graphene-1.0:amd64.
+Preparing to unpack .../003-gir1.2-graphene-1.0_1.10.8-3build2_amd64.deb ...
+Unpacking gir1.2-graphene-1.0:amd64 (1.10.8-3build2) ...
+Selecting previously unselected package libharfbuzz-gobject0:amd64.
+Preparing to unpack .../004-libharfbuzz-gobject0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-gobject0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package gir1.2-harfbuzz-0.0:amd64.
+Preparing to unpack .../005-gir1.2-harfbuzz-0.0_8.3.0-2build2_amd64.deb ...
+Unpacking gir1.2-harfbuzz-0.0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libpangoxft-1.0-0:amd64.
+Preparing to unpack .../006-libpangoxft-1.0-0_1.52.1+ds-1build1_amd64.deb ...
+Unpacking libpangoxft-1.0-0:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package gir1.2-pango-1.0:amd64.
+Preparing to unpack .../007-gir1.2-pango-1.0_1.52.1+ds-1build1_amd64.deb ...
+Unpacking gir1.2-pango-1.0:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package libcairo-script-interpreter2:amd64.
+Preparing to unpack .../008-libcairo-script-interpreter2_1.18.0-3build1_amd64.deb ...
+Unpacking libcairo-script-interpreter2:amd64 (1.18.0-3build1) ...
+Selecting previously unselected package libgles2:amd64.
+Preparing to unpack .../009-libgles2_1.7.0-1build1_amd64.deb ...
+Unpacking libgles2:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgtk-4-common.
+Preparing to unpack .../010-libgtk-4-common_4.14.5+ds-0ubuntu0.10_all.deb ...
+Unpacking libgtk-4-common (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libgtk-4-1:amd64.
+Preparing to unpack .../011-libgtk-4-1_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking libgtk-4-1:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package gir1.2-gtk-4.0:amd64.
+Preparing to unpack .../012-gir1.2-gtk-4.0_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking gir1.2-gtk-4.0:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libadwaita-1-0:amd64.
+Preparing to unpack .../013-libadwaita-1-0_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking libadwaita-1-0:amd64 (1.5.0-1ubuntu2) ...
+Selecting previously unselected package gir1.2-adw-1:amd64.
+Preparing to unpack .../014-gir1.2-adw-1_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking gir1.2-adw-1:amd64 (1.5.0-1ubuntu2) ...
+Selecting previously unselected package gir1.2-appstream-1.0:amd64.
+Preparing to unpack .../015-gir1.2-appstream-1.0_1.0.2-1build6_amd64.deb ...
+Unpacking gir1.2-appstream-1.0:amd64 (1.0.2-1build6) ...
+Selecting previously unselected package gir1.2-glib-2.0-dev:amd64.
+Preparing to unpack .../016-gir1.2-glib-2.0-dev_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking gir1.2-glib-2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package gir1.2-freedesktop-dev:amd64.
+Preparing to unpack .../017-gir1.2-freedesktop-dev_1.80.1-1_amd64.deb ...
+Unpacking gir1.2-freedesktop-dev:amd64 (1.80.1-1) ...
+Selecting previously unselected package libglib2.0-dev-bin.
+Preparing to unpack .../018-libglib2.0-dev-bin_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libglib2.0-dev-bin (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package uuid-dev:amd64.
+Preparing to unpack .../019-uuid-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking uuid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libblkid-dev:amd64.
+Preparing to unpack .../020-libblkid-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking libblkid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libsepol-dev:amd64.
+Preparing to unpack .../021-libsepol-dev_3.5-2build1_amd64.deb ...
+Unpacking libsepol-dev:amd64 (3.5-2build1) ...
+Selecting previously unselected package libselinux1-dev:amd64.
+Preparing to unpack .../022-libselinux1-dev_3.5-2ubuntu2.1_amd64.deb ...
+Unpacking libselinux1-dev:amd64 (3.5-2ubuntu2.1) ...
+Selecting previously unselected package libmount-dev:amd64.
+Preparing to unpack .../023-libmount-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking libmount-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libgirepository-2.0-0:amd64.
+Preparing to unpack .../024-libgirepository-2.0-0_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libgirepository-2.0-0:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package libglib2.0-dev:amd64.
+Preparing to unpack .../025-libglib2.0-dev_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libglib2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package libappstream-dev:amd64.
+Preparing to unpack .../026-libappstream-dev_1.0.2-1build6_amd64.deb ...
+Unpacking libappstream-dev:amd64 (1.0.2-1build6) ...
+Selecting previously unselected package libbrotli-dev:amd64.
+Preparing to unpack .../027-libbrotli-dev_1.1.0-2build2_amd64.deb ...
+Unpacking libbrotli-dev:amd64 (1.1.0-2build2) ...
+Selecting previously unselected package libbz2-dev:amd64.
+Preparing to unpack .../028-libbz2-dev_1.0.8-5.1build0.1_amd64.deb ...
+Unpacking libbz2-dev:amd64 (1.0.8-5.1build0.1) ...
+Selecting previously unselected package libpng-dev:amd64.
+Preparing to unpack .../029-libpng-dev_1.6.43-5ubuntu0.6_amd64.deb ...
+Unpacking libpng-dev:amd64 (1.6.43-5ubuntu0.6) ...
+Selecting previously unselected package libfreetype-dev:amd64.
+Preparing to unpack .../030-libfreetype-dev_2.13.2+dfsg-1ubuntu0.1_amd64.deb ...
+Unpacking libfreetype-dev:amd64 (2.13.2+dfsg-1ubuntu0.1) ...
+Selecting previously unselected package libfontconfig-dev:amd64.
+Preparing to unpack .../031-libfontconfig-dev_2.15.0-1.1ubuntu2_amd64.deb ...
+Unpacking libfontconfig-dev:amd64 (2.15.0-1.1ubuntu2) ...
+Selecting previously unselected package libpixman-1-dev:amd64.
+Preparing to unpack .../032-libpixman-1-dev_0.42.2-1build1_amd64.deb ...
+Unpacking libpixman-1-dev:amd64 (0.42.2-1build1) ...
+Selecting previously unselected package xorg-sgml-doctools.
+Preparing to unpack .../033-xorg-sgml-doctools_1%3a1.11-1.1_all.deb ...
+Unpacking xorg-sgml-doctools (1:1.11-1.1) ...
+Selecting previously unselected package x11proto-dev.
+Preparing to unpack .../034-x11proto-dev_2023.2-1_all.deb ...
+Unpacking x11proto-dev (2023.2-1) ...
+Selecting previously unselected package x11proto-core-dev.
+Preparing to unpack .../035-x11proto-core-dev_2023.2-1_all.deb ...
+Unpacking x11proto-core-dev (2023.2-1) ...
+Selecting previously unselected package libice-dev:amd64.
+Preparing to unpack .../036-libice-dev_2%3a1.0.10-1build3_amd64.deb ...
+Unpacking libice-dev:amd64 (2:1.0.10-1build3) ...
+Selecting previously unselected package libsm-dev:amd64.
+Preparing to unpack .../037-libsm-dev_2%3a1.2.3-1build3_amd64.deb ...
+Unpacking libsm-dev:amd64 (2:1.2.3-1build3) ...
+Selecting previously unselected package libxau-dev:amd64.
+Preparing to unpack .../038-libxau-dev_1%3a1.0.9-1build6_amd64.deb ...
+Unpacking libxau-dev:amd64 (1:1.0.9-1build6) ...
+Selecting previously unselected package libxdmcp-dev:amd64.
+Preparing to unpack .../039-libxdmcp-dev_1%3a1.1.3-0ubuntu6_amd64.deb ...
+Unpacking libxdmcp-dev:amd64 (1:1.1.3-0ubuntu6) ...
+Selecting previously unselected package xtrans-dev.
+Preparing to unpack .../040-xtrans-dev_1.4.0-1_all.deb ...
+Unpacking xtrans-dev (1.4.0-1) ...
+Selecting previously unselected package libpthread-stubs0-dev:amd64.
+Preparing to unpack .../041-libpthread-stubs0-dev_0.4-1build3_amd64.deb ...
+Unpacking libpthread-stubs0-dev:amd64 (0.4-1build3) ...
+Selecting previously unselected package libxcb1-dev:amd64.
+Preparing to unpack .../042-libxcb1-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb1-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libx11-dev:amd64.
+Preparing to unpack .../043-libx11-dev_2%3a1.8.7-1build1_amd64.deb ...
+Unpacking libx11-dev:amd64 (2:1.8.7-1build1) ...
+Selecting previously unselected package libxcb-render0-dev:amd64.
+Preparing to unpack .../044-libxcb-render0-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb-render0-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libxcb-shm0-dev:amd64.
+Preparing to unpack .../045-libxcb-shm0-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb-shm0-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libxext-dev:amd64.
+Preparing to unpack .../046-libxext-dev_2%3a1.3.4-1build2_amd64.deb ...
+Unpacking libxext-dev:amd64 (2:1.3.4-1build2) ...
+Selecting previously unselected package libxrender-dev:amd64.
+Preparing to unpack .../047-libxrender-dev_1%3a0.9.10-1.1build1_amd64.deb ...
+Unpacking libxrender-dev:amd64 (1:0.9.10-1.1build1) ...
+Selecting previously unselected package libcairo2-dev:amd64.
+Preparing to unpack .../048-libcairo2-dev_1.18.0-3build1_amd64.deb ...
+Unpacking libcairo2-dev:amd64 (1.18.0-3build1) ...
+Selecting previously unselected package libegl-mesa0:amd64.
+Preparing to unpack .../049-libegl-mesa0_25.2.8-0ubuntu0.24.04.2_amd64.deb ...
+Unpacking libegl-mesa0:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Selecting previously unselected package libegl1:amd64.
+Preparing to unpack .../050-libegl1_1.7.0-1build1_amd64.deb ...
+Unpacking libegl1:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglx-dev:amd64.
+Preparing to unpack .../051-libglx-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglx-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgl-dev:amd64.
+Preparing to unpack .../052-libgl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libgl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libegl-dev:amd64.
+Preparing to unpack .../053-libegl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libegl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglvnd-core-dev:amd64.
+Preparing to unpack .../054-libglvnd-core-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglvnd-core-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgles1:amd64.
+Preparing to unpack .../055-libgles1_1.7.0-1build1_amd64.deb ...
+Unpacking libgles1:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgles-dev:amd64.
+Preparing to unpack .../056-libgles-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libgles-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libopengl0:amd64.
+Preparing to unpack .../057-libopengl0_1.7.0-1build1_amd64.deb ...
+Unpacking libopengl0:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libopengl-dev:amd64.
+Preparing to unpack .../058-libopengl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libopengl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglvnd-dev:amd64.
+Preparing to unpack .../059-libglvnd-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglvnd-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libegl1-mesa-dev:amd64.
+Preparing to unpack .../060-libegl1-mesa-dev_25.2.8-0ubuntu0.24.04.2_amd64.deb ...
+Unpacking libegl1-mesa-dev:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Selecting previously unselected package libepoxy-dev:amd64.
+Preparing to unpack .../061-libepoxy-dev_1.5.10-1build1_amd64.deb ...
+Unpacking libepoxy-dev:amd64 (1.5.10-1build1) ...
+Selecting previously unselected package libgdk-pixbuf2.0-bin.
+Preparing to unpack .../062-libgdk-pixbuf2.0-bin_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking libgdk-pixbuf2.0-bin (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libjpeg-turbo8-dev:amd64.
+Preparing to unpack .../063-libjpeg-turbo8-dev_2.1.5-2ubuntu2_amd64.deb ...
+Unpacking libjpeg-turbo8-dev:amd64 (2.1.5-2ubuntu2) ...
+Selecting previously unselected package libjpeg8-dev:amd64.
+Preparing to unpack .../064-libjpeg8-dev_8c-2ubuntu11_amd64.deb ...
+Unpacking libjpeg8-dev:amd64 (8c-2ubuntu11) ...
+Selecting previously unselected package libjpeg-dev:amd64.
+Preparing to unpack .../065-libjpeg-dev_8c-2ubuntu11_amd64.deb ...
+Unpacking libjpeg-dev:amd64 (8c-2ubuntu11) ...
+Selecting previously unselected package libjbig-dev:amd64.
+Preparing to unpack .../066-libjbig-dev_2.1-6.1ubuntu2_amd64.deb ...
+Unpacking libjbig-dev:amd64 (2.1-6.1ubuntu2) ...
+Selecting previously unselected package liblzma-dev:amd64.
+Preparing to unpack .../067-liblzma-dev_5.6.1+really5.4.5-1ubuntu0.3_amd64.deb ...
+Unpacking liblzma-dev:amd64 (5.6.1+really5.4.5-1ubuntu0.3) ...
+Selecting previously unselected package libwebpdecoder3:amd64.
+Preparing to unpack .../068-libwebpdecoder3_1.3.2-0.4build3_amd64.deb ...
+Unpacking libwebpdecoder3:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libsharpyuv-dev:amd64.
+Preparing to unpack .../069-libsharpyuv-dev_1.3.2-0.4build3_amd64.deb ...
+Unpacking libsharpyuv-dev:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libwebp-dev:amd64.
+Preparing to unpack .../070-libwebp-dev_1.3.2-0.4build3_amd64.deb ...
+Unpacking libwebp-dev:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libtiffxx6:amd64.
+Preparing to unpack .../071-libtiffxx6_4.5.1+git230720-4ubuntu2.5_amd64.deb ...
+Unpacking libtiffxx6:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Selecting previously unselected package libdeflate-dev:amd64.
+Preparing to unpack .../072-libdeflate-dev_1.19-1build1.1_amd64.deb ...
+Unpacking libdeflate-dev:amd64 (1.19-1build1.1) ...
+Selecting previously unselected package liblerc-dev:amd64.
+Preparing to unpack .../073-liblerc-dev_4.0.0+ds-4ubuntu2_amd64.deb ...
+Unpacking liblerc-dev:amd64 (4.0.0+ds-4ubuntu2) ...
+Selecting previously unselected package libtiff-dev:amd64.
+Preparing to unpack .../074-libtiff-dev_4.5.1+git230720-4ubuntu2.5_amd64.deb ...
+Unpacking libtiff-dev:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Selecting previously unselected package libgdk-pixbuf-2.0-dev:amd64.
+Preparing to unpack .../075-libgdk-pixbuf-2.0-dev_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking libgdk-pixbuf-2.0-dev:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libgraphene-1.0-dev.
+Preparing to unpack .../076-libgraphene-1.0-dev_1.10.8-3build2_amd64.deb ...
+Unpacking libgraphene-1.0-dev (1.10.8-3build2) ...
+Selecting previously unselected package libfribidi-dev:amd64.
+Preparing to unpack .../077-libfribidi-dev_1.0.13-3build1_amd64.deb ...
+Unpacking libfribidi-dev:amd64 (1.0.13-3build1) ...
+Selecting previously unselected package libharfbuzz-icu0:amd64.
+Preparing to unpack .../078-libharfbuzz-icu0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-icu0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libharfbuzz-subset0:amd64.
+Preparing to unpack .../079-libharfbuzz-subset0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-subset0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libharfbuzz-cairo0:amd64.
+Preparing to unpack .../080-libharfbuzz-cairo0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-cairo0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libgraphite2-dev:amd64.
+Preparing to unpack .../081-libgraphite2-dev_1.3.14-2ubuntu0.24.04.1_amd64.deb ...
+Unpacking libgraphite2-dev:amd64 (1.3.14-2ubuntu0.24.04.1) ...
+Selecting previously unselected package libharfbuzz-dev:amd64.
+Preparing to unpack .../082-libharfbuzz-dev_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-dev:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libdatrie-dev:amd64.
+Preparing to unpack .../083-libdatrie-dev_0.2.13-3build1_amd64.deb ...
+Unpacking libdatrie-dev:amd64 (0.2.13-3build1) ...
+Selecting previously unselected package libthai-dev:amd64.
+Preparing to unpack .../084-libthai-dev_0.1.29-2build1_amd64.deb ...
+Unpacking libthai-dev:amd64 (0.1.29-2build1) ...
+Selecting previously unselected package libxft-dev:amd64.
+Preparing to unpack .../085-libxft-dev_2.3.6-1build1_amd64.deb ...
+Unpacking libxft-dev:amd64 (2.3.6-1build1) ...
+Selecting previously unselected package pango1.0-tools.
+Preparing to unpack .../086-pango1.0-tools_1.52.1+ds-1build1_amd64.deb ...
+Unpacking pango1.0-tools (1.52.1+ds-1build1) ...
+Selecting previously unselected package libpango1.0-dev:amd64.
+Preparing to unpack .../087-libpango1.0-dev_1.52.1+ds-1build1_amd64.deb ...
+Unpacking libpango1.0-dev:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package libwayland-server0:amd64.
+Preparing to unpack .../088-libwayland-server0_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-server0:amd64 (1.22.0-2.1build1) ...
+Selecting previously unselected package libwayland-bin.
+Preparing to unpack .../089-libwayland-bin_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-bin (1.22.0-2.1build1) ...
+Selecting previously unselected package libwayland-dev:amd64.
+Preparing to unpack .../090-libwayland-dev_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-dev:amd64 (1.22.0-2.1build1) ...
+Selecting previously unselected package libxfixes-dev:amd64.
+Preparing to unpack .../091-libxfixes-dev_1%3a6.0.0-2build1_amd64.deb ...
+Unpacking libxfixes-dev:amd64 (1:6.0.0-2build1) ...
+Selecting previously unselected package libxcomposite-dev:amd64.
+Preparing to unpack .../092-libxcomposite-dev_1%3a0.4.5-1build3_amd64.deb ...
+Unpacking libxcomposite-dev:amd64 (1:0.4.5-1build3) ...
+Selecting previously unselected package libxcursor-dev:amd64.
+Preparing to unpack .../093-libxcursor-dev_1%3a1.2.1-1build1_amd64.deb ...
+Unpacking libxcursor-dev:amd64 (1:1.2.1-1build1) ...
+Selecting previously unselected package libxdamage-dev:amd64.
+Preparing to unpack .../094-libxdamage-dev_1%3a1.1.6-1build1_amd64.deb ...
+Unpacking libxdamage-dev:amd64 (1:1.1.6-1build1) ...
+Selecting previously unselected package libxi-dev:amd64.
+Preparing to unpack .../095-libxi-dev_2%3a1.8.1-1build1_amd64.deb ...
+Unpacking libxi-dev:amd64 (2:1.8.1-1build1) ...
+Selecting previously unselected package libxinerama-dev:amd64.
+Preparing to unpack .../096-libxinerama-dev_2%3a1.1.4-3build1_amd64.deb ...
+Unpacking libxinerama-dev:amd64 (2:1.1.4-3build1) ...
+Selecting previously unselected package libxkbcommon-dev:amd64.
+Preparing to unpack .../097-libxkbcommon-dev_1.6.0-1build1_amd64.deb ...
+Unpacking libxkbcommon-dev:amd64 (1.6.0-1build1) ...
+Selecting previously unselected package libxrandr-dev:amd64.
+Preparing to unpack .../098-libxrandr-dev_2%3a1.5.2-2build1_amd64.deb ...
+Unpacking libxrandr-dev:amd64 (2:1.5.2-2build1) ...
+Selecting previously unselected package libvulkan-dev:amd64.
+Preparing to unpack .../099-libvulkan-dev_1.3.275.0-1build1_amd64.deb ...
+Unpacking libvulkan-dev:amd64 (1.3.275.0-1build1) ...
+Selecting previously unselected package wayland-protocols.
+Preparing to unpack .../100-wayland-protocols_1.45-1~ubuntu0.24.04.2_all.deb ...
+Unpacking wayland-protocols (1.45-1~ubuntu0.24.04.2) ...
+Selecting previously unselected package libgtk-4-dev:amd64.
+Preparing to unpack .../101-libgtk-4-dev_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking libgtk-4-dev:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libadwaita-1-dev:amd64.
+Preparing to unpack .../102-libadwaita-1-dev_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking libadwaita-1-dev:amd64 (1.5.0-1ubuntu2) ...
+Setting up libcairo-script-interpreter2:amd64 (1.18.0-3build1) ...
+Setting up libglib2.0-dev-bin (2.80.0-6ubuntu3.8) ...
+Setting up libwayland-server0:amd64 (1.22.0-2.1build1) ...
+Setting up libjpeg-turbo8-dev:amd64 (2.1.5-2ubuntu2) ...
+Setting up libvulkan-dev:amd64 (1.3.275.0-1build1) ...
+Setting up gir1.2-freedesktop:amd64 (1.80.1-1) ...
+Setting up libharfbuzz-icu0:amd64 (8.3.0-2build2) ...
+Setting up libpixman-1-dev:amd64 (0.42.2-1build1) ...
+Setting up libpangoxft-1.0-0:amd64 (1.52.1+ds-1build1) ...
+Setting up libglvnd-core-dev:amd64 (1.7.0-1build1) ...
+Setting up gir1.2-gdkpixbuf-2.0:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libgirepository-2.0-0:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libfribidi-dev:amd64 (1.0.13-3build1) ...
+Setting up libxkbcommon-dev:amd64 (1.6.0-1build1) ...
+Setting up libpng-dev:amd64 (1.6.43-5ubuntu0.6) ...
+Setting up pango1.0-tools (1.52.1+ds-1build1) ...
+Setting up libjbig-dev:amd64 (2.1-6.1ubuntu2) ...
+Setting up libwebpdecoder3:amd64 (1.3.2-0.4build3) ...
+Setting up libharfbuzz-gobject0:amd64 (8.3.0-2build2) ...
+Setting up gir1.2-harfbuzz-0.0:amd64 (8.3.0-2build2) ...
+Setting up libpthread-stubs0-dev:amd64 (0.4-1build3) ...
+Setting up libopengl0:amd64 (1.7.0-1build1) ...
+Setting up xtrans-dev (1.4.0-1) ...
+Setting up libwayland-bin (1.22.0-2.1build1) ...
+Setting up libgraphite2-dev:amd64 (1.3.14-2ubuntu0.24.04.1) ...
+Setting up gir1.2-pango-1.0:amd64 (1.52.1+ds-1build1) ...
+Setting up libegl-mesa0:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Setting up libgles2:amd64 (1.7.0-1build1) ...
+Setting up libharfbuzz-cairo0:amd64 (8.3.0-2build2) ...
+Setting up uuid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libgles1:amd64 (1.7.0-1build1) ...
+Setting up gir1.2-appstream-1.0:amd64 (1.0.2-1build6) ...
+Setting up libsepol-dev:amd64 (3.5-2build1) ...
+Setting up liblerc-dev:amd64 (4.0.0+ds-4ubuntu2) ...
+Setting up liblzma-dev:amd64 (5.6.1+really5.4.5-1ubuntu0.3) ...
+Setting up wayland-protocols (1.45-1~ubuntu0.24.04.2) ...
+Setting up libdatrie-dev:amd64 (0.2.13-3build1) ...
+Setting up gir1.2-glib-2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libgdk-pixbuf2.0-bin (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libegl1:amd64 (1.7.0-1build1) ...
+Setting up libharfbuzz-subset0:amd64 (8.3.0-2build2) ...
+Setting up xorg-sgml-doctools (1:1.11-1.1) ...
+Setting up libgtk-4-common (4.14.5+ds-0ubuntu0.10) ...
+Setting up libopengl-dev:amd64 (1.7.0-1build1) ...
+Setting up libjpeg8-dev:amd64 (8c-2ubuntu11) ...
+Setting up libsharpyuv-dev:amd64 (1.3.2-0.4build3) ...
+Setting up libtiffxx6:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Setting up libdeflate-dev:amd64 (1.19-1build1.1) ...
+Setting up libbrotli-dev:amd64 (1.1.0-2build2) ...
+Setting up libgraphene-1.0-0:amd64 (1.10.8-3build2) ...
+Setting up libbz2-dev:amd64 (1.0.8-5.1build0.1) ...
+Setting up gir1.2-graphene-1.0:amd64 (1.10.8-3build2) ...
+Setting up libblkid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libselinux1-dev:amd64 (3.5-2ubuntu2.1) ...
+Setting up libjpeg-dev:amd64 (8c-2ubuntu11) ...
+Setting up libwayland-dev:amd64 (1.22.0-2.1build1) ...
+Setting up libfreetype-dev:amd64 (2.13.2+dfsg-1ubuntu0.1) ...
+Setting up libwebp-dev:amd64 (1.3.2-0.4build3) ...
+Setting up libtiff-dev:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Setting up gir1.2-freedesktop-dev:amd64 (1.80.1-1) ...
+Setting up libthai-dev:amd64 (0.1.29-2build1) ...
+Setting up libmount-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libfontconfig-dev:amd64 (2.15.0-1.1ubuntu2) ...
+Setting up libglib2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Processing triggers for sgml-base (1.31) ...
+Setting up x11proto-dev (2023.2-1) ...
+Setting up libxau-dev:amd64 (1:1.0.9-1build6) ...
+Setting up libice-dev:amd64 (2:1.0.10-1build3) ...
+Setting up libsm-dev:amd64 (2:1.2.3-1build3) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Not building database; man-db/auto-update is not 'true'.
+Setting up libxdmcp-dev:amd64 (1:1.1.3-0ubuntu6) ...
+Processing triggers for libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libappstream-dev:amd64 (1.0.2-1build6) ...
+Setting up x11proto-core-dev (2023.2-1) ...
+Setting up libgraphene-1.0-dev (1.10.8-3build2) ...
+Setting up libgtk-4-1:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up gir1.2-gtk-4.0:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up libgdk-pixbuf-2.0-dev:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libharfbuzz-dev:amd64 (8.3.0-2build2) ...
+Setting up libxcb1-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libx11-dev:amd64 (2:1.8.7-1build1) ...
+Setting up libadwaita-1-0:amd64 (1.5.0-1ubuntu2) ...
+Setting up libxfixes-dev:amd64 (1:6.0.0-2build1) ...
+Setting up libxcb-shm0-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libxcb-render0-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libxext-dev:amd64 (2:1.3.4-1build2) ...
+Setting up libglx-dev:amd64 (1.7.0-1build1) ...
+Setting up libxi-dev:amd64 (2:1.8.1-1build1) ...
+Setting up libxrender-dev:amd64 (1:0.9.10-1.1build1) ...
+Setting up libgl-dev:amd64 (1.7.0-1build1) ...
+Setting up libxft-dev:amd64 (2.3.6-1build1) ...
+Setting up libxdamage-dev:amd64 (1:1.1.6-1build1) ...
+Setting up libegl-dev:amd64 (1.7.0-1build1) ...
+Setting up libxcomposite-dev:amd64 (1:0.4.5-1build3) ...
+Setting up libxcursor-dev:amd64 (1:1.2.1-1build1) ...
+Setting up libepoxy-dev:amd64 (1.5.10-1build1) ...
+Setting up gir1.2-adw-1:amd64 (1.5.0-1ubuntu2) ...
+Setting up libxrandr-dev:amd64 (2:1.5.2-2build1) ...
+Setting up libxinerama-dev:amd64 (2:1.1.4-3build1) ...
+Setting up libcairo2-dev:amd64 (1.18.0-3build1) ...
+Setting up libgles-dev:amd64 (1.7.0-1build1) ...
+Setting up libglvnd-dev:amd64 (1.7.0-1build1) ...
+Setting up libpango1.0-dev:amd64 (1.52.1+ds-1build1) ...
+Setting up libegl1-mesa-dev:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Setting up libgtk-4-dev:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up libadwaita-1-dev:amd64 (1.5.0-1ubuntu2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+4.14.5
+1.5.0
+GATE_native_prerequisites_RC=0
+===== GATE toolchain =====
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GATE_toolchain_RC=0
+===== PRE_VALIDATION_HASHES =====
+cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503  Cargo.toml
+c22b0efad4fc6e9e404ce68d182da6713296f88039338429a3af983b409b24cb  Cargo.lock
+51227c7f0a1216df83c1e2ac7526961d096b7508ff1aaa1c7410f15102ba182e  crates/prw-remote-bridge/Cargo.toml
+===== GATE locked_metadata =====
+GATE_locked_metadata_RC=0
+===== GATE focused_fmt =====
+GATE_focused_fmt_RC=0
+===== GATE focused_clippy =====
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded bitflags v2.13.1
+  Downloaded dunce v1.0.5
+  Downloaded chacha20 v0.10.1
+  Downloaded errno v0.3.14
+  Downloaded aws-lc-rs v1.18.0
+  Downloaded rand_pcg v0.10.2
+  Downloaded rustc-hash v2.1.3
+  Downloaded lru-slab v0.1.2
+  Downloaded subtle v2.6.1
+  Downloaded cfg-if v1.0.4
+  Downloaded cpufeatures v0.3.0
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded untrusted v0.7.1
+  Downloaded cfg_aliases v0.2.2
+  Downloaded untrusted v0.9.0
+  Downloaded tokio-macros v2.7.2
+  Downloaded fs_extra v1.3.0
+  Downloaded pin-project-lite v0.2.17
+  Downloaded pkg-config v0.3.34
+  Downloaded quinn-udp v0.5.15
+  Downloaded rand_core v0.10.1
+  Downloaded quote v1.0.47
+  Downloaded once_cell v1.21.4
+  Downloaded slab v0.4.12
+  Downloaded thiserror-impl v2.0.20
+  Downloaded getrandom v0.2.17
+  Downloaded jobserver v0.1.35
+  Downloaded shlex v2.0.1
+  Downloaded thiserror v2.0.20
+  Downloaded zeroize v1.9.0
+  Downloaded cmake v0.1.58
+  Downloaded getrandom v0.4.3
+  Downloaded proc-macro2 v1.0.107
+  Downloaded socket2 v0.6.5
+  Downloaded tinyvec v1.12.0
+  Downloaded tracing-core v0.1.36
+  Downloaded unicode-ident v1.0.24
+  Downloaded rustls-pki-types v1.15.1
+  Downloaded bytes v1.12.1
+  Downloaded quinn v0.11.11
+  Downloaded mio v1.2.2
+  Downloaded rand v0.10.2
+  Downloaded rustls-webpki v0.103.14
+  Downloaded cc v1.4.3
+  Downloaded quinn-proto v0.11.16
+  Downloaded syn v3.0.3
+  Downloaded rustls v0.23.43
+  Downloaded tracing v0.1.44
+  Downloaded rustix v1.1.4
+  Downloaded libc v0.2.189
+  Downloaded tokio v1.53.1
+  Downloaded ring v0.17.14
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded aws-lc-sys v0.44.0
+   Compiling libc v0.2.189
+   Compiling aws-lc-rs v1.18.0
+    Checking untrusted v0.7.1
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling jobserver v0.1.35
+   Compiling cc v1.4.3
+   Compiling cmake v0.1.58
+   Compiling syn v3.0.3
+   Compiling aws-lc-sys v0.44.0
+    Checking once_cell v1.21.4
+    Checking rand_core v0.10.1
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Checking pin-project-lite v0.2.17
+   Compiling getrandom v0.4.3
+    Checking tracing-core v0.1.36
+    Checking rustls-pki-types v1.15.1
+   Compiling rustls v0.23.43
+    Checking cpufeatures v0.3.0
+   Compiling thiserror v2.0.20
+    Checking chacha20 v0.10.1
+    Checking tracing v0.1.44
+   Compiling quinn-udp v0.5.15
+   Compiling thiserror-impl v2.0.20
+    Checking socket2 v0.6.5
+    Checking prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+    Checking bytes v1.12.1
+   Compiling rustix v1.1.4
+    Checking tinyvec_macros v0.1.1
+    Checking tinyvec v1.12.0
+    Checking rand v0.10.2
+    Checking rand_pcg v0.10.2
+   Compiling quinn v0.11.11
+   Compiling tokio-macros v2.7.2
+    Checking mio v1.2.2
+    Checking linux-raw-sys v0.12.1
+    Checking lru-slab v0.1.2
+    Checking slab v0.4.12
+    Checking rustc-hash v2.1.3
+    Checking tokio v1.53.1
+    Checking rustls-webpki v0.103.14
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking quinn-proto v0.11.16
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 55.37s
+GATE_focused_clippy_RC=0
+===== GATE focused_connectivity_tests =====
+   Compiling prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.43s
+     Running unittests src/lib.rs (target/debug/deps/prw_connectivity-70caf3fdea53556c)
+
+running 14 tests
+test tests::candidate_capacity_is_enforced ... ok
+test tests::candidate_refresh_preserves_identity_and_replaces_transient_endpoints ... ok
+test tests::candidate_refresh_rejects_rebinding_existing_id_to_new_endpoint ... ok
+test tests::candidate_refresh_rejects_reuse_after_candidate_removal ... ok
+test tests::identifiers_transport_and_endpoints_are_bounded ... ok
+test tests::internet_direct_beats_relay_when_local_is_unavailable ... ok
+test tests::invalid_candidate_refresh_preserves_previous_state ... ok
+test tests::local_direct_beats_internet_direct_and_relay ... ok
+test tests::logical_device_and_transport_identity_are_independent ... ok
+test tests::relay_is_fallback_only_when_direct_candidates_are_not_reachable ... ok
+test tests::duplicate_ids_and_exact_kind_endpoints_are_rejected ... ok
+test tests::selection_is_insertion_order_independent_and_same_kind_uses_lowest_id ... ok
+test tests::unknown_and_unreachable_candidates_produce_offline ... ok
+test tests::unknown_observation_target_fails_closed ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+GATE_focused_connectivity_tests_RC=0
+===== GATE focused_remote_bridge_tests =====
+   Compiling libc v0.2.189
+   Compiling untrusted v0.7.1
+   Compiling rand_core v0.10.1
+   Compiling once_cell v1.21.4
+   Compiling prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+   Compiling pin-project-lite v0.2.17
+   Compiling tracing-core v0.1.36
+   Compiling jobserver v0.1.35
+   Compiling rustls-pki-types v1.15.1
+   Compiling cc v1.4.3
+   Compiling cpufeatures v0.3.0
+   Compiling chacha20 v0.10.1
+   Compiling socket2 v0.6.5
+   Compiling cmake v0.1.58
+   Compiling getrandom v0.4.3
+   Compiling tracing v0.1.44
+   Compiling aws-lc-sys v0.44.0
+   Compiling prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+   Compiling bytes v1.12.1
+   Compiling tinyvec_macros v0.1.1
+   Compiling tinyvec v1.12.0
+   Compiling thiserror v2.0.20
+   Compiling rand v0.10.2
+   Compiling mio v1.2.2
+   Compiling rand_pcg v0.10.2
+   Compiling slab v0.4.12
+   Compiling lru-slab v0.1.2
+   Compiling linux-raw-sys v0.12.1
+   Compiling rustc-hash v2.1.3
+   Compiling rustix v1.1.4
+   Compiling tokio v1.53.1
+   Compiling quinn-udp v0.5.15
+   Compiling aws-lc-rs v1.18.0
+   Compiling rustls v0.23.43
+   Compiling prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+   Compiling rustls-webpki v0.103.14
+   Compiling prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+   Compiling prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+   Compiling prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+   Compiling prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+   Compiling prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+   Compiling prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+   Compiling prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+   Compiling quinn-proto v0.11.16
+   Compiling quinn v0.11.11
+   Compiling prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+   Compiling prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 51.31s
+     Running unittests src/lib.rs (target/debug/deps/prw_remote_bridge-93fc81f236efc0ad)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/authenticated_candidate_provenance.rs (target/debug/deps/authenticated_candidate_provenance-31220d05e7564c86)
+
+running 7 tests
+test authenticated_target_publication_allows_same_workspace_refresh ... ok
+test authenticated_requester_publication_cannot_be_retargeted_to_peer_plan ... ok
+test cross_workspace_requester_cannot_consume_authenticated_target_publication ... ok
+test fixture_keeps_requester_and_target_identities_distinct ... ok
+test target_membership_suspension_rejects_stale_publication_before_mutation ... ok
+test invalid_candidate_set_is_rejected_before_publication_exists ... ok
+test target_transport_rotation_rejects_stale_publication_before_mutation ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/candidate_reachability_semantic_adapter.rs (target/debug/deps/candidate_reachability_semantic_adapter-4bf62badb7fd4930)
+
+running 3 tests
+test semantic_adapter_rejects_candidate_id_rebinding_transactionally ... ok
+test semantic_adapter_derives_publisher_identity_and_refreshes_exact_target_only ... ok
+test semantic_adapter_rejects_stale_target_transport_before_plan_mutation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/dynamic_reachability_registry.rs (target/debug/deps/dynamic_reachability_registry-0deaef7585b09e01)
+
+running 5 tests
+test cross_workspace_target_rejects_refresh_before_endpoint_mutation ... ok
+test current_session_workspace_and_target_identity_allow_transient_refresh ... ok
+test requester_membership_suspension_rejects_refresh_before_endpoint_mutation ... ok
+test target_device_revocation_rejects_refresh_before_endpoint_mutation ... ok
+test transport_rotation_rejects_stale_plan_before_endpoint_mutation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/end_to_end.rs (target/debug/deps/end_to_end-433eafdbf45f3234)
+
+running 9 tests
+test all_operation_codes_round_trip_and_map_to_exact_capabilities ... ok
+test current_transport_binding_is_single_bind_compare_and_rotate ... ok
+test denied_capability_and_owner_role_never_dispatch ... ok
+test malformed_header_fields_trailing_data_and_invalid_typed_values_fail_closed ... ok
+test lease_bounds_dispatch_failure_and_oversized_response_fail_closed ... ok
+test membership_suspension_and_device_revocation_invalidate_unexpired_session ... ok
+test stale_transport_expired_or_future_session_never_dispatches ... ok
+test valid_full_chain_dispatches_and_correlates_response ... ok
+test wrong_outer_kind_and_malformed_prwc_never_dispatch ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_composition_reference.rs (target/debug/deps/reachability_composition_reference-cd990ee72241f0f6)
+
+running 4 tests
+test rejected_candidate_refresh_preserves_plan_and_current_traversal_lifecycle ... ok
+test every_successful_full_refresh_invalidates_the_current_replacement_lifecycle ... ok
+test stale_transport_admission_failure_preserves_plan_and_traversal ... ok
+test successful_refresh_invalidates_old_lifecycle_even_for_exact_retained_candidate ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_freshness_authority_reference.rs (target/debug/deps/reachability_freshness_authority_reference-91b90d328f8c7691)
+
+running 6 tests
+test candidate_validation_failure_does_not_consume_current_freshness ... ok
+test requester_change_does_not_create_an_independent_replay_namespace ... ok
+test stale_or_duplicate_expected_freshness_fails_before_authoritative_mutation ... ok
+test same_peer_session_renewal_continues_the_existing_freshness_lifecycle ... ok
+test successful_commit_advances_freshness_resets_observation_and_invalidates_traversal_together ... ok
+test unavailable_verifier_state_fails_closed_without_resetting_to_an_initial_baseline ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_freshness_bootstrap_reference.rs (target/debug/deps/reachability_freshness_bootstrap_reference-84223b9c91f0e064)
+
+running 5 tests
+test missing_state_for_existing_lifecycle_does_not_alias_new_bootstrap ... ok
+test invalid_first_candidate_vector_does_not_consume_bootstrap ... ok
+test new_lifecycle_first_publication_establishes_freshness_once ... ok
+test same_peer_session_renewal_during_bootstrap_uses_the_existing_bootstrap_state ... ok
+test transport_rotation_creates_a_distinct_replacement_peer_bootstrap_lifecycle ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+GATE_focused_remote_bridge_tests_RC=0
+===== GATE locked_metadata_recheck =====
+GATE_locked_metadata_recheck_RC=0
+===== GATE workspace_fmt =====
+GATE_workspace_fmt_RC=0
+===== GATE workspace_clippy =====
+ Downloading crates ...
+  Downloaded asn1-rs-derive v0.6.0
+  Downloaded aead v0.5.2
+  Downloaded asn1-rs v0.7.2
+  Downloaded crc v3.4.0
+  Downloaded block-buffer v0.10.4
+  Downloaded cpufeatures v0.2.17
+  Downloaded cipher v0.4.4
+  Downloaded ctr v0.9.2
+  Downloaded displaydoc v0.2.7
+  Downloaded num-integer v0.1.47
+  Downloaded autocfg v1.5.1
+  Downloaded base64ct v1.8.3
+  Downloaded bit-vec v0.9.1
+  Downloaded cfg-expr v0.20.8
+  Downloaded crc-catalog v2.5.0
+  Downloaded digest v0.10.7
+  Downloaded base64 v0.22.1
+  Downloaded cairo-rs v0.22.0
+  Downloaded crypto-bigint v0.5.5
+  Downloaded crypto-common v0.1.7
+  Downloaded data-encoding v2.11.1
+  Downloaded der v0.7.10
+  Downloaded der-parser v10.0.0
+  Downloaded deranged v0.5.8
+  Downloaded futures-core v0.3.34
+  Downloaded gdk4-sys v0.11.4
+  Downloaded group v0.13.0
+  Downloaded minimal-lexical v0.2.1
+  Downloaded pkcs8 v0.10.2
+  Downloaded rfc6979 v0.4.0
+  Downloaded aes v0.8.4
+  Downloaded aes-gcm v0.10.3
+  Downloaded ff v0.13.1
+  Downloaded futures-macro v0.3.34
+  Downloaded rand_core v0.6.4
+  Downloaded zerofrom-derive v0.1.7
+  Downloaded generic-array v0.14.7
+  Downloaded ghash v0.5.1
+  Downloaded heck v0.5.0
+  Downloaded yoke-derive v0.8.2
+  Downloaded asn1-rs-impl v0.2.0
+  Downloaded futures-task v0.3.34
+  Downloaded glib-macros v0.22.6
+  Downloaded futures-io v0.3.34
+  Downloaded gdk-pixbuf-sys v0.22.0
+  Downloaded gsk4 v0.11.4
+  Downloaded gtk4-macros v0.11.4
+  Downloaded icu_collections v2.3.0
+  Downloaded ecdsa v0.16.9
+  Downloaded rcgen v0.14.8
+  Downloaded equivalent v1.0.2
+  Downloaded graphene-sys v0.22.8
+  Downloaded form_urlencoded v1.2.2
+  Downloaded rusticata-macros v4.1.0
+  Downloaded serde_derive v1.0.229
+  Downloaded field-offset v0.3.6
+  Downloaded gobject-sys v0.22.6
+  Downloaded primeorder v0.13.6
+  Downloaded proc-macro-crate v3.5.0
+  Downloaded serde_spanned v1.1.1
+  Downloaded substring v1.4.5
+  Downloaded elliptic-curve v0.13.8
+  Downloaded signature v2.2.0
+  Downloaded idna_adapter v1.2.2
+  Downloaded gdk-pixbuf v0.22.0
+  Downloaded utf8_iter v1.0.4
+  Downloaded inout v0.1.4
+  Downloaded lazy_static v1.5.0
+  Downloaded memoffset v0.9.1
+  Downloaded num-conv v0.2.2
+  Downloaded percent-encoding v2.3.2
+  Downloaded potential_utf v0.1.6
+  Downloaded sec1 v0.7.3
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded time-core v0.1.9
+  Downloaded universal-hash v0.5.1
+  Downloaded version-compare v0.2.1
+  Downloaded base16ct v0.2.0
+  Downloaded cairo-sys-rs v0.22.0
+  Downloaded const-oid v0.9.6
+  Downloaded futures-channel v0.3.34
+  Downloaded futures-executor v0.3.34
+  Downloaded graphene-rs v0.22.8
+  Downloaded md-5 v0.10.6
+  Downloaded oid-registry v0.8.1
+  Downloaded opaque-debug v0.3.1
+  Downloaded pem v3.0.6
+  Downloaded polyval v0.6.2
+  Downloaded powerfmt v0.2.0
+  Downloaded rustc_version v0.4.1
+  Downloaded zerofrom v0.1.8
+  Downloaded gsk4-sys v0.11.4
+  Downloaded hmac v0.12.1
+  Downloaded libadwaita-sys v0.9.2
+  Downloaded litemap v0.8.3
+  Downloaded log v0.4.33
+  Downloaded p256 v0.13.2
+  Downloaded pango v0.22.8
+  Downloaded version_check v0.9.5
+  Downloaded glib-sys v0.22.8
+  Downloaded num-traits v0.2.19
+  Downloaded pango-sys v0.22.0
+  Downloaded pem-rfc7468 v0.7.0
+  Downloaded sha2 v0.10.9
+  Downloaded toml_datetime v1.1.1+spec-1.1.0
+  Downloaded writeable v0.6.4
+  Downloaded gio-sys v0.22.8
+  Downloaded icu_locale_core v2.3.0
+  Downloaded icu_normalizer_data v2.3.0
+  Downloaded icu_provider v2.3.0
+  Downloaded nom v7.1.3
+  Downloaded spki v0.7.3
+  Downloaded synstructure v0.13.2
+  Downloaded target-lexicon v0.13.5
+  Downloaded toml_writer v1.1.2+spec-1.1.0
+  Downloaded zerovec-derive v0.11.4
+  Downloaded gtk4-sys v0.11.4
+  Downloaded indexmap v2.14.0
+  Downloaded memchr v2.8.3
+  Downloaded num-bigint v0.4.8
+  Downloaded smallvec v1.15.2
+  Downloaded gdk4 v0.11.4
+  Downloaded rtc-shared v0.20.2
+  Downloaded semver v1.0.28
+  Downloaded toml_parser v1.1.3+spec-1.1.0
+  Downloaded futures-util v0.3.34
+  Downloaded hashbrown v0.17.1
+  Downloaded icu_properties v2.3.0
+  Downloaded system-deps v7.0.8
+  Downloaded tinystr v0.8.4
+  Downloaded gio v0.22.8
+  Downloaded icu_properties_data v2.3.0
+  Downloaded idna v1.1.0
+  Downloaded libadwaita v0.9.2
+  Downloaded rtc-stun v0.20.2
+  Downloaded time-macros v0.2.32
+  Downloaded yoke v0.8.3
+  Downloaded rtc-mdns v0.20.2
+  Downloaded serde_core v1.0.229
+  Downloaded yasna v0.6.0
+  Downloaded hkdf v0.12.4
+  Downloaded rtc-ice v0.20.2
+  Downloaded toml_edit v0.25.13+spec-1.1.0
+  Downloaded uuid v1.24.1
+  Downloaded zerotrie v0.2.5
+  Downloaded sansio v1.0.0
+  Downloaded toml v1.1.4+spec-1.1.0
+  Downloaded glib v0.22.8
+  Downloaded url v2.5.8
+  Downloaded serde v1.0.229
+  Downloaded x509-parser v0.18.1
+  Downloaded nix v0.31.3
+  Downloaded typenum v1.20.1
+  Downloaded zerovec v0.11.7
+  Downloaded gtk4 v0.11.3
+  Downloaded icu_normalizer v2.3.0
+  Downloaded winnow v1.0.4
+  Downloaded time v0.3.55
+  Downloaded syn v2.0.119
+   Compiling jobserver v0.1.35
+   Compiling syn v3.0.3
+   Compiling cc v1.4.3
+   Compiling cmake v0.1.58
+   Compiling aws-lc-sys v0.44.0
+    Checking subtle v2.6.1
+   Compiling winnow v1.0.4
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling target-lexicon v0.13.5
+   Compiling serde_spanned v1.1.1
+   Compiling smallvec v1.15.2
+   Compiling heck v0.5.0
+   Compiling cfg-expr v0.20.8
+   Compiling toml v1.1.4+spec-1.1.0
+   Compiling version-compare v0.2.1
+   Compiling system-deps v7.0.8
+   Compiling syn v2.0.119
+   Compiling version_check v0.9.5
+   Compiling generic-array v0.14.7
+    Checking typenum v1.20.1
+    Checking getrandom v0.4.3
+    Checking getrandom v0.2.17
+    Checking rand_core v0.6.4
+   Compiling thiserror-impl v2.0.20
+    Checking thiserror v2.0.20
+    Checking rand v0.10.2
+    Checking socket2 v0.6.5
+    Checking crypto-common v0.1.7
+   Compiling autocfg v1.5.1
+   Compiling glib-sys v0.22.8
+   Compiling synstructure v0.13.2
+   Compiling tokio-macros v2.7.2
+    Checking mio v1.2.2
+    Checking const-oid v0.9.6
+    Checking tokio v1.53.1
+    Checking quinn-udp v0.5.15
+   Compiling zerofrom-derive v0.1.7
+   Compiling memoffset v0.9.1
+   Compiling gobject-sys v0.22.6
+    Checking zerofrom v0.1.8
+   Compiling yoke-derive v0.8.2
+    Checking stable_deref_trait v1.2.1
+    Checking yoke v0.8.3
+   Compiling gio-sys v0.22.8
+    Checking block-buffer v0.10.4
+   Compiling zerovec-derive v0.11.4
+    Checking zerovec v0.11.7
+    Checking digest v0.10.7
+   Compiling nix v0.31.3
+   Compiling displaydoc v0.2.7
+    Checking base64ct v1.8.3
+    Checking pem-rfc7468 v0.7.0
+    Checking futures-core v0.3.34
+    Checking der v0.7.10
+    Checking tinystr v0.8.4
+   Compiling futures-macro v0.3.34
+    Checking futures-task v0.3.34
+    Checking writeable v0.6.4
+    Checking litemap v0.8.3
+    Checking icu_locale_core v2.3.0
+    Checking futures-util v0.3.34
+    Checking spki v0.7.3
+    Checking zerotrie v0.2.5
+    Checking hmac v0.12.1
+    Checking potential_utf v0.1.6
+   Compiling cairo-sys-rs v0.22.0
+   Compiling pango-sys v0.22.0
+   Compiling gdk-pixbuf-sys v0.22.0
+    Checking utf8_iter v1.0.4
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+    Checking cpufeatures v0.2.17
+    Checking icu_collections v2.3.0
+    Checking icu_provider v2.3.0
+    Checking pkcs8 v0.10.2
+    Checking futures-executor v0.3.34
+    Checking futures-channel v0.3.34
+    Checking ff v0.13.1
+   Compiling glib-macros v0.22.6
+    Checking time-core v0.1.9
+    Checking num-conv v0.2.2
+    Checking base16ct v0.2.0
+    Checking memchr v2.8.3
+    Checking deranged v0.5.8
+    Checking powerfmt v0.2.0
+    Checking time v0.3.55
+    Checking glib v0.22.8
+    Checking sec1 v0.7.3
+    Checking group v0.13.0
+    Checking hkdf v0.12.4
+    Checking crypto-bigint v0.5.5
+    Checking inout v0.1.4
+   Compiling gdk4-sys v0.11.4
+   Compiling graphene-sys v0.22.8
+    Checking base64 v0.22.1
+    Checking pem v3.0.6
+    Checking cipher v0.4.4
+    Checking elliptic-curve v0.13.8
+    Checking icu_normalizer v2.3.0
+    Checking icu_properties v2.3.0
+    Checking yasna v0.6.0
+    Checking universal-hash v0.5.1
+    Checking opaque-debug v0.3.1
+   Compiling serde_core v1.0.229
+    Checking polyval v0.6.2
+    Checking idna_adapter v1.2.2
+    Checking rfc6979 v0.4.0
+    Checking signature v2.2.0
+   Compiling substring v1.4.5
+   Compiling gsk4-sys v0.11.4
+   Compiling serde v1.0.229
+    Checking percent-encoding v2.3.2
+    Checking futures-io v0.3.34
+    Checking gio v0.22.8
+    Checking form_urlencoded v1.2.2
+    Checking ecdsa v0.16.9
+    Checking idna v1.1.0
+    Checking ghash v0.5.1
+    Checking primeorder v0.13.6
+    Checking ctr v0.9.2
+    Checking aes v0.8.4
+    Checking sha2 v0.10.9
+    Checking aead v0.5.2
+   Compiling gtk4-sys v0.11.4
+   Compiling serde_derive v1.0.229
+   Compiling equivalent v1.0.2
+   Compiling semver v1.0.28
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.0
+   Compiling rustc_version v0.4.1
+    Checking aes-gcm v0.10.3
+    Checking p256 v0.13.2
+    Checking url v2.5.8
+   Compiling field-offset v0.3.6
+   Compiling toml_edit v0.25.13+spec-1.1.0
+    Checking pango v0.22.8
+    Checking gdk-pixbuf v0.22.0
+    Checking cairo-rs v0.22.0
+    Checking sansio v1.0.0
+    Checking crc-catalog v2.5.0
+    Checking crc v3.4.0
+    Checking gdk4 v0.11.4
+   Compiling proc-macro-crate v3.5.0
+    Checking graphene-rs v0.22.8
+    Checking md-5 v0.10.6
+   Compiling libadwaita-sys v0.9.2
+    Checking log v0.4.33
+    Checking lazy_static v1.5.0
+    Checking gsk4 v0.11.4
+   Compiling gtk4-macros v0.11.4
+    Checking uuid v1.24.1
+    Checking gtk4 v0.11.3
+   Compiling aws-lc-rs v1.18.0
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking rustls-webpki v0.103.14
+   Compiling rustls v0.23.43
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking quinn-proto v0.11.16
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking quinn v0.11.11
+    Checking rcgen v0.14.8
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking rtc-shared v0.20.2
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking rtc-mdns v0.20.2
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+    Checking rtc-stun v0.20.2
+    Checking rtc-ice v0.20.2
+    Checking prw-relay v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay)
+    Checking libadwaita v0.9.2
+    Checking prw-device-identity-provisioning v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-provisioning)
+    Checking prw-control-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-transport)
+    Checking prw-private-dns v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-private-dns)
+    Checking prw-relay-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay-service)
+    Checking prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+    Checking prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+    Checking prw-enrollment v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-enrollment)
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 36s
+GATE_workspace_clippy_RC=0
+===== GATE workspace_tests =====
+   Compiling aws-lc-sys v0.44.0
+   Compiling subtle v2.6.1
+   Compiling typenum v1.20.1
+   Compiling aws-lc-rs v1.18.0
+   Compiling generic-array v0.14.7
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling getrandom v0.4.3
+   Compiling prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+   Compiling thiserror v2.0.20
+   Compiling rand v0.10.2
+   Compiling socket2 v0.6.5
+   Compiling rustls-webpki v0.103.14
+   Compiling crypto-common v0.1.7
+   Compiling prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+   Compiling rustls v0.23.43
+   Compiling prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+   Compiling const-oid v0.9.6
+   Compiling smallvec v1.15.2
+   Compiling glib-sys v0.22.8
+   Compiling mio v1.2.2
+   Compiling tokio v1.53.1
+   Compiling quinn-proto v0.11.16
+   Compiling zerofrom v0.1.8
+   Compiling quinn-udp v0.5.15
+   Compiling prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+   Compiling stable_deref_trait v1.2.1
+   Compiling yoke v0.8.3
+   Compiling memoffset v0.9.1
+   Compiling gobject-sys v0.22.6
+   Compiling prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+   Compiling block-buffer v0.10.4
+   Compiling quinn v0.11.11
+   Compiling zerovec v0.11.7
+   Compiling prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+   Compiling digest v0.10.7
+   Compiling gio-sys v0.22.8
+   Compiling prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+   Compiling prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+   Compiling prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+   Compiling base64ct v1.8.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling nix v0.31.3
+   Compiling der v0.7.10
+   Compiling prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+   Compiling tinystr v0.8.4
+   Compiling futures-core v0.3.34
+   Compiling litemap v0.8.3
+   Compiling writeable v0.6.4
+   Compiling spki v0.7.3
+   Compiling icu_locale_core v2.3.0
+   Compiling zerotrie v0.2.5
+   Compiling hmac v0.12.1
+   Compiling potential_utf v0.1.6
+   Compiling futures-task v0.3.34
+   Compiling cpufeatures v0.2.17
+   Compiling utf8_iter v1.0.4
+   Compiling icu_collections v2.3.0
+   Compiling icu_provider v2.3.0
+   Compiling futures-util v0.3.34
+   Compiling pkcs8 v0.10.2
+   Compiling ff v0.13.1
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling time-core v0.1.9
+   Compiling powerfmt v0.2.0
+   Compiling base16ct v0.2.0
+   Compiling time v0.3.55
+   Compiling sec1 v0.7.3
+   Compiling futures-executor v0.3.34
+   Compiling group v0.13.0
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling hkdf v0.12.4
+   Compiling futures-channel v0.3.34
+   Compiling crypto-bigint v0.5.5
+   Compiling inout v0.1.4
+   Compiling memchr v2.8.3
+   Compiling base64 v0.22.1
+   Compiling pem v3.0.6
+   Compiling elliptic-curve v0.13.8
+   Compiling glib v0.22.8
+   Compiling cipher v0.4.4
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling yasna v0.6.0
+   Compiling pango-sys v0.22.0
+   Compiling cairo-sys-rs v0.22.0
+   Compiling gdk-pixbuf-sys v0.22.0
+   Compiling prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+   Compiling universal-hash v0.5.1
+   Compiling opaque-debug v0.3.1
+   Compiling polyval v0.6.2
+   Compiling rcgen v0.14.8
+   Compiling idna_adapter v1.2.2
+   Compiling rfc6979 v0.4.0
+   Compiling signature v2.2.0
+   Compiling percent-encoding v2.3.2
+   Compiling form_urlencoded v1.2.2
+   Compiling ecdsa v0.16.9
+   Compiling idna v1.1.0
+   Compiling graphene-sys v0.22.8
+   Compiling gdk4-sys v0.11.4
+   Compiling serde_core v1.0.229
+   Compiling ghash v0.5.1
+   Compiling aes v0.8.4
+   Compiling ctr v0.9.2
+   Compiling primeorder v0.13.6
+   Compiling sha2 v0.10.9
+   Compiling aead v0.5.2
+   Compiling futures-io v0.3.34
+   Compiling gio v0.22.8
+   Compiling p256 v0.13.2
+   Compiling serde v1.0.229
+   Compiling aes-gcm v0.10.3
+   Compiling url v2.5.8
+   Compiling substring v1.4.5
+   Compiling rtc-shared v0.20.2
+   Compiling gsk4-sys v0.11.4
+   Compiling crc-catalog v2.5.0
+   Compiling sansio v1.0.0
+   Compiling crc v3.4.0
+   Compiling prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+   Compiling cairo-rs v0.22.0
+   Compiling md-5 v0.10.6
+   Compiling log v0.4.33
+   Compiling lazy_static v1.5.0
+   Compiling rtc-stun v0.20.2
+   Compiling rtc-mdns v0.20.2
+   Compiling gtk4-sys v0.11.4
+   Compiling graphene-rs v0.22.8
+   Compiling pango v0.22.8
+   Compiling gdk-pixbuf v0.22.0
+   Compiling gdk4 v0.11.4
+   Compiling uuid v1.24.1
+   Compiling rtc-ice v0.20.2
+   Compiling field-offset v0.3.6
+   Compiling prw-relay v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay)
+   Compiling libadwaita-sys v0.9.2
+   Compiling prw-control-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-transport)
+   Compiling prw-relay-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay-service)
+   Compiling gsk4 v0.11.4
+   Compiling prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+   Compiling gtk4 v0.11.3
+   Compiling prw-device-identity-provisioning v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-provisioning)
+   Compiling prw-private-dns v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-private-dns)
+   Compiling libadwaita v0.9.2
+   Compiling prw-enrollment v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-enrollment)
+   Compiling prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 33s
+     Running unittests src/lib.rs (target/debug/deps/prw_agent-5bf932f0b842a46d)
+
+running 373 tests
+test frame_codec::tests::decoder_rejects_invalid_magic ... ok
+test frame_codec::tests::decoder_rejects_unknown_kind_flags_and_reserved_bytes ... ok
+test frame_codec::tests::decoder_rejects_payload_above_global_bound ... ok
+test frame_codec::tests::decoder_rejects_zero_request_id ... ok
+test frame_codec::tests::encoding_matches_locked_big_endian_layout ... ok
+test frame_codec::tests::header_round_trip_preserves_validated_metadata ... ok
+test frame_codec::tests::decoder_rejects_unsupported_version ... ok
+test frame_object::boundary_reader::tests::complete_frame_is_delegated_and_returned ... ok
+test frame_object::boundary_reader::tests::empty_stream_is_clean_eof_without_frame_error ... ok
+test frame_object::boundary_reader::tests::eof_after_first_header_byte_is_truncated_header ... ok
+test frame_object::boundary_reader::tests::eof_after_partial_header_is_truncated_header ... ok
+test frame_object::boundary_reader::tests::first_byte_non_eof_io_failure_is_bounded_header_io ... ok
+test frame_object::boundary_reader::tests::interrupted_first_byte_read_is_retried ... ok
+test frame_object::boundary_reader::tests::successful_read_leaves_following_frame_unconsumed ... ok
+test frame_object::reader::tests::accepts_zero_length_payload_without_consuming_next_frame_data ... ok
+test frame_object::reader::tests::reads_one_frame_and_leaves_following_bytes ... ok
+test frame_object::reader::tests::rejects_truncated_header ... ok
+test frame_object::reader::tests::rejects_truncated_payload ... ok
+test frame_object::reader::tests::validates_header_before_payload_allocation_or_read ... ok
+test frame_object::tests::complete_frame_rejects_payload_length_mismatch ... ok
+test frame_object::tests::complete_frame_requires_exact_payload_length ... ok
+test frame_object::tests::empty_payload_is_valid_when_header_declares_zero ... ok
+test frame_object::tests::payload_accepts_global_maximum ... ok
+test frame_object::tests::payload_rejects_above_global_maximum ... ok
+test frame_object::writer::tests::classifies_header_write_failure ... ok
+test frame_object::writer::tests::classifies_payload_write_failure_after_complete_header ... ok
+test frame_object::writer::tests::writer_emits_exact_header_then_payload ... ok
+test frame_object::writer::tests::written_frame_round_trips_through_generic_reader ... ok
+test frame_object::writer::tests::zero_payload_writes_header_only ... ok
+test linux_bootstrap::tests::initial_profile_matches_phase_101_lock ... ok
+test linux_bootstrap::tests::phase_101_policy_allows_only_existing_local_reads ... ok
+test linux_bootstrap::tests::second_instance_maps_to_stable_already_running_class ... ok
+test linux_bootstrap::tests::success_requires_normal_terminal_clean_cleanup_and_restored_mask ... ok
+test linux_identity::accept_ready::tests::one_accept_does_not_consume_listener_lifecycle_or_later_client ... ok
+test linux_identity::accept_ready::tests::accepted_stream_is_cloexec_blocking_authenticated_and_bytes_remain_unread ... ok
+test linux_identity::accept_ready::tests::readiness_transition_sets_nonblocking_and_empty_queue_returns_no_ready ... ok
+test linux_identity::authenticated_connection::tests::authorization_occurs_without_consuming_application_bytes ... ok
+test linux_identity::authenticated_connection::tests::failed_authorization_returns_original_stream_ownership ... ok
+test linux_identity::authenticated_connection::tests::successful_wrapper_preserves_kernel_authorization_metadata ... ok
+test linux_identity::authenticated_session::tests::authenticated_session_preserves_clean_eof_as_normal_stop ... ok
+test linux_identity::authenticated_session::tests::clean_eof_never_starts_deferred_write_deadline ... ok
+test linux_identity::authenticated_session::tests::authenticated_session_processes_bounded_requests_and_emits_responses ... ok
+test linux_identity::authenticated_session::tests::deadline_transaction_processes_one_request_and_response ... ok
+test linux_identity::authenticated_session::tests::malformed_authenticated_input_updates_owned_aggregate_state ... ok
+test linux_identity::authenticated_session_bridge::tests::authenticated_connection_maps_to_fresh_session_without_consuming_bytes ... ok
+test linux_identity::authenticated_session_bridge::tests::no_connection_ready_maps_without_constructing_a_session ... ok
+test linux_identity::bound_socket::tests::absent_path_binds_validated_0600_socket_and_cleanup_removes_it ... ok
+test linux_identity::bound_socket::tests::bind_remains_anchored_to_validated_runtime_directory_descriptor ... ok
+test linux_identity::bound_socket::tests::cleanup_refuses_to_unlink_replacement_socket_identity ... ok
+test linux_identity::bound_socket::tests::trusted_stale_socket_is_removed_before_new_bind ... ok
+test linux_identity::bound_socket::tests::wrong_mode_stale_socket_blocks_before_bind_and_remains ... ok
+test linux_identity::bounded_scheduler_cycle::tests::at_capacity_stops_after_one_attempt_without_consuming_queued_client ... ok
+test linux_identity::bounded_scheduler_cycle::tests::exact_attempt_budget_limits_multiple_queued_registrations ... ok
+test linux_identity::bounded_scheduler_cycle::tests::no_ready_stops_after_exactly_one_attempt_even_with_larger_budget ... ok
+test linux_identity::bounded_scheduler_cycle::tests::reaps_finished_worker_before_next_schedule_attempt ... ok
+test linux_identity::bounded_scheduler_cycle::tests::shutdown_before_cycle_performs_zero_accept_attempts_and_leaves_client_queued ... ok
+test linux_identity::deadline_io::tests::deferred_writer_reports_deadline_overflow_only_when_write_begins ... ok
+test linux_identity::deadline_io::tests::deferred_writer_starts_deadline_only_on_first_nonempty_write ... ok
+test linux_identity::authenticated_session::tests::idle_peer_read_deadline_poisons_inbound_state ... ok
+test linux_identity::deadline_io::tests::partial_progress_does_not_replace_reader_deadline ... ok
+test linux_identity::deadline_io::tests::partial_progress_does_not_replace_writer_deadline ... ok
+test linux_identity::deadline_io::tests::read_and_write_round_trip_with_independent_absolute_deadlines ... ok
+test linux_identity::deadline_io::tests::unrepresentable_deadline_is_rejected ... ok
+test linux_identity::deadline_io::tests::zero_budget_is_rejected ... ok
+test linux_identity::listening_socket::tests::bound_socket_transitions_to_listening_with_explicit_backlog ... ok
+test linux_identity::listening_socket::tests::listening_state_retains_instance_lock_authority ... ok
+test linux_identity::one_shot_scheduler::tests::at_capacity_does_not_consume_queued_connection ... ok
+test linux_identity::one_shot_scheduler::tests::no_ready_releases_capacity_without_registry_entry ... ok
+test linux_identity::one_shot_scheduler::tests::successful_schedule_registers_cancellable_scoped_worker ... ok
+test linux_identity::peer_auth::tests::anonymous_unix_pair_authorizes_current_effective_uid ... ok
+test linux_identity::peer_auth::tests::non_socket_descriptor_fails_closed ... ok
+test linux_identity::peer_auth::tests::uid_equality_predicate_is_exact ... ok
+test linux_identity::production_lifecycle::tests::callback_unwind_best_effort_cleans_listener_and_releases_lock ... ok
+test linux_identity::production_lifecycle::tests::lifecycle_can_be_reassembled_after_clean_return ... ok
+test linux_identity::production_lifecycle::tests::preexisting_instance_lock_fails_before_socket_bind ... ok
+test linux_identity::production_lifecycle::tests::successful_assembly_exposes_live_resources_then_removes_socket ... ok
+test linux_identity::production_runtime_loop::tests::one_client_round_trip_then_programmatic_shutdown_exits_and_cleans ... ok
+test linux_identity::production_runtime_loop::tests::programmatic_shutdown_before_first_wait_returns_clean_terminal_report ... ok
+test linux_identity::production_runtime_types::tests::counter_saturates_instead_of_wrapping ... ok
+test linux_identity::production_runtime_types::tests::ordinary_accept_failure_is_fail_stop ... ok
+test linux_identity::production_runtime_types::tests::peer_authorization_rejection_is_the_only_nonterminal_schedule_class ... ok
+test linux_identity::production_runtime_types::tests::peer_rejection_counter_is_memory_bounded ... ok
+test linux_identity::production_runtime_types::tests::production_config_preserves_every_validated_bound ... ok
+test linux_identity::production_runtime_types::tests::readiness_failure_is_fail_stop_and_preserves_exact_classification ... ok
+test linux_identity::runtime_orchestration::tests::completion_wake_does_not_encode_worker_result_count ... ok
+test linux_identity::runtime_orchestration::tests::listener_ready_orchestration_registers_only_completion_wake_worker ... ok
+test linux_identity::runtime_orchestration::tests::runtime_cycle_stops_at_capacity_without_accepting_queued_client ... ok
+test linux_identity::runtime_orchestration::tests::shutdown_state_is_committed_before_wake_and_prevents_queued_accept ... ok
+test linux_identity::deadline_io::tests::empty_peer_read_expires_as_timed_out ... ok
+test linux_identity::runtime_readiness::tests::descriptor_classifier_fails_closed_on_error_and_unexpected_flags ... ok
+test linux_identity::runtime_orchestration::tests::worker_completion_wake_restores_capacity_for_next_client ... ok
+test linux_identity::runtime_readiness::tests::full_capacity_omits_queued_listener_until_runtime_wake_and_release ... ok
+test linux_identity::runtime_readiness::tests::poll_result_classifier_surfaces_interrupt_without_retry ... ok
+test linux_identity::runtime_readiness::tests::queued_client_is_listener_ready_when_capacity_is_available ... ok
+test linux_identity::runtime_readiness::tests::runtime_wake_reaps_already_finished_registered_worker ... ok
+test linux_identity::runtime_readiness::tests::simultaneous_wake_and_listener_readiness_drains_wake_before_listener_outcome ... ok
+test linux_identity::runtime_readiness::tests::shutdown_before_wait_returns_without_blocking_or_arming_listener ... ok
+test linux_identity::runtime_wake::tests::cloned_notifiers_share_one_wake_transport ... ok
+test linux_identity::runtime_wake::tests::created_descriptor_is_cloexec_nonblocking_and_starts_without_pending_wake ... ok
+test linux_identity::runtime_wake::tests::drain_retries_only_interrupted_fixed_read ... ok
+test linux_identity::runtime_wake::tests::multiple_notifications_coalesce_into_one_drainable_wake ... ok
+test linux_identity::runtime_wake::tests::notify_eagain_is_already_pending_without_retry ... ok
+test linux_identity::runtime_wake::tests::notify_rejects_short_write_and_non_interrupt_failure ... ok
+test linux_identity::runtime_wake::tests::notify_retries_only_interrupted_fixed_write ... ok
+test linux_identity::runtime_wake::tests::drain_rejects_would_block_short_zero_overflow_and_other_failure ... ok
+test linux_identity::runtime_wake::tests::one_notify_is_drained_once_and_numeric_count_is_not_exposed ... ok
+test linux_identity::runtime_wake::tests::wake_and_notifier_have_expected_thread_safety ... ok
+test linux_identity::session_worker::tests::clean_eof_releases_permit_without_policy_call ... ok
+test linux_identity::session_worker::tests::request_budget_exhaustion_closes_session_and_releases_permit ... ok
+test linux_identity::session_worker_thread::tests::completion_wake_is_observable_after_normal_worker_releases_capacity ... ok
+test linux_identity::session_worker_thread::tests::completion_wake_survives_policy_panic_after_permit_unwinds ... ok
+test linux_identity::session_worker_thread::tests::scoped_worker_can_borrow_policy_and_snapshot_from_scope_environment ... ok
+test linux_identity::session_worker_thread::tests::scoped_worker_holds_permit_until_worker_body_finishes_and_returns_result ... ok
+test linux_identity::signal_aware_readiness::tests::descriptor_classifier_fails_closed_by_descriptor_kind ... ok
+test linux_identity::signal_aware_readiness::tests::poll_classifier_surfaces_interrupt_without_retry ... ok
+test linux_identity::signal_aware_readiness::tests::ready_count_matches_exact_three_descriptor_observation ... ok
+test linux_identity::signal_aware_readiness::tests::semantic_precedence_is_signal_then_wake_then_listener ... ok
+test linux_identity::signal_aware_runtime::tests::signal_beats_simultaneous_listener_and_restores_mask_after_cleanup ... ok
+test linux_identity::termination_signal::tests::real_mask_inheritance_signalfd_delivery_and_restore_are_subprocess_isolated ... ok
+test linux_identity::termination_signal::tests::signal_number_classifier_accepts_only_sigterm_and_sigint ... ok
+test linux_identity::termination_signal::tests::termination_mask_contains_exact_initial_signal_contract ... ok
+test linux_identity::tests::anonymous_unix_pair_reports_current_process_identity ... ok
+test linux_identity::worker_cancellation::tests::cancellation_clone_is_created_only_after_authenticated_wrapper_exists ... ok
+test linux_identity::worker_cancellation::tests::cancellation_shutdown_wakes_blocked_peer_side_io_and_is_terminal ... ok
+test linux_identity::worker_capacity::tests::acquisition_stops_exactly_at_capacity ... ok
+test linux_identity::worker_capacity::tests::capacity_and_permit_are_thread_transfer_compatible ... ok
+test linux_identity::worker_capacity::tests::capacity_starts_empty_and_reports_caller_bound ... ok
+test linux_identity::worker_capacity::tests::cloned_capacity_handles_share_the_same_accounting ... ok
+test linux_identity::worker_capacity::tests::dropping_permit_releases_exactly_one_slot ... ok
+test linux_identity::worker_completion::tests::bounded_worker_error_is_preserved ... ok
+test linux_identity::worker_completion::tests::normal_worker_stop_is_preserved ... ok
+test linux_identity::worker_completion::tests::worker_panic_is_bounded_to_panicked_classification ... ok
+test linux_identity::session_worker::tests::read_deadline_failure_releases_permit_and_reports_prior_response_count ... ok
+test linux_identity::worker_registry::tests::join_all_classifies_every_remaining_worker_in_registration_order ... ok
+test linux_identity::worker_registry::tests::reap_finished_leaves_running_worker_and_cancellation_registered ... ok
+test linux_identity::worker_registry::tests::registry_starts_empty_and_tracks_paired_registration ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::distinct_socket_nodes_do_not_match_stale_identity ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::missing_socket_path_is_already_absent ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::regular_file_socket_path_fails_closed_and_remains ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::second_lifecycle_authority_is_rejected_before_socket_path_work ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::symlink_socket_path_fails_closed_and_target_is_unchanged ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::trusted_shape_stale_socket_is_removed_and_absence_verified ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::wrong_mode_socket_fails_closed_and_remains ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::socket_path::tests::wrong_owner_metadata_classification_fails_closed ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::absent_lock_file_is_created_locked_and_validated_at_0600 ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::lock_can_be_reacquired_after_first_guard_is_dropped ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::same_uid_wrong_mode_lock_file_is_normalized_to_0600 ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::second_conforming_acquisition_reports_already_running ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::symlink_lock_path_fails_closed_without_modifying_target ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::tests::wrong_owner_metadata_is_rejected_before_mode_policy ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::absent_child_is_created_and_validated_at_0700 ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::child_resolution_remains_anchored_to_validated_root_descriptor ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::regular_file_child_fails_closed ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::same_uid_wrong_mode_child_is_normalized_to_exact_0700 ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::symlink_child_fails_closed ... ok
+test linux_identity::xdg_runtime_root::prw_runtime_directory::tests::wrong_owner_metadata_is_rejected_before_mode_policy ... ok
+test linux_identity::xdg_runtime_root::tests::descriptor_metadata_wrong_owner_classification_is_fail_closed ... ok
+test linux_identity::xdg_runtime_root::tests::final_component_symlink_is_rejected ... ok
+test linux_identity::xdg_runtime_root::tests::missing_empty_and_relative_values_fail_before_open ... ok
+test linux_identity::xdg_runtime_root::tests::non_directory_is_rejected ... ok
+test linux_identity::xdg_runtime_root::tests::valid_absolute_same_uid_0700_directory_is_accepted ... ok
+test linux_identity::xdg_runtime_root::tests::wrong_root_mode_fails_closed_without_repair ... ok
+test local_commands::admission::tests::allowing_status_does_not_allow_private_dns_read ... ok
+test local_commands::admission::tests::current_commands_map_to_distinct_exact_capabilities ... ok
+test local_commands::admission::tests::deny_all_never_produces_admission_token ... ok
+test local_commands::admission::tests::exact_allow_produces_token_with_preserved_request_metadata ... ok
+test local_commands::boundary_inbound_state::tests::clean_eof_is_normal_and_leaves_both_states_healthy ... ok
+test local_commands::boundary_inbound_state::tests::preexisting_inbound_poison_rejects_before_any_io ... ok
+test local_commands::boundary_inbound_state::tests::response_write_failure_poisons_only_response_state ... ok
+test local_commands::boundary_inbound_state::tests::successful_request_leaves_both_states_healthy ... ok
+test local_commands::boundary_inbound_state::tests::truncated_request_poisons_only_inbound_state ... ok
+test local_commands::boundary_policy_processor::tests::allowed_request_builds_existing_correlated_success_response ... ok
+test local_commands::boundary_policy_processor::tests::clean_eof_returns_without_policy_evaluation ... ok
+test local_commands::boundary_policy_processor::tests::denied_request_builds_existing_correlated_unauthorized_response ... ok
+test local_commands::boundary_policy_processor::tests::partial_header_stops_before_policy_evaluation ... ok
+test local_commands::boundary_policy_processor::tests::unknown_command_stops_before_policy_evaluation ... ok
+test local_commands::boundary_request_response_transaction::tests::allowed_request_writes_correlated_success_response ... ok
+test local_commands::boundary_request_response_transaction::tests::already_poisoned_response_state_rejects_before_read_policy_or_write ... ok
+test local_commands::boundary_request_response_transaction::tests::clean_eof_returns_without_policy_or_write_and_keeps_state_healthy ... ok
+test local_commands::boundary_request_response_transaction::tests::denied_request_writes_correlated_unauthorized_response ... ok
+test local_commands::boundary_request_response_transaction::tests::response_write_failure_poisons_state_after_policy_processing ... ok
+test local_commands::boundary_request_response_transaction::tests::truncated_request_stops_before_policy_and_response_write ... ok
+test local_commands::codec::tests::command_payload_length_is_locked ... ok
+test local_commands::codec::tests::commands_encode_as_big_endian_u16_codes ... ok
+test local_commands::codec::tests::current_commands_round_trip ... ok
+test local_commands::codec::tests::unknown_command_code_is_rejected ... ok
+test local_commands::codec::tests::wrong_payload_length_is_rejected ... ok
+test local_commands::inbound_state::tests::poisoned_inbound_rejects_later_attempt_before_read_policy_or_write ... ok
+test local_commands::inbound_state::tests::response_write_failure_does_not_misclassify_inbound_state ... ok
+test local_commands::inbound_state::tests::successful_transaction_leaves_inbound_state_healthy ... ok
+test local_commands::inbound_state::tests::unknown_command_poisons_inbound_before_return ... ok
+test local_commands::management_dispatch::tests::agent_owned_family_mismatch_refuses_context_construction ... ok
+test local_commands::management_dispatch::tests::exact_authority_invokes_dispatcher_once_and_success_follows_provider_success ... ok
+test local_commands::management_dispatch::tests::malformed_request_stops_before_dispatch_and_is_correlated_invalid_request ... ok
+test local_commands::management_dispatch::tests::missing_authority_stops_before_dispatch ... ok
+test local_commands::management_dispatch::tests::production_policy_denial_stops_before_dispatch_and_is_unauthorized ... ok
+test local_commands::management_dispatch::tests::provider_failure_never_creates_success_acknowledgement ... ok
+test local_commands::management_dispatch::tests::stale_or_wrong_family_authority_stops_before_dispatch ... ok
+test local_commands::management_provider_backend_policy::tests::default_forwarding_egress_policy_is_deny_all ... ok
+test local_commands::management_provider_backend_policy::tests::exact_target_policy_allows_only_configured_ip_port_targets ... ok
+test local_commands::management_provider_backend_policy::tests::exact_target_policy_is_bounded_and_deduplicated ... ok
+test local_commands::management_provider_backend_policy::tests::forwarding_half_close_and_teardown_order_are_explicit ... ok
+test local_commands::management_provider_backend_policy::tests::forwarding_worker_bounds_match_locked_transport_precedent ... ok
+test local_commands::management_provider_backend_policy::tests::terminal_profile_maps_only_to_provider_owned_template_id ... ok
+test local_commands::management_request::tests::c01_admission_binds_correlation_caller_and_canonical_capability ... ok
+test local_commands::management_request::tests::c01_malformed_canonical_payload_never_reaches_policy ... ok
+test local_commands::management_request::tests::c01_production_local_read_policy_denies_management_without_token ... ok
+test local_commands::management_request::tests::declared_payload_above_retained_prwc_bound_fails_closed ... ok
+test local_commands::management_request::tests::empty_and_oversized_bridge_payloads_fail_before_frame_build ... ok
+test local_commands::management_request::tests::exact_maximum_bridge_payload_is_accepted ... ok
+test local_commands::management_request::tests::management_constants_lock_additive_command_and_bounds ... ok
+test local_commands::management_request::tests::management_payload_round_trips_with_outer_request_id ... ok
+test local_commands::management_request::tests::truncated_trailing_and_zero_length_bodies_fail_closed ... ok
+test local_commands::management_request::tests::wrong_command_and_non_request_kind_fail_closed ... ok
+test local_commands::policy_response::tests::allowed_private_dns_request_builds_existing_success_response ... ok
+test local_commands::policy_response::tests::allowed_status_request_builds_existing_success_response ... ok
+test local_commands::policy_response::tests::denied_request_builds_correlated_unauthorized_error ... ok
+test local_commands::policy_response::tests::granting_other_read_capability_still_denies_command ... ok
+test local_commands::private_dns_codec::tests::default_snapshot_has_stable_three_byte_encoding ... ok
+test local_commands::private_dns_codec::tests::entry_boundaries_and_utf8_fail_closed ... ok
+test local_commands::private_dns_codec::tests::flags_lists_and_utf8_round_trip_exactly ... ok
+test local_commands::private_dns_codec::tests::header_flags_and_counts_fail_closed ... ok
+test local_commands::private_dns_codec::tests::maximum_snapshot_matches_locked_encoded_bound ... ok
+test local_commands::private_dns_codec::tests::trailing_bytes_are_rejected ... ok
+test local_commands::private_dns_response::stream::completion::tests::fully_decoded_unknown_id_leaves_other_tracker_state_untouched ... ok
+test local_commands::private_dns_response::stream::completion::tests::fully_valid_known_private_dns_response_completes_only_its_request ... ok
+test local_commands::private_dns_response::stream::completion::tests::malformed_private_dns_body_does_not_consume_request_state ... ok
+test local_commands::private_dns_response::stream::completion::tests::replay_after_successful_completion_is_rejected ... ok
+test local_commands::private_dns_response::stream::completion::tests::truncated_stream_does_not_consume_request_state ... ok
+test local_commands::private_dns_response::stream::tests::bounded_utf8_snapshot_round_trips_through_generic_stream_io ... ok
+test local_commands::private_dns_response::stream::tests::default_response_wire_length_is_exactly_twenty_nine_bytes ... ok
+test local_commands::private_dns_response::stream::tests::maximum_snapshot_matches_locked_wire_bound ... ok
+test local_commands::private_dns_response::stream::tests::reader_consumes_exactly_one_frame_and_leaves_trailing_bytes ... ok
+test local_commands::private_dns_response::stream::tests::truncated_payload_preserves_generic_read_error ... ok
+test local_commands::private_dns_response::tests::bounded_utf8_snapshot_round_trips_through_complete_frame ... ok
+test local_commands::private_dns_response::tests::default_snapshot_builds_stable_success_payload ... ok
+test local_commands::private_dns_response::tests::locked_maximum_lengths_are_consistent ... ok
+test local_commands::private_dns_response::tests::malformed_private_dns_body_is_rejected_after_terminal_validation ... ok
+test local_commands::private_dns_response::tests::maximum_snapshot_fits_locked_success_payload ... ok
+test local_commands::private_dns_response::tests::valid_terminal_error_is_not_a_success_private_dns_frame ... ok
+test local_commands::private_dns_snapshot::tests::above_count_bounds_are_rejected ... ok
+test local_commands::private_dns_snapshot::tests::default_config_projects_without_inventing_values ... ok
+test local_commands::private_dns_snapshot::tests::empty_and_oversize_strings_are_rejected ... ok
+test local_commands::private_dns_snapshot::tests::exact_count_bounds_are_accepted ... ok
+test local_commands::private_dns_snapshot::tests::exact_string_byte_bounds_are_accepted ... ok
+test local_commands::private_dns_snapshot::tests::flags_lists_and_order_are_preserved_exactly ... ok
+test local_commands::request_frame::boundary_stream::tests::complete_non_request_frame_preserves_decode_error ... ok
+test local_commands::request_frame::boundary_stream::tests::empty_stream_is_clean_eof ... ok
+test local_commands::request_frame::boundary_stream::tests::partial_header_is_not_clean_eof ... ok
+test local_commands::request_frame::boundary_stream::tests::repeated_reads_preserve_frame_boundaries_then_report_clean_eof ... ok
+test local_commands::request_frame::boundary_stream::tests::unknown_command_is_not_clean_eof ... ok
+test local_commands::request_frame::boundary_stream::tests::valid_request_preserves_id_and_command ... ok
+test local_commands::request_frame::discard::tests::abandoned_id_is_not_recorded_as_completed ... ok
+test local_commands::request_frame::discard::tests::empty_discard_is_explicit_and_stable ... ok
+test local_commands::request_frame::discard::tests::healthy_discard_surfaces_outstanding_ids_in_registration_order ... ok
+test local_commands::request_frame::discard::tests::poisoned_discard_reports_poison_and_preserves_ambiguous_id_for_caller ... ok
+test local_commands::request_frame::send_state::tests::new_state_is_healthy_and_successful_send_keeps_it_healthy ... ok
+test local_commands::request_frame::send_state::tests::poisoned_state_rejects_later_send_before_tracker_or_io ... ok
+test local_commands::request_frame::send_state::tests::registration_failure_does_not_poison_or_write ... ok
+test local_commands::request_frame::send_state::tests::write_failure_poisons_and_retains_outstanding_request ... ok
+test local_commands::request_frame::stream::tests::both_read_only_commands_round_trip_through_memory_stream ... ok
+test local_commands::request_frame::stream::tests::non_request_frame_preserves_request_decode_error ... ok
+test local_commands::request_frame::stream::tests::one_read_consumes_exactly_one_request_frame ... ok
+test local_commands::request_frame::stream::tests::payload_write_failure_is_preserved ... ok
+test local_commands::request_frame::stream::tests::truncated_request_preserves_generic_read_error ... ok
+test local_commands::request_frame::tests::both_read_only_commands_build_with_stable_payload_bytes ... ok
+test local_commands::request_frame::tests::fixed_request_lengths_are_locked ... ok
+test local_commands::request_frame::tests::malformed_command_payload_is_delegated_to_phase_015_decoder ... ok
+test local_commands::request_frame::tests::response_and_error_frames_are_rejected_before_command_decode ... ok
+test local_commands::request_frame::transaction::tests::capacity_failure_prevents_all_io ... ok
+test local_commands::request_frame::transaction::tests::duplicate_registration_prevents_all_io ... ok
+test local_commands::request_frame::transaction::tests::header_write_failure_retains_registration ... ok
+test local_commands::request_frame::transaction::tests::payload_write_failure_retains_registration ... ok
+test local_commands::request_frame::transaction::tests::successful_write_leaves_request_outstanding ... ok
+test local_commands::request_processor::tests::truncated_request_is_rejected_before_policy_evaluation ... ok
+test local_commands::request_processor::tests::unknown_command_is_rejected_before_policy_evaluation ... ok
+test local_commands::request_processor::tests::valid_allowed_request_reads_then_builds_success_response ... ok
+test local_commands::request_processor::tests::valid_denied_request_reads_then_builds_unauthorized_response ... ok
+test local_commands::request_response_transaction::tests::allowed_request_writes_correlated_success_response ... ok
+test local_commands::request_response_transaction::tests::already_poisoned_response_state_rejects_before_read_policy_or_write ... ok
+test local_commands::request_response_transaction::tests::denied_request_writes_correlated_unauthorized_response ... ok
+test local_commands::request_response_transaction::tests::invalid_command_stops_before_policy_and_response_write ... ok
+test local_commands::request_response_transaction::tests::response_write_failure_poisons_state_after_valid_policy_processing ... ok
+test local_commands::request_tracker::tests::abandon_all_on_empty_tracker_is_stable ... ok
+test local_commands::request_tracker::tests::abandon_all_returns_registration_order_and_empties_tracker ... ok
+test local_commands::request_tracker::tests::duplicate_outstanding_request_id_is_rejected ... ok
+test local_commands::request_tracker::tests::outstanding_request_count_is_bounded ... ok
+test local_commands::request_tracker::tests::terminal_response_removes_request_id_for_reuse ... ok
+test local_commands::request_tracker::tests::tracker_starts_empty_and_tracks_registration ... ok
+test local_commands::request_tracker::tests::unknown_terminal_response_is_rejected ... ok
+test local_commands::responder::tests::admitted_private_dns_request_uses_existing_builder_and_preserves_correlation ... ok
+test local_commands::responder::tests::admitted_status_request_uses_existing_builder_and_preserves_correlation ... ok
+test local_commands::response_codec::tests::all_current_statuses_round_trip ... ok
+test local_commands::response_codec::tests::decoder_preserves_body_bytes_unchanged ... ok
+test local_commands::response_codec::tests::missing_status_prefix_is_rejected ... ok
+test local_commands::response_codec::tests::response_status_codes_encode_big_endian ... ok
+test local_commands::response_codec::tests::response_status_prefix_length_is_locked ... ok
+test local_commands::response_codec::tests::unknown_status_code_is_rejected ... ok
+test local_commands::response_writer::tests::header_write_failure_poisons_response_state ... ok
+test local_commands::response_writer::tests::invalid_terminal_frame_is_rejected_before_io_without_poisoning ... ok
+test local_commands::response_writer::tests::payload_write_failure_poisons_response_state ... ok
+test local_commands::response_writer::tests::poisoned_state_rejects_later_write_before_io ... ok
+test local_commands::response_writer::tests::valid_response_write_succeeds_and_state_remains_healthy ... ok
+test local_commands::server_connection_loop::tests::budget_exhaustion_does_not_probe_following_frame_and_can_resume ... ok
+test local_commands::server_connection_loop::tests::empty_stream_stops_cleanly_without_policy_or_output ... ok
+test local_commands::server_connection_loop::tests::loop_processes_multiple_requests_then_clean_eof ... ok
+test local_commands::server_connection_loop::tests::truncation_after_one_success_stops_with_inbound_unusable_state ... ok
+test local_commands::server_connection_loop::tests::write_failure_stops_with_response_unusable_state ... ok
+test local_commands::server_connection_state::tests::boundary_clean_eof_keeps_aggregate_state_usable ... ok
+test local_commands::server_connection_state::tests::boundary_repeated_calls_process_frames_then_clean_eof ... ok
+test local_commands::server_connection_state::tests::boundary_response_write_failure_marks_aggregate_write_unusable ... ok
+test local_commands::server_connection_state::tests::boundary_truncation_marks_aggregate_inbound_unusable ... ok
+test local_commands::server_connection_state::tests::boundary_unusable_state_rejects_before_any_io ... ok
+test local_commands::server_connection_state::tests::invalid_command_makes_aggregate_state_unusable_for_inbound_reason ... ok
+test local_commands::server_connection_state::tests::new_aggregate_state_is_usable ... ok
+test local_commands::server_connection_state::tests::response_write_failure_makes_aggregate_state_unusable_for_write_reason ... ok
+test local_commands::server_connection_state::tests::successful_request_keeps_aggregate_state_usable ... ok
+test local_commands::server_connection_state::tests::unusable_aggregate_state_rejects_later_request_before_any_io ... ok
+test local_commands::status_snapshot::codec::tests::all_runtime_states_round_trip ... ok
+test local_commands::status_snapshot::codec::tests::body_length_is_locked_to_five_bytes ... ok
+test local_commands::status_snapshot::codec::tests::non_exact_lengths_are_rejected ... ok
+test local_commands::status_snapshot::codec::tests::ready_status_has_stable_current_wire_bytes ... ok
+test local_commands::status_snapshot::codec::tests::unknown_runtime_state_is_rejected ... ok
+test local_commands::status_snapshot::codec::tests::unsupported_protocol_versions_are_rejected ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::every_runtime_state_round_trips_through_generic_stream_io ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::reader_consumes_exactly_one_frame_and_leaves_trailing_bytes ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::status_response_wire_length_is_exactly_thirty_one_bytes ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::truncated_header_and_payload_preserve_generic_read_errors ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::fully_decoded_unknown_id_leaves_other_tracker_state_untouched ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::fully_valid_known_status_response_completes_exactly_its_request ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::malformed_command_body_does_not_consume_request_state ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::replay_after_successful_completion_is_rejected ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::truncated_stream_does_not_consume_request_state ... ok
+test local_commands::status_snapshot::response_frame::tests::all_runtime_states_round_trip_through_complete_frame ... ok
+test local_commands::status_snapshot::response_frame::tests::builder_matches_phase_019_payload_and_response_kind ... ok
+test local_commands::status_snapshot::response_frame::tests::malformed_status_body_is_rejected_after_terminal_validation ... ok
+test local_commands::status_snapshot::response_frame::tests::valid_terminal_error_is_not_a_success_status_frame ... ok
+test local_commands::status_snapshot::response_payload::tests::all_runtime_states_round_trip_through_success_payload ... ok
+test local_commands::status_snapshot::response_payload::tests::known_non_success_status_is_rejected ... ok
+test local_commands::status_snapshot::response_payload::tests::missing_and_unknown_status_prefixes_are_rejected ... ok
+test local_commands::status_snapshot::response_payload::tests::ready_status_has_stable_current_success_bytes ... ok
+test local_commands::status_snapshot::response_payload::tests::status_body_failures_remain_fail_closed ... ok
+test linux_identity::worker_registry::tests::cancel_all_wakes_worker_blocked_on_long_request_read_and_releases_capacity ... ok
+test local_commands::status_snapshot::response_payload::tests::successful_status_payload_length_is_locked_to_seven_bytes ... ok
+test local_commands::status_snapshot::tests::only_ready_state_reports_normal_readiness ... ok
+test local_commands::status_snapshot::tests::runtime_state_codes_are_stable_and_invertible ... ok
+test local_commands::status_snapshot::tests::snapshot_uses_current_protocol_version ... ok
+test local_commands::terminal_completion::tests::duplicate_terminal_response_is_rejected_after_first_completion ... ok
+test local_commands::terminal_completion::tests::invalid_terminal_frame_does_not_consume_request_state ... ok
+test local_commands::terminal_completion::tests::unknown_request_id_does_not_consume_other_state ... ok
+test local_commands::terminal_completion::tests::valid_error_completes_known_request ... ok
+test local_commands::terminal_completion::tests::valid_success_completes_exactly_one_known_request ... ok
+test local_commands::terminal_response::builder::tests::above_maximum_command_body_is_rejected_before_frame_construction ... ok
+test local_commands::terminal_response::builder::tests::non_success_builder_uses_error_kind ... ok
+test local_commands::terminal_response::builder::tests::success_builder_uses_response_kind_and_prepends_ok_status ... ok
+test local_commands::terminal_response::builder::tests::maximum_command_body_produces_maximum_valid_payload ... ok
+test local_commands::terminal_response::builder::tests::terminal_body_bound_reserves_exact_status_prefix_space ... ok
+test local_commands::terminal_response::tests::error_with_each_non_success_status_is_valid ... ok
+test local_commands::terminal_response::tests::error_with_ok_is_rejected ... ok
+test local_commands::terminal_response::tests::expected_kind_mapping_is_stable ... ok
+test local_commands::terminal_response::tests::request_kind_is_rejected_before_payload_interpretation ... ok
+test local_commands::terminal_response::tests::missing_and_unknown_status_prefixes_are_rejected ... ok
+test local_commands::terminal_response::tests::response_with_non_success_status_is_rejected ... ok
+test local_commands::terminal_response::tests::response_with_ok_is_valid_and_preserves_request_id ... ok
+test local_commands::tests::read_only_command_codes_are_stable ... ok
+test local_commands::tests::response_preserves_request_correlation ... ok
+test local_commands::tests::response_status_codes_are_stable ... ok
+test tests::baseline_contract_is_same_user_unix_socket ... ok
+test tests::payload_length_is_bounded ... ok
+test tests::protocol_constants_are_locked ... ok
+test tests::request_id_zero_is_rejected ... ok
+test tests::unsupported_protocol_version_is_rejected ... ok
+test tests::socket_path_is_beneath_xdg_runtime_dir ... ok
+
+test result: ok. 373 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/main.rs (target/debug/deps/prw_agent-a3c8c07d2c142085)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase125_device_identity_bootstrap.rs (target/debug/deps/phase125_device_identity_bootstrap-3cd7ceb05ac05f7e)
+
+running 1 test
+test missing_systemd_identity_fails_before_runtime_socket_creation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase_102_binary_bootstrap.rs (target/debug/deps/phase_102_binary_bootstrap-a60ed09f10d83070)
+
+running 1 test
+test standalone_binary_bootstrap_contract_is_proven_sequentially ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_connectivity-70caf3fdea53556c)
+
+running 14 tests
+test tests::candidate_capacity_is_enforced ... ok
+test tests::candidate_refresh_preserves_identity_and_replaces_transient_endpoints ... ok
+test tests::candidate_refresh_rejects_rebinding_existing_id_to_new_endpoint ... ok
+test tests::candidate_refresh_rejects_reuse_after_candidate_removal ... ok
+test tests::identifiers_transport_and_endpoints_are_bounded ... ok
+test tests::duplicate_ids_and_exact_kind_endpoints_are_rejected ... ok
+test tests::internet_direct_beats_relay_when_local_is_unavailable ... ok
+test tests::invalid_candidate_refresh_preserves_previous_state ... ok
+test tests::local_direct_beats_internet_direct_and_relay ... ok
+test tests::logical_device_and_transport_identity_are_independent ... ok
+test tests::relay_is_fallback_only_when_direct_candidates_are_not_reachable ... ok
+test tests::selection_is_insertion_order_independent_and_same_kind_uses_lowest_id ... ok
+test tests::unknown_and_unreachable_candidates_produce_offline ... ok
+test tests::unknown_observation_target_fails_closed ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_control_plane-ae93b829743e7d7a)
+
+running 23 tests
+test enrollment_pop::tests::canonical_message_has_exact_locked_bytes ... ok
+test enrollment_pop::tests::challenge_lifetime_accepts_one_through_300_seconds_only ... ok
+test enrollment_pop::tests::domain_separator_and_version_are_locked ... ok
+test enrollment_pop::tests::every_bound_field_changes_the_message ... ok
+test enrollment_pop::tests::identifier_and_public_identity_bounds_fail_closed ... ok
+test enrollment_pop::tests::maximum_locked_message_size_is_exactly_4442_bytes ... ok
+test enrollment_pop::tests::mismatched_enrollment_and_nonce_are_rejected ... ok
+test enrollment_pop::tests::nonce_requires_exactly_32_bytes ... ok
+test enrollment_pop::tests::replacement_challenge_supersedes_old_nonce_and_clears_consumed_state ... ok
+test enrollment_pop::tests::server_time_enforces_not_yet_valid_and_expiry_boundaries ... ok
+test enrollment_pop::tests::successful_consume_is_single_use ... ok
+test session_auth::tests::canonical_message_changes_with_every_bound_identifier ... ok
+test session_auth::tests::challenge_lifetime_accepts_one_through_300_seconds_only ... ok
+test session_auth::tests::derived_maximum_message_bound_matches_locked_constant ... ok
+test session_auth::tests::domain_separator_and_nonce_length_are_locked ... ok
+test session_auth::tests::non_enrolled_binding_cannot_encode_message ... ok
+test session_auth::tests::only_enrolled_binding_can_create_challenge_state ... ok
+test tests::device_identity_signature_preserves_algorithm_and_encoding ... ok
+test tests::device_identity_signature_rejects_empty_bytes ... ok
+test tests::enrollment_decision_is_terminal ... ok
+test tests::public_identity_material_preserves_algorithm_and_encoding ... ok
+test tests::public_identity_material_rejects_empty_bytes ... ok
+test tests::typed_action_preserves_identity_boundaries ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_control_transport-54575df5a437f7e0)
+
+running 6 tests
+test tests::constructor_rejects_zero_request_id_and_oversize_payload ... ok
+test tests::decoder_rejects_each_locked_header_violation ... ok
+test tests::decoder_rejects_header_and_payload_truncation ... ok
+test tests::frame_round_trip_preserves_exact_fields ... ok
+test tests::locked_header_bytes_are_exact ... ok
+test tests::tls_config_rejects_empty_roots_invalid_server_name_and_timeout ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/tls_loopback.rs (target/debug/deps/tls_loopback-32df0bd45aa5785c)
+
+running 5 tests
+test plaintext_peer_has_no_fallback_path ... ok
+test tls12_only_server_has_no_fallback_path ... ok
+test wrong_alpn_fails_closed_after_tls_handshake ... ok
+test tls13_expected_name_and_alpn_establishes_transport ... ok
+test wrong_server_name_fails_closed ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests examples/phase129_tls_probe.rs (target/debug/examples/phase129_tls_probe-349a49d75e20ff53)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_core-68d39f572cc7e73f)
+
+running 4 tests
+test tests::enrollment_identifier_is_strongly_typed ... ok
+test tests::only_enrolled_devices_can_participate ... ok
+test tests::preserves_non_empty_identifier ... ok
+test tests::rejects_empty_identifier ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/prw_desktop-0ab101f100b01d23)
+
+running 17 tests
+test ipc::tests::absolute_runtime_root_uses_the_authoritative_socket_derivation ... ok
+test ipc::tests::bounded_errors_map_to_offline_or_error_presentation ... ok
+test ipc::tests::missing_and_empty_runtime_roots_are_rejected ... ok
+test ipc::tests::relative_runtime_root_is_rejected_before_socket_use ... ok
+test ipc::tests::response_request_id_mismatch_fails_closed ... ok
+test local_management_ipc::tests::legacy_two_byte_namespace_remains_byte_compatible_and_rejects_code_three ... ok
+test local_management_ipc::tests::local_schema_contains_only_command_length_and_canonical_bridge_bytes ... ok
+test local_management_ipc::tests::typed_terminal_file_and_forwarding_intents_round_trip_through_local_command_three ... ok
+test management::tests::connectivity_selection_uses_existing_deterministic_authority ... ok
+test management::tests::file_browser_request_does_not_fabricate_authoritative_entries ... ok
+test management::tests::forwarding_intent_reuses_typed_loopback_authority_and_ack_state ... ok
+test management::tests::invalid_terminal_values_fail_closed_through_existing_authority ... ok
+test management::tests::private_dns_validation_never_claims_os_application ... ok
+test management::tests::terminal_intent_reuses_bridge_and_never_forges_open_or_closed ... ok
+test management::tests::upload_progress_advances_only_from_exact_acknowledgements ... ok
+test state::tests::overview_is_the_deterministic_default_destination ... ok
+test state::tests::runtime_states_project_without_granting_capabilities ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_device_identity-d4689119e682e8d3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/enrollment_pop.rs (target/debug/deps/enrollment_pop-b58af10497194bd6)
+
+running 6 tests
+test expired_challenge_is_rejected_without_consumption ... ok
+test invalid_signature_does_not_consume_challenge ... ok
+test replacement_challenge_invalidates_old_proof ... ok
+test valid_proof_consumes_challenge_exactly_once ... ok
+test signature_for_changed_snapshot_fails_against_bound_snapshot ... ok
+test wrong_nonce_is_rejected_before_crypto_and_does_not_consume ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/locked_profile.rs (target/debug/deps/locked_profile-16efccf2646769a1)
+
+running 12 tests
+test rejects_malformed_signature_der ... ok
+test rejects_fixed_width_signature_claimed_as_der ... ok
+test rejects_malformed_spki_der ... ok
+test rejects_modified_message ... ok
+test rejects_modified_signature ... ok
+test rejects_off_curve_public_point ... ok
+test rejects_p384_key_under_p256_profile ... ok
+test rejects_spki_with_trailing_bytes ... ok
+test rejects_raw_sec1_point_even_if_provider_can_parse_it ... ok
+test rejects_wrong_named_curve_oid ... ok
+test rejects_wrong_public_key_algorithm_oid ... ok
+test verifies_valid_p256_spki_and_der_signature ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/phase119_ubuntu_signer_spike.rs (target/debug/deps/phase119_ubuntu_signer_spike-25535c3d1a386e94)
+
+running 6 tests
+test full_enrollment_pop_from_reloaded_pkcs8_verifies_and_consumes_once ... ok
+test asn1_der_signature_verifies_through_production_verifier ... ok
+test pkcs8_v1_round_trip_preserves_canonical_public_identity ... ok
+test signature_from_different_private_key_is_rejected_without_consuming_challenge ... ok
+test truncated_pkcs8_is_rejected ... ok
+test signature_over_mutated_canonical_message_is_rejected_without_consuming_challenge ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_device_identity_custody-c8d1b2cebdfaf4ab)
+
+running 8 tests
+test linux::tests::bounded_reader_maps_read_failure_without_secret_data ... ok
+test linux::tests::credential_directory_symlink_is_rejected ... ok
+test linux::tests::credential_symlink_and_non_regular_file_are_rejected ... ok
+test linux::tests::environment_value_requires_present_absolute_directory ... ok
+test linux::tests::empty_oversized_and_trailing_content_fail_closed ... ok
+test linux::tests::exact_named_secure_credential_loads_signer ... ok
+test linux::tests::insecure_directory_or_credential_modes_are_rejected ... ok
+test linux::tests::wrong_filename_does_not_fallback ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_device_identity_provisioning-cec1bf6cce4f1741)
+
+running 1 test
+test tests::public_fingerprint_hex_is_fixed_lowercase_width ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/prw-device-identity-provision.rs (target/debug/deps/prw_device_identity_provision-31e2932eb2a5f2be)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_device_identity_signer-5d00b18e9bec02cb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/typed_signer.rs (target/debug/deps/typed_signer-309bf7de2f6fa63a)
+
+running 8 tests
+test credential_bounds_fail_before_provider_use ... ok
+test debug_representation_contains_no_private_credential_bytes ... ok
+test enrollment_id_mismatch_is_rejected ... ok
+test changed_snapshot_rejects_previously_signed_proof_without_consumption ... ok
+test request_public_identity_mismatch_is_rejected ... ok
+test malformed_truncated_wrong_curve_and_non_pkcs8_credentials_are_rejected ... ok
+test typed_signing_produces_proof_accepted_and_consumed_by_production_verifier ... ok
+test valid_pkcs8_load_derives_stable_canonical_public_identity ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_enrollment-80af7c126d842944)
+
+running 5 tests
+test tests::duplicate_enrollment_identifier_fails_closed ... ok
+test tests::already_enrolled_device_cannot_begin_second_enrollment ... ok
+test tests::invalid_lifetime_creates_no_pending_state ... ok
+test tests::proof_for_other_enrollment_is_rejected_without_completion ... ok
+test tests::valid_proof_enrolls_exact_bound_device_once ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_file_service-fa30c858df5f9c7e)
+
+running 7 tests
+test tests::creation_only_file_and_directory_enforce_modes_and_non_overwrite ... ok
+test tests::intermediate_and_final_symlinks_fail_closed ... ok
+test tests::list_stat_and_read_remain_inside_root ... ok
+test tests::opened_root_descriptor_survives_path_replacement_without_redirect ... ok
+test tests::path_parser_rejects_escape_and_ambiguity ... ok
+test tests::payload_bound_fails_before_create_and_read_is_bounded ... ok
+test tests::directory_listing_bound_fails_closed ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_file_transfer-d427721f36e5d8a4)
+
+running 7 tests
+test tests::download_chunks_are_bounded_and_eof_is_empty ... ok
+test tests::plan_and_chunk_bounds_fail_before_storage_mutation ... ok
+test tests::preexisting_final_destination_is_never_overwritten ... ok
+test tests::incomplete_and_wrong_digest_never_publish_final_destination ... ok
+test tests::staging_symlink_substitution_fails_closed ... ok
+test tests::transfer_id_round_trip_is_exact_lowercase_hex ... ok
+test tests::sequential_chunks_resume_and_commit_exact_content ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_files-4df76bb172e67687)
+
+running 1 test
+test tests::progress_is_bounded_to_one ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_forwarding-8c8c48236c47cbcd)
+
+running 12 tests
+test tests::backend_close_failure_retains_failed_record ... ok
+test tests::backend_open_failure_creates_no_session ... ok
+test tests::backend_receives_exact_validated_spec_and_identity_is_preserved ... ok
+test tests::capacity_fails_before_backend_call ... ok
+test tests::duplicate_identifier_fails_before_backend_call ... ok
+test tests::failed_close_can_be_retried_to_closed_and_removed ... ok
+test tests::failed_close_retry_failure_retains_failed_record ... ok
+test tests::identifiers_and_ports_are_non_zero ... ok
+test tests::failed_close_retry_rejects_active_or_unknown_before_backend_call ... ok
+test tests::invalid_target_address_classes_are_rejected ... ok
+test tests::loopback_targets_and_named_bind_families_are_supported ... ok
+test tests::successful_close_returns_closed_and_removes_record ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_nat_traversal-0c305f802bd96886)
+
+running 7 tests
+test tests::datagram_and_credentials_are_bounded ... ok
+test tests::candidate_capacity_is_bounded ... ok
+test tests::in_memory_ice_pair_selects_and_updates_phase135_plan ... ok
+test tests::stun_wrong_source_is_rejected_before_protocol ... ok
+test tests::relay_and_candidate_duplicates_fail_closed ... ok
+test tests::synthetic_stun_binding_success_yields_mapped_endpoint ... ok
+test tests::wrong_remote_ice_password_never_selects_pair ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/security_boundaries.rs (target/debug/deps/security_boundaries-d2698999cc7d2722)
+
+running 2 tests
+test ice_credentials_debug_redacts_password ... ok
+test stun_non_success_message_with_xor_mapping_fails_closed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_network-9c7d3fdd2e9fe3f9)
+
+running 1 test
+test tests::private_dns_is_disabled_by_default ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_policy-74d760e290116e8a)
+
+running 6 tests
+test tests::bounded_local_policy_configures_local_reads_independently ... ok
+test tests::bounded_local_policy_constructors_are_deterministic ... ok
+test tests::bounded_local_policy_denies_every_nonlocal_capability ... ok
+test tests::bounded_local_policy_is_copy_send_sync ... ok
+test tests::evaluator_can_deny_capability ... ok
+test tests::local_read_capabilities_are_distinct ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_private_dns-159c483c58756e7a)
+
+running 9 tests
+test tests::configuration_collection_bounds_fail_closed ... ok
+test tests::default_configuration_is_disabled_and_empty ... ok
+test tests::device_labels_are_strictly_canonical_and_bounded ... ok
+test tests::device_naming_requires_domain_and_split_dns_requires_resolver ... ok
+test tests::disabled_mode_retains_valid_settings_without_becoming_active ... ok
+test tests::domain_suffixes_are_strictly_canonical_and_bounded ... ok
+test tests::duplicate_resolvers_and_split_domains_are_rejected ... ok
+test tests::enabled_mode_is_only_configuration_state ... ok
+test tests::resolver_endpoints_are_explicit_and_bounded ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_registry-7214982234cdeaaf)
+
+running 7 tests
+test tests::authenticated_session_revalidates_current_membership_and_device_state ... ok
+test tests::device_registration_requires_active_membership_and_enrolled_lifecycle ... ok
+test tests::duplicate_device_id_never_rebinds ... ok
+test tests::membership_capacity_fails_before_insertion ... ok
+test tests::membership_uniqueness_and_role_are_exact ... ok
+test tests::removal_and_revocation_are_terminal_for_validation ... ok
+test tests::device_capacity_fails_before_insertion ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_relay-e731f8f967c99728)
+
+running 9 tests
+test tests::backend_open_failure_creates_no_session ... ok
+test tests::close_failure_retains_failed_record ... ok
+test tests::duplicate_and_capacity_fail_before_backend_open ... ok
+test tests::identifiers_tokens_and_frames_are_bounded ... ok
+test tests::only_selected_relay_path_can_construct_spec ... ok
+test tests::logical_device_and_transport_identity_remain_distinct ... ok
+test tests::opaque_frame_reaches_backend_byte_for_byte ... ok
+test tests::successful_close_returns_closed_and_removes_record ... ok
+test tests::transmit_failure_retains_failed_record ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_relay_service-6526582a9fe517ed)
+
+running 7 tests
+test tests::debug_output_redacts_token_and_payload ... ok
+test tests::route_token_mismatch_and_unpaired_forwarding_fail_closed ... ok
+test tests::routing_envelope_has_exact_layout_and_round_trip ... ok
+test tests::routing_envelope_rejects_malformed_metadata_and_lengths ... ok
+test tests::queue_limits_fail_without_dropping_earlier_frames ... ok
+test tests::third_participant_and_unrelated_routes_are_isolated ... ok
+test tests::two_providers_transfer_opaque_bytes_bidirectionally ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/security_boundaries.rs (target/debug/deps/security_boundaries-22be222de86bc2b8)
+
+running 3 tests
+test route_token_and_session_debug_redact_raw_token ... ok
+test routing_packet_debug_redacts_token_and_payload_bytes ... ok
+test byte_queue_capacity_fails_without_dropping_accepted_frames ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_remote_bridge-7a77b50afa2f61e2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/authenticated_candidate_provenance.rs (target/debug/deps/authenticated_candidate_provenance-d278dfa529ed74a1)
+
+running 7 tests
+test authenticated_target_publication_allows_same_workspace_refresh ... ok
+test authenticated_requester_publication_cannot_be_retargeted_to_peer_plan ... ok
+test cross_workspace_requester_cannot_consume_authenticated_target_publication ... ok
+test fixture_keeps_requester_and_target_identities_distinct ... ok
+test invalid_candidate_set_is_rejected_before_publication_exists ... ok
+test target_membership_suspension_rejects_stale_publication_before_mutation ... ok
+test target_transport_rotation_rejects_stale_publication_before_mutation ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/candidate_reachability_semantic_adapter.rs (target/debug/deps/candidate_reachability_semantic_adapter-fa2ebfe578515e05)
+
+running 3 tests
+test semantic_adapter_rejects_candidate_id_rebinding_transactionally ... ok
+test semantic_adapter_derives_publisher_identity_and_refreshes_exact_target_only ... ok
+test semantic_adapter_rejects_stale_target_transport_before_plan_mutation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/dynamic_reachability_registry.rs (target/debug/deps/dynamic_reachability_registry-e1a918de1c2e103f)
+
+running 5 tests
+test current_session_workspace_and_target_identity_allow_transient_refresh ... ok
+test cross_workspace_target_rejects_refresh_before_endpoint_mutation ... ok
+test requester_membership_suspension_rejects_refresh_before_endpoint_mutation ... ok
+test target_device_revocation_rejects_refresh_before_endpoint_mutation ... ok
+test transport_rotation_rejects_stale_plan_before_endpoint_mutation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/end_to_end.rs (target/debug/deps/end_to_end-3c89dba5a2657f1d)
+
+running 9 tests
+test all_operation_codes_round_trip_and_map_to_exact_capabilities ... ok
+test current_transport_binding_is_single_bind_compare_and_rotate ... ok
+test denied_capability_and_owner_role_never_dispatch ... ok
+test malformed_header_fields_trailing_data_and_invalid_typed_values_fail_closed ... ok
+test lease_bounds_dispatch_failure_and_oversized_response_fail_closed ... ok
+test membership_suspension_and_device_revocation_invalidate_unexpired_session ... ok
+test valid_full_chain_dispatches_and_correlates_response ... ok
+test stale_transport_expired_or_future_session_never_dispatches ... ok
+test wrong_outer_kind_and_malformed_prwc_never_dispatch ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_composition_reference.rs (target/debug/deps/reachability_composition_reference-391d19e8cde00fe9)
+
+running 4 tests
+test rejected_candidate_refresh_preserves_plan_and_current_traversal_lifecycle ... ok
+test every_successful_full_refresh_invalidates_the_current_replacement_lifecycle ... ok
+test stale_transport_admission_failure_preserves_plan_and_traversal ... ok
+test successful_refresh_invalidates_old_lifecycle_even_for_exact_retained_candidate ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_freshness_authority_reference.rs (target/debug/deps/reachability_freshness_authority_reference-8d30c987b966ccd2)
+
+running 6 tests
+test requester_change_does_not_create_an_independent_replay_namespace ... ok
+test candidate_validation_failure_does_not_consume_current_freshness ... ok
+test same_peer_session_renewal_continues_the_existing_freshness_lifecycle ... ok
+test stale_or_duplicate_expected_freshness_fails_before_authoritative_mutation ... ok
+test successful_commit_advances_freshness_resets_observation_and_invalidates_traversal_together ... ok
+test unavailable_verifier_state_fails_closed_without_resetting_to_an_initial_baseline ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/reachability_freshness_bootstrap_reference.rs (target/debug/deps/reachability_freshness_bootstrap_reference-ed89abee4ebafb92)
+
+running 5 tests
+test missing_state_for_existing_lifecycle_does_not_alias_new_bootstrap ... ok
+test invalid_first_candidate_vector_does_not_consume_bootstrap ... ok
+test new_lifecycle_first_publication_establishes_freshness_once ... ok
+test same_peer_session_renewal_during_bootstrap_uses_the_existing_bootstrap_state ... ok
+test transport_rotation_creates_a_distinct_replacement_peer_bootstrap_lifecycle ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_remote_transport-639dd35329fb3321)
+
+running 4 tests
+test tests::control_frame_rejects_header_and_length_failures ... ok
+test tests::control_frame_round_trip ... ok
+test tests::deterministic_initiator_orders_transport_identity ... ok
+test tests::server_name_uses_all_transport_identity_bytes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/loopback.rs (target/debug/deps/loopback-bdfbf901c80d8f19)
+
+running 5 tests
+test missing_client_certificate_fails_closed ... ok
+test prw_expected_identity_mismatch_fails_after_valid_mtls ... ok
+test wrong_ca_fails_closed ... ok
+test wrong_server_name_fails_closed ... ok
+test loopback_quic_v1_mtls_binds_peer_identity_and_control_frame ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_session-eff88c8d401ede48)
+
+running 6 tests
+test tests::challenge_time_window_fails_closed ... ok
+test tests::pending_and_revoked_bindings_fail_before_pending_state ... ok
+test tests::changed_bound_identity_signature_is_rejected_without_consumption ... ok
+test tests::proof_for_other_session_is_rejected_without_consuming_correct_challenge ... ok
+test tests::wrong_nonce_is_rejected_before_correct_proof_can_complete ... ok
+test tests::valid_typed_proof_authenticates_exact_bound_identity_once ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/prw_terminal-372ec8e6694b2573)
+
+running 16 tests
+test tests::backend_failure_marks_session_failed_and_rejects_later_io ... ok
+test tests::backend_open_failure_never_creates_open_record ... ok
+test tests::backend_oversized_output_fails_session ... ok
+test tests::broker_capacity_fails_before_backend_call ... ok
+test tests::broker_passes_only_named_profile_and_valid_geometry ... ok
+test tests::broker_rejects_duplicate_identifier_before_backend_call ... ok
+test tests::close_failure_retains_failed_record ... ok
+test tests::close_is_terminal_for_returned_record_and_later_io_is_rejected ... ok
+test tests::empty_and_oversized_input_fail_before_backend_call ... ok
+test tests::failed_close_can_be_retried_to_closed_and_removed ... ok
+test tests::failed_close_retry_failure_retains_failed_record ... ok
+test tests::failed_close_retry_rejects_open_or_unknown_before_backend_call ... ok
+test tests::identifiers_and_geometry_are_bounded ... ok
+test tests::identity_binding_is_immutable_in_session_record ... ok
+test tests::output_request_bound_fails_before_backend_call ... ok
+test tests::resize_geometry_is_rejected_before_backend_call ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+GATE_workspace_tests_RC=0
+===== GATE workspace_build =====
+   Compiling prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+   Compiling prw-device-identity-provisioning v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-provisioning)
+   Compiling prw-control-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-transport)
+   Compiling prw-enrollment v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-enrollment)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.85s
+GATE_workspace_build_RC=0
+===== POST_VALIDATION_HASHES =====
+cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503  Cargo.toml
+c22b0efad4fc6e9e404ce68d182da6713296f88039338429a3af983b409b24cb  Cargo.lock
+51227c7f0a1216df83c1e2ac7526961d096b7508ff1aaa1c7410f15102ba182e  crates/prw-remote-bridge/Cargo.toml
+ZERO_DEPENDENCY_DRIFT_RC=0
+STATUS=PASS
+FIRST_FAILURE=NONE
+VALIDATION_RC=0
