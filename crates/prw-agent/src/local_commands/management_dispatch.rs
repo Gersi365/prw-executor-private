@@ -67,7 +67,7 @@ impl LocalManagementAuthorityContext {
     /// Returns `None` when the supplied authority family is not the family required by
     /// the canonical admitted command. Request ID, kernel peer credentials, capability,
     /// operation code and provider family are copied only from the admission token.
-    pub(crate) fn from_agent_owned_authority(
+    pub(super) fn from_agent_owned_authority(
         admission: &LocalManagementAdmission,
         authority: LocalManagementFamilyAuthority<'_>,
     ) -> Option<Self> {

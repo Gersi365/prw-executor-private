@@ -1,0 +1,133 @@
+STATUS=RUNNING
+BASE_HEAD=f21872cac0511be212f4e7a8acc1d1a166f335a6
+RUN_ID=32129561843
+REF=phase-152-c02e-dynamic-reachability-design
+EDIT_RC=0
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+FMT_RC=0
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded bitflags v2.13.1
+  Downloaded lru-slab v0.1.2
+  Downloaded dunce v1.0.5
+  Downloaded subtle v2.6.1
+  Downloaded untrusted v0.9.0
+  Downloaded errno v0.3.14
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded tokio-macros v2.7.2
+  Downloaded rand_pcg v0.10.2
+  Downloaded untrusted v0.7.1
+  Downloaded cpufeatures v0.3.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded cfg-if v1.0.4
+  Downloaded cfg_aliases v0.2.2
+  Downloaded cmake v0.1.58
+  Downloaded pkg-config v0.3.34
+  Downloaded slab v0.4.12
+  Downloaded thiserror-impl v2.0.20
+  Downloaded thiserror v2.0.20
+  Downloaded quinn-udp v0.5.15
+  Downloaded quote v1.0.47
+  Downloaded shlex v2.0.1
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded fs_extra v1.3.0
+  Downloaded jobserver v0.1.35
+  Downloaded bytes v1.12.1
+  Downloaded pin-project-lite v0.2.17
+  Downloaded once_cell v1.21.4
+  Downloaded rand_core v0.10.1
+  Downloaded rustls-pki-types v1.15.1
+  Downloaded zeroize v1.9.0
+  Downloaded getrandom v0.2.17
+  Downloaded chacha20 v0.10.1
+  Downloaded proc-macro2 v1.0.107
+  Downloaded getrandom v0.4.3
+  Downloaded cc v1.4.3
+  Downloaded socket2 v0.6.5
+  Downloaded tracing-core v0.1.36
+  Downloaded unicode-ident v1.0.24
+  Downloaded tinyvec v1.12.0
+  Downloaded quinn v0.11.11
+  Downloaded rustls-webpki v0.103.14
+  Downloaded mio v1.2.2
+  Downloaded rand v0.10.2
+  Downloaded aws-lc-rs v1.18.0
+  Downloaded quinn-proto v0.11.16
+  Downloaded syn v3.0.3
+  Downloaded nix v0.31.3
+  Downloaded rustls v0.23.43
+  Downloaded rustix v1.1.4
+  Downloaded tracing v0.1.44
+  Downloaded libc v0.2.189
+  Downloaded tokio v1.53.1
+  Downloaded ring v0.17.14
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded aws-lc-sys v0.44.0
+   Compiling jobserver v0.1.35
+   Compiling aws-lc-rs v1.18.0
+    Checking untrusted v0.7.1
+   Compiling proc-macro2 v1.0.107
+   Compiling cc v1.4.3
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling syn v3.0.3
+   Compiling cmake v0.1.58
+   Compiling aws-lc-sys v0.44.0
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Checking rand_core v0.10.1
+    Checking once_cell v1.21.4
+   Compiling getrandom v0.4.3
+    Checking pin-project-lite v0.2.17
+    Checking tracing-core v0.1.36
+    Checking rustls-pki-types v1.15.1
+   Compiling thiserror v2.0.20
+   Compiling rustls v0.23.43
+    Checking cpufeatures v0.3.0
+    Checking chacha20 v0.10.1
+    Checking tracing v0.1.44
+   Compiling thiserror-impl v2.0.20
+   Compiling quinn-udp v0.5.15
+    Checking socket2 v0.6.5
+    Checking prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+    Checking tinyvec_macros v0.1.1
+    Checking bytes v1.12.1
+    Checking tinyvec v1.12.0
+    Checking rand v0.10.2
+    Checking rand_pcg v0.10.2
+   Compiling tokio-macros v2.7.2
+   Compiling quinn v0.11.11
+    Checking mio v1.2.2
+    Checking rustc-hash v2.1.3
+    Checking slab v0.4.12
+    Checking lru-slab v0.1.2
+    Checking tokio v1.53.1
+   Compiling nix v0.31.3
+    Checking rustls-webpki v0.103.14
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking quinn-proto v0.11.16
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 36.35s
+AGENT_CLIPPY_RC=0
+UNEXPECTED_CHANGED_PATHS=crates/prw-agent/src/local_commands/management_dispatch.rs
+target/debug/.fingerprint/prw-control-plane-608a95297df85987/dep-lib-prw_control_plane
+target/debug/build/aws-lc-sys-bbcf55ca4d69cb00/output
+SOURCE_MUTATION=crates/prw-agent/src/local_commands/management_dispatch.rs
+VISIBILITY_CORRECTIVE=LocalManagementAuthorityContext::from_agent_owned_authority_pub_crate_to_pub_super
+LINT_SUPPRESSIONS_ADDED=NONE
+DEPENDENCY_STATE=UNCHANGED
+RUNTIME_NETWORK_ACTIVATION=NONE
+STATUS=FAIL
+FIRST_FAILURE=changed_paths
+CORRECTIVE_RC=76
