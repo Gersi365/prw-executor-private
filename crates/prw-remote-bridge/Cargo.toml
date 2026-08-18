@@ -21,7 +21,6 @@ aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc"
 prw-control-plane = { path = "../prw-control-plane" }
 prw-core = { path = "../prw-core" }
 prw-device-identity-signer = { path = "../prw-device-identity-signer" }
-# Tranche 2 test composition only; this does not select a production traversal owner.
 prw-nat-traversal = { path = "../prw-nat-traversal" }
 
 [lints]
