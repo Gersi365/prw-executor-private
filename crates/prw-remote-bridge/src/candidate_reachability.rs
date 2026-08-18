@@ -1,10 +1,9 @@
-//! Source-only authenticated candidate-publication semantics for PRW dynamic reachability.
+//! Authenticated candidate-publication semantics for PRW dynamic reachability.
 //!
-//! Phase 152 C02e factors the already-locked provenance/admission ordering into one
-//! bounded semantic adapter. This module intentionally defines no wire encoding,
-//! freshness/replay token, socket operation, discovery authority, or runtime wiring.
-//! It is not exported by `prw-remote-bridge` while the candidate wire/replay adapter
-//! remains unselected.
+//! Phase 152 C02e factors the locked provenance/admission ordering into one bounded semantic
+//! adapter. Tranche 4 exports this adapter as an input to the production reachability owner while
+//! still defining no candidate wire encoding, socket operation, discovery authority or runtime
+//! activation. Publication freshness remains a separate verifier-owned input to the upper owner.
 
 use std::fmt;
 
@@ -56,8 +55,8 @@ impl std::error::Error for CandidateReachabilityError {}
 /// Candidate set whose peer identity is derived from a registry-current authenticated publisher.
 ///
 /// This object is a semantic snapshot only. It intentionally carries no generic control-frame
-/// request identifier and makes no freshness/replay claim. A future reviewed wire adapter must
-/// add an independent bounded freshness mechanism before production consumption is possible.
+/// request identifier and makes no freshness/replay claim. The production owner requires a
+/// separately presented verifier freshness token before this publication can commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticatedCandidatePublication {
     publisher_session: AuthenticatedDeviceSession,
@@ -124,9 +123,8 @@ pub fn publish_current_candidates(
 /// Revalidates requester, publisher, workspace and exact target currentness without mutating the
 /// target connectivity plan.
 ///
-/// This source-only precheck exists so a later upper composition authority can place its
-/// independent publication-freshness comparison after current identity/workspace admission but
-/// before candidate-plan mutation.
+/// The production upper owner places its independent publication-freshness comparison after this
+/// current identity/workspace admission and before candidate-plan mutation.
 ///
 /// Admission order is intentionally fixed:
 ///
@@ -181,6 +179,9 @@ pub fn validate_authenticated_publication_admission(
 ///
 /// Any failure before the final step leaves the target plan untouched. Candidate-ID non-rebinding
 /// and full-vector transactional validation are delegated to `PeerConnectivityPlan`.
+///
+/// The production Tranche 4 owner does not call this mutation helper directly because it stages a
+/// cloned plan before durable CAS; the helper remains useful for bounded source/test composition.
 ///
 /// # Errors
 ///
