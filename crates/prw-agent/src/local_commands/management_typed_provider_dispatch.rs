@@ -58,13 +58,11 @@ pub(crate) enum LocalManagementTypedProviderDispatchError {
 /// Dispatches one admitted canonical command through already-owned typed providers.
 ///
 /// The function first proves family correlation by constructing the existing C02c
-/// request-bound authority context. File/transfer calls additionally require pointer
-/// identity with the lifecycle's exact Agent-owned descriptor authority. Terminal and
-/// forwarding calls derive principals only from registry-revalidated PRW-session
-/// authority and prevent operations against broker records owned by another principal.
+/// request-bound authority context. Family-specific helpers then enforce exact
+/// filesystem authority or registry/session principal binding before mutation.
 ///
 /// No local response byte representation is chosen here. Successful output remains in
-/// [`LocalManagementTypedProviderResult`] for a later reviewed response-encoding gate.
+/// [`LocalManagementTypedProviderResult`] for the deterministic response layer.
 ///
 /// # Errors
 ///
@@ -87,107 +85,140 @@ where
         BridgeCommand::AgentStatus => Ok(LocalManagementTypedProviderResult::AgentStatus(
             agent_status,
         )),
-        BridgeCommand::FileList(path) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .filesystem()
-                .root()
-                .list_directory(path)
-                .map(LocalManagementTypedProviderResult::DirectoryEntries)
-                .map_err(LocalManagementTypedProviderDispatchError::File)
+        BridgeCommand::FileList(_)
+        | BridgeCommand::FileStat(_)
+        | BridgeCommand::FileCreate { .. }
+        | BridgeCommand::DirectoryCreate(_) => {
+            dispatch_file_command(admission.command(), authority, lifecycle)
         }
-        BridgeCommand::FileStat(path) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .filesystem()
-                .root()
-                .metadata(path)
-                .map(LocalManagementTypedProviderResult::Metadata)
-                .map_err(LocalManagementTypedProviderDispatchError::File)
+        BridgeCommand::UploadBegin(_)
+        | BridgeCommand::UploadResume(_)
+        | BridgeCommand::UploadChunk { .. }
+        | BridgeCommand::UploadFinalize(_)
+        | BridgeCommand::UploadAbort(_)
+        | BridgeCommand::DownloadChunk { .. } => {
+            dispatch_transfer_command(admission.command(), authority, lifecycle)
         }
-        BridgeCommand::FileCreate { path, contents } => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .filesystem()
-                .root()
-                .create_file(path, contents)
-                .map(|()| LocalManagementTypedProviderResult::Empty)
-                .map_err(LocalManagementTypedProviderDispatchError::File)
+        BridgeCommand::TerminalOpen { .. }
+        | BridgeCommand::TerminalInput { .. }
+        | BridgeCommand::TerminalResize { .. }
+        | BridgeCommand::TerminalRead { .. }
+        | BridgeCommand::TerminalClose(_) => {
+            dispatch_terminal_command(admission.command(), authority, lifecycle)
         }
-        BridgeCommand::DirectoryCreate(path) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .filesystem()
-                .root()
-                .create_directory(path)
-                .map(|()| LocalManagementTypedProviderResult::Empty)
-                .map_err(LocalManagementTypedProviderDispatchError::File)
+        BridgeCommand::ForwardOpen { .. } | BridgeCommand::ForwardClose(_) => {
+            dispatch_forwarding_command(admission.command(), authority, lifecycle)
         }
-        BridgeCommand::UploadBegin(plan) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .transfers_mut()
-                .begin(plan.clone())
-                .map(LocalManagementTypedProviderResult::Offset)
-                .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
-        BridgeCommand::UploadResume(plan) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .transfers_mut()
-                .resume(plan.clone())
-                .map(LocalManagementTypedProviderResult::Offset)
-                .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
+    }
+}
+
+fn dispatch_file_command<T, F>(
+    command: &BridgeCommand,
+    authority: LocalManagementFamilyAuthority<'_>,
+    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+) -> Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>
+where
+    T: TerminalBackend,
+    F: PortForwardBackend,
+{
+    require_exact_filesystem_authority(authority, lifecycle)?;
+    let root = lifecycle.filesystem().root();
+
+    match command {
+        BridgeCommand::FileList(path) => root
+            .list_directory(path)
+            .map(LocalManagementTypedProviderResult::DirectoryEntries)
+            .map_err(LocalManagementTypedProviderDispatchError::File),
+        BridgeCommand::FileStat(path) => root
+            .metadata(path)
+            .map(LocalManagementTypedProviderResult::Metadata)
+            .map_err(LocalManagementTypedProviderDispatchError::File),
+        BridgeCommand::FileCreate { path, contents } => root
+            .create_file(path, contents)
+            .map(|()| LocalManagementTypedProviderResult::Empty)
+            .map_err(LocalManagementTypedProviderDispatchError::File),
+        BridgeCommand::DirectoryCreate(path) => root
+            .create_directory(path)
+            .map(|()| LocalManagementTypedProviderResult::Empty)
+            .map_err(LocalManagementTypedProviderDispatchError::File),
+        _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
+    }
+}
+
+fn dispatch_transfer_command<T, F>(
+    command: &BridgeCommand,
+    authority: LocalManagementFamilyAuthority<'_>,
+    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+) -> Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>
+where
+    T: TerminalBackend,
+    F: PortForwardBackend,
+{
+    require_exact_filesystem_authority(authority, lifecycle)?;
+
+    match command {
+        BridgeCommand::UploadBegin(plan) => lifecycle
+            .transfers_mut()
+            .begin(plan.clone())
+            .map(LocalManagementTypedProviderResult::Offset)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+        BridgeCommand::UploadResume(plan) => lifecycle
+            .transfers_mut()
+            .resume(plan.clone())
+            .map(LocalManagementTypedProviderResult::Offset)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
         BridgeCommand::UploadChunk {
             transfer_id,
             offset,
             chunk,
-        } => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .transfers_mut()
-                .upload_chunk(*transfer_id, *offset, chunk)
-                .map(LocalManagementTypedProviderResult::Offset)
-                .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
-        BridgeCommand::UploadFinalize(transfer_id) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .transfers_mut()
-                .finalize(*transfer_id)
-                .map(|()| LocalManagementTypedProviderResult::Empty)
-                .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
-        BridgeCommand::UploadAbort(transfer_id) => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            lifecycle
-                .transfers_mut()
-                .abort(*transfer_id)
-                .map(|()| LocalManagementTypedProviderResult::Empty)
-                .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
+        } => lifecycle
+            .transfers_mut()
+            .upload_chunk(*transfer_id, *offset, chunk)
+            .map(LocalManagementTypedProviderResult::Offset)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+        BridgeCommand::UploadFinalize(transfer_id) => lifecycle
+            .transfers_mut()
+            .finalize(*transfer_id)
+            .map(|()| LocalManagementTypedProviderResult::Empty)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+        BridgeCommand::UploadAbort(transfer_id) => lifecycle
+            .transfers_mut()
+            .abort(*transfer_id)
+            .map(|()| LocalManagementTypedProviderResult::Empty)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
         BridgeCommand::DownloadChunk {
             path,
             offset,
             requested_len,
-        } => {
-            require_exact_filesystem_authority(authority, lifecycle)?;
-            download_chunk(
-                lifecycle.filesystem().root(),
-                path,
-                *offset,
-                *requested_len,
-            )
-            .map(LocalManagementTypedProviderResult::Bytes)
-            .map_err(LocalManagementTypedProviderDispatchError::Transfer)
-        }
+        } => download_chunk(
+            lifecycle.filesystem().root(),
+            path,
+            *offset,
+            *requested_len,
+        )
+        .map(LocalManagementTypedProviderResult::Bytes)
+        .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+        _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
+    }
+}
+
+fn dispatch_terminal_command<T, F>(
+    command: &BridgeCommand,
+    authority: LocalManagementFamilyAuthority<'_>,
+    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+) -> Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>
+where
+    T: TerminalBackend,
+    F: PortForwardBackend,
+{
+    let principal = terminal_principal(authority)?;
+
+    match command {
         BridgeCommand::TerminalOpen {
             session_id,
             profile,
             geometry,
         } => {
-            let principal = terminal_principal(authority)?;
             if let Some(existing) = lifecycle.terminal().session(*session_id) {
                 require_same_terminal_principal(existing.principal(), &principal)?;
             }
@@ -198,7 +229,6 @@ where
                 .map_err(LocalManagementTypedProviderDispatchError::Terminal)
         }
         BridgeCommand::TerminalInput { session_id, bytes } => {
-            let principal = terminal_principal(authority)?;
             require_terminal_session_principal(lifecycle, *session_id, &principal)?;
             lifecycle
                 .terminal_mut()
@@ -210,7 +240,6 @@ where
             session_id,
             geometry,
         } => {
-            let principal = terminal_principal(authority)?;
             require_terminal_session_principal(lifecycle, *session_id, &principal)?;
             lifecycle
                 .terminal_mut()
@@ -222,7 +251,6 @@ where
             session_id,
             maximum_bytes,
         } => {
-            let principal = terminal_principal(authority)?;
             require_terminal_session_principal(lifecycle, *session_id, &principal)?;
             lifecycle
                 .terminal_mut()
@@ -231,7 +259,6 @@ where
                 .map_err(LocalManagementTypedProviderDispatchError::Terminal)
         }
         BridgeCommand::TerminalClose(session_id) => {
-            let principal = terminal_principal(authority)?;
             require_terminal_session_principal(lifecycle, *session_id, &principal)?;
             lifecycle
                 .terminal_mut()
@@ -239,8 +266,23 @@ where
                 .map(|_| LocalManagementTypedProviderResult::Empty)
                 .map_err(LocalManagementTypedProviderDispatchError::Terminal)
         }
+        _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
+    }
+}
+
+fn dispatch_forwarding_command<T, F>(
+    command: &BridgeCommand,
+    authority: LocalManagementFamilyAuthority<'_>,
+    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+) -> Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>
+where
+    T: TerminalBackend,
+    F: PortForwardBackend,
+{
+    let principal = forwarding_principal(authority)?;
+
+    match command {
         BridgeCommand::ForwardOpen { forward_id, spec } => {
-            let principal = forwarding_principal(authority)?;
             if let Some(existing) = lifecycle.forwarding().session(*forward_id) {
                 require_same_forwarding_principal(existing.principal(), &principal)?;
             }
@@ -251,7 +293,6 @@ where
                 .map_err(LocalManagementTypedProviderDispatchError::Forwarding)
         }
         BridgeCommand::ForwardClose(forward_id) => {
-            let principal = forwarding_principal(authority)?;
             require_forwarding_session_principal(lifecycle, *forward_id, &principal)?;
             lifecycle
                 .forwarding_mut()
@@ -259,6 +300,7 @@ where
                 .map(|_| LocalManagementTypedProviderResult::Empty)
                 .map_err(LocalManagementTypedProviderDispatchError::Forwarding)
         }
+        _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
     }
 }
 
