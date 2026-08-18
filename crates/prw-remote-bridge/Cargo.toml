@@ -5,11 +5,15 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[lib]
+path = "src/root.rs"
+
 [dependencies]
 prw-connectivity = { path = "../prw-connectivity" }
 prw-file-service = { path = "../prw-file-service" }
 prw-file-transfer = { path = "../prw-file-transfer" }
 prw-forwarding = { path = "../prw-forwarding" }
+prw-nat-traversal = { path = "../prw-nat-traversal" }
 prw-policy = { path = "../prw-policy" }
 prw-registry = { path = "../prw-registry" }
 prw-remote-transport = { path = "../prw-remote-transport" }
@@ -21,7 +25,6 @@ aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc"
 prw-control-plane = { path = "../prw-control-plane" }
 prw-core = { path = "../prw-core" }
 prw-device-identity-signer = { path = "../prw-device-identity-signer" }
-prw-nat-traversal = { path = "../prw-nat-traversal" }
 
 [lints]
 workspace = true
