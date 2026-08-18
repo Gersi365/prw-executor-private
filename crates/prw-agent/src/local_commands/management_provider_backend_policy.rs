@@ -281,7 +281,9 @@ mod tests {
         assert_eq!(MAX_FORWARD_CONNECTIONS_PER_SESSION, 32);
         assert_eq!(MAX_FORWARD_CONNECTIONS_AGGREGATE, 32);
         assert_eq!(MAX_FORWARD_EGRESS_TARGETS, 32);
-        assert!(MAX_FORWARD_CONNECTIONS_PER_SESSION <= MAX_FORWARD_CONNECTIONS_AGGREGATE);
+        const {
+            assert!(MAX_FORWARD_CONNECTIONS_PER_SESSION <= MAX_FORWARD_CONNECTIONS_AGGREGATE);
+        }
         assert_eq!(FORWARD_CONNECT_TIMEOUT, Duration::from_secs(5));
         assert_eq!(FORWARD_IDLE_TIMEOUT, Duration::from_secs(30));
         assert_eq!(FORWARD_COPY_BUFFER_BYTES, 65_536);
