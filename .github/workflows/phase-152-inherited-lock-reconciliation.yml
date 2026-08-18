@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: prw-phase-152-inherited-lock-reconciliation
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   reconcile:
@@ -25,22 +25,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Materialize only inherited workspace lock metadata
+      - name: Reconcile and capture result
+        id: reconcile
         shell: bash
         run: |
-          set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
-          C02D=857583b25ed1206317641a93fd8f927819c954d8
-          git merge-base --is-ancestor "${C02D}" HEAD
-          test "$(git merge-base "${C02D}" HEAD)" = "${C02D}"
+          set -u -o pipefail
+
           BASE_HEAD="$(git rev-parse HEAD)"
-          test "${BASE_HEAD}" = "${GITHUB_SHA}"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_LOCK_RECONCILIATION_${BASE_HEAD}.txt"
+          mkdir -p "$(dirname "${REPORT}")"
+          : > "${REPORT}"
+          overall=0
+          failure="NONE"
 
-          rustc --version
-          cargo --version
+          record() { printf '%s\n' "$*" | tee -a "${REPORT}"; }
+          fail() {
+            if [[ "${overall}" -eq 0 ]]; then
+              overall=1
+              failure="$1"
+            fi
+            record "FAILURE_${1}=1"
+          }
+
+          record 'STATUS=RUNNING'
+          record "BASE_HEAD=${BASE_HEAD}"
+          record "RUN_ID=${GITHUB_RUN_ID}"
+          record "REF=${GITHUB_REF_NAME}"
+          record "GITHUB_SHA=${GITHUB_SHA}"
+
+          if [[ "${GITHUB_REF_NAME}" != "phase-152-c02e-dynamic-reachability-design" ]]; then
+            fail wrong_branch
+          fi
+          if [[ "${BASE_HEAD}" != "${GITHUB_SHA}" ]]; then
+            fail checkout_head_mismatch
+          fi
+          if ! git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD; then
+            fail c02d_not_ancestor
+          elif [[ "$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)" != "857583b25ed1206317641a93fd8f927819c954d8" ]]; then
+            fail c02d_merge_base_mismatch
+          fi
+
+          rustc --version 2>&1 | tee -a "${REPORT}" || fail rustc_version
+          cargo --version 2>&1 | tee -a "${REPORT}" || fail cargo_version
+
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          record "LOCK_BEFORE_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
 
-          python3 - <<'PY'
+          python3 - <<'PY' || exit 70
           import json, tomllib
           from pathlib import Path
           data = tomllib.loads(Path('Cargo.lock').read_text())
@@ -48,77 +79,173 @@ jobs:
               (p['name'], p['version'], p.get('source'), p.get('checksum'))
               for p in data['package'] if p.get('source') is not None
           )
-          locals_ = sorted((p['name'], p['version']) for p in data['package'] if p.get('source') is None)
-          agent = next(p for p in data['package'] if p['name'] == 'prw-agent')
+          local_identity = sorted(
+              (p['name'], p['version']) for p in data['package'] if p.get('source') is None
+          )
+          local_deps = {
+              p['name']: sorted(p.get('dependencies', []))
+              for p in data['package'] if p.get('source') is None
+          }
           Path('/tmp/external-before.json').write_text(json.dumps(external, sort_keys=True))
-          Path('/tmp/locals-before.json').write_text(json.dumps(locals_, sort_keys=True))
-          Path('/tmp/agent-deps-before.json').write_text(json.dumps(sorted(agent.get('dependencies', []))))
+          Path('/tmp/local-identity-before.json').write_text(json.dumps(local_identity, sort_keys=True))
+          Path('/tmp/local-deps-before.json').write_text(json.dumps(local_deps, sort_keys=True))
           PY
+          if [[ "$?" -ne 0 ]]; then fail snapshot_before; fi
 
-          # Full metadata resolution intentionally materializes the committed workspace manifests.
-          cargo metadata --format-version 1 > /dev/null
+          if [[ "${overall}" -eq 0 ]]; then
+            set +e
+            cargo metadata --format-version 1 > "${RUNNER_TEMP}/metadata.json" 2> "${RUNNER_TEMP}/metadata.stderr"
+            metadata_rc=$?
+            set -u -o pipefail
+            record "CARGO_METADATA_MATERIALIZE_RC=${metadata_rc}"
+            cat "${RUNNER_TEMP}/metadata.stderr" >> "${REPORT}"
+            if [[ "${metadata_rc}" -ne 0 ]]; then fail cargo_metadata_materialize; fi
+          fi
 
-          test -n "$(git diff --name-only -- Cargo.lock)"
-          mapfile -t changed < <(git diff --name-only)
-          test "${#changed[@]}" -eq 1
-          test "${changed[0]}" = "Cargo.lock"
+          if [[ "${overall}" -eq 0 ]]; then
+            mapfile -t changed < <(git diff --name-only)
+            record "CHANGED_PATH_COUNT=${#changed[@]}"
+            printf 'CHANGED_PATH=%s\n' "${changed[@]}" | tee -a "${REPORT}"
+            if [[ "${#changed[@]}" -ne 1 || "${changed[0]}" != "Cargo.lock" ]]; then
+              fail unexpected_materialization_paths
+            fi
+          fi
 
-          cargo metadata --locked --format-version 1 > /dev/null
+          if [[ "${overall}" -eq 0 ]]; then
+            set +e
+            cargo metadata --locked --format-version 1 > /dev/null 2> "${RUNNER_TEMP}/locked.stderr"
+            locked_rc=$?
+            set -u -o pipefail
+            record "CARGO_METADATA_LOCKED_RECHECK_RC=${locked_rc}"
+            cat "${RUNNER_TEMP}/locked.stderr" >> "${REPORT}"
+            if [[ "${locked_rc}" -ne 0 ]]; then fail locked_recheck; fi
+          fi
 
-          python3 - <<'PY'
+          if [[ "${overall}" -eq 0 ]]; then
+            set +e
+            python3 - <<'PY' > "${RUNNER_TEMP}/audit.out" 2>&1
           import json, tomllib
           from pathlib import Path
+
+          before_external = [tuple(x) for x in json.loads(Path('/tmp/external-before.json').read_text())]
+          before_identity = [tuple(x) for x in json.loads(Path('/tmp/local-identity-before.json').read_text())]
+          before_deps = json.loads(Path('/tmp/local-deps-before.json').read_text())
+
           data = tomllib.loads(Path('Cargo.lock').read_text())
-          external = sorted(
+          after_external = sorted(
               (p['name'], p['version'], p.get('source'), p.get('checksum'))
               for p in data['package'] if p.get('source') is not None
           )
-          locals_ = sorted((p['name'], p['version']) for p in data['package'] if p.get('source') is None)
-          before_external = json.loads(Path('/tmp/external-before.json').read_text())
-          before_locals = json.loads(Path('/tmp/locals-before.json').read_text())
-          if external != [tuple(x) for x in before_external]:
-              raise SystemExit('external package/version/source/checksum drift detected')
-          if locals_ != [tuple(x) for x in before_locals]:
-              raise SystemExit('workspace/local package identity drift detected')
+          after_identity = sorted(
+              (p['name'], p['version']) for p in data['package'] if p.get('source') is None
+          )
+          after_deps = {
+              p['name']: sorted(p.get('dependencies', []))
+              for p in data['package'] if p.get('source') is None
+          }
 
-          agent = next(p for p in data['package'] if p['name'] == 'prw-agent')
-          before = set(json.loads(Path('/tmp/agent-deps-before.json').read_text()))
-          after = set(agent.get('dependencies', []))
-          expected_added = {
+          if after_external != before_external:
+              before = set(before_external)
+              after = set(after_external)
+              print('EXTERNAL_REMOVED=', sorted(before-after))
+              print('EXTERNAL_ADDED=', sorted(after-before))
+              raise SystemExit('external package/version/source/checksum drift detected')
+          print('EXTERNAL_PACKAGE_IDENTITY_DRIFT=NONE')
+
+          if after_identity != before_identity:
+              print('LOCAL_IDENTITY_BEFORE=', before_identity)
+              print('LOCAL_IDENTITY_AFTER=', after_identity)
+              raise SystemExit('workspace/local package identity drift detected')
+          print('WORKSPACE_PACKAGE_IDENTITY_DRIFT=NONE')
+
+          all_names = sorted(set(before_deps) | set(after_deps))
+          changed = {}
+          for name in all_names:
+              b = set(before_deps.get(name, []))
+              a = set(after_deps.get(name, []))
+              if a != b:
+                  changed[name] = {
+                      'added': sorted(a-b),
+                      'removed': sorted(b-a),
+                  }
+          print('LOCAL_DEPENDENCY_CHANGES=', json.dumps(changed, sort_keys=True))
+
+          expected_added = sorted([
               'prw-file-service',
               'prw-file-transfer',
               'prw-forwarding',
               'prw-registry',
               'prw-session',
               'prw-terminal',
+          ])
+          expected = {
+              'prw-agent': {
+                  'added': expected_added,
+                  'removed': [],
+              }
           }
-          if after - before != expected_added:
-              raise SystemExit(f'unexpected prw-agent lock dependency additions: {sorted(after-before)}')
-          if before - after:
-              raise SystemExit(f'unexpected prw-agent lock dependency removals: {sorted(before-after)}')
-          Path('/tmp/agent-deps-after.txt').write_text('\n'.join(sorted(after)) + '\n')
+          if changed != expected:
+              raise SystemExit('workspace dependency-list drift exceeds exact inherited prw-agent correction')
+          print('WORKSPACE_DEPENDENCY_DRIFT=EXACT_PRW_AGENT_SIX_EDGES_ONLY')
           PY
+            audit_rc=$?
+            set -u -o pipefail
+            cat "${RUNNER_TEMP}/audit.out" | tee -a "${REPORT}"
+            record "LOCK_SEMANTIC_AUDIT_RC=${audit_rc}"
+            if [[ "${audit_rc}" -ne 0 ]]; then fail lock_semantic_guard; fi
+          fi
 
-          git diff --check -- Cargo.lock
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_LOCK_RECONCILIATION_${BASE_HEAD}.txt"
-          {
-            echo 'STATUS=PASS_TOOL_MATERIALIZED_INHERITED_LOCK_RECONCILIATION'
-            echo "BASE_HEAD=${BASE_HEAD}"
-            echo "RUN_ID=${GITHUB_RUN_ID}"
-            echo "RUSTC=$(rustc --version)"
-            echo "CARGO=$(cargo --version)"
-            echo "LOCK_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/Cargo.lock.before" | awk '{print $1}')"
-            echo "LOCK_AFTER_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
-            echo 'EXTERNAL_PACKAGE_IDENTITY_DRIFT=NONE'
-            echo 'WORKSPACE_PACKAGE_IDENTITY_DRIFT=NONE'
-            echo 'PRW_AGENT_LOCK_ADDED_DEPENDENCIES=prw-file-service,prw-file-transfer,prw-forwarding,prw-registry,prw-session,prw-terminal'
-            echo 'MANIFEST_MUTATION=NONE'
-            echo 'LOCK_MATERIALIZER=cargo metadata --format-version 1'
-          } > "${REPORT}"
+          if [[ "${overall}" -eq 0 ]]; then
+            git diff --check -- Cargo.lock >> "${REPORT}" 2>&1 || fail lock_diff_check
+          fi
 
+          record "LOCK_CANDIDATE_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
+
+          if [[ "${overall}" -eq 0 ]]; then
+            record 'STATUS=PASS_TOOL_MATERIALIZED_INHERITED_LOCK_RECONCILIATION'
+            record 'MANIFEST_MUTATION=NONE'
+            record 'LOCK_MATERIALIZER=cargo metadata --format-version 1'
+            record 'PRW_AGENT_LOCK_ADDED_DEPENDENCIES=prw-file-service,prw-file-transfer,prw-forwarding,prw-registry,prw-session,prw-terminal'
+          else
+            record 'STATUS=FAIL_INHERITED_LOCK_RECONCILIATION'
+            record "FIRST_FAILURE=${failure}"
+            cp "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+            record 'LOCK_MUTATION_COMMITTED=NO'
+          fi
+          record "RECONCILIATION_RC=${overall}"
+
+          printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
+          printf 'rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit reconciled lock or failure evidence
+        if: always()
+        shell: bash
+        env:
+          REPORT: ${{ steps.reconcile.outputs.report }}
+          RECONCILIATION_RC: ${{ steps.reconcile.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test -n "${REPORT}"
+          test -f "${REPORT}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock "${REPORT}"
-          git diff --cached --check
-          git commit -m "phase 152 c02e: reconcile inherited workspace lock ${BASE_HEAD::12}"
+          if [[ "${RECONCILIATION_RC}" -eq 0 ]]; then
+            git add Cargo.lock "${REPORT}"
+            git diff --cached --check
+            git commit -m "phase 152 c02e: reconcile inherited workspace lock ${GITHUB_SHA::12}"
+          else
+            git add "${REPORT}"
+            git diff --cached --check
+            git commit -m "phase 152 c02e: record inherited lock reconciliation failure ${GITHUB_SHA::12}"
+          fi
           git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Fail when reconciliation failed
+        if: always()
+        shell: bash
+        env:
+          RECONCILIATION_RC: ${{ steps.reconcile.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test -n "${RECONCILIATION_RC}"
+          test "${RECONCILIATION_RC}" -eq 0
