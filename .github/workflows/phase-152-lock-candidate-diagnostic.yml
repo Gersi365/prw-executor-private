@@ -25,22 +25,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Materialize candidate transiently and report exact dependency delta
+      - name: Capture transient lock candidate
+        id: diagnose
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           BASE_HEAD="$(git rev-parse HEAD)"
-          test "${BASE_HEAD}" = "${GITHUB_SHA}"
-          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
-
           REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_LOCK_CANDIDATE_DIAGNOSTIC_${BASE_HEAD}.txt"
           mkdir -p "$(dirname "${REPORT}")"
           : > "${REPORT}"
+          echo "REPORT=${REPORT}" >> "${GITHUB_ENV}"
+
+          {
+            echo 'STATUS=DIAGNOSTIC_ONLY_NO_LOCK_COMMIT'
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "GITHUB_SHA=${GITHUB_SHA}"
+            echo "RUN_ID=${GITHUB_RUN_ID}"
+            echo "RUSTC=$(rustc --version 2>&1)"
+            echo "CARGO=$(cargo --version 2>&1)"
+          } >> "${REPORT}"
+
+          if [[ "${BASE_HEAD}" != "${GITHUB_SHA}" ]]; then
+            echo 'PRECHECK=FAIL_HEAD_MISMATCH' >> "${REPORT}"
+          else
+            echo 'PRECHECK=PASS' >> "${REPORT}"
+          fi
 
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
-          cp target/.rustc_info.json "${RUNNER_TEMP}/rustc_info.before.json"
+          if [[ -f target/.rustc_info.json ]]; then
+            cp target/.rustc_info.json "${RUNNER_TEMP}/rustc_info.before.json"
+            echo 'RUSTC_INFO_PRESENT_BEFORE=YES' >> "${REPORT}"
+          else
+            echo 'RUSTC_INFO_PRESENT_BEFORE=NO' >> "${REPORT}"
+          fi
 
-          python3 - <<'PY'
+          python3 - <<'PY' > "${RUNNER_TEMP}/snapshot.rc" 2>> "${REPORT}"
           import json, tomllib
           from pathlib import Path
           data = tomllib.loads(Path('Cargo.lock').read_text())
@@ -54,20 +74,15 @@ jobs:
           }
           Path('/tmp/external-before.json').write_text(json.dumps(external, sort_keys=True))
           Path('/tmp/local-deps-before.json').write_text(json.dumps(local_deps, sort_keys=True))
+          print('0')
           PY
+          snapshot_rc=$?
+          echo "SNAPSHOT_RC=${snapshot_rc}" >> "${REPORT}"
 
-          set +e
           cargo metadata --format-version 1 > "${RUNNER_TEMP}/metadata.json" 2> "${RUNNER_TEMP}/metadata.stderr"
           metadata_rc=$?
-          set -e
 
           {
-            echo 'STATUS=DIAGNOSTIC_ONLY_NO_LOCK_COMMIT'
-            echo "BASE_HEAD=${BASE_HEAD}"
-            echo "RUN_ID=${GITHUB_RUN_ID}"
-            echo "RUSTC=$(rustc --version)"
-            echo "CARGO=$(cargo --version)"
-            echo "LOCK_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/Cargo.lock.before" | awk '{print $1}')"
             echo "CARGO_METADATA_RC=${metadata_rc}"
             echo '===== CARGO_METADATA_STDERR ====='
             cat "${RUNNER_TEMP}/metadata.stderr"
@@ -77,11 +92,10 @@ jobs:
             git diff -- Cargo.lock
           } >> "${REPORT}"
 
-          if [[ "${metadata_rc}" -eq 0 ]]; then
-            python3 - <<'PY' >> "${REPORT}"
+          if [[ "${metadata_rc}" -eq 0 && "${snapshot_rc}" -eq 0 ]]; then
+            python3 - <<'PY' >> "${REPORT}" 2>&1
           import json, os, tomllib
           from pathlib import Path
-
           before_external = set(tuple(x) for x in json.loads(Path('/tmp/external-before.json').read_text()))
           before_deps = json.loads(Path('/tmp/local-deps-before.json').read_text())
           data = tomllib.loads(Path('Cargo.lock').read_text())
@@ -93,11 +107,9 @@ jobs:
               p['name']: sorted(p.get('dependencies', []))
               for p in data['package'] if p.get('source') is None
           }
-
           print('===== SEMANTIC_LOCK_DELTA =====')
           print('EXTERNAL_ADDED=', json.dumps(sorted(after_external-before_external)))
           print('EXTERNAL_REMOVED=', json.dumps(sorted(before_external-after_external)))
-
           dep_changes = {}
           for name in sorted(set(before_deps) | set(after_deps)):
               b = set(before_deps.get(name, []))
@@ -111,24 +123,21 @@ jobs:
           nodes = {n['id']: n for n in (metadata.get('resolve') or {}).get('nodes', [])}
           target_ids = [pid for pid,p in packages.items() if p.get('name') == 'libyuv-sys']
           print('LIBYUV_SYS_PACKAGE_IDS=', json.dumps(target_ids))
+          reverse = {}
+          for nid,node in nodes.items():
+              for dep in node.get('deps', []):
+                  reverse.setdefault(dep.get('pkg'), []).append(nid)
           for tid in target_ids:
               p = packages[tid]
               print('LIBYUV_SYS_PACKAGE=', json.dumps({k:p.get(k) for k in ['name','version','source','manifest_path']}, sort_keys=True))
-              rev = []
-              for nid,node in nodes.items():
-                  for dep in node.get('deps', []):
-                      if dep.get('pkg') == tid:
-                          parent = packages.get(nid, {})
-                          rev.append({'parent_id':nid,'parent_name':parent.get('name'),'parent_version':parent.get('version'),'dep_name':dep.get('name')})
-              print('LIBYUV_SYS_DIRECT_REVERSE_DEPS=', json.dumps(rev, sort_keys=True))
-
-              reverse = {}
-              for nid,node in nodes.items():
-                  for dep in node.get('deps', []):
-                      reverse.setdefault(dep.get('pkg'), []).append(nid)
+              direct=[]
+              for parent in reverse.get(tid, []):
+                  pp=packages.get(parent,{})
+                  direct.append({'parent_id':parent,'parent_name':pp.get('name'),'parent_version':pp.get('version')})
+              print('LIBYUV_SYS_DIRECT_REVERSE_DEPS=', json.dumps(direct, sort_keys=True))
               queue=[(tid,[tid])]
               paths=[]
-              while queue and len(paths)<50:
+              while queue and len(paths)<100:
                   cur,path=queue.pop(0)
                   for parent in reverse.get(cur,[]):
                       if parent in path:
@@ -137,7 +146,7 @@ jobs:
                       npath=path+[parent]
                       if pp.get('source') is None:
                           paths.append(npath)
-                      if len(npath)<8:
+                      if len(npath)<10:
                           queue.append((parent,npath))
               def label(pid):
                   p=packages.get(pid,{})
@@ -147,15 +156,57 @@ jobs:
           fi
 
           {
+            echo "LOCK_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/Cargo.lock.before" | awk '{print $1}')"
             echo "LOCK_CANDIDATE_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
-            echo "RUSTC_INFO_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/rustc_info.before.json" | awk '{print $1}')"
-            echo "RUSTC_INFO_CANDIDATE_SHA256=$(sha256sum target/.rustc_info.json | awk '{print $1}')"
+            if [[ -f "${RUNNER_TEMP}/rustc_info.before.json" ]]; then
+              echo "RUSTC_INFO_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/rustc_info.before.json" | awk '{print $1}')"
+            fi
+            if [[ -f target/.rustc_info.json ]]; then
+              echo "RUSTC_INFO_CANDIDATE_SHA256=$(sha256sum target/.rustc_info.json | awk '{print $1}')"
+            fi
           } >> "${REPORT}"
 
           cp "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
-          cp "${RUNNER_TEMP}/rustc_info.before.json" target/.rustc_info.json
-          git diff --exit-code -- Cargo.lock target/.rustc_info.json
+          if [[ -f "${RUNNER_TEMP}/rustc_info.before.json" ]]; then
+            cp "${RUNNER_TEMP}/rustc_info.before.json" target/.rustc_info.json
+          else
+            rm -f target/.rustc_info.json
+          fi
+          git restore --source=HEAD -- Cargo.lock || true
+          if git ls-files --error-unmatch target/.rustc_info.json >/dev/null 2>&1; then
+            git restore --source=HEAD -- target/.rustc_info.json || true
+          fi
 
+          {
+            echo '===== POST_RESTORE_TRACKED_DIFF ====='
+            git diff --name-only -- Cargo.lock target/.rustc_info.json
+            if git diff --quiet -- Cargo.lock target/.rustc_info.json; then
+              echo 'POST_RESTORE_AUTHORITY_STATE=UNCHANGED'
+            else
+              echo 'POST_RESTORE_AUTHORITY_STATE=DRIFT_DETECTED'
+            fi
+          } >> "${REPORT}"
+          exit 0
+
+      - name: Record diagnostic evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_HEAD="$(git rev-parse HEAD)"
+          REPORT="${REPORT:-logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_LOCK_CANDIDATE_DIAGNOSTIC_${BASE_HEAD}.txt}"
+          mkdir -p "$(dirname "${REPORT}")"
+          if [[ ! -f "${REPORT}" ]]; then
+            {
+              echo 'STATUS=DIAGNOSTIC_HARNESS_FAILED_BEFORE_REPORT'
+              echo "BASE_HEAD=${BASE_HEAD}"
+              echo "RUN_ID=${GITHUB_RUN_ID}"
+            } > "${REPORT}"
+          fi
+          git restore --source=HEAD -- Cargo.lock || true
+          if git ls-files --error-unmatch target/.rustc_info.json >/dev/null 2>&1; then
+            git restore --source=HEAD -- target/.rustc_info.json || true
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${REPORT}"
