@@ -1,0 +1,87 @@
+name: Phase 152 Desktop Envelope Clippy Corrective Run
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-envelope-clippy-corrective-run
+    paths:
+      - .github/workflows/phase-152-desktop-envelope-clippy-corrective-run.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Guard and apply exact Clippy correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "phase-152-desktop-envelope-clippy-corrective-run"
+          test "$(git hash-object apps/desktop/src/local_management_ipc.rs)" = "1d6b2b08d02f2c33460400ec9cf74b2453fcd772"
+          test "$(git hash-object apps/desktop/src/ui.rs)" = "00b4aabb9e350d3e16c9b8d3b6f8bed03c33678a"
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+          old = '''    match payload_len {
+        Some(payload_len) => (
+            format!("Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."),
+            format!(
+                "LOCAL: {operation} intent + Agent command-3 envelope constructed; NOT DISPATCHED"
+            ),
+        ),
+        None => (
+            "Agent command-3 local envelope preview was rejected. NOT DISPATCHED.".to_owned(),
+            format!(
+                "LOCAL: {operation} intent validated; Agent command-3 envelope rejected; NOT DISPATCHED"
+            ),
+        ),
+    }
+'''
+          new = '''    payload_len.map_or_else(
+        || {
+            (
+                "Agent command-3 local envelope preview was rejected. NOT DISPATCHED.".to_owned(),
+                format!(
+                    "LOCAL: {operation} intent validated; Agent command-3 envelope rejected; NOT DISPATCHED"
+                ),
+            )
+        },
+        |payload_len| {
+            (
+                format!(
+                    "Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."
+                ),
+                format!(
+                    "LOCAL: {operation} intent + Agent command-3 envelope constructed; NOT DISPATCHED"
+                ),
+            )
+        },
+    )
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"Clippy corrective guard failed: found {text.count(old)} matches")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          cargo fmt --all
+          cargo fmt --all -- --check
+          test "$(git diff --name-only | sort)" = "apps/desktop/src/ui.rs"
+
+      - name: Commit correction and self-delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase-152-desktop-envelope-clippy-corrective-run.yml
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -v -E '^(apps/desktop/src/ui.rs|\.github/workflows/phase-152-desktop-envelope-clippy-corrective-run.yml)$' || true)"
+          test -z "$unexpected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/src/ui.rs .github/workflows/phase-152-desktop-envelope-clippy-corrective-run.yml
+          git commit -m "phase 152 desktop: apply isolated envelope clippy corrective"
+          git push origin HEAD:phase-152-desktop-envelope-clippy-corrective-run
