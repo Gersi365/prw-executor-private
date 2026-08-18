@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Audit
 
-Status: `IMPLEMENTATION_STAGED / AUTHENTICATED_CANDIDATE_PUBLICATION_PROVENANCE_STAGED / SESSION_WORKSPACE_TARGET_REFRESH_ORDER_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `IMPLEMENTATION_STAGED / CANDIDATE_ID_NON_REBINDING_CORRECTIVE_STAGED / AUTHENTICATED_CANDIDATE_PUBLICATION_PROVENANCE_STAGED / SESSION_WORKSPACE_TARGET_REFRESH_ORDER_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor head:
 
@@ -38,7 +38,7 @@ Existing `prw-remote-bridge` already depends on session, registry and connectivi
 
 Phase 139 assigns candidate exchange and coordination to the separate control plane and explicitly states that QUIC destination discovery comes from selected explicit IP/UDP candidates rather than certificate DNS SAN resolution.
 
-Phase 141 keeps ICE/STUN Sans-I/O, requires remote ICE credentials through authenticated PRW coordination metadata, and correlates selected reachability back to existing Phase 135 candidates.
+Phase 141 keeps ICE/STUN Sans-I/O, requires remote ICE credentials through authenticated PRW coordination metadata, correlates remote ICE state to existing `ConnectivityCandidate` values and emits selected-pair reachability updates keyed by `CandidateId`.
 
 Therefore the C02e direction remains candidate refresh under authenticated logical/transport identity, not static-IP identity and not a second discovery authority.
 
@@ -66,6 +66,32 @@ Semantics staged:
 
 No dependency or Cargo mutation was introduced.
 
+## Candidate correlation non-rebinding corrective
+
+A concrete C02e/Phase 141 interaction was found during source inspection.
+
+Phase 141's `CandidateReachabilityUpdate` carries only the correlated Phase 135 `CandidateId` when applying a selected ICE-pair observation back to `PeerConnectivityPlan`.
+
+Before this corrective, C02e refresh could remove an old candidate and reuse the same `CandidateId` for a different endpoint. A delayed Phase 141 reachability update correlated to the old endpoint could then call `set_observation(...)` with that reused identifier and incorrectly mark the new endpoint reachable.
+
+That violates the C02e invariant that reachability evidence for an old network path must not transfer to a newly signaled endpoint.
+
+The minimal corrective is entirely inside existing `prw-connectivity` semantics:
+
+- `CandidateId` is now explicitly stable for the lifetime of one `PeerConnectivityPlan`;
+- a refresh may retain an existing ID only for the exact same `ConnectivityCandidate`;
+- changing path kind or endpoint requires a fresh candidate ID;
+- rebinding an existing ID to another candidate returns `ConnectivityError::CandidateIdRebound` before mutation;
+- failed rebinding preserves the complete previous candidate and observation state.
+
+New source test staged but not run:
+
+`candidate_refresh_rejects_rebinding_existing_id_to_new_endpoint`
+
+This corrective intentionally does **not** modify `prw-nat-traversal`. Existing Phase 141 behavior already fails closed when a reachability update references a candidate ID removed from the current plan; the non-rebinding rule closes the endpoint-aliasing case without broadening the Phase 141 mutation surface.
+
+This does not claim general signaling replay protection. A late observation for the exact same unchanged candidate remains a freshness concern for the later coordination/runtime adapter.
+
 ## Session/workspace/target admission ordering staged
 
 Integration-test source:
@@ -92,7 +118,7 @@ Every rejection occurs before `PeerConnectivityPlan::refresh_candidates(...)` an
 
 ## Authenticated candidate publication provenance staged
 
-New integration-test source:
+Integration-test source:
 
 `crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs`
 
@@ -121,13 +147,23 @@ This stages the security property that authenticated candidate state is attribut
 
 The target publisher is revalidated again at consumption so later target membership suspension/device revocation also invalidates an older publication before endpoint mutation.
 
-## Wire/control-plane boundary remains closed
+## Wire/control-plane review and replay boundary
 
-C02e does not invent or activate a candidate-update wire schema.
+C02e inspected the existing Phase 129 control-plane framing before selecting any candidate-update codec.
 
-The repository has a bounded generic Phase 129 control-frame envelope, and Phase 139 assigns candidate exchange to authenticated control-plane coordination, but no reviewed candidate-update application payload codec or session-bound production adapter exists yet.
+The repository precedent is explicit:
 
-The source-only provenance semantics therefore lock what a later adapter must preserve without pretending that generic TLS/frame validity alone authenticates PRW candidate bytes.
+- Phase 129 defines a bounded generic `PRWC` frame envelope and message-kind registry;
+- Phase 129 intentionally does not define command semantics;
+- TLS success is server-transport authentication only and is not PRW device/session authentication;
+- Phase 139 assigns candidate exchange to authenticated control-plane coordination;
+- no reviewed candidate-update application payload schema currently exists.
+
+Phase 128 does provide replay-resistant session authentication using verifier-owned freshness state, a server-issued nonce and atomic single-use consumption.
+
+However, the Phase 129 generic frame `request_id` is specified only as non-zero. No repository contract currently makes it a uniqueness, monotonicity or replay-prevention authority for candidate publications.
+
+Therefore C02e does not invent a candidate-update wire encoding or infer freshness from frame transport metadata. The production candidate wire/freshness adapter remains fail-closed and unselected until a separately reviewed semantic/codec boundary can preserve authenticated publication identity plus explicit freshness/replay semantics.
 
 No `prw-control-transport` dependency was added to `prw-remote-bridge`; no production control-plane runtime path was wired.
 
@@ -136,6 +172,7 @@ No `prw-control-transport` dependency was added to `prw-remote-bridge`; no produ
 Connectivity source tests:
 
 - `candidate_refresh_preserves_identity_and_replaces_transient_endpoints`
+- `candidate_refresh_rejects_rebinding_existing_id_to_new_endpoint`
 - `invalid_candidate_refresh_preserves_previous_state`
 
 Registry/admission integration tests:
@@ -162,13 +199,15 @@ These tests are source specifications only while the build/test gate remains clo
 
 C02e remains stacked exactly on C02d.
 
-Current intended mutation surface is limited to:
+Current intended mutation surface remains limited to:
 
 1. `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02E_DYNAMIC_REACHABILITY_GATE.md`
 2. `crates/prw-connectivity/src/lib.rs`
 3. `crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs`
 4. `crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs`
 5. this audit file
+
+The Phase 141 inspection did not widen the mutation surface to `crates/prw-nat-traversal/src/lib.rs`.
 
 No changes are intended to:
 
@@ -178,7 +217,7 @@ No changes are intended to:
 - Agent `main.rs`;
 - production bootstrap/runtime loop;
 - control-plane transport runtime source;
-- NAT traversal runtime adapters;
+- NAT traversal runtime source;
 - relay service runtime;
 - Android application source;
 - desktop application source;
@@ -206,6 +245,7 @@ C02e does not claim:
 - a production candidate-update wire schema exists;
 - production candidate discovery/signaling is wired;
 - generic control-plane TLS or frame validity alone is PRW session authentication;
+- generic frame `request_id` is candidate-publication replay protection;
 - STUN/ICE/TURN is activated;
 - real sockets are opened;
 - a QUIC connection is established by this checkpoint;
@@ -217,4 +257,4 @@ C02e does not claim:
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_IMPLEMENTATION_STAGED / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / TRANSACTIONAL_REFRESH / AUTHENTICATED_PUBLISHER_IDENTITY_DERIVED / REQUESTER_AND_TARGET_REGISTRY_CURRENT / SAME_WORKSPACE_REQUIRED / RETARGETED_OR_STALE_PUBLICATION_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_ADAPTER_UNSELECTED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_IMPLEMENTATION_STAGED / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / TRANSACTIONAL_REFRESH / CANDIDATE_ID_NON_REBINDABLE / AUTHENTICATED_PUBLISHER_IDENTITY_DERIVED / REQUESTER_AND_TARGET_REGISTRY_CURRENT / SAME_WORKSPACE_REQUIRED / RETARGETED_STALE_OR_REBOUND_STATE_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_AND_REPLAY_ADAPTER_UNSELECTED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
