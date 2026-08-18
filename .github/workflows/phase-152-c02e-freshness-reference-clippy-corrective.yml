@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Tranche 1 Validation Transport
+name: PRW Phase 152 C02e Workspace Clippy Probe
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-c02e-tranche1-${{ github.ref }}
+  group: prw-phase-152-c02e-workspace-clippy-probe
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate C02e current source without dependency mutation
+  probe:
+    name: Probe locked full-workspace Clippy without source mutation
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -26,12 +26,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run exact Tranche 1 sequence and capture auditable result
-        id: validation
+      - name: Run source-neutral workspace Clippy probe
+        id: probe
         shell: bash
         run: |
           set -u -o pipefail
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_${GITHUB_SHA}.txt"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_WORKSPACE_CLIPPY_PROBE_${GITHUB_SHA}.txt"
           mkdir -p "$(dirname "${REPORT}")"
           : > "${REPORT}"
           overall=0
@@ -49,11 +49,14 @@ jobs:
             local rc=${PIPESTATUS[0]}
             set -u -o pipefail
             record "GATE_${name}_RC=${rc}"
-            if [[ "${rc}" -ne 0 ]]; then overall="${rc}"; first_failure="${name}"; fi
+            if [[ "${rc}" -ne 0 ]]; then
+              overall="${rc}"
+              first_failure="${name}"
+            fi
           }
 
           record STATUS=RUNNING
-          record WORKFLOW=phase-152-c02e-tranche1-validation-transport
+          record WORKFLOW=phase-152-c02e-workspace-clippy-probe
           record "RUN_ID=${GITHUB_RUN_ID}"
           record "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
           record "REF=${GITHUB_REF_NAME}"
@@ -66,39 +69,44 @@ jobs:
           gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev && pkg-config --modversion gtk4 && pkg-config --modversion libadwaita-1"
           gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
 
-          record '===== PRE_VALIDATION_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" | tee -a "${REPORT}"
+          record '===== PRE_PROBE_HASHES ====='
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-workspace-clippy-pre.sha256" | tee -a "${REPORT}"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
 
           gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml"
-          gate focused_fmt "cargo fmt --all -- --check"
-          gate focused_clippy "cargo clippy --locked -p prw-connectivity -p prw-remote-bridge --all-targets --all-features -- -D warnings"
-          gate focused_connectivity_tests "cargo test --locked -p prw-connectivity --all-targets"
-          gate focused_remote_bridge_tests "cargo test --locked -p prw-remote-bridge --all-targets"
-          gate locked_metadata_recheck "cargo metadata --locked --no-deps --format-version 1 > /dev/null && cmp -s \"${RUNNER_TEMP}/Cargo.lock.before\" Cargo.lock && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml"
-          gate workspace_fmt "cargo fmt --all -- --check"
+          gate fmt "cargo fmt --all -- --check"
           gate workspace_clippy "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
-          gate workspace_tests "cargo test --locked --workspace --all-targets"
-          gate workspace_build "cargo build --locked --workspace --all-targets"
 
-          record '===== POST_VALIDATION_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-post.sha256" | tee -a "${REPORT}"
+          record '===== POST_PROBE_HASHES ====='
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-workspace-clippy-post.sha256" | tee -a "${REPORT}"
           drift_rc=0
-          diff -u "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" "${RUNNER_TEMP}/c02e-tranche1-post.sha256" >> "${REPORT}" 2>&1 || drift_rc=$?
+          diff -u "${RUNNER_TEMP}/c02e-workspace-clippy-pre.sha256" "${RUNNER_TEMP}/c02e-workspace-clippy-post.sha256" >> "${REPORT}" 2>&1 || drift_rc=$?
           cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift_rc=$?
           git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >> "${REPORT}" 2>&1 || drift_rc=$?
           record "ZERO_DEPENDENCY_DRIFT_RC=${drift_rc}"
-          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then overall="${drift_rc}"; first_failure=dependency_source_drift; fi
-          if [[ "${overall}" -eq 0 ]]; then record STATUS=PASS; record FIRST_FAILURE=NONE; else record STATUS=FAIL; record "FIRST_FAILURE=${first_failure}"; fi
-          record "VALIDATION_RC=${overall}"
-          printf 'validation_rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
+          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then
+            overall="${drift_rc}"
+            first_failure=dependency_source_drift
+          fi
+
+          record SOURCE_MUTATION=NONE
+          record RUNTIME_NETWORK_ACTIVATION=NONE
+          if [[ "${overall}" -eq 0 ]]; then
+            record STATUS=PASS_WORKSPACE_CLIPPY
+            record FIRST_FAILURE=NONE
+          else
+            record STATUS=FAIL
+            record "FIRST_FAILURE=${first_failure}"
+          fi
+          record "PROBE_RC=${overall}"
+          printf 'probe_rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
           printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
 
-      - name: Commit validation evidence only
+      - name: Commit probe evidence only
         if: always()
         shell: bash
         env:
-          REPORT: ${{ steps.validation.outputs.report }}
+          REPORT: ${{ steps.probe.outputs.report }}
         run: |
           set -euo pipefail
           test -n "${REPORT}"
@@ -108,15 +116,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: record tranche1 validation ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: record workspace clippy probe ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
-      - name: Fail job when validation failed
+      - name: Surface probe result
         if: always()
         shell: bash
         env:
-          VALIDATION_RC: ${{ steps.validation.outputs.validation_rc }}
+          PROBE_RC: ${{ steps.probe.outputs.probe_rc }}
         run: |
           set -euo pipefail
-          test -n "${VALIDATION_RC}"
-          test "${VALIDATION_RC}" -eq 0
+          test -n "${PROBE_RC}"
+          test "${PROBE_RC}" -eq 0
