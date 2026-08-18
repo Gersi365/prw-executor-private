@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-c02e-tranche1-${{ github.ref }}
+  group: prw-phase-152-c02e-inherited-workspace-clippy-corrective
   cancel-in-progress: true
 
 jobs:
