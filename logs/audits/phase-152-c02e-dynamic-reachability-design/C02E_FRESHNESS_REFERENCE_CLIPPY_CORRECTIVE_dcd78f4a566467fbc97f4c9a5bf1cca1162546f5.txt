@@ -1,0 +1,188 @@
+STATUS=RUNNING
+BASE_HEAD=dcd78f4a566467fbc97f4c9a5bf1cca1162546f5
+RUN_ID=32122580770
+EDIT_RC=0
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+FMT_RC=0
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cc v1.4.3
+  Downloaded bitflags v2.13.1
+  Downloaded bytes v1.12.1
+  Downloaded quinn v0.11.11
+  Downloaded aws-lc-rs v1.18.0
+  Downloaded errno v0.3.14
+  Downloaded subtle v2.6.1
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded jobserver v0.1.35
+  Downloaded zeroize v1.9.0
+  Downloaded slab v0.4.12
+  Downloaded lru-slab v0.1.2
+  Downloaded rand_pcg v0.10.2
+  Downloaded cpufeatures v0.3.0
+  Downloaded proc-macro2 v1.0.107
+  Downloaded tinyvec v1.12.0
+  Downloaded getrandom v0.2.17
+  Downloaded dunce v1.0.5
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded tokio-macros v2.7.2
+  Downloaded cfg_aliases v0.2.2
+  Downloaded rustc-hash v2.1.3
+  Downloaded shlex v2.0.1
+  Downloaded thiserror-impl v2.0.20
+  Downloaded untrusted v0.7.1
+  Downloaded cfg-if v1.0.4
+  Downloaded cmake v0.1.58
+  Downloaded rand_core v0.10.1
+  Downloaded pkg-config v0.3.34
+  Downloaded quinn-udp v0.5.15
+  Downloaded unicode-ident v1.0.24
+  Downloaded untrusted v0.9.0
+  Downloaded fs_extra v1.3.0
+  Downloaded pin-project-lite v0.2.17
+  Downloaded chacha20 v0.10.1
+  Downloaded rustls-pki-types v1.15.1
+  Downloaded thiserror v2.0.20
+  Downloaded once_cell v1.21.4
+  Downloaded quote v1.0.47
+  Downloaded rustls-webpki v0.103.14
+  Downloaded tracing-core v0.1.36
+  Downloaded getrandom v0.4.3
+  Downloaded socket2 v0.6.5
+  Downloaded mio v1.2.2
+  Downloaded rand v0.10.2
+  Downloaded quinn-proto v0.11.16
+  Downloaded syn v3.0.3
+  Downloaded rustls v0.23.43
+  Downloaded rustix v1.1.4
+  Downloaded tracing v0.1.44
+  Downloaded libc v0.2.189
+  Downloaded tokio v1.53.1
+  Downloaded ring v0.17.14
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded aws-lc-sys v0.44.0
+   Compiling libc v0.2.189
+   Compiling aws-lc-rs v1.18.0
+    Checking untrusted v0.7.1
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling jobserver v0.1.35
+   Compiling cc v1.4.3
+   Compiling cmake v0.1.58
+   Compiling syn v3.0.3
+   Compiling aws-lc-sys v0.44.0
+    Checking once_cell v1.21.4
+    Checking rand_core v0.10.1
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Checking pin-project-lite v0.2.17
+   Compiling getrandom v0.4.3
+    Checking tracing-core v0.1.36
+    Checking rustls-pki-types v1.15.1
+    Checking cpufeatures v0.3.0
+   Compiling rustls v0.23.43
+   Compiling thiserror v2.0.20
+    Checking chacha20 v0.10.1
+    Checking tracing v0.1.44
+   Compiling quinn-udp v0.5.15
+   Compiling thiserror-impl v2.0.20
+    Checking socket2 v0.6.5
+    Checking prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+   Compiling rustix v1.1.4
+    Checking bytes v1.12.1
+    Checking tinyvec_macros v0.1.1
+    Checking tinyvec v1.12.0
+    Checking rand v0.10.2
+    Checking rand_pcg v0.10.2
+   Compiling quinn v0.11.11
+   Compiling tokio-macros v2.7.2
+    Checking mio v1.2.2
+    Checking rustc-hash v2.1.3
+    Checking slab v0.4.12
+    Checking linux-raw-sys v0.12.1
+    Checking lru-slab v0.1.2
+    Checking tokio v1.53.1
+    Checking rustls-webpki v0.103.14
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking quinn-proto v0.11.16
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+error: function `refresh_from_authenticated_publication` is never used
+   --> crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:188:8
+    |
+188 | pub fn refresh_from_authenticated_publication(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `-D dead-code` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[expect(dead_code)]` or `#[allow(dead_code)]`
+
+error: this could be a `const fn`
+  --> crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs:64:5
+   |
+64 | /     fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {
+65 | |         Self {
+66 | |             plan,
+67 | |             lifecycle: TestFreshnessLifecycle::NewLifecycleEligible(bootstrap),
+68 | |         }
+69 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#missing_const_for_fn
+   = note: `-D clippy::missing-const-for-fn` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::missing_const_for_fn)]`
+help: make the function `const`
+   |
+64 |     const fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {
+   |     +++++
+
+error: this could be a `const fn`
+  --> crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs:71:5
+   |
+71 | /     fn recovery_required(plan: PeerConnectivityPlan) -> Self {
+72 | |         Self {
+73 | |             plan,
+74 | |             lifecycle: TestFreshnessLifecycle::RecoveryRequired,
+75 | |         }
+76 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#missing_const_for_fn
+help: make the function `const`
+   |
+71 |     const fn recovery_required(plan: PeerConnectivityPlan) -> Self {
+   |     +++++
+
+error: this could be a `const fn`
+  --> crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs:82:5
+   |
+82 | /     fn plan(&self) -> &PeerConnectivityPlan {
+83 | |         &self.plan
+84 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#missing_const_for_fn
+help: make the function `const`
+   |
+82 |     const fn plan(&self) -> &PeerConnectivityPlan {
+   |     +++++
+
+error: could not compile `prw-remote-bridge` (test "reachability_freshness_bootstrap_reference") due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...
+FOCUSED_REMOTE_BRIDGE_CLIPPY_RC=101
+UNEXPECTED_CHANGED_PATHS=crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs
+target/debug/.fingerprint/prw-control-plane-608a95297df85987/dep-lib-prw_control_plane
+SOURCE_MUTATION=crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs
+DEAD_CODE_CORRECTIVE=anonymous compile-time function-pointer reference; no allow attribute
+CONST_FN_CORRECTIVES=with_current_freshness,without_current_freshness,plan
+DEPENDENCY_STATE=UNCHANGED
+CORRECTIVE_RC=101
+STATUS=SOURCE_CORRECTIVE_STAGED_WITH_NEXT_LINT_EVIDENCE

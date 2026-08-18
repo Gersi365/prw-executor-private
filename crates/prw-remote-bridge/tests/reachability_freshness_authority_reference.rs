@@ -17,7 +17,7 @@ use aws_lc_rs::{
 };
 use candidate_reachability::{
     AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,
-    validate_authenticated_publication_admission,
+    refresh_from_authenticated_publication, validate_authenticated_publication_admission,
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
@@ -29,6 +29,16 @@ use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
 use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use prw_registry::{WorkspaceDeviceRegistry, WorkspaceRole};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
+
+// This reference harness intentionally performs admission, freshness comparison, staging, and
+// commit explicitly. Keep the lower authenticated-refresh adapter compile-linked without
+// invoking it here, so the reference does not bypass the freshness boundary it is proving.
+const _: fn(
+    &WorkspaceDeviceRegistry,
+    &AuthenticatedDeviceSession,
+    &AuthenticatedCandidatePublication,
+    &mut PeerConnectivityPlan,
+) -> Result<(), CandidateReachabilityError> = refresh_from_authenticated_publication;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestFreshnessState {
@@ -68,7 +78,7 @@ struct FreshnessReachabilityReference {
 }
 
 impl FreshnessReachabilityReference {
-    fn with_current_freshness(
+    const fn with_current_freshness(
         plan: PeerConnectivityPlan,
         current_freshness: TestFreshnessState,
         traversal: TestTraversalLifecycle,
@@ -80,7 +90,7 @@ impl FreshnessReachabilityReference {
         }
     }
 
-    fn without_current_freshness(
+    const fn without_current_freshness(
         plan: PeerConnectivityPlan,
         traversal: TestTraversalLifecycle,
     ) -> Self {
@@ -91,7 +101,7 @@ impl FreshnessReachabilityReference {
         }
     }
 
-    fn plan(&self) -> &PeerConnectivityPlan {
+    const fn plan(&self) -> &PeerConnectivityPlan {
         &self.plan
     }
 
