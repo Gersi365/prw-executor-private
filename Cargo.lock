@@ -1561,6 +1561,7 @@ dependencies = [
  "prw-file-service",
  "prw-file-transfer",
  "prw-forwarding",
+ "prw-nat-traversal",
  "prw-policy",
  "prw-registry",
  "prw-remote-transport",
