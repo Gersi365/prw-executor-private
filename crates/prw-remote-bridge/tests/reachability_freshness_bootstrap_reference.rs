@@ -61,14 +61,14 @@ struct BootstrapFreshnessReference {
 }
 
 impl BootstrapFreshnessReference {
-    fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {
+    const fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {
         Self {
             plan,
             lifecycle: TestFreshnessLifecycle::NewLifecycleEligible(bootstrap),
         }
     }
 
-    fn recovery_required(plan: PeerConnectivityPlan) -> Self {
+    const fn recovery_required(plan: PeerConnectivityPlan) -> Self {
         Self {
             plan,
             lifecycle: TestFreshnessLifecycle::RecoveryRequired,
@@ -79,7 +79,7 @@ impl BootstrapFreshnessReference {
         self.lifecycle
     }
 
-    fn plan(&self) -> &PeerConnectivityPlan {
+    const fn plan(&self) -> &PeerConnectivityPlan {
         &self.plan
     }
 
