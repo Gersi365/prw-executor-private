@@ -1,7 +1,9 @@
 //! Provider-neutral private-mesh connectivity foundation for Private Remote Workspace.
 //!
 //! Phase 135 models bounded candidates, provider observations and deterministic path
-//! selection. It performs no socket I/O, probing, NAT traversal, tunneling, routing, DNS,
+//! selection. Phase 152 C02e additionally permits transactional refresh of transient
+//! candidate endpoints while preserving the authenticated logical/transport peer identity.
+//! It performs no socket I/O, probing, NAT traversal, tunneling, routing, DNS,
 //! firewall mutation or production-network activation.
 
 use std::{
@@ -270,6 +272,46 @@ impl PeerConnectivityPlan {
     #[must_use]
     pub const fn candidate_count(&self) -> usize {
         self.candidates.len()
+    }
+
+    /// Atomically replaces transient network candidates while preserving peer identity.
+    ///
+    /// Every refreshed candidate starts with an `Unknown` observation so reachability evidence
+    /// from a previous Wi-Fi, mobile-data, NAT, or relay path cannot be inherited by a newly
+    /// signaled endpoint set.
+    ///
+    /// # Errors
+    ///
+    /// Rejects the same invalid candidate sets as [`Self::new`]. Validation completes before
+    /// mutation, so an error preserves the complete previous candidate/observation state.
+    pub fn refresh_candidates(
+        &mut self,
+        candidates: Vec<ConnectivityCandidate>,
+    ) -> Result<(), ConnectivityError> {
+        if candidates.len() > MAX_CONNECTIVITY_CANDIDATES {
+            return Err(ConnectivityError::CandidateCapacity);
+        }
+
+        for (index, candidate) in candidates.iter().enumerate() {
+            for existing in &candidates[..index] {
+                if existing.id == candidate.id {
+                    return Err(ConnectivityError::DuplicateCandidateId);
+                }
+                if existing.kind == candidate.kind && existing.endpoint == candidate.endpoint {
+                    return Err(ConnectivityError::DuplicateCandidateEndpoint);
+                }
+            }
+        }
+
+        let refreshed = candidates
+            .into_iter()
+            .map(|candidate| CandidateState {
+                candidate,
+                observation: ReachabilityObservation::Unknown,
+            })
+            .collect();
+        self.candidates = refreshed;
+        Ok(())
     }
 
     /// Records a provider observation for an existing candidate.
@@ -568,6 +610,64 @@ mod tests {
         ));
         assert_eq!(first.selected_path(), expected);
         assert_eq!(second.selected_path(), expected);
+    }
+
+    #[test]
+    fn candidate_refresh_preserves_identity_and_replaces_transient_endpoints() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::LocalDirect, 2001)],
+        )
+        .expect("initial plan");
+        plan.set_observation(id(1), ReachabilityObservation::Reachable)
+            .expect("initial reachability");
+        let expected_identity = plan.peer().clone();
+
+        plan.refresh_candidates(vec![
+            candidate(2, ConnectivityPathKind::InternetDirect, 3002),
+            candidate(3, ConnectivityPathKind::Relay, 3003),
+        ])
+        .expect("valid refreshed candidate set");
+
+        assert_eq!(plan.peer(), &expected_identity);
+        assert_eq!(plan.candidate_count(), 2);
+        assert_eq!(plan.selected_path(), SelectedConnectivityPath::Offline);
+        assert_eq!(
+            plan.set_observation(id(1), ReachabilityObservation::Reachable),
+            Err(ConnectivityError::UnknownCandidate)
+        );
+
+        plan.set_observation(id(2), ReachabilityObservation::Reachable)
+            .expect("new internet candidate");
+        assert_eq!(
+            plan.selected_path(),
+            SelectedConnectivityPath::Candidate(candidate(
+                2,
+                ConnectivityPathKind::InternetDirect,
+                3002
+            ))
+        );
+    }
+
+    #[test]
+    fn invalid_candidate_refresh_preserves_previous_state() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::InternetDirect, 2001)],
+        )
+        .expect("initial plan");
+        plan.set_observation(id(1), ReachabilityObservation::Reachable)
+            .expect("initial reachability");
+        let before = plan.clone();
+
+        assert_eq!(
+            plan.refresh_candidates(vec![
+                candidate(2, ConnectivityPathKind::LocalDirect, 3001),
+                candidate(2, ConnectivityPathKind::Relay, 3002),
+            ]),
+            Err(ConnectivityError::DuplicateCandidateId)
+        );
+        assert_eq!(plan, before);
     }
 
     #[test]
