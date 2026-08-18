@@ -4,15 +4,18 @@ use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::glib;
+use prw_agent::LocalIpcRequestId;
 use prw_connectivity::{ConnectivityPathKind, ReachabilityObservation, SelectedConnectivityPath};
 use prw_forwarding::LoopbackFamily;
 use prw_terminal::TerminalProfile;
 
 use crate::ipc;
+use crate::local_management_ipc;
 use crate::management;
 use crate::state::{DesktopPresentationState, NavigationDestination};
 
 const EMPTY_LOCAL_ACTIVITY: &str = "No local validation events yet.";
+const DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID: u64 = 152_500;
 
 pub fn build(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
@@ -202,14 +205,13 @@ fn append_forwarding_intent(page: &gtk::Box, activity_log: gtk::Label) {
                 target_address,
                 target_port,
             ) {
+                let (envelope_summary, activity_entry) =
+                    local_management_envelope_status(&payload, "forwarding");
                 forward_result_output.set_text(&format!(
-                    "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                    "Validated canonical forward-open request: {} bridge bytes; {envelope_summary} No listener was opened and state is not Active.",
                     payload.len()
                 ));
-                record_local_activity(
-                    &activity_log,
-                    "LOCAL: forwarding intent validated; no listener opened",
-                );
+                record_local_activity(&activity_log, &activity_entry);
             } else {
                 forward_result_output.set_text(
                     "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
@@ -277,14 +279,13 @@ fn sessions_page(activity_log: gtk::Label) -> gtk::Box {
                 columns,
                 rows,
             ) {
+                let (envelope_summary, activity_entry) =
+                    local_management_envelope_status(&payload, "terminal-open");
                 result_output.set_text(&format!(
-                    "Validated canonical terminal-open request: {} bytes. Not dispatched; authoritative state remains unchanged.",
+                    "Validated canonical terminal-open request: {} bridge bytes; {envelope_summary} Authoritative session state remains unchanged.",
                     payload.len()
                 ));
-                record_local_activity(
-                    &activity_log,
-                    "LOCAL: terminal-open intent validated; session not opened",
-                );
+                record_local_activity(&activity_log, &activity_entry);
             } else {
                 result_output.set_text(
                     "Rejected by typed terminal/bridge validation. No request was dispatched.",
@@ -331,14 +332,13 @@ fn files_page(activity_log: gtk::Label) -> gtk::Box {
     let result_output = result.clone();
     validate.connect_clicked(move |_| {
         if let Ok(payload) = management::encode_file_list(path_input.text().as_str()) {
+            let (envelope_summary, activity_entry) =
+                local_management_envelope_status(&payload, "file-list");
             result_output.set_text(&format!(
-                "Validated canonical file-list request: {} bytes. No filesystem operation was performed.",
+                "Validated canonical file-list request: {} bridge bytes; {envelope_summary} No filesystem operation was performed.",
                 payload.len()
             ));
-            record_local_activity(
-                &activity_log,
-                "LOCAL: file-list intent validated; filesystem not read",
-            );
+            record_local_activity(&activity_log, &activity_entry);
         } else {
             result_output.set_text(
                 "Rejected by RemotePath/bridge validation. Absolute or escaping paths are not accepted.",
@@ -397,14 +397,13 @@ fn transfers_page(activity_log: gtk::Label) -> gtk::Box {
             total_bytes,
             [1; 32],
         ) {
+            let (envelope_summary, activity_entry) =
+                local_management_envelope_status(&payload, "upload-begin");
             result_output.set_text(&format!(
-                "Validated canonical upload-begin request: {} bytes. Committed progress remains 0 until an authoritative acknowledgement.",
+                "Validated canonical upload-begin request: {} bridge bytes; {envelope_summary} Committed progress remains 0 until an authoritative acknowledgement.",
                 payload.len()
             ));
-            record_local_activity(
-                &activity_log,
-                "LOCAL: upload-begin intent validated; committed progress remains 0",
-            );
+            record_local_activity(&activity_log, &activity_entry);
         } else {
             result_output.set_text(
                 "Rejected by transfer/path/bridge validation. No upload state was advanced.",
@@ -635,6 +634,34 @@ const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
         ConnectivityPathKind::LocalDirect => "LocalDirect",
         ConnectivityPathKind::InternetDirect => "InternetDirect",
         ConnectivityPathKind::Relay => "Relay",
+    }
+}
+
+fn local_management_envelope_status(bridge_payload: &[u8], operation: &str) -> (String, String) {
+    let payload_len = LocalIpcRequestId::new(DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID)
+        .ok()
+        .and_then(|request_id| {
+            local_management_ipc::build_encoded_bridge_management_request(
+                request_id,
+                bridge_payload,
+            )
+            .ok()
+        })
+        .map(|frame| frame.payload().as_bytes().len());
+
+    match payload_len {
+        Some(payload_len) => (
+            format!("Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."),
+            format!(
+                "LOCAL: {operation} intent + Agent command-3 envelope constructed; NOT DISPATCHED"
+            ),
+        ),
+        None => (
+            "Agent command-3 local envelope preview was rejected. NOT DISPATCHED.".to_owned(),
+            format!(
+                "LOCAL: {operation} intent validated; Agent command-3 envelope rejected; NOT DISPATCHED"
+            ),
+        ),
     }
 }
 
