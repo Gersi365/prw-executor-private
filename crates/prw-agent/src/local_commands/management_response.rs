@@ -180,6 +180,10 @@ const fn error_status(
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "file-service errors are non-exhaustive; unknown future variants fail internal"
+)]
 const fn file_error_status(error: FileServiceError) -> LocalAgentResponseStatus {
     match error {
         FileServiceError::RootNotAllowed | FileServiceError::PayloadTooLarge => {
@@ -192,6 +196,10 @@ const fn file_error_status(error: FileServiceError) -> LocalAgentResponseStatus 
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "file-transfer errors are non-exhaustive; unknown future variants fail internal"
+)]
 const fn transfer_error_status(error: FileTransferError) -> LocalAgentResponseStatus {
     match error {
         FileTransferError::RootDestination
@@ -208,6 +216,10 @@ const fn transfer_error_status(error: FileTransferError) -> LocalAgentResponseSt
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "terminal errors are non-exhaustive; unknown future variants fail internal"
+)]
 const fn terminal_error_status(error: TerminalError) -> LocalAgentResponseStatus {
     match error {
         TerminalError::InvalidIdentifier
@@ -223,6 +235,10 @@ const fn terminal_error_status(error: TerminalError) -> LocalAgentResponseStatus
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "forwarding errors are non-exhaustive; unknown future variants fail internal"
+)]
 const fn forwarding_error_status(error: ForwardingError) -> LocalAgentResponseStatus {
     match error {
         ForwardingError::InvalidIdentifier
