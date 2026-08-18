@@ -192,7 +192,7 @@ fn fixture() -> Fixture {
     );
     let other = authenticated_session(&other_signer, &other_binding, "session-other-tranche5-wire");
     let target_device_id = target_binding.device_id.clone();
-    let transport = transport(31);
+    let current_transport = transport(31);
     let other_transport = transport(32);
     let mut registry = WorkspaceDeviceRegistry::new();
     registry
@@ -208,18 +208,18 @@ fn fixture() -> Fixture {
         .register_device(other_binding.clone())
         .expect("other device");
     registry
-        .bind_transport_identity(&target_device_id, transport)
+        .bind_transport_identity(&target_device_id, current_transport)
         .expect("target transport");
     registry
         .bind_transport_identity(&other_binding.device_id, other_transport)
         .expect("other transport");
-    let plan = plan(target_device_id.clone(), transport);
+    let plan = plan(target_device_id.clone(), current_transport);
     Fixture {
         registry,
         target,
         other,
         target_device_id,
-        transport,
+        transport: current_transport,
         plan,
     }
 }
