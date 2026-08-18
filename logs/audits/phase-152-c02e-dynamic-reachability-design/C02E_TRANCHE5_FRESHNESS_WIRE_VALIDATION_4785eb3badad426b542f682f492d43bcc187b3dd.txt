@@ -1,0 +1,282 @@
+PHASE=152-C02e-Tranche5-FreshnessWire
+BASE_HEAD=4785eb3badad426b542f682f492d43bcc187b3dd
+RUSTC=rustc 1.97.1 (8bab26f4f 2026-07-14)
+CARGO=cargo 1.97.1 (c980f4866 2026-06-30)
+RUSTFMT=rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+CLIPPY=clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GTK4=4.14.5
+LIBADWAITA=1.5.0
+LOCK_SHA256_EXPECTED=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+LOCK_SHA256_BEFORE=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+LOCK_SHA256_AFTER=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+ROOT_MANIFEST_SHA256_BEFORE=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+ROOT_MANIFEST_SHA256_AFTER=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+BRIDGE_MANIFEST_SHA256_BEFORE=4da3fbd299be9e141e26925135e1c972b010506191734474b128bea752cd8334
+BRIDGE_MANIFEST_SHA256_AFTER=4da3fbd299be9e141e26925135e1c972b010506191734474b128bea752cd8334
+ROOT_SOURCE_SHA256_BEFORE=df7e1b84afe7097c1ac134bf01a97622127f84f23db9a8842cca88f280709de3
+ROOT_SOURCE_SHA256_AFTER=df7e1b84afe7097c1ac134bf01a97622127f84f23db9a8842cca88f280709de3
+WIRE_SOURCE_SHA256_BEFORE=7081be4eaae062f4ca6d1b520dad2c2b5ae4fb59a34bb8ce878adba52785ecac
+WIRE_SOURCE_SHA256_AFTER=7081be4eaae062f4ca6d1b520dad2c2b5ae4fb59a34bb8ce878adba52785ecac
+TEST_SHA256_BEFORE=261b2501f73597a9daa7f93c943bf65794cafca703e3f3a63db14c16d023a5c7
+TEST_SHA256_AFTER=261b2501f73597a9daa7f93c943bf65794cafca703e3f3a63db14c16d023a5c7
+LOCK_AUDIT_RC=0
+LOCKED_METADATA_RC=0
+FORMAT_RC=0
+FOCUSED_TEST_RC=101
+PRE_NORMALIZE_DRIFT_RC=0
+TARGET_RESTORE_RC=0
+HASH_DRIFT_RC=0
+FINAL_DRIFT_RC=0
+FINAL_TRACKED_DIFF=
+FRESHNESS_WIRE_MAGIC=PRWF
+FRESHNESS_WIRE_VERSION=1.0
+OUTER_CONTROL_KINDS=REQUEST,RESPONSE,ERROR
+AUTHENTICATED_DURABLE_RESYNC=YES
+RESYNC_COMPARE_AND_COMMIT=NO
+RESYNC_TOKEN_GENERATION=NO
+DISTRIBUTED_RUNTIME_TENANCY_SELECTED=NO
+NETWORK_RUNTIME_ACTIVATION=NO
+AGENT_BOOTSTRAP_ACTIVATION=NO
+FIRST_FAILURE=FOCUSED_TEST
+STATUS=FAIL
+===== FOCUSED_TEST FAILURE =====
+  Downloaded rtc-mdns v0.20.2
+  Downloaded spki v0.7.3
+  Downloaded thiserror-impl v2.0.20
+  Downloaded time-core v0.1.9
+  Downloaded zerofrom-derive v0.1.7
+  Downloaded bitflags v2.13.1
+  Downloaded elliptic-curve v0.13.8
+  Downloaded getrandom v0.2.17
+  Downloaded icu_provider v2.3.0
+  Downloaded log v0.4.33
+  Downloaded base64 v0.22.1
+  Downloaded once_cell v1.21.4
+  Downloaded p256 v0.13.2
+  Downloaded proc-macro2 v1.0.107
+  Downloaded crypto-bigint v0.5.5
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded syn v3.0.3
+  Downloaded icu_normalizer_data v2.3.0
+  Downloaded quinn v0.11.11
+  Downloaded rtc-ice v0.20.2
+  Downloaded rtc-stun v0.20.2
+  Downloaded bytes v1.12.1
+  Downloaded icu_collections v2.3.0
+  Downloaded rustls-webpki v0.103.14
+  Downloaded icu_locale_core v2.3.0
+  Downloaded rand v0.10.2
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded cc v1.4.3
+  Downloaded der v0.7.10
+  Downloaded icu_properties v2.3.0
+  Downloaded mio v1.2.2
+  Downloaded rcgen v0.14.8
+  Downloaded signature v2.2.0
+  Downloaded syn v2.0.119
+  Downloaded writeable v0.6.4
+  Downloaded aes v0.8.4
+  Downloaded yasna v0.6.0
+  Downloaded yoke-derive v0.8.2
+  Downloaded aws-lc-rs v1.18.0
+  Downloaded idna v1.1.0
+  Downloaded aes-gcm v0.10.3
+  Downloaded serde v1.0.229
+  Downloaded slab v0.4.12
+  Downloaded hkdf v0.12.4
+  Downloaded icu_properties_data v2.3.0
+  Downloaded url v2.5.8
+  Downloaded quinn-proto v0.11.16
+  Downloaded utf8_iter v1.0.4
+  Downloaded serde_core v1.0.229
+  Downloaded zeroize v1.9.0
+  Downloaded sha2 v0.10.9
+  Downloaded tinyvec v1.12.0
+  Downloaded nix v0.31.3
+  Downloaded time v0.3.55
+  Downloaded universal-hash v0.5.1
+  Downloaded rustls v0.23.43
+  Downloaded yoke v0.8.3
+  Downloaded shlex v2.0.1
+  Downloaded zerofrom v0.1.8
+  Downloaded rustix v1.1.4
+  Downloaded tracing v0.1.44
+  Downloaded tokio v1.53.1
+  Downloaded tinystr v0.8.4
+  Downloaded typenum v1.20.1
+  Downloaded unicode-ident v1.0.24
+  Downloaded untrusted v0.7.1
+  Downloaded icu_normalizer v2.3.0
+  Downloaded uuid v1.24.1
+  Downloaded subtle v2.6.1
+  Downloaded socket2 v0.6.5
+  Downloaded libc v0.2.189
+  Downloaded smallvec v1.15.2
+  Downloaded substring v1.4.5
+  Downloaded ring v0.17.14
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded aws-lc-sys v0.44.0
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling version_check v0.9.5
+   Compiling generic-array v0.14.7
+   Compiling typenum v1.20.1
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling syn v3.0.3
+   Compiling subtle v2.6.1
+   Compiling jobserver v0.1.35
+   Compiling crypto-common v0.1.7
+   Compiling cc v1.4.3
+   Compiling cmake v0.1.58
+   Compiling syn v2.0.119
+   Compiling aws-lc-sys v0.44.0
+   Compiling synstructure v0.13.2
+   Compiling const-oid v0.9.6
+   Compiling zerofrom-derive v0.1.7
+   Compiling aws-lc-rs v1.18.0
+   Compiling zerofrom v0.1.8
+   Compiling yoke-derive v0.8.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling yoke v0.8.3
+   Compiling untrusted v0.7.1
+   Compiling zerovec-derive v0.11.4
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling zerovec v0.11.7
+   Compiling displaydoc v0.2.7
+   Compiling base64ct v1.8.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling rand_core v0.10.1
+   Compiling der v0.7.10
+   Compiling tinystr v0.8.4
+   Compiling autocfg v1.5.1
+   Compiling getrandom v0.4.3
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling icu_locale_core v2.3.0
+   Compiling spki v0.7.3
+   Compiling zerotrie v0.2.5
+   Compiling potential_utf v0.1.6
+   Compiling hmac v0.12.1
+   Compiling rustls-pki-types v1.15.1
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling cpufeatures v0.2.17
+   Compiling icu_collections v2.3.0
+   Compiling icu_provider v2.3.0
+   Compiling pkcs8 v0.10.2
+   Compiling ff v0.13.1
+   Compiling base16ct v0.2.0
+   Compiling thiserror v2.0.20
+   Compiling cpufeatures v0.3.0
+   Compiling chacha20 v0.10.1
+   Compiling sec1 v0.7.3
+   Compiling group v0.13.0
+   Compiling hkdf v0.12.4
+   Compiling thiserror-impl v2.0.20
+   Compiling crypto-bigint v0.5.5
+   Compiling inout v0.1.4
+   Compiling bytes v1.12.1
+   Compiling smallvec v1.15.2
+   Compiling icu_normalizer v2.3.0
+   Compiling cipher v0.4.4
+   Compiling elliptic-curve v0.13.8
+   Compiling icu_properties v2.3.0
+   Compiling rand v0.10.2
+   Compiling memoffset v0.9.1
+   Compiling universal-hash v0.5.1
+   Compiling time-core v0.1.9
+   Compiling opaque-debug v0.3.1
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling serde_core v1.0.229
+   Compiling time v0.3.55
+   Compiling polyval v0.6.2
+   Compiling idna_adapter v1.2.2
+   Compiling rfc6979 v0.4.0
+   Compiling substring v1.4.5
+   Compiling nix v0.31.3
+   Compiling signature v2.2.0
+   Compiling socket2 v0.6.5
+   Compiling base64 v0.22.1
+   Compiling serde v1.0.229
+   Compiling percent-encoding v2.3.2
+   Compiling once_cell v1.21.4
+   Compiling form_urlencoded v1.2.2
+   Compiling pem v3.0.6
+   Compiling ecdsa v0.16.9
+   Compiling idna v1.1.0
+   Compiling ghash v0.5.1
+   Compiling yasna v0.6.0
+   Compiling primeorder v0.13.6
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling sha2 v0.10.9
+   Compiling prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+   Compiling serde_derive v1.0.229
+   Compiling aead v0.5.2
+   Compiling pin-project-lite v0.2.17
+   Compiling aes-gcm v0.10.3
+   Compiling p256 v0.13.2
+   Compiling rcgen v0.14.8
+   Compiling url v2.5.8
+   Compiling tracing-core v0.1.36
+   Compiling prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+   Compiling rustls v0.23.43
+   Compiling tracing v0.1.44
+   Compiling rtc-shared v0.20.2
+   Compiling quinn-udp v0.5.15
+   Compiling tinyvec_macros v0.1.1
+   Compiling sansio v1.0.0
+   Compiling crc-catalog v2.5.0
+   Compiling rustix v1.1.4
+   Compiling crc v3.4.0
+   Compiling tinyvec v1.12.0
+   Compiling rand_pcg v0.10.2
+   Compiling quinn v0.11.11
+   Compiling md-5 v0.10.6
+   Compiling tokio-macros v2.7.2
+   Compiling mio v1.2.2
+   Compiling log v0.4.33
+   Compiling linux-raw-sys v0.12.1
+   Compiling rustc-hash v2.1.3
+   Compiling slab v0.4.12
+   Compiling lazy_static v1.5.0
+   Compiling lru-slab v0.1.2
+   Compiling rtc-mdns v0.20.2
+   Compiling tokio v1.53.1
+   Compiling uuid v1.24.1
+   Compiling prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+   Compiling rustls-webpki v0.103.14
+   Compiling prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+   Compiling prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+   Compiling rtc-stun v0.20.2
+   Compiling rtc-ice v0.20.2
+   Compiling quinn-proto v0.11.16
+   Compiling prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+   Compiling prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+   Compiling prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+   Compiling prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+   Compiling prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+   Compiling prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+   Compiling prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+   Compiling prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+error[E0618]: expected function, found `TransportIdentity`
+   --> crates/prw-remote-bridge/tests/reachability_freshness_wire.rs:196:27
+    |
+149 | fn transport(seed: u8) -> TransportIdentity {
+    | ------------------------------------------- this function of the same name is available here, but it's shadowed by the local binding
+...
+195 |     let transport = transport(31);
+    |         --------- `transport` has type `TransportIdentity`
+196 |     let other_transport = transport(32);
+    |                           ^^^^^^^^^----
+    |                           |
+    |                           call expression requires function
+
+For more information about this error, try `rustc --explain E0618`.
+error: could not compile `prw-remote-bridge` (test "reachability_freshness_wire") due to 1 previous error
