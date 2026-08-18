@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Freshness Reference Clippy Corrective
+name: PRW Phase 152 C02e Freshness Bootstrap Clippy Corrective
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-c02e-freshness-reference-clippy-corrective
+  group: prw-phase-152-c02e-freshness-bootstrap-clippy-corrective
   cancel-in-progress: true
 
 jobs:
@@ -24,86 +24,116 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply exact test-reference correctives and capture next lint
+      - name: Apply exact bootstrap-reference const correctives and capture next lint
         id: corrective
         shell: bash
         run: |
           set -u -o pipefail
           BASE_HEAD="$(git rev-parse HEAD)"
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_FRESHNESS_REFERENCE_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_FRESHNESS_BOOTSTRAP_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
           mkdir -p "$(dirname "${REPORT}")"; : > "${REPORT}"
           echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
           overall=0
           record(){ printf '%s\n' "$*" | tee -a "${REPORT}"; }
           fail(){ [[ ${overall} -ne 0 ]] || overall="$1"; }
+
           record STATUS=RUNNING
           record "BASE_HEAD=${BASE_HEAD}"
           record "RUN_ID=${GITHUB_RUN_ID}"
           [[ "${BASE_HEAD}" = "${GITHUB_SHA}" ]] || fail 70
           [[ "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design" ]] || fail 71
           git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD || fail 72
+
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
           sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
 
-          set +e
-          python3 - <<'PY' 2>&1 | tee -a "${REPORT}"
+          if [[ ${overall} -eq 0 ]]; then
+            set +e
+            python3 - <<'PY' 2>&1 | tee -a "${REPORT}"
           from pathlib import Path
-          p=Path('crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs')
-          s=p.read_text()
-          old_use='''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    validate_authenticated_publication_admission,\n};\n'''
-          new_use='''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    refresh_from_authenticated_publication, validate_authenticated_publication_admission,\n};\n'''
-          assert s.count(old_use)==1, f'use block count {s.count(old_use)}'
-          s=s.replace(old_use,new_use,1)
-          anchor='''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n'''
-          linkage='''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n// This reference harness intentionally performs admission, freshness comparison, staging, and\n// commit explicitly. Keep the lower authenticated-refresh adapter compile-linked without\n// invoking it here, so the reference does not bypass the freshness boundary it is proving.\nconst _: fn(\n    &WorkspaceDeviceRegistry,\n    &AuthenticatedDeviceSession,\n    &AuthenticatedCandidatePublication,\n    &mut PeerConnectivityPlan,\n) -> Result<(), CandidateReachabilityError> = refresh_from_authenticated_publication;\n\n'''
-          assert s.count(anchor)==1, f'linkage anchor count {s.count(anchor)}'
-          s=s.replace(anchor,linkage,1)
-          for old,new in [
-              ('    fn with_current_freshness(\n','    const fn with_current_freshness(\n'),
-              ('    fn without_current_freshness(\n','    const fn without_current_freshness(\n'),
-              ('    fn plan(&self) -> &PeerConnectivityPlan {\n','    const fn plan(&self) -> &PeerConnectivityPlan {\n'),
-          ]:
-              assert s.count(old)==1, (old,s.count(old))
-              s=s.replace(old,new,1)
+          p = Path('crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs')
+          s = p.read_text()
+          replacements = [
+              ('    fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {\n',
+               '    const fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {\n'),
+              ('    fn recovery_required(plan: PeerConnectivityPlan) -> Self {\n',
+               '    const fn recovery_required(plan: PeerConnectivityPlan) -> Self {\n'),
+              ('    fn plan(&self) -> &PeerConnectivityPlan {\n',
+               '    const fn plan(&self) -> &PeerConnectivityPlan {\n'),
+          ]
+          for old, new in replacements:
+              assert s.count(old) == 1, (old, s.count(old))
+              s = s.replace(old, new, 1)
           p.write_text(s)
           PY
-          edit_rc=${PIPESTATUS[0]}
-          set -u -o pipefail
-          record "EDIT_RC=${edit_rc}"; [[ ${edit_rc} -eq 0 ]] || fail ${edit_rc}
+            edit_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "EDIT_RC=${edit_rc}"
+            [[ ${edit_rc} -eq 0 ]] || fail ${edit_rc}
+          fi
 
           if [[ ${overall} -eq 0 ]]; then
-            set +e; cargo fmt --all -- --check 2>&1 | tee -a "${REPORT}"; fmt_rc=${PIPESTATUS[0]}; set -u -o pipefail
-            record "FMT_RC=${fmt_rc}"; [[ ${fmt_rc} -eq 0 ]] || fail ${fmt_rc}
+            set +e
+            cargo fmt --all -- --check 2>&1 | tee -a "${REPORT}"
+            fmt_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "FMT_RC=${fmt_rc}"
+            [[ ${fmt_rc} -eq 0 ]] || fail ${fmt_rc}
           fi
+
           if [[ ${overall} -eq 0 ]]; then
-            set +e; cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings 2>&1 | tee -a "${REPORT}"; clippy_rc=${PIPESTATUS[0]}; set -u -o pipefail
-            record "FOCUSED_REMOTE_BRIDGE_CLIPPY_RC=${clippy_rc}"; [[ ${clippy_rc} -eq 0 ]] || fail ${clippy_rc}
+            set +e
+            cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings 2>&1 | tee -a "${REPORT}"
+            clippy_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "FOCUSED_REMOTE_BRIDGE_CLIPPY_RC=${clippy_rc}"
+            [[ ${clippy_rc} -eq 0 ]] || fail ${clippy_rc}
           fi
+
           cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || fail 73
           sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
           diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || fail 74
-          changed="$(git diff --name-only | grep -v '^target/.rustc_info.json$' || true)"
-          [[ "${changed}" = "crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs" ]] || { record "UNEXPECTED_CHANGED_PATHS=${changed}"; fail 75; }
+
           git restore --source=HEAD -- target/.rustc_info.json 2>/dev/null || true
-          record 'SOURCE_MUTATION=crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs'
-          record 'DEAD_CODE_CORRECTIVE=anonymous compile-time function-pointer reference; no allow attribute'
-          record 'CONST_FN_CORRECTIVES=with_current_freshness,without_current_freshness,plan'
+          changed="$(git diff --name-only)"
+          expected='crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs'
+          [[ "${changed}" = "${expected}" ]] || { record "UNEXPECTED_CHANGED_PATHS=${changed}"; fail 75; }
+
+          record 'SOURCE_MUTATION=crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs'
+          record 'CONST_FN_CORRECTIVES=new_lifecycle,recovery_required,plan'
           record 'DEPENDENCY_STATE=UNCHANGED'
+          record 'RUNTIME_NETWORK_ACTIVATION=NONE'
           record "CORRECTIVE_RC=${overall}"
-          if [[ ${overall} -eq 0 ]]; then record STATUS=PASS; else record STATUS=SOURCE_CORRECTIVE_STAGED_WITH_NEXT_LINT_EVIDENCE; fi
+          if [[ ${overall} -eq 0 ]]; then
+            record STATUS=PASS_FOCUSED_REMOTE_BRIDGE_CLIPPY
+          else
+            record STATUS=SOURCE_CORRECTIVE_STAGED_WITH_NEXT_LINT_EVIDENCE
+          fi
           echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
 
-      - name: Commit source corrective and evidence
+      - name: Commit bootstrap corrective and evidence
         if: always()
         shell: bash
         env:
           REPORT: ${{ steps.corrective.outputs.report }}
         run: |
           set -euo pipefail
-          test -n "${REPORT}"; test -f "${REPORT}"
+          test -n "${REPORT}"
+          test -f "${REPORT}"
           git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
-          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs "${REPORT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: apply freshness reference lint correctives ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: apply freshness bootstrap lint correctives ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Surface focused Clippy result
+        if: always()
+        shell: bash
+        env:
+          CORRECTIVE_RC: ${{ steps.corrective.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test -n "${CORRECTIVE_RC}"
+          test "${CORRECTIVE_RC}" -eq 0
