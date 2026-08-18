@@ -1,0 +1,145 @@
+name: PRW Phase 152 C02e Tranche 1 Validation
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-c02e-tranche1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate C02e current source without dependency mutation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Require exact C02e branch and frozen predecessor lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
+          C02D=857583b25ed1206317641a93fd8f927819c954d8
+          actual_head="$(git rev-parse HEAD)"
+          test "${actual_head}" = "${GITHUB_SHA}"
+          git merge-base --is-ancestor "${C02D}" HEAD
+          test "$(git merge-base "${C02D}" HEAD)" = "${C02D}"
+          echo "C02e Tranche 1 validation head: ${actual_head}"
+
+      - name: Install and record native workspace prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Record toolchain and immutable dependency baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+          sha256sum \
+            Cargo.toml \
+            Cargo.lock \
+            crates/prw-remote-bridge/Cargo.toml \
+            | tee "${RUNNER_TEMP}/c02e-tranche1-pre.sha256"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+
+      - name: Verify locked metadata preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run focused C02e Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked \
+            -p prw-connectivity \
+            -p prw-remote-bridge \
+            --all-targets \
+            --all-features \
+            -- -D warnings
+
+      - name: Run focused C02e tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p prw-connectivity --all-targets
+          cargo test --locked -p prw-remote-bridge --all-targets
+
+      - name: Reverify locked metadata before workspace authority gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml
+
+      - name: Run full workspace formatting authority gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run full workspace Clippy authority gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run full workspace tests authority gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --workspace --all-targets
+
+      - name: Run full workspace build authority gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --workspace --all-targets
+
+      - name: Verify zero dependency/source drift
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            Cargo.toml \
+            Cargo.lock \
+            crates/prw-remote-bridge/Cargo.toml \
+            | tee "${RUNNER_TEMP}/c02e-tranche1-post.sha256"
+          diff -u \
+            "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" \
+            "${RUNNER_TEMP}/c02e-tranche1-post.sha256"
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          git diff --exit-code
+          echo 'C02e Tranche 1 produced no tracked source/dependency drift'
