@@ -1,6 +1,6 @@
 # C02e Tranche 5 — Freshness-Token Wire / Authenticated Resynchronization Audit
 
-Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / FOCUSED_TEST_SHADOWING_CORRECTED / EXACT_HEAD_REVALIDATION_TRIGGERED`
+Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / FOCUSED_TEST_SHADOWING_CORRECTED / CONST_CLIPPY_CORRECTED / EXACT_HEAD_REVALIDATION_TRIGGERED`
 
 Tranche 4 closeout head: `eea6b8743eebf21002ae173dfcfd5cbbf93378a8`
 Frozen C02d head: `857583b25ed1206317641a93fd8f927819c954d8`
@@ -84,3 +84,17 @@ The corrective renamed only that local binding to `current_transport` and update
 Focused-test corrective commit: `b0d56d1ad954e0187180d5f71a2ca5a0b4419c99`.
 
 This audit-only user commit retriggers the existing validator on the corrected exact head. Final classification remains pending a new authoritative validation evidence child/report.
+
+## Parallel exact-head validation and const-Clippy corrective
+
+Parallel exact-head validation head: `571a7cc5a80a714ff4a74c61e7dea764c47c8feb`.
+Failure evidence child: `1fd9f62bcbdbbfcdaf59b55ea32849c9248f7d4c`.
+Failure report: `C02E_TRANCHE5_FRESHNESS_WIRE_VALIDATION_571a7cc5a80a714ff4a74c61e7dea764c47c8feb.txt`.
+
+That authoritative run passed Cargo.lock integrity, native prerequisites, locked metadata, rustfmt and the focused Tranche 5 test. Its first failure was only strict Clippy `missing_const_for_fn` on `bootstrap_token_delivery`; workspace Clippy reported the same single source defect.
+
+An isolated corrective proof changed only `pub fn bootstrap_token_delivery` to `pub const fn bootstrap_token_delivery` and produced PASS evidence at `0dea94f6761a875f7996ce668a7aa1ae829a224e`: focused test, focused Clippy, workspace Clippy, target restoration and exact diff-scope checks all returned zero.
+
+The proven one-line corrective was then applied to the authoritative C02e branch in bot commit `5fdf8e7084c9183078d26ce9aaf4b13cac18424b`; its temporary applicator self-deleted in the same commit. No PRWF field, operation, failure code, authentication/currentness ordering, durable state transition, token provenance rule, dependency graph, Cargo.lock, network runtime or Agent bootstrap behavior changed.
+
+Because the corrective commit was workflow-token authored and therefore cannot recursively trigger the main validator, this audit-only user commit intentionally retriggers exact-head Tranche 5 validation on the corrected authoritative tree.
