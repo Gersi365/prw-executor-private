@@ -1,0 +1,58 @@
+PHASE=152-C02e-Tranche2-Clippy-Corrective
+BASE_HEAD=40046f9f924f7368abd71098db0a2e0466c01e47
+RUSTC=rustc 1.97.1 (8bab26f4f 2026-07-14)
+RUSTFMT=rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+LOCK_SHA256_BEFORE=c22b0efad4fc6e9e404ce68d182da6713296f88039338429a3af983b409b24cb
+LOCK_SHA256_AFTER=c22b0efad4fc6e9e404ce68d182da6713296f88039338429a3af983b409b24cb
+MANIFEST_SHA256_BEFORE=079cccf4dbf6af5c7582402ce72f4e27a2d351637c0cd32ddf0523f9951986a6
+MANIFEST_SHA256_AFTER=079cccf4dbf6af5c7582402ce72f4e27a2d351637c0cd32ddf0523f9951986a6
+TEST_SHA256_BEFORE=50f5e2f7c191b133a0c8fe30080f5773d317083e99c2bc723f3ea426f07f5aab
+TEST_SHA256_AFTER=54416f521da6c7d5b3401938bd8950af4e0e0d173f7b7ec30b7cb7c18d896e5b
+PATCH_RC=0
+RUSTFMT_RC=0
+MUTATION_GUARD_RC=0
+FIRST_FAILURE=NONE
+STATUS=PASS
+
+===== DIFF =====
+diff --git a/crates/prw-remote-bridge/tests/reachability_phase141_integration.rs b/crates/prw-remote-bridge/tests/reachability_phase141_integration.rs
+index a1d9d46..ad8e45d 100644
+--- a/crates/prw-remote-bridge/tests/reachability_phase141_integration.rs
++++ b/crates/prw-remote-bridge/tests/reachability_phase141_integration.rs
+@@ -56,9 +56,7 @@ impl Owner {
+     }
+ 
+     fn traversal_ptr(&self) -> Option<*const IceConnectivitySession> {
+-        self.traversal
+-            .as_deref()
+-            .map(|session| session as *const IceConnectivitySession)
++        self.traversal.as_deref().map(std::ptr::from_ref)
+     }
+ 
+     fn traversal_mut(&mut self) -> &mut IceConnectivitySession {
+@@ -318,6 +316,7 @@ fn successful_refresh_stales_queued_phase141_update_and_replacement_becomes_curr
+         vec![retained],
+     )
+     .expect("publication");
++    assert_eq!(publication.candidates(), &[retained]);
+     let (session, mut peer) = ice_pair(retained, 43001);
+     let mut owner = Owner::new(fixture.plan, session);
+     let old_ptr = owner.traversal_ptr().expect("old traversal");
+@@ -332,7 +331,7 @@ fn successful_refresh_stales_queued_phase141_update_and_replacement_becomes_curr
+         )
+         .expect("refresh")
+         .expect("stale session");
+-    assert_eq!(stale.as_ref() as *const IceConnectivitySession, old_ptr);
++    assert_eq!(std::ptr::from_ref(stale.as_ref()), old_ptr);
+     assert_eq!(
+         owner.apply(old_ptr, queued),
+         Err(ObservationError::StaleTraversal)
+@@ -409,7 +408,7 @@ fn failed_refresh_preserves_session_then_transport_rotation_invalidates_it() {
+     let stale = owner
+         .replace_plan(replacement_plan)
+         .expect("rotation stales traversal");
+-    assert_eq!(stale.as_ref() as *const IceConnectivitySession, old_ptr);
++    assert_eq!(std::ptr::from_ref(stale.as_ref()), old_ptr);
+     assert_eq!(owner.traversal_ptr(), None);
+     assert_eq!(
+         owner.apply(old_ptr, queued_after_rotation),

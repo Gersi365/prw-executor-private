@@ -56,9 +56,7 @@ impl Owner {
     }
 
     fn traversal_ptr(&self) -> Option<*const IceConnectivitySession> {
-        self.traversal
-            .as_deref()
-            .map(|session| session as *const IceConnectivitySession)
+        self.traversal.as_deref().map(std::ptr::from_ref)
     }
 
     fn traversal_mut(&mut self) -> &mut IceConnectivitySession {
@@ -318,6 +316,7 @@ fn successful_refresh_stales_queued_phase141_update_and_replacement_becomes_curr
         vec![retained],
     )
     .expect("publication");
+    assert_eq!(publication.candidates(), &[retained]);
     let (session, mut peer) = ice_pair(retained, 43001);
     let mut owner = Owner::new(fixture.plan, session);
     let old_ptr = owner.traversal_ptr().expect("old traversal");
@@ -332,7 +331,7 @@ fn successful_refresh_stales_queued_phase141_update_and_replacement_becomes_curr
         )
         .expect("refresh")
         .expect("stale session");
-    assert_eq!(stale.as_ref() as *const IceConnectivitySession, old_ptr);
+    assert_eq!(std::ptr::from_ref(stale.as_ref()), old_ptr);
     assert_eq!(
         owner.apply(old_ptr, queued),
         Err(ObservationError::StaleTraversal)
@@ -409,7 +408,7 @@ fn failed_refresh_preserves_session_then_transport_rotation_invalidates_it() {
     let stale = owner
         .replace_plan(replacement_plan)
         .expect("rotation stales traversal");
-    assert_eq!(stale.as_ref() as *const IceConnectivitySession, old_ptr);
+    assert_eq!(std::ptr::from_ref(stale.as_ref()), old_ptr);
     assert_eq!(owner.traversal_ptr(), None);
     assert_eq!(
         owner.apply(old_ptr, queued_after_rotation),
