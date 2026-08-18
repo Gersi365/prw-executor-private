@@ -151,9 +151,8 @@ mod tests {
 
     #[test]
     fn encoded_bridge_adapter_reuses_command_three_without_alternate_schema() {
-        let command = BridgeCommand::FileList(
-            RemotePath::parse("workspace").expect("valid relative path"),
-        );
+        let command =
+            BridgeCommand::FileList(RemotePath::parse("workspace").expect("valid relative path"));
         let bridge_payload = command.encode().expect("canonical PRWC encoding");
         let frame = build_encoded_bridge_management_request(id(156), &bridge_payload)
             .expect("encoded canonical bridge payload builds local request");

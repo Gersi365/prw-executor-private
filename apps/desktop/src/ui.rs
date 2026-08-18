@@ -637,23 +637,21 @@ const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
     }
 }
 
-fn local_management_envelope_status(
-    bridge_payload: &[u8],
-    operation: &str,
-) -> (String, String) {
+fn local_management_envelope_status(bridge_payload: &[u8], operation: &str) -> (String, String) {
     let payload_len = LocalIpcRequestId::new(DISPOSABLE_LOCAL_MANAGEMENT_PREVIEW_REQUEST_ID)
         .ok()
         .and_then(|request_id| {
-            local_management_ipc::build_encoded_bridge_management_request(request_id, bridge_payload)
-                .ok()
+            local_management_ipc::build_encoded_bridge_management_request(
+                request_id,
+                bridge_payload,
+            )
+            .ok()
         })
         .map(|frame| frame.payload().as_bytes().len());
 
     match payload_len {
         Some(payload_len) => (
-            format!(
-                "Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."
-            ),
+            format!("Agent command-3 local envelope: {payload_len} payload bytes. NOT DISPATCHED."),
             format!(
                 "LOCAL: {operation} intent + Agent command-3 envelope constructed; NOT DISPATCHED"
             ),
