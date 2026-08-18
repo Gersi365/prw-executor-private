@@ -112,6 +112,10 @@ where
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "family helper rejects commands outside the preclassified file family"
+)]
 fn dispatch_file_command<T, F>(
     command: &BridgeCommand,
     authority: LocalManagementFamilyAuthority<'_>,
@@ -145,6 +149,10 @@ where
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "family helper rejects commands outside the preclassified transfer family"
+)]
 fn dispatch_transfer_command<T, F>(
     command: &BridgeCommand,
     authority: LocalManagementFamilyAuthority<'_>,
@@ -202,6 +210,10 @@ where
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "family helper rejects commands outside the preclassified terminal family"
+)]
 fn dispatch_terminal_command<T, F>(
     command: &BridgeCommand,
     authority: LocalManagementFamilyAuthority<'_>,
@@ -270,6 +282,10 @@ where
     }
 }
 
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "family helper rejects commands outside the preclassified forwarding family"
+)]
 fn dispatch_forwarding_command<T, F>(
     command: &BridgeCommand,
     authority: LocalManagementFamilyAuthority<'_>,
