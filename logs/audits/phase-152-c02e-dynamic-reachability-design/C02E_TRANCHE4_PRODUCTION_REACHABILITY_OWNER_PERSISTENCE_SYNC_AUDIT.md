@@ -1,6 +1,6 @@
 # C02e Tranche 4 — Production Reachability Owner / Persistence-Synchronization Audit
 
-Status: `IMPLEMENTATION_STAGED / EXECUTABLE_VALIDATION_PENDING`
+Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / EXECUTABLE_REVALIDATION_PENDING`
 
 Tranche 3 closeout head: `6168d500b25627190aa272ff34fdc186465ebc04`
 Frozen C02d head: `857583b25ed1206317641a93fd8f927819c954d8`
@@ -55,4 +55,25 @@ No database product, persistence serialization, wire format, socket, network ada
 5. postcommit traversal-construction failure does not roll back accepted state;
 6. transport rotation permits durable retirement of the old peer lifecycle.
 
-The final classification remains pending until exact-head Cargo metadata, formatting, focused tests/Clippy and full locked workspace validation all pass with drift normalization.
+## First exact-head validation and mechanical corrective
+
+Initial validator head: `f34f59a0f8324026c784bf68f118f4399f8c07c3`
+Failure evidence child: `8964deedf069b7f1bc364077bb7a09c10af13805`
+Failure report: `C02E_TRANCHE4_PRODUCTION_OWNER_VALIDATION_f34f59a0f8324026c784bf68f118f4399f8c07c3.txt`
+
+The first run proved before failure:
+
+- locked Cargo hash exactly matched the Tranche 3 lock;
+- dependency audit passed;
+- `prw-nat-traversal` was exactly one normal `prw-remote-bridge` dependency;
+- no dev duplicate existed;
+- locked metadata passed;
+- tracked/source/hash drift guards passed.
+
+`FIRST_FAILURE=FORMAT` was the only validation failure. The reported diffs were rustfmt-only changes in `reachability_owner.rs` and `reachability_owner_production_seam.rs`.
+
+A one-shot corrective harness ran `cargo fmt --all`, rejected any diff outside those two files, committed the formatter output and self-deleted. Corrective commit: `88703e8543fccaa617bf009960682820e9e14514`.
+
+The formatter corrective changes no owner semantics, dependency graph, Cargo.lock, persistence contract, runtime boundary or network activation.
+
+The final classification remains pending until a new exact-head Cargo metadata, formatting, focused tests/Clippy and full locked workspace validation all pass with drift normalization.
