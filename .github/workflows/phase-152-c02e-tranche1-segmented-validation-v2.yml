@@ -1,0 +1,420 @@
+name: PRW Phase 152 C02e Segmented Tranche 1 Validation V2
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - '.github/workflows/phase-152-c02e-tranche1-segmented-validation-v2.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-tranche1-segmented-v2
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    name: Focused C02e gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.gates.outputs.status }}
+      rc: ${{ steps.gates.outputs.rc }}
+      drift: ${{ steps.gates.outputs.drift }}
+      dep_hash: ${{ steps.gates.outputs.dep_hash }}
+      first_failure: ${{ steps.gates.outputs.first_failure }}
+      diag_b64: ${{ steps.gates.outputs.diag_b64 }}
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Run focused gates
+        id: gates
+        shell: bash
+        run: |
+          set -u -o pipefail
+          overall=0
+          first_failure=NONE
+          diag_b64=""
+          gate() {
+            local name="$1"
+            local command="$2"
+            local log="${RUNNER_TEMP}/${name}.log"
+            local gate_rc
+            if [[ "${overall}" -ne 0 ]]; then return 0; fi
+            set +e
+            bash -o pipefail -c "${command}" 2>&1 | tee "${log}"
+            gate_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            if [[ "${gate_rc}" -ne 0 ]]; then
+              overall="${gate_rc}"
+              first_failure="${name}"
+              diag_b64="$(tail -n 220 "${log}" | base64 -w0)"
+            fi
+          }
+          dep_hash() {
+            sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | sha256sum | awk '{print $1}'
+          }
+          before="$(dep_hash)"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD && test \"$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)\" = \"857583b25ed1206317641a93fd8f927819c954d8\""
+          gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
+          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml"
+          gate focused_fmt "cargo fmt --all -- --check"
+          gate focused_clippy "cargo clippy --locked -p prw-connectivity -p prw-remote-bridge --all-targets --all-features -- -D warnings"
+          gate focused_connectivity_tests "cargo test --locked -p prw-connectivity --all-targets"
+          gate focused_remote_bridge_tests "cargo test --locked -p prw-remote-bridge --all-targets"
+          gate locked_metadata_recheck "cargo metadata --locked --no-deps --format-version 1 > /dev/null"
+          after="$(dep_hash)"
+          drift=0
+          [[ "${before}" = "${after}" ]] || drift=1
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift=1
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >/dev/null 2>&1 || drift=1
+          if [[ "${drift}" -ne 0 && "${overall}" -eq 0 ]]; then overall=74; first_failure=dependency_source_drift; fi
+          if [[ "${overall}" -eq 0 ]]; then status=PASS; else status=FAIL; fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
+          echo "drift=${drift}" >> "${GITHUB_OUTPUT}"
+          echo "dep_hash=${after}" >> "${GITHUB_OUTPUT}"
+          echo "first_failure=${first_failure}" >> "${GITHUB_OUTPUT}"
+          echo "diag_b64=${diag_b64}" >> "${GITHUB_OUTPUT}"
+
+  workspace_clippy:
+    name: Full workspace fmt and Clippy
+    needs: focused
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.gates.outputs.status }}
+      rc: ${{ steps.gates.outputs.rc }}
+      drift: ${{ steps.gates.outputs.drift }}
+      dep_hash: ${{ steps.gates.outputs.dep_hash }}
+      first_failure: ${{ steps.gates.outputs.first_failure }}
+      diag_b64: ${{ steps.gates.outputs.diag_b64 }}
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Run workspace fmt and Clippy
+        id: gates
+        shell: bash
+        env:
+          UPSTREAM_STATUS: ${{ needs.focused.outputs.status }}
+        run: |
+          set -u -o pipefail
+          dep_hash() { sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | sha256sum | awk '{print $1}'; }
+          if [[ "${UPSTREAM_STATUS}" != "PASS" ]]; then
+            echo status=SKIPPED >> "${GITHUB_OUTPUT}"
+            echo rc=125 >> "${GITHUB_OUTPUT}"
+            echo drift=0 >> "${GITHUB_OUTPUT}"
+            echo "dep_hash=$(dep_hash)" >> "${GITHUB_OUTPUT}"
+            echo first_failure=skipped_after_focused >> "${GITHUB_OUTPUT}"
+            echo diag_b64= >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          overall=0
+          first_failure=NONE
+          diag_b64=""
+          gate() {
+            local name="$1"
+            local command="$2"
+            local log="${RUNNER_TEMP}/${name}.log"
+            local gate_rc
+            if [[ "${overall}" -ne 0 ]]; then return 0; fi
+            set +e
+            bash -o pipefail -c "${command}" 2>&1 | tee "${log}"
+            gate_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            if [[ "${gate_rc}" -ne 0 ]]; then overall="${gate_rc}"; first_failure="${name}"; diag_b64="$(tail -n 220 "${log}" | base64 -w0)"; fi
+          }
+          before="$(dep_hash)"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD"
+          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev && pkg-config --modversion gtk4 && pkg-config --modversion libadwaita-1"
+          gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
+          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null"
+          gate workspace_fmt "cargo fmt --all -- --check"
+          gate workspace_clippy "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
+          after="$(dep_hash)"
+          drift=0
+          [[ "${before}" = "${after}" ]] || drift=1
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift=1
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >/dev/null 2>&1 || drift=1
+          if [[ "${drift}" -ne 0 && "${overall}" -eq 0 ]]; then overall=74; first_failure=dependency_source_drift; fi
+          if [[ "${overall}" -eq 0 ]]; then status=PASS; else status=FAIL; fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
+          echo "drift=${drift}" >> "${GITHUB_OUTPUT}"
+          echo "dep_hash=${after}" >> "${GITHUB_OUTPUT}"
+          echo "first_failure=${first_failure}" >> "${GITHUB_OUTPUT}"
+          echo "diag_b64=${diag_b64}" >> "${GITHUB_OUTPUT}"
+
+  workspace_tests:
+    name: Full workspace tests
+    needs: workspace_clippy
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.gates.outputs.status }}
+      rc: ${{ steps.gates.outputs.rc }}
+      drift: ${{ steps.gates.outputs.drift }}
+      dep_hash: ${{ steps.gates.outputs.dep_hash }}
+      first_failure: ${{ steps.gates.outputs.first_failure }}
+      diag_b64: ${{ steps.gates.outputs.diag_b64 }}
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Run workspace tests
+        id: gates
+        shell: bash
+        env:
+          UPSTREAM_STATUS: ${{ needs.workspace_clippy.outputs.status }}
+        run: |
+          set -u -o pipefail
+          dep_hash() { sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | sha256sum | awk '{print $1}'; }
+          if [[ "${UPSTREAM_STATUS}" != "PASS" ]]; then
+            echo status=SKIPPED >> "${GITHUB_OUTPUT}"
+            echo rc=125 >> "${GITHUB_OUTPUT}"
+            echo drift=0 >> "${GITHUB_OUTPUT}"
+            echo "dep_hash=$(dep_hash)" >> "${GITHUB_OUTPUT}"
+            echo first_failure=skipped_after_workspace_clippy >> "${GITHUB_OUTPUT}"
+            echo diag_b64= >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          overall=0
+          first_failure=NONE
+          diag_b64=""
+          gate() {
+            local name="$1"
+            local command="$2"
+            local log="${RUNNER_TEMP}/${name}.log"
+            local gate_rc
+            if [[ "${overall}" -ne 0 ]]; then return 0; fi
+            set +e
+            bash -o pipefail -c "${command}" 2>&1 | tee "${log}"
+            gate_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            if [[ "${gate_rc}" -ne 0 ]]; then overall="${gate_rc}"; first_failure="${name}"; diag_b64="$(tail -n 220 "${log}" | base64 -w0)"; fi
+          }
+          before="$(dep_hash)"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD"
+          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev"
+          gate toolchain "rustc --version && cargo --version"
+          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null"
+          gate workspace_tests "cargo test --locked --workspace --all-targets"
+          after="$(dep_hash)"
+          drift=0
+          [[ "${before}" = "${after}" ]] || drift=1
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift=1
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >/dev/null 2>&1 || drift=1
+          if [[ "${drift}" -ne 0 && "${overall}" -eq 0 ]]; then overall=74; first_failure=dependency_source_drift; fi
+          if [[ "${overall}" -eq 0 ]]; then status=PASS; else status=FAIL; fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
+          echo "drift=${drift}" >> "${GITHUB_OUTPUT}"
+          echo "dep_hash=${after}" >> "${GITHUB_OUTPUT}"
+          echo "first_failure=${first_failure}" >> "${GITHUB_OUTPUT}"
+          echo "diag_b64=${diag_b64}" >> "${GITHUB_OUTPUT}"
+
+  workspace_build:
+    name: Full workspace build
+    needs: workspace_tests
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.gates.outputs.status }}
+      rc: ${{ steps.gates.outputs.rc }}
+      drift: ${{ steps.gates.outputs.drift }}
+      dep_hash: ${{ steps.gates.outputs.dep_hash }}
+      first_failure: ${{ steps.gates.outputs.first_failure }}
+      diag_b64: ${{ steps.gates.outputs.diag_b64 }}
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Run workspace build
+        id: gates
+        shell: bash
+        env:
+          UPSTREAM_STATUS: ${{ needs.workspace_tests.outputs.status }}
+        run: |
+          set -u -o pipefail
+          dep_hash() { sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | sha256sum | awk '{print $1}'; }
+          if [[ "${UPSTREAM_STATUS}" != "PASS" ]]; then
+            echo status=SKIPPED >> "${GITHUB_OUTPUT}"
+            echo rc=125 >> "${GITHUB_OUTPUT}"
+            echo drift=0 >> "${GITHUB_OUTPUT}"
+            echo "dep_hash=$(dep_hash)" >> "${GITHUB_OUTPUT}"
+            echo first_failure=skipped_after_workspace_tests >> "${GITHUB_OUTPUT}"
+            echo diag_b64= >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          overall=0
+          first_failure=NONE
+          diag_b64=""
+          gate() {
+            local name="$1"
+            local command="$2"
+            local log="${RUNNER_TEMP}/${name}.log"
+            local gate_rc
+            if [[ "${overall}" -ne 0 ]]; then return 0; fi
+            set +e
+            bash -o pipefail -c "${command}" 2>&1 | tee "${log}"
+            gate_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            if [[ "${gate_rc}" -ne 0 ]]; then overall="${gate_rc}"; first_failure="${name}"; diag_b64="$(tail -n 220 "${log}" | base64 -w0)"; fi
+          }
+          before="$(dep_hash)"
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD"
+          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev"
+          gate toolchain "rustc --version && cargo --version"
+          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null"
+          gate workspace_build "cargo build --locked --workspace --all-targets"
+          after="$(dep_hash)"
+          drift=0
+          [[ "${before}" = "${after}" ]] || drift=1
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift=1
+          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >/dev/null 2>&1 || drift=1
+          if [[ "${drift}" -ne 0 && "${overall}" -eq 0 ]]; then overall=74; first_failure=dependency_source_drift; fi
+          if [[ "${overall}" -eq 0 ]]; then status=PASS; else status=FAIL; fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
+          echo "drift=${drift}" >> "${GITHUB_OUTPUT}"
+          echo "dep_hash=${after}" >> "${GITHUB_OUTPUT}"
+          echo "first_failure=${first_failure}" >> "${GITHUB_OUTPUT}"
+          echo "diag_b64=${diag_b64}" >> "${GITHUB_OUTPUT}"
+
+  collect:
+    name: Commit authoritative Tranche 1 evidence V2
+    needs: [focused, workspace_clippy, workspace_tests, workspace_build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Build evidence report
+        id: report
+        shell: bash
+        env:
+          A_STATUS: ${{ needs.focused.outputs.status }}
+          A_RC: ${{ needs.focused.outputs.rc }}
+          A_DRIFT: ${{ needs.focused.outputs.drift }}
+          A_HASH: ${{ needs.focused.outputs.dep_hash }}
+          A_FIRST: ${{ needs.focused.outputs.first_failure }}
+          A_DIAG: ${{ needs.focused.outputs.diag_b64 }}
+          B_STATUS: ${{ needs.workspace_clippy.outputs.status }}
+          B_RC: ${{ needs.workspace_clippy.outputs.rc }}
+          B_DRIFT: ${{ needs.workspace_clippy.outputs.drift }}
+          B_HASH: ${{ needs.workspace_clippy.outputs.dep_hash }}
+          B_FIRST: ${{ needs.workspace_clippy.outputs.first_failure }}
+          B_DIAG: ${{ needs.workspace_clippy.outputs.diag_b64 }}
+          C_STATUS: ${{ needs.workspace_tests.outputs.status }}
+          C_RC: ${{ needs.workspace_tests.outputs.rc }}
+          C_DRIFT: ${{ needs.workspace_tests.outputs.drift }}
+          C_HASH: ${{ needs.workspace_tests.outputs.dep_hash }}
+          C_FIRST: ${{ needs.workspace_tests.outputs.first_failure }}
+          C_DIAG: ${{ needs.workspace_tests.outputs.diag_b64 }}
+          D_STATUS: ${{ needs.workspace_build.outputs.status }}
+          D_RC: ${{ needs.workspace_build.outputs.rc }}
+          D_DRIFT: ${{ needs.workspace_build.outputs.drift }}
+          D_HASH: ${{ needs.workspace_build.outputs.dep_hash }}
+          D_FIRST: ${{ needs.workspace_build.outputs.first_failure }}
+          D_DIAG: ${{ needs.workspace_build.outputs.diag_b64 }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_V2_${GITHUB_SHA}.txt"
+          mkdir -p "$(dirname "${REPORT}")"
+          current_hash="$(sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | sha256sum | awk '{print $1}')"
+          status=PASS
+          first_failure=NONE
+          for pair in "focused:${A_STATUS}:${A_FIRST}" "workspace_clippy:${B_STATUS}:${B_FIRST}" "workspace_tests:${C_STATUS}:${C_FIRST}" "workspace_build:${D_STATUS}:${D_FIRST}"; do
+            IFS=: read -r segment segment_status segment_first <<< "${pair}"
+            if [[ "${segment_status}" != "PASS" && "${status}" = "PASS" ]]; then status=FAIL; first_failure="${segment}:${segment_first}"; fi
+          done
+          dependency_evidence=PASS
+          for drift in "${A_DRIFT}" "${B_DRIFT}" "${C_DRIFT}" "${D_DRIFT}"; do
+            if [[ "${drift}" != "0" ]]; then dependency_evidence=FAIL; fi
+          done
+          for hash in "${A_HASH}" "${B_HASH}" "${C_HASH}" "${D_HASH}"; do
+            if [[ -z "${hash}" || "${hash}" != "${current_hash}" ]]; then dependency_evidence=FAIL; fi
+          done
+          if [[ "${dependency_evidence}" != PASS && "${status}" = PASS ]]; then status=FAIL; first_failure=dependency_evidence_incomplete_or_drifted; fi
+          {
+            echo STATUS=RUNNING
+            echo WORKFLOW=phase-152-c02e-segmented-tranche1-validation-v2
+            echo "RUN_ID=${GITHUB_RUN_ID}"
+            echo "REF=${GITHUB_REF_NAME}"
+            echo "HEAD=${GITHUB_SHA}"
+            echo "SOURCE_PARENT=$(git rev-parse HEAD^)"
+            echo FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
+            echo '===== SEGMENT_RESULTS ====='
+            echo "FOCUSED_STATUS=${A_STATUS} FOCUSED_RC=${A_RC} FOCUSED_DRIFT=${A_DRIFT} FOCUSED_DEP_HASH=${A_HASH} FOCUSED_FIRST_FAILURE=${A_FIRST}"
+            echo "WORKSPACE_CLIPPY_STATUS=${B_STATUS} WORKSPACE_CLIPPY_RC=${B_RC} WORKSPACE_CLIPPY_DRIFT=${B_DRIFT} WORKSPACE_CLIPPY_DEP_HASH=${B_HASH} WORKSPACE_CLIPPY_FIRST_FAILURE=${B_FIRST}"
+            echo "WORKSPACE_TESTS_STATUS=${C_STATUS} WORKSPACE_TESTS_RC=${C_RC} WORKSPACE_TESTS_DRIFT=${C_DRIFT} WORKSPACE_TESTS_DEP_HASH=${C_HASH} WORKSPACE_TESTS_FIRST_FAILURE=${C_FIRST}"
+            echo "WORKSPACE_BUILD_STATUS=${D_STATUS} WORKSPACE_BUILD_RC=${D_RC} WORKSPACE_BUILD_DRIFT=${D_DRIFT} WORKSPACE_BUILD_DEP_HASH=${D_HASH} WORKSPACE_BUILD_FIRST_FAILURE=${D_FIRST}"
+            echo "CURRENT_DEP_HASH=${current_hash}"
+            echo "DEPENDENCY_EVIDENCE=${dependency_evidence}"
+            echo '===== CURRENT_DEPENDENCY_SHA256 ====='
+            sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml
+          } > "${REPORT}"
+          for entry in "focused:${A_DIAG}" "workspace_clippy:${B_DIAG}" "workspace_tests:${C_DIAG}" "workspace_build:${D_DIAG}"; do
+            segment="${entry%%:*}"; payload="${entry#*:}"
+            if [[ -n "${payload}" ]]; then
+              echo "===== FAILURE_DIAGNOSTIC_${segment} =====" >> "${REPORT}"
+              printf '%s' "${payload}" | base64 -d >> "${REPORT}" || true
+              echo >> "${REPORT}"
+            fi
+          done
+          echo RUNTIME_NETWORK_ACTIVATION=NONE >> "${REPORT}"
+          echo SOURCE_MUTATION_BY_VALIDATION=NONE >> "${REPORT}"
+          if [[ "${dependency_evidence}" = PASS ]]; then echo ZERO_DEPENDENCY_DRIFT_RC=0 >> "${REPORT}"; else echo ZERO_DEPENDENCY_DRIFT_RC=1 >> "${REPORT}"; fi
+          if [[ "${status}" = PASS ]]; then
+            echo STATUS=PASS >> "${REPORT}"
+            echo FIRST_FAILURE=NONE >> "${REPORT}"
+            echo VALIDATION_RC=0 >> "${REPORT}"
+            rc=0
+          else
+            echo STATUS=FAIL >> "${REPORT}"
+            echo "FIRST_FAILURE=${first_failure}" >> "${REPORT}"
+            echo VALIDATION_RC=1 >> "${REPORT}"
+            rc=1
+          fi
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
+          echo "rc=${rc}" >> "${GITHUB_OUTPUT}"
+      - name: Commit validation evidence only
+        shell: bash
+        env:
+          REPORT: ${{ steps.report.outputs.report }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${REPORT}"
+          git diff --cached --check
+          git commit -m "phase 152 c02e: record segmented tranche1 validation v2 ${GITHUB_SHA::12}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - name: Surface validation result
+        if: always()
+        shell: bash
+        env:
+          VALIDATION_RC: ${{ steps.report.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test -n "${VALIDATION_RC}"
+          test "${VALIDATION_RC}" -eq 0
