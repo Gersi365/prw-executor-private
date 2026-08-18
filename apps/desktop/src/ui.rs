@@ -418,17 +418,16 @@ fn settings_page() -> gtk::Box {
         let resolver = if resolver_address.is_empty() && resolver_port.is_empty() {
             None
         } else if !resolver_address.is_empty() && !resolver_port.is_empty() {
-            match (
+            if let (Ok(address), Ok(port)) = (
                 resolver_address.parse::<IpAddr>(),
                 resolver_port.parse::<u16>(),
             ) {
-                (Ok(address), Ok(port)) => Some((address, port)),
-                _ => {
-                    dns_result_output.set_text(
-                        "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
-                    );
-                    return;
-                }
+                Some((address, port))
+            } else {
+                dns_result_output.set_text(
+                    "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                );
+                return;
             }
         } else {
             dns_result_output.set_text(
