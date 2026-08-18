@@ -14,8 +14,7 @@ use aws_lc_rs::{
     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
 };
 use candidate_reachability::{
-    CandidateReachabilityError, publish_current_candidates,
-    refresh_from_authenticated_publication,
+    CandidateReachabilityError, publish_current_candidates, refresh_from_authenticated_publication,
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
@@ -28,9 +27,8 @@ use prw_registry::{RegistryError, WorkspaceDeviceRegistry, WorkspaceRole};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable semantic-adapter key");
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable semantic-adapter key");
     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
         .expect("load disposable semantic-adapter signer")
 }

@@ -116,9 +116,8 @@ impl ReachabilityCompositionReference {
 }
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable composition-reference key");
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable composition-reference key");
     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
         .expect("load disposable composition-reference signer")
 }
@@ -278,7 +277,10 @@ fn successful_refresh_invalidates_old_lifecycle_even_for_exact_retained_candidat
         .expect("successful full refresh commits");
 
     assert_eq!(owner.current_traversal(), None);
-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan().selected_path(),
+        SelectedConnectivityPath::Offline
+    );
     assert_eq!(
         owner.apply_observation(
             TestTraversalLifecycle::BeforeRefresh,
@@ -287,7 +289,10 @@ fn successful_refresh_invalidates_old_lifecycle_even_for_exact_retained_candidat
         ),
         Err(ReferenceObservationError::StaleTraversal)
     );
-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan().selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 
     owner.install_replacement(TestTraversalLifecycle::Replacement);
     owner
@@ -350,7 +355,10 @@ fn rejected_candidate_refresh_preserves_plan_and_current_traversal_lifecycle() {
             ReachabilityObservation::Unreachable,
         )
         .expect("rejected refresh does not invalidate current traversal");
-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan().selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 }
 
 #[test]
@@ -363,10 +371,8 @@ fn stale_transport_admission_failure_preserves_plan_and_traversal() {
         vec![candidate(2, ConnectivityPathKind::InternetDirect, 3002)],
     )
     .expect("current target publication");
-    let mut owner = ReachabilityCompositionReference::new(
-        fixture.plan,
-        TestTraversalLifecycle::BeforeRefresh,
-    );
+    let mut owner =
+        ReachabilityCompositionReference::new(fixture.plan, TestTraversalLifecycle::BeforeRefresh);
     let before = owner.plan().clone();
 
     fixture
@@ -446,5 +452,8 @@ fn every_successful_full_refresh_invalidates_the_current_replacement_lifecycle()
         ),
         Err(ReferenceObservationError::StaleTraversal)
     );
-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan().selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 }

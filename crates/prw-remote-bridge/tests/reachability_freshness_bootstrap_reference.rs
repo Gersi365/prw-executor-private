@@ -129,9 +129,8 @@ impl BootstrapFreshnessReference {
 }
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable bootstrap-reference key");
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable bootstrap-reference key");
     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
         .expect("load disposable bootstrap-reference signer")
 }

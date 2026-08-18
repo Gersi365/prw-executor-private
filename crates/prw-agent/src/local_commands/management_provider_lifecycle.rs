@@ -112,9 +112,7 @@ where
     /// Returns whether all provider resources have been explicitly drained.
     #[must_use]
     pub(crate) fn is_quiescent(&self) -> bool {
-        self.transfers.active_count() == 0
-            && self.terminal.is_empty()
-            && self.forwarding.is_empty()
+        self.transfers.active_count() == 0 && self.terminal.is_empty() && self.forwarding.is_empty()
     }
 
     /// Consumes the lifecycle only when all provider resources are explicitly drained.

@@ -12,8 +12,8 @@ use aws_lc_rs::{
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
-    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan,
-    ReachabilityObservation, SelectedConnectivityPath, TransportIdentity,
+    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, ReachabilityObservation,
+    SelectedConnectivityPath, TransportIdentity,
 };
 use prw_control_plane::DeviceIdentityBinding;
 use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
@@ -49,10 +49,8 @@ fn publish_current_candidates(
         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
         .map_err(CandidateProvenanceError::Registry)?;
 
-    let peer = PeerConnectivityIdentity::new(
-        publisher.device_id().clone(),
-        presented_transport_identity,
-    );
+    let peer =
+        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
         .map_err(CandidateProvenanceError::Connectivity)?;
 
@@ -95,9 +93,8 @@ fn refresh_from_authenticated_publication(
 }
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable C02e provenance key");
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable C02e provenance key");
     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
         .expect("load disposable C02e provenance signer")
 }
@@ -187,11 +184,8 @@ fn same_workspace_fixture() -> SameWorkspaceFixture {
         &requester_binding,
         "session-requester-provenance",
     );
-    let target_session = authenticated_session(
-        &target_signer,
-        &target_binding,
-        "session-target-provenance",
-    );
+    let target_session =
+        authenticated_session(&target_signer, &target_binding, "session-target-provenance");
     let requester_transport = transport(1);
     let target_transport = transport(2);
 
@@ -277,7 +271,10 @@ fn authenticated_target_publication_allows_same_workspace_refresh() {
 
     assert_eq!(fixture.plan.peer(), &expected_identity);
     assert_eq!(fixture.plan.candidate_count(), 2);
-    assert_eq!(fixture.plan.selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        fixture.plan.selected_path(),
+        SelectedConnectivityPath::Offline
+    );
     assert_eq!(
         fixture.plan.set_observation(
             CandidateId::new(1).expect("removed candidate id"),

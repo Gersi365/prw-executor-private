@@ -82,12 +82,8 @@ where
         return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
     };
 
-    let result = dispatch_admitted_management_command(
-        &admission,
-        authority,
-        lifecycle,
-        agent_status,
-    );
+    let result =
+        dispatch_admitted_management_command(&admission, authority, lifecycle, agent_status);
     build_management_provider_response(request_id, result)
 }
 

@@ -961,7 +961,10 @@ mod tests {
             .open_session(id(13), principal(), TerminalProfile::PosixShell, geometry())
             .expect("open");
         assert_eq!(broker.close_session(id(13)), Err(TerminalError::Backend));
-        assert_eq!(broker.retry_failed_close(id(13)), Err(TerminalError::Backend));
+        assert_eq!(
+            broker.retry_failed_close(id(13)),
+            Err(TerminalError::Backend)
+        );
         assert_eq!(broker.backend.close_calls, 2);
         assert_eq!(
             broker.session(id(13)).expect("retained").state(),

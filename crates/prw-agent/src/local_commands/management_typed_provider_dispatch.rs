@@ -198,14 +198,9 @@ where
             path,
             offset,
             requested_len,
-        } => download_chunk(
-            lifecycle.filesystem().root(),
-            path,
-            *offset,
-            *requested_len,
-        )
-        .map(LocalManagementTypedProviderResult::Bytes)
-        .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+        } => download_chunk(lifecycle.filesystem().root(), path, *offset, *requested_len)
+            .map(LocalManagementTypedProviderResult::Bytes)
+            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
         _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
     }
 }
@@ -376,12 +371,9 @@ where
     T: TerminalBackend,
     F: PortForwardBackend,
 {
-    let existing = lifecycle
-        .terminal()
-        .session(session_id)
-        .ok_or(LocalManagementTypedProviderDispatchError::Terminal(
-            TerminalError::UnknownSession,
-        ))?;
+    let existing = lifecycle.terminal().session(session_id).ok_or(
+        LocalManagementTypedProviderDispatchError::Terminal(TerminalError::UnknownSession),
+    )?;
     require_same_terminal_principal(existing.principal(), current)
 }
 
@@ -405,11 +397,8 @@ where
     T: TerminalBackend,
     F: PortForwardBackend,
 {
-    let existing = lifecycle
-        .forwarding()
-        .session(forward_id)
-        .ok_or(LocalManagementTypedProviderDispatchError::Forwarding(
-            ForwardingError::UnknownSession,
-        ))?;
+    let existing = lifecycle.forwarding().session(forward_id).ok_or(
+        LocalManagementTypedProviderDispatchError::Forwarding(ForwardingError::UnknownSession),
+    )?;
     require_same_forwarding_principal(existing.principal(), current)
 }

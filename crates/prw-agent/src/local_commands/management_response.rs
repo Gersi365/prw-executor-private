@@ -19,8 +19,8 @@ use super::terminal_response::builder::{
     LOCAL_IPC_MAX_TERMINAL_BODY_LENGTH, LocalTerminalResponseBuildError,
     build_terminal_response_frame,
 };
-use crate::frame_object::LocalIpcFrame;
 use crate::LocalIpcRequestId;
+use crate::frame_object::LocalIpcFrame;
 
 const RESULT_AGENT_STATUS: u8 = 1;
 const RESULT_DIRECTORY_ENTRIES: u8 = 2;
@@ -168,12 +168,8 @@ const fn error_status(
             LocalAgentResponseStatus::Conflict
         }
         LocalManagementTypedProviderDispatchError::File(error) => file_error_status(error),
-        LocalManagementTypedProviderDispatchError::Transfer(error) => {
-            transfer_error_status(error)
-        }
-        LocalManagementTypedProviderDispatchError::Terminal(error) => {
-            terminal_error_status(error)
-        }
+        LocalManagementTypedProviderDispatchError::Transfer(error) => transfer_error_status(error),
+        LocalManagementTypedProviderDispatchError::Terminal(error) => terminal_error_status(error),
         LocalManagementTypedProviderDispatchError::Forwarding(error) => {
             forwarding_error_status(error)
         }

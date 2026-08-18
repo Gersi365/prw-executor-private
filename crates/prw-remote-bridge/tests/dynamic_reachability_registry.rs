@@ -13,8 +13,8 @@ use aws_lc_rs::{
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
-    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan,
-    ReachabilityObservation, SelectedConnectivityPath, TransportIdentity,
+    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, ReachabilityObservation,
+    SelectedConnectivityPath, TransportIdentity,
 };
 use prw_control_plane::DeviceIdentityBinding;
 use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
@@ -39,20 +39,18 @@ fn refresh_after_current_admission_revalidation(
         .validate_authenticated_session(requester_session)
         .map_err(ReachabilityAdmissionError::Registry)?;
 
-    let target = registry
-        .device(plan.peer().device_id())
-        .ok_or(ReachabilityAdmissionError::Registry(
-            RegistryError::DeviceUnknown,
-        ))?;
+    let target =
+        registry
+            .device(plan.peer().device_id())
+            .ok_or(ReachabilityAdmissionError::Registry(
+                RegistryError::DeviceUnknown,
+            ))?;
     if target.binding().workspace_id != *requester.workspace_id() {
         return Err(ReachabilityAdmissionError::WorkspaceMismatch);
     }
 
     registry
-        .validate_transport_identity(
-            plan.peer().device_id(),
-            plan.peer().transport_identity(),
-        )
+        .validate_transport_identity(plan.peer().device_id(), plan.peer().transport_identity())
         .map_err(ReachabilityAdmissionError::Registry)?;
 
     plan.refresh_candidates(candidates)
@@ -60,11 +58,9 @@ fn refresh_after_current_admission_revalidation(
 }
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable C02e key");
-    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
-        .expect("load disposable C02e signer")
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable C02e key");
+    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("load disposable C02e signer")
 }
 
 fn authenticated_session(
@@ -145,11 +141,7 @@ fn registry_session_and_plan(
 
     let mut registry = WorkspaceDeviceRegistry::new();
     registry
-        .add_membership(
-            workspace_id.clone(),
-            user_id.clone(),
-            WorkspaceRole::Member,
-        )
+        .add_membership(workspace_id.clone(), user_id.clone(), WorkspaceRole::Member)
         .expect("active membership");
     registry
         .register_device(requester_binding)
@@ -325,11 +317,7 @@ fn cross_workspace_target_rejects_refresh_before_endpoint_mutation() {
 
     let mut registry = WorkspaceDeviceRegistry::new();
     registry
-        .add_membership(
-            requester_workspace,
-            requester_user,
-            WorkspaceRole::Member,
-        )
+        .add_membership(requester_workspace, requester_user, WorkspaceRole::Member)
         .expect("requester membership");
     registry
         .add_membership(target_workspace, target_user, WorkspaceRole::Member)

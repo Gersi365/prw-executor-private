@@ -220,7 +220,10 @@ mod tests {
         let policy = DenyAllForwardingEgressPolicy;
         let ssh = target(Ipv4Addr::LOCALHOST, 22);
         let https = target(Ipv4Addr::LOCALHOST, 443);
-        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Deny);
+        assert_eq!(
+            policy.evaluate(spec(2200, ssh)),
+            ForwardingEgressDecision::Deny
+        );
         assert_eq!(
             policy.evaluate(spec(8443, https)),
             ForwardingEgressDecision::Deny
@@ -234,8 +237,14 @@ mod tests {
             .expect("one exact target is within policy bound");
 
         assert_eq!(policy.target_count(), 1);
-        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Allow);
-        assert_eq!(policy.evaluate(spec(2201, ssh)), ForwardingEgressDecision::Allow);
+        assert_eq!(
+            policy.evaluate(spec(2200, ssh)),
+            ForwardingEgressDecision::Allow
+        );
+        assert_eq!(
+            policy.evaluate(spec(2201, ssh)),
+            ForwardingEgressDecision::Allow
+        );
         assert_eq!(
             policy.evaluate(spec(2200, target(Ipv4Addr::new(10, 0, 0, 10), 23))),
             ForwardingEgressDecision::Deny

@@ -292,7 +292,10 @@ mod tests {
             forwarding_create: Decision::Allow,
         });
 
-        assert_eq!(policy.evaluate(Capability::AgentStatusRead), Decision::Allow);
+        assert_eq!(
+            policy.evaluate(Capability::AgentStatusRead),
+            Decision::Allow
+        );
         assert_eq!(
             policy.evaluate(Capability::PrivateDnsConfigRead),
             Decision::Deny

@@ -172,9 +172,8 @@ impl FreshnessReachabilityReference {
 }
 
 fn signer() -> UbuntuEnrollmentSigner {
-    let pkcs8 =
-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
-            .expect("generate disposable freshness-reference key");
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+        .expect("generate disposable freshness-reference key");
     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
         .expect("load disposable freshness-reference signer")
 }
@@ -242,8 +241,7 @@ fn fixture() -> Fixture {
     let target_signer = signer();
     let workspace_id = WorkspaceId::new("workspace-freshness-reference").expect("workspace id");
     let requester_user = UserId::new("requester-freshness-reference").expect("user id");
-    let second_requester_user =
-        UserId::new("requester-two-freshness-reference").expect("user id");
+    let second_requester_user = UserId::new("requester-two-freshness-reference").expect("user id");
     let target_user = UserId::new("target-freshness-reference").expect("user id");
     let requester_binding = binding(
         &requester_signer,
@@ -407,10 +405,7 @@ fn candidate_validation_failure_does_not_consume_current_freshness() {
         ))
     );
     assert_eq!(owner.plan(), &before);
-    assert_eq!(
-        owner.current_freshness(),
-        Some(TestFreshnessState::Initial)
-    );
+    assert_eq!(owner.current_freshness(), Some(TestFreshnessState::Initial));
     assert_eq!(
         owner.current_traversal(),
         Some(TestTraversalLifecycle::BeforeRefresh)
@@ -605,5 +600,8 @@ fn successful_commit_advances_freshness_resets_observation_and_invalidates_trave
         Some(TestFreshnessState::AfterFirstCommit)
     );
     assert_eq!(owner.current_traversal(), None);
-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan().selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 }

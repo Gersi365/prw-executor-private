@@ -32,7 +32,9 @@ pub enum CandidateReachabilityError {
 impl fmt::Display for CandidateReachabilityError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Registry(error) => write!(formatter, "candidate registry admission failed: {error}"),
+            Self::Registry(error) => {
+                write!(formatter, "candidate registry admission failed: {error}")
+            }
             Self::WorkspaceMismatch => {
                 formatter.write_str("candidate publisher and requester workspace mismatch")
             }
@@ -40,7 +42,10 @@ impl fmt::Display for CandidateReachabilityError {
                 formatter.write_str("candidate publication target identity mismatch")
             }
             Self::Connectivity(error) => {
-                write!(formatter, "candidate connectivity validation failed: {error}")
+                write!(
+                    formatter,
+                    "candidate connectivity validation failed: {error}"
+                )
             }
         }
     }
@@ -104,10 +109,8 @@ pub fn publish_current_candidates(
         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
         .map_err(CandidateReachabilityError::Registry)?;
 
-    let peer = PeerConnectivityIdentity::new(
-        publisher.device_id().clone(),
-        presented_transport_identity,
-    );
+    let peer =
+        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
         .map_err(CandidateReachabilityError::Connectivity)?;
 
@@ -152,7 +155,8 @@ pub fn validate_authenticated_publication_admission(
     if requester.workspace_id() != publisher.workspace_id() {
         return Err(CandidateReachabilityError::WorkspaceMismatch);
     }
-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
+    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer()
+    {
         return Err(CandidateReachabilityError::PublicationTargetMismatch);
     }
 
@@ -187,12 +191,7 @@ pub fn refresh_from_authenticated_publication(
     publication: &AuthenticatedCandidatePublication,
     plan: &mut PeerConnectivityPlan,
 ) -> Result<(), CandidateReachabilityError> {
-    validate_authenticated_publication_admission(
-        registry,
-        requester_session,
-        publication,
-        plan,
-    )?;
+    validate_authenticated_publication_admission(registry, requester_session, publication, plan)?;
 
     plan.refresh_candidates(publication.candidates.clone())
         .map_err(CandidateReachabilityError::Connectivity)

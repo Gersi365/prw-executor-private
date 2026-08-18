@@ -425,7 +425,9 @@ impl fmt::Display for ConnectivityError {
             Self::CandidateCapacity => "connectivity candidate capacity exceeded",
             Self::DuplicateCandidateId => "connectivity candidate identifier is duplicated",
             Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
-            Self::CandidateIdRebound => "connectivity candidate identifier cannot be rebound or reused",
+            Self::CandidateIdRebound => {
+                "connectivity candidate identifier cannot be rebound or reused"
+            }
             Self::UnknownCandidate => "connectivity candidate is unknown",
         })
     }
