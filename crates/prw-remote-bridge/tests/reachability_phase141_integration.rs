@@ -333,14 +333,22 @@ fn successful_refresh_stales_queued_phase141_update_and_replacement_becomes_curr
         .expect("refresh")
         .expect("stale session");
     assert_eq!(stale.as_ref() as *const IceConnectivitySession, old_ptr);
-    assert_eq!(owner.apply(old_ptr, queued), Err(ObservationError::StaleTraversal));
-    assert_eq!(owner.plan.selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.apply(old_ptr, queued),
+        Err(ObservationError::StaleTraversal)
+    );
+    assert_eq!(
+        owner.plan.selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 
     let (replacement, mut replacement_peer) = ice_pair(retained, 43011);
     owner.install(replacement);
     let replacement_ptr = owner.traversal_ptr().expect("replacement traversal");
     let current = drive(owner.traversal_mut(), &mut replacement_peer);
-    owner.apply(replacement_ptr, current).expect("current update");
+    owner
+        .apply(replacement_ptr, current)
+        .expect("current update");
     assert_eq!(
         owner.plan.selected_path(),
         SelectedConnectivityPath::Candidate(retained)
@@ -407,7 +415,10 @@ fn failed_refresh_preserves_session_then_transport_rotation_invalidates_it() {
         owner.apply(old_ptr, queued_after_rotation),
         Err(ObservationError::StaleTraversal)
     );
-    assert_eq!(owner.plan.selected_path(), SelectedConnectivityPath::Offline);
+    assert_eq!(
+        owner.plan.selected_path(),
+        SelectedConnectivityPath::Offline
+    );
 
     let (replacement, mut replacement_peer) = ice_pair(replacement_candidate, 43111);
     owner.install(replacement);
