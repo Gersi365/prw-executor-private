@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Tranche 1 Validation Transport
+name: PRW Phase 152 C02e Inherited Workspace Clippy Corrective
 
 on:
   push:
@@ -15,89 +15,148 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate C02e current source without dependency mutation
+  correct:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-
     steps:
       - name: Checkout exact pushed head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
-      - name: Run exact Tranche 1 sequence and capture auditable result
-        id: validation
+      - name: Install full-workspace native prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Apply exact inherited prw-agent lint correctives
+        id: corrective
         shell: bash
         run: |
           set -u -o pipefail
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE1_GITHUB_VALIDATION_${GITHUB_SHA}.txt"
-          mkdir -p "$(dirname "${REPORT}")"
-          : > "${REPORT}"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_WORKSPACE_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
+          mkdir -p "$(dirname "${REPORT}")"; : > "${REPORT}"
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
           overall=0
-          first_failure=""
           record(){ printf '%s\n' "$*" | tee -a "${REPORT}"; }
-          gate(){
-            local name="$1" command="$2"
-            if [[ "${overall}" -ne 0 ]]; then
-              record "GATE_${name}=SKIPPED_AFTER_${first_failure}"
-              return 0
-            fi
-            record "===== GATE ${name} ====="
-            set +e
-            bash -o pipefail -c "${command}" 2>&1 | tee -a "${REPORT}"
-            local rc=${PIPESTATUS[0]}
-            set -u -o pipefail
-            record "GATE_${name}_RC=${rc}"
-            if [[ "${rc}" -ne 0 ]]; then overall="${rc}"; first_failure="${name}"; fi
-          }
+          fail(){ [[ ${overall} -ne 0 ]] || overall="$1"; }
 
           record STATUS=RUNNING
-          record WORKFLOW=phase-152-c02e-tranche1-validation-transport
+          record "BASE_HEAD=${BASE_HEAD}"
           record "RUN_ID=${GITHUB_RUN_ID}"
-          record "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
-          record "REF=${GITHUB_REF_NAME}"
-          record "HEAD=${GITHUB_SHA}"
-          record FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
-          record "RUNNER_OS=${RUNNER_OS}"
+          [[ "${BASE_HEAD}" = "${GITHUB_SHA}" ]] || fail 70
+          [[ "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design" ]] || fail 71
+          git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD || fail 72
 
-          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD && test \"$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)\" = \"857583b25ed1206317641a93fd8f927819c954d8\""
-          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev && pkg-config --modversion gtk4 && pkg-config --modversion libadwaita-1"
-          gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
-
-          record '===== PRE_VALIDATION_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" | tee -a "${REPORT}"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
 
-          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml"
-          gate focused_fmt "cargo fmt --all -- --check"
-          gate focused_clippy "cargo clippy --locked -p prw-connectivity -p prw-remote-bridge --all-targets --all-features -- -D warnings"
-          gate focused_connectivity_tests "cargo test --locked -p prw-connectivity --all-targets"
-          gate focused_remote_bridge_tests "cargo test --locked -p prw-remote-bridge --all-targets"
-          gate locked_metadata_recheck "cargo metadata --locked --no-deps --format-version 1 > /dev/null && cmp -s \"${RUNNER_TEMP}/Cargo.lock.before\" Cargo.lock && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml"
-          gate workspace_fmt "cargo fmt --all -- --check"
-          gate workspace_clippy "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
-          gate workspace_tests "cargo test --locked --workspace --all-targets"
-          gate workspace_build "cargo build --locked --workspace --all-targets"
+          set +e
+          python3 - <<'PY' 2>&1 | tee -a "${REPORT}"
+          from pathlib import Path
 
-          record '===== POST_VALIDATION_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-tranche1-post.sha256" | tee -a "${REPORT}"
-          drift_rc=0
-          diff -u "${RUNNER_TEMP}/c02e-tranche1-pre.sha256" "${RUNNER_TEMP}/c02e-tranche1-post.sha256" >> "${REPORT}" 2>&1 || drift_rc=$?
-          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift_rc=$?
-          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml >> "${REPORT}" 2>&1 || drift_rc=$?
-          record "ZERO_DEPENDENCY_DRIFT_RC=${drift_rc}"
-          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then overall="${drift_rc}"; first_failure=dependency_source_drift; fi
-          if [[ "${overall}" -eq 0 ]]; then record STATUS=PASS; record FIRST_FAILURE=NONE; else record STATUS=FAIL; record "FIRST_FAILURE=${first_failure}"; fi
-          record "VALIDATION_RC=${overall}"
-          printf 'validation_rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
-          printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
+          base = Path('crates/prw-agent/src/local_commands')
+          visibility_files = [
+              base / 'management_authority.rs',
+              base / 'management_execution.rs',
+              base / 'management_provider_backend_policy.rs',
+              base / 'management_provider_lifecycle.rs',
+              base / 'management_response.rs',
+              base / 'management_typed_provider_dispatch.rs',
+          ]
+          for path in visibility_files:
+              source = path.read_text()
+              assert 'pub(crate)' in source, path
+              path.write_text(source.replace('pub(crate)', 'pub(super)'))
 
-      - name: Commit validation evidence only
+          lifecycle = base / 'management_provider_lifecycle.rs'
+          source = lifecycle.read_text()
+          for old, new in [
+              ('    pub(super) fn transfers_mut(&mut self) -> &mut UploadTransferManager',
+               '    pub(super) const fn transfers_mut(&mut self) -> &mut UploadTransferManager'),
+              ('    pub(super) fn terminal_mut(&mut self) -> &mut TerminalBroker<T>',
+               '    pub(super) const fn terminal_mut(&mut self) -> &mut TerminalBroker<T>'),
+              ('    pub(super) fn forwarding_mut(&mut self) -> &mut PortForwardBroker<F>',
+               '    pub(super) const fn forwarding_mut(&mut self) -> &mut PortForwardBroker<F>'),
+          ]:
+              assert source.count(old) == 1, (lifecycle, old, source.count(old))
+              source = source.replace(old, new, 1)
+          lifecycle.write_text(source)
+
+          response = base / 'management_response.rs'
+          source = response.read_text()
+          old_import = 'use prw_file_service::{FileServiceError, RemoteDirectoryEntry, RemoteFileType, RemoteMetadata};'
+          new_import = 'use prw_file_service::{FileServiceError, RemoteDirectoryEntry, RemoteFileType};'
+          assert source.count(old_import) == 1, ('response import', source.count(old_import))
+          source = source.replace(old_import, new_import, 1)
+          old = '''    match result {\n        Ok(result) => match encode_success_body(&result) {\n            Ok(body) => {\n                build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body)\n            }\n            Err(_) => build_terminal_response_frame(\n                request_id,\n                LocalAgentResponseStatus::InternalError,\n                &[],\n            ),\n        },\n        Err(error) => build_terminal_response_frame(request_id, error_status(error), &[]),\n    }\n'''
+          new = '''    match result {\n        Ok(result) => encode_success_body(&result).map_or_else(\n            |_| {\n                build_terminal_response_frame(\n                    request_id,\n                    LocalAgentResponseStatus::InternalError,\n                    &[],\n                )\n            },\n            |body| {\n                build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body)\n            },\n        ),\n        Err(error) => build_terminal_response_frame(request_id, error_status(error), &[]),\n    }\n'''
+          assert source.count(old) == 1, ('response match', source.count(old))
+          source = source.replace(old, new, 1)
+          response.write_text(source)
+
+          dispatch = base / 'management_typed_provider_dispatch.rs'
+          source = dispatch.read_text()
+          old = '''fn dispatch_file_command<T, F>(\n    command: &BridgeCommand,\n    authority: LocalManagementFamilyAuthority<'_>,\n    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,\n)'''
+          new = '''fn dispatch_file_command<T, F>(\n    command: &BridgeCommand,\n    authority: LocalManagementFamilyAuthority<'_>,\n    lifecycle: &LocalManagementProviderLifecycle<'_, T, F>,\n)'''
+          assert source.count(old) == 1, ('file dispatch mutability', source.count(old))
+          source = source.replace(old, new, 1)
+          for old, new in [
+              ('.map(|remote| remote.terminal_principal())',
+               '.map(super::management_authority::LocalManagementRemoteSessionAuthority::terminal_principal)'),
+              ('.map(|remote| remote.forwarding_principal())',
+               '.map(super::management_authority::LocalManagementRemoteSessionAuthority::forwarding_principal)'),
+          ]:
+              assert source.count(old) == 1, (old, source.count(old))
+              source = source.replace(old, new, 1)
+          dispatch.write_text(source)
+          PY
+          edit_rc=${PIPESTATUS[0]}
+          set -u -o pipefail
+          record "EDIT_RC=${edit_rc}"
+          [[ ${edit_rc} -eq 0 ]] || fail ${edit_rc}
+
+          if [[ ${overall} -eq 0 ]]; then
+            set +e
+            cargo fmt --all -- --check 2>&1 | tee -a "${REPORT}"
+            fmt_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "FMT_RC=${fmt_rc}"
+            [[ ${fmt_rc} -eq 0 ]] || fail ${fmt_rc}
+          fi
+
+          if [[ ${overall} -eq 0 ]]; then
+            set +e
+            cargo clippy --locked --workspace --all-targets --all-features -- -D warnings 2>&1 | tee -a "${REPORT}"
+            clippy_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "WORKSPACE_CLIPPY_RC=${clippy_rc}"
+            [[ ${clippy_rc} -eq 0 ]] || fail ${clippy_rc}
+          fi
+
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || fail 73
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
+          diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || fail 74
+          git restore --source=HEAD -- target/.rustc_info.json 2>/dev/null || true
+
+          record 'CORRECTIVE_SCOPE=INHERITED_PRW_AGENT_LINTS_ONLY'
+          record 'VISIBILITY_CHANGE=pub(crate)_to_pub(super)_inside_crate_internal_management_modules'
+          record 'LINT_SUPPRESSIONS_ADDED=NONE'
+          record 'DEPENDENCY_STATE=UNCHANGED'
+          record 'RUNTIME_NETWORK_ACTIVATION=NONE'
+          record "CORRECTIVE_RC=${overall}"
+          if [[ ${overall} -eq 0 ]]; then record STATUS=PASS_WORKSPACE_CLIPPY; else record STATUS=CORRECTIVE_STAGED_WITH_NEXT_WORKSPACE_CLIPPY_EVIDENCE; fi
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit source corrective and evidence
         if: always()
         shell: bash
         env:
-          REPORT: ${{ steps.validation.outputs.report }}
+          REPORT: ${{ steps.corrective.outputs.report }}
         run: |
           set -euo pipefail
           test -n "${REPORT}"
@@ -105,17 +164,24 @@ jobs:
           git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- "${REPORT}"
+          git add \
+            crates/prw-agent/src/local_commands/management_authority.rs \
+            crates/prw-agent/src/local_commands/management_execution.rs \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs \
+            crates/prw-agent/src/local_commands/management_provider_lifecycle.rs \
+            crates/prw-agent/src/local_commands/management_response.rs \
+            crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs \
+            "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: record tranche1 validation ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: apply inherited workspace clippy correctives ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
-      - name: Fail job when validation failed
+      - name: Surface workspace Clippy result
         if: always()
         shell: bash
         env:
-          VALIDATION_RC: ${{ steps.validation.outputs.validation_rc }}
+          CORRECTIVE_RC: ${{ steps.corrective.outputs.rc }}
         run: |
           set -euo pipefail
-          test -n "${VALIDATION_RC}"
-          test "${VALIDATION_RC}" -eq 0
+          test -n "${CORRECTIVE_RC}"
+          test "${CORRECTIVE_RC}" -eq 0
