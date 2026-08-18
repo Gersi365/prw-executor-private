@@ -1,6 +1,6 @@
 # C02e Tranche 5 — Freshness-Token Wire / Authenticated Resynchronization Audit
 
-Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / EXACT_HEAD_REVALIDATION_TRIGGERED`
+Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / FOCUSED_TEST_SHADOWING_CORRECTED / EXACT_HEAD_REVALIDATION_TRIGGERED`
 
 Tranche 4 closeout head: `eea6b8743eebf21002ae173dfcfd5cbbf93378a8`
 Frozen C02d head: `857583b25ed1206317641a93fd8f927819c954d8`
@@ -69,4 +69,18 @@ Rustfmt corrective commit: `63db80674e30f85b79d40fd07690c7f332afbf50`.
 
 The corrective patch contains formatting only: line wrapping, brace layout and whitespace. It changes no PRWF field, operation, failure code, authentication/currentness ordering, durable-read semantics, token disclosure rule, dependency graph, Cargo.lock, runtime boundary or network activation.
 
-Because commits pushed by a workflow token do not recursively trigger the validator workflow, this audit-only user commit intentionally retriggers the existing exact-head Tranche 5 validator without changing source semantics. Final classification remains pending the new authoritative validation evidence child/report.
+Because commits pushed by a workflow token do not recursively trigger the validator workflow, an audit-only user commit retriggered the existing exact-head Tranche 5 validator without changing source semantics.
+
+## First executable validation and focused-test corrective
+
+First exact revalidation head: `4785eb3badad426b542f682f492d43bcc187b3dd`.
+Failure evidence child: `8ca1ef721f66f4f79fbc3690ad70d00f7dbe3d54`.
+Failure report: `C02E_TRANCHE5_FRESHNESS_WIRE_VALIDATION_4785eb3badad426b542f682f492d43bcc187b3dd.txt`.
+
+The run proved before failure that the frozen Cargo.lock hash matched exactly, locked metadata passed, rustfmt passed, and all tracked/hash drift guards were clean. `FIRST_FAILURE=FOCUSED_TEST` was one compile-time test-fixture shadowing error: a local `TransportIdentity` binding named `transport` shadowed the helper function `transport(seed)` before construction of the second fixture transport identity.
+
+The corrective renamed only that local binding to `current_transport` and updated its three fixture uses. No production source, PRWF field, authenticated currentness rule, durable resynchronization semantics, Cargo manifest, Cargo.lock, runtime boundary or network activation changed.
+
+Focused-test corrective commit: `b0d56d1ad954e0187180d5f71a2ca5a0b4419c99`.
+
+This audit-only user commit retriggers the existing validator on the corrected exact head. Final classification remains pending a new authoritative validation evidence child/report.
