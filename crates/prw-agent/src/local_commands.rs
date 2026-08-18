@@ -47,6 +47,11 @@ pub(crate) mod management_dispatch;
 pub(crate) mod management_provider_lifecycle;
 #[allow(
     dead_code,
+    reason = "C02c deterministic management response semantics are intentionally not runtime-wired"
+)]
+pub(crate) mod management_response;
+#[allow(
+    dead_code,
     reason = "C02c typed provider dispatch seam is intentionally not response-encoded or runtime-wired"
 )]
 pub(crate) mod management_typed_provider_dispatch;
