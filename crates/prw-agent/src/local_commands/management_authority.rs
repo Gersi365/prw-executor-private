@@ -35,6 +35,7 @@ impl LocalManagementRemoteSessionAuthority {
     ///
     /// Propagates the registry's fail-closed membership/device/session-binding
     /// rejection. No authority object is returned on stale or mismatched state.
+    #[must_use = "validated remote-session authority must be retained to authorize providers"]
     pub(crate) fn revalidate(
         registry: &WorkspaceDeviceRegistry,
         session: &AuthenticatedDeviceSession,
@@ -47,21 +48,25 @@ impl LocalManagementRemoteSessionAuthority {
     }
 
     /// Returns the current registry-validated principal snapshot.
+    #[must_use]
     pub(crate) const fn principal(&self) -> &RegistryValidatedPrincipal {
         &self.principal
     }
 
     /// Returns the exact authenticated PRW session identifier.
+    #[must_use]
     pub(crate) const fn session_id(&self) -> &SessionId {
         &self.session_id
     }
 
     /// Derives the terminal provider principal through the provider's locked API.
+    #[must_use]
     pub(crate) fn terminal_principal(&self) -> TerminalPrincipal {
         TerminalPrincipal::from_registry(&self.principal, self.session_id.clone())
     }
 
     /// Derives the forwarding provider principal through the provider's locked API.
+    #[must_use]
     pub(crate) fn forwarding_principal(&self) -> ForwardingPrincipal {
         ForwardingPrincipal::from_registry(&self.principal, self.session_id.clone())
     }
@@ -84,11 +89,13 @@ impl LocalManagementFilesystemAuthority {
     ///
     /// Returns the file-service root-opening failure without retaining partial
     /// authority.
+    #[must_use = "opened filesystem authority must be retained to authorize file providers"]
     pub(crate) fn open_trusted_root(path: &Path) -> Result<Self, FileServiceError> {
         AnchoredFileRoot::open(path).map(|root| Self { root })
     }
 
     /// Returns the already-opened filesystem authority for file operations.
+    #[must_use]
     pub(crate) const fn root(&self) -> &AnchoredFileRoot {
         &self.root
     }
@@ -114,6 +121,7 @@ enum LocalManagementFamilyAuthorityKind<'authority> {
 
 impl<'authority> LocalManagementFamilyAuthority<'authority> {
     /// Creates Agent-family authority that needs no external provider identity.
+    #[must_use]
     pub(crate) const fn agent() -> Self {
         Self {
             inner: LocalManagementFamilyAuthorityKind::Agent,
@@ -121,6 +129,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Creates file-family evidence from an already-opened trusted root.
+    #[must_use]
     pub(crate) const fn file(authority: &'authority LocalManagementFilesystemAuthority) -> Self {
         Self {
             inner: LocalManagementFamilyAuthorityKind::File(authority),
@@ -128,6 +137,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Creates transfer-family evidence from the same anchored filesystem authority.
+    #[must_use]
     pub(crate) const fn transfer(
         authority: &'authority LocalManagementFilesystemAuthority,
     ) -> Self {
@@ -137,6 +147,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Creates terminal-family evidence from a registry-revalidated PRW session.
+    #[must_use]
     pub(crate) const fn terminal(
         authority: &'authority LocalManagementRemoteSessionAuthority,
     ) -> Self {
@@ -146,6 +157,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Creates forwarding-family evidence from a registry-revalidated PRW session.
+    #[must_use]
     pub(crate) const fn forwarding(
         authority: &'authority LocalManagementRemoteSessionAuthority,
     ) -> Self {
@@ -155,6 +167,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Returns the exact provider family proven by this authority object.
+    #[must_use]
     pub(crate) const fn family(self) -> LocalManagementAuthorityFamily {
         match self.inner {
             LocalManagementFamilyAuthorityKind::Agent => LocalManagementAuthorityFamily::Agent,
@@ -172,6 +185,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Returns the filesystem authority only for file/transfer families.
+    #[must_use]
     pub(crate) const fn filesystem(self) -> Option<&'authority LocalManagementFilesystemAuthority> {
         match self.inner {
             LocalManagementFamilyAuthorityKind::File(authority)
@@ -183,6 +197,7 @@ impl<'authority> LocalManagementFamilyAuthority<'authority> {
     }
 
     /// Returns the registry/session authority only for terminal/forwarding families.
+    #[must_use]
     pub(crate) const fn remote_session(
         self,
     ) -> Option<&'authority LocalManagementRemoteSessionAuthority> {
