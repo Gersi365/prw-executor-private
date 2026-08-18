@@ -17,7 +17,7 @@ use aws_lc_rs::{
 };
 use candidate_reachability::{
     AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,
-    refresh_from_authenticated_publication,
+    validate_authenticated_publication_admission,
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
@@ -118,6 +118,16 @@ impl FreshnessReachabilityReference {
         requester_session: &AuthenticatedDeviceSession,
         publication: &AuthenticatedCandidatePublication,
     ) -> Result<TestFreshnessState, FreshnessReferenceError> {
+        // Preserve the locked C02e ordering: current requester/publisher/workspace/target/transport
+        // admission is checked before exposing freshness comparison results to the caller.
+        validate_authenticated_publication_admission(
+            registry,
+            requester_session,
+            publication,
+            &self.plan,
+        )
+        .map_err(FreshnessReferenceError::Admission)?;
+
         let current = self
             .current_freshness
             .ok_or(FreshnessReferenceError::FreshnessUnavailable)?;
@@ -128,16 +138,14 @@ impl FreshnessReachabilityReference {
             .next()
             .ok_or(FreshnessReferenceError::TestFreshnessExhausted)?;
 
-        // Stage every registry/admission/candidate-plan mutation against a private clone. A
-        // rejected publication cannot mutate the authoritative plan or consume freshness.
+        // Stage candidate-plan validation against a private clone after freshness admission. A
+        // rejected vector cannot mutate the authoritative plan or consume freshness.
         let mut staged_plan = self.plan.clone();
-        refresh_from_authenticated_publication(
-            registry,
-            requester_session,
-            publication,
-            &mut staged_plan,
-        )
-        .map_err(FreshnessReferenceError::Admission)?;
+        staged_plan
+            .refresh_candidates(publication.candidates().to_vec())
+            .map_err(|error| {
+                FreshnessReferenceError::Admission(CandidateReachabilityError::Connectivity(error))
+            })?;
 
         // No fallible work remains. Exclusive `&mut self` ownership makes these state moves one
         // serialized reference-model commit: refreshed plan, advanced verifier state, and stale
