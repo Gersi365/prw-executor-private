@@ -56,7 +56,7 @@ use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConn
 ///
 /// Returns only terminal-response frame construction failures.
 #[cfg(target_os = "linux")]
-pub(crate) fn process_authenticated_linux_management_with_typed_providers<E, T, F, S>(
+pub(super) fn process_authenticated_linux_management_with_typed_providers<E, T, F, S>(
     frame: &LocalIpcFrame,
     connection: &AuthenticatedLocalLinuxConnection<S>,
     evaluator: &E,

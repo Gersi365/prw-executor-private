@@ -15,17 +15,17 @@ use prw_terminal::TerminalProfile;
 /// This reuses the existing Phase 140 remote-transport concurrency precedent of
 /// 32 remotely initiated bidirectional streams rather than introducing a wider
 /// forwarding-specific concurrency surface.
-pub(crate) const MAX_FORWARD_CONNECTIONS_PER_SESSION: usize = 32;
+pub(super) const MAX_FORWARD_CONNECTIONS_PER_SESSION: usize = 32;
 /// Maximum simultaneous forwarding connections owned by one Agent provider lifecycle.
-pub(crate) const MAX_FORWARD_CONNECTIONS_AGGREGATE: usize = 32;
+pub(super) const MAX_FORWARD_CONNECTIONS_AGGREGATE: usize = 32;
 /// Maximum exact target endpoints selectable by one Agent-owned egress policy.
-pub(crate) const MAX_FORWARD_EGRESS_TARGETS: usize = 32;
+pub(super) const MAX_FORWARD_EGRESS_TARGETS: usize = 32;
 /// Bounded target-connect budget inherited from the existing Phase 140 operation timeout.
-pub(crate) const FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+pub(super) const FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Bounded forwarding inactivity budget inherited from the Phase 140 idle timeout.
-pub(crate) const FORWARD_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const FORWARD_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Per-direction forwarding copy buffer bound matching the existing 64 KiB transport bound.
-pub(crate) const FORWARD_COPY_BUFFER_BYTES: usize = 65_536;
+pub(super) const FORWARD_COPY_BUFFER_BYTES: usize = 65_536;
 
 /// Provider-owned terminal launch-template identifier.
 ///
@@ -33,7 +33,7 @@ pub(crate) const FORWARD_COPY_BUFFER_BYTES: usize = 65_536;
 /// intentionally carries no executable path, argument vector, environment,
 /// working directory, or request-controlled string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LinuxTerminalLaunchTemplateId {
+pub(super) enum LinuxTerminalLaunchTemplateId {
     /// Provider-owned template corresponding to the POSIX-shell profile.
     PosixInteractiveShell,
     /// Provider-owned template corresponding to the Bash-shell profile.
@@ -43,7 +43,7 @@ pub(crate) enum LinuxTerminalLaunchTemplateId {
 impl LinuxTerminalLaunchTemplateId {
     /// Maps one admitted named terminal profile to its provider-owned template ID.
     #[must_use]
-    pub(crate) const fn for_profile(profile: TerminalProfile) -> Self {
+    pub(super) const fn for_profile(profile: TerminalProfile) -> Self {
         match profile {
             TerminalProfile::PosixShell => Self::PosixInteractiveShell,
             TerminalProfile::BashShell => Self::BashInteractiveShell,
@@ -53,7 +53,7 @@ impl LinuxTerminalLaunchTemplateId {
 
 /// Agent-owned forwarding-target policy decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ForwardingEgressDecision {
+pub(super) enum ForwardingEgressDecision {
     /// Exact validated forwarding target is permitted by provider policy.
     Allow,
     /// Exact validated forwarding target is denied by provider policy.
@@ -66,14 +66,14 @@ pub(crate) enum ForwardingEgressDecision {
 /// widen the loopback bind domain, introduce DNS, or receive raw request bytes.
 /// Production assembly must provide an explicitly reviewed implementation before
 /// any real socket adapter is wired.
-pub(crate) trait ForwardingEgressPolicy {
+pub(super) trait ForwardingEgressPolicy {
     /// Evaluates the exact validated forwarding specification.
     fn evaluate(&self, spec: TcpForwardSpec) -> ForwardingEgressDecision;
 }
 
 /// Fail-closed forwarding egress policy used before production policy selection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct DenyAllForwardingEgressPolicy;
+pub(super) struct DenyAllForwardingEgressPolicy;
 
 impl ForwardingEgressPolicy for DenyAllForwardingEgressPolicy {
     fn evaluate(&self, _spec: TcpForwardSpec) -> ForwardingEgressDecision {
@@ -83,7 +83,7 @@ impl ForwardingEgressPolicy for DenyAllForwardingEgressPolicy {
 
 /// Failure while assembling a bounded exact-target forwarding policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ExactForwardingEgressPolicyError {
+pub(super) enum ExactForwardingEgressPolicyError {
     /// More exact target entries were supplied than the locked policy bound.
     TooManyTargets,
 }
@@ -95,7 +95,7 @@ pub(crate) enum ExactForwardingEgressPolicyError {
 /// request text. Assembly is crate-internal and therefore remains outside request
 /// decoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExactForwardingEgressPolicy {
+pub(super) struct ExactForwardingEgressPolicy {
     allowed_targets: Box<[ForwardTarget]>,
 }
 
@@ -106,7 +106,7 @@ impl ExactForwardingEgressPolicy {
     ///
     /// Returns [`ExactForwardingEgressPolicyError::TooManyTargets`] when the
     /// caller supplies more than [`MAX_FORWARD_EGRESS_TARGETS`] entries.
-    pub(crate) fn try_from_targets(
+    pub(super) fn try_from_targets(
         targets: &[ForwardTarget],
     ) -> Result<Self, ExactForwardingEgressPolicyError> {
         if targets.len() > MAX_FORWARD_EGRESS_TARGETS {
@@ -127,7 +127,7 @@ impl ExactForwardingEgressPolicy {
 
     /// Returns the number of unique exact targets in the policy.
     #[must_use]
-    pub(crate) fn target_count(&self) -> usize {
+    pub(super) fn target_count(&self) -> usize {
         self.allowed_targets.len()
     }
 }
@@ -144,7 +144,7 @@ impl ForwardingEgressPolicy for ExactForwardingEgressPolicy {
 
 /// Locked TCP half-close behavior for a future forwarding pump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ForwardingHalfClosePolicy {
+pub(super) enum ForwardingHalfClosePolicy {
     /// Propagate EOF to the peer write half, then continue draining the opposite
     /// direction until its EOF, explicit cancellation, or idle-timeout expiry.
     PropagateEofAndDrainPeer,
@@ -152,7 +152,7 @@ pub(crate) enum ForwardingHalfClosePolicy {
 
 /// One ordered provider-close stage for a future forwarding handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ForwardingCloseStage {
+pub(super) enum ForwardingCloseStage {
     /// Stop accepting new loopback connections first.
     StopAccepting,
     /// Cancel or close every currently owned forwarding connection next.
@@ -162,7 +162,7 @@ pub(crate) enum ForwardingCloseStage {
 }
 
 /// Locked forwarding close ordering used by later concrete provider review.
-pub(crate) const FORWARDING_CLOSE_ORDER: [ForwardingCloseStage; 3] = [
+pub(super) const FORWARDING_CLOSE_ORDER: [ForwardingCloseStage; 3] = [
     ForwardingCloseStage::StopAccepting,
     ForwardingCloseStage::CancelActiveConnections,
     ForwardingCloseStage::JoinWorkers,
@@ -170,7 +170,7 @@ pub(crate) const FORWARDING_CLOSE_ORDER: [ForwardingCloseStage; 3] = [
 
 /// Returns the locked forwarding half-close behavior.
 #[must_use]
-pub(crate) const fn forwarding_half_close_policy() -> ForwardingHalfClosePolicy {
+pub(super) const fn forwarding_half_close_policy() -> ForwardingHalfClosePolicy {
     ForwardingHalfClosePolicy::PropagateEofAndDrainPeer
 }
 

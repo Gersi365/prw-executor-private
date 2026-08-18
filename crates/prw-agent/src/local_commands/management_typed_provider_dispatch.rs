@@ -21,7 +21,7 @@ use super::status_snapshot::LocalAgentStatusSnapshot;
 
 /// Typed provider result retained before any local response-byte encoding decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LocalManagementTypedProviderResult {
+pub(super) enum LocalManagementTypedProviderResult {
     /// Existing bounded Agent status snapshot.
     AgentStatus(LocalAgentStatusSnapshot),
     /// Existing descriptor-anchored bounded directory listing.
@@ -38,7 +38,7 @@ pub(crate) enum LocalManagementTypedProviderResult {
 
 /// Fail-closed typed provider-dispatch failure before response encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalManagementTypedProviderDispatchError {
+pub(super) enum LocalManagementTypedProviderDispatchError {
     /// Supplied family authority does not match the admitted canonical command.
     AuthorityFamilyMismatch,
     /// File/transfer authority is not the exact filesystem authority owned by lifecycle.
@@ -68,7 +68,7 @@ pub(crate) enum LocalManagementTypedProviderDispatchError {
 ///
 /// Fails before provider mutation on authority-family, filesystem-authority, or
 /// principal-binding mismatch. Provider errors are retained as typed classifications.
-pub(crate) fn dispatch_admitted_management_command<T, F>(
+pub(super) fn dispatch_admitted_management_command<T, F>(
     admission: &LocalManagementAdmission,
     authority: LocalManagementFamilyAuthority<'_>,
     lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
@@ -119,7 +119,7 @@ where
 fn dispatch_file_command<T, F>(
     command: &BridgeCommand,
     authority: LocalManagementFamilyAuthority<'_>,
-    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+    lifecycle: &LocalManagementProviderLifecycle<'_, T, F>,
 ) -> Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>
 where
     T: TerminalBackend,
@@ -338,7 +338,7 @@ fn terminal_principal(
 ) -> Result<TerminalPrincipal, LocalManagementTypedProviderDispatchError> {
     authority
         .remote_session()
-        .map(|remote| remote.terminal_principal())
+        .map(super::management_authority::LocalManagementRemoteSessionAuthority::terminal_principal)
         .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)
 }
 
@@ -347,7 +347,7 @@ fn forwarding_principal(
 ) -> Result<ForwardingPrincipal, LocalManagementTypedProviderDispatchError> {
     authority
         .remote_session()
-        .map(|remote| remote.forwarding_principal())
+        .map(super::management_authority::LocalManagementRemoteSessionAuthority::forwarding_principal)
         .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)
 }
 

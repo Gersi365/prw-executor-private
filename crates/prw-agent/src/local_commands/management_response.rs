@@ -5,7 +5,7 @@
 //! command body used after typed provider dispatch. Provider errors are collapsed into the
 //! existing coarse local statuses and never serialize provider strings or host detail.
 
-use prw_file_service::{FileServiceError, RemoteDirectoryEntry, RemoteFileType, RemoteMetadata};
+use prw_file_service::{FileServiceError, RemoteDirectoryEntry, RemoteFileType};
 use prw_file_transfer::FileTransferError;
 use prw_forwarding::ForwardingError;
 use prw_terminal::TerminalError;
@@ -36,7 +36,7 @@ const FILE_TYPE_OTHER: u8 = 4;
 
 /// Defensive failure while encoding one successful typed provider result body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalManagementSuccessBodyEncodeError {
+pub(super) enum LocalManagementSuccessBodyEncodeError {
     /// Directory entry count did not fit the locked two-byte count field.
     DirectoryEntryCount,
     /// One provider entry name did not fit the locked two-byte name-length field.
@@ -56,21 +56,23 @@ pub(crate) enum LocalManagementSuccessBodyEncodeError {
 /// # Errors
 ///
 /// Returns only failures from the pre-existing terminal-response frame builder.
-pub(crate) fn build_management_provider_response(
+pub(super) fn build_management_provider_response(
     request_id: LocalIpcRequestId,
     result: Result<LocalManagementTypedProviderResult, LocalManagementTypedProviderDispatchError>,
 ) -> Result<LocalIpcFrame, LocalTerminalResponseBuildError> {
     match result {
-        Ok(result) => match encode_success_body(&result) {
-            Ok(body) => {
+        Ok(result) => encode_success_body(&result).map_or_else(
+            |_| {
+                build_terminal_response_frame(
+                    request_id,
+                    LocalAgentResponseStatus::InternalError,
+                    &[],
+                )
+            },
+            |body| {
                 build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body)
-            }
-            Err(_) => build_terminal_response_frame(
-                request_id,
-                LocalAgentResponseStatus::InternalError,
-                &[],
-            ),
-        },
+            },
+        ),
         Err(error) => build_terminal_response_frame(request_id, error_status(error), &[]),
     }
 }
@@ -90,7 +92,7 @@ pub(crate) fn build_management_provider_response(
 ///
 /// Rejects defensive count/name conversion failure or an encoded body above the
 /// existing local IPC response-body limit.
-pub(crate) fn encode_success_body(
+pub(super) fn encode_success_body(
     result: &LocalManagementTypedProviderResult,
 ) -> Result<Vec<u8>, LocalManagementSuccessBodyEncodeError> {
     let mut body = Vec::new();

@@ -1,0 +1,26 @@
+STATUS=RUNNING
+BASE_HEAD=ec419f2abab962c10631cd45851d13efd41f83c9
+RUN_ID=32125502834
+EDIT_RC=0
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_response.rs:69:
+                     &[],
+                 )
+             },
+-            |body| {
+-                build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body)
+-            },
++            |body| build_terminal_response_frame(request_id, LocalAgentResponseStatus::Ok, &body),
+         ),
+         Err(error) => build_terminal_response_frame(request_id, error_status(error), &[]),
+     }
+FMT_RC=1
+CORRECTIVE_SCOPE=INHERITED_PRW_AGENT_LINTS_ONLY
+VISIBILITY_CHANGE=pub(crate)_to_pub(super)_inside_crate_internal_management_modules
+LINT_SUPPRESSIONS_ADDED=NONE
+DEPENDENCY_STATE=UNCHANGED
+RUNTIME_NETWORK_ACTIVATION=NONE
+CORRECTIVE_RC=1
+STATUS=CORRECTIVE_STAGED_WITH_NEXT_WORKSPACE_CLIPPY_EVIDENCE
