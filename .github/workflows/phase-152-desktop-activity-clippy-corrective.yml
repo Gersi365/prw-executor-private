@@ -1,0 +1,119 @@
+name: Phase 152 Desktop Activity Clippy Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-local-activity-feed
+    paths:
+      - .github/workflows/phase-152-desktop-activity-clippy-corrective.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-desktop-activity-clippy-corrective
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Guard exact UI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "phase-152-desktop-local-activity-feed"
+          test "$(git hash-object apps/desktop/src/ui.rs)" = "e2fcf4e8149ccb7413cea272779ec7009044e962"
+
+      - name: Install desktop native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev
+
+      - name: Apply bounded structural corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+
+          replacements = {
+              "NavigationDestination::Activity => activity_page(activity_log),":
+                  "NavigationDestination::Activity => activity_page(&activity_log),",
+              "fn activity_page(activity_log: gtk::Label) -> gtk::Box {":
+                  "fn activity_page(activity_log: &gtk::Label) -> gtk::Box {",
+              "    page.append(&activity_log);":
+                  "    page.append(activity_log);",
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"guard failed for replacement: {old!r}")
+              text = text.replace(old, new, 1)
+
+          old_settings = '''fn settings_page(activity_log: gtk::Label) -> gtk::Box {
+    let page = page_shell(
+        "Settings",
+        "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
+    );
+    page.append(&section_label("Private DNS"));
+    page.append(&detail_label(
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
+    ));
+'''
+          new_settings = '''fn settings_shell() -> gtk::Box {
+    let page = page_shell(
+        "Settings",
+        "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
+    );
+    page.append(&section_label("Private DNS"));
+    page.append(&detail_label(
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
+    ));
+    page
+}
+
+fn settings_page(activity_log: gtk::Label) -> gtk::Box {
+    let page = settings_shell();
+'''
+          if text.count(old_settings) != 1:
+              raise SystemExit("settings_page structural guard failed")
+          text = text.replace(old_settings, new_settings, 1)
+          path.write_text(text)
+          PY
+
+      - name: Apply Clippy machine fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --fix --locked --package prw-desktop --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
+          cargo fmt --all
+
+      - name: Verify strict desktop Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --package prw-desktop --all-targets --all-features -- -D warnings
+          cargo fmt --all -- --check
+
+      - name: Commit bounded corrective and self-delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(git status --porcelain)"
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -v -E '^(apps/desktop/src/ui.rs|\.github/workflows/phase-152-desktop-activity-clippy-corrective.yml)$' || true)"
+          test -z "$unexpected"
+          rm .github/workflows/phase-152-desktop-activity-clippy-corrective.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/src/ui.rs .github/workflows/phase-152-desktop-activity-clippy-corrective.yml
+          git commit -m "phase 152 desktop: correct activity feed clippy"
+          git push origin HEAD:phase-152-desktop-local-activity-feed
