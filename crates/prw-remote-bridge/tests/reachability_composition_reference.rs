@@ -35,6 +35,11 @@ use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use prw_registry::{RegistryError, WorkspaceDeviceRegistry, WorkspaceRole};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
 
+// This test exercises the authenticated refresh path directly. Keep the publication candidate
+// accessor compile-linked as part of the same private semantic adapter without adding runtime work.
+const _: fn(&AuthenticatedCandidatePublication) -> &[ConnectivityCandidate] =
+    AuthenticatedCandidatePublication::candidates;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TestOnlyFreshnessAdmission;
 
@@ -56,18 +61,18 @@ struct ReachabilityCompositionReference {
 }
 
 impl ReachabilityCompositionReference {
-    fn new(plan: PeerConnectivityPlan, traversal: TestTraversalLifecycle) -> Self {
+    const fn new(plan: PeerConnectivityPlan, traversal: TestTraversalLifecycle) -> Self {
         Self {
             plan,
             current_traversal: Some(traversal),
         }
     }
 
-    fn plan(&self) -> &PeerConnectivityPlan {
+    const fn plan(&self) -> &PeerConnectivityPlan {
         &self.plan
     }
 
-    fn current_traversal(&self) -> Option<TestTraversalLifecycle> {
+    const fn current_traversal(&self) -> Option<TestTraversalLifecycle> {
         self.current_traversal
     }
 

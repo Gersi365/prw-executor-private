@@ -17,7 +17,7 @@ use aws_lc_rs::{
 };
 use candidate_reachability::{
     AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,
-    validate_authenticated_publication_admission,
+    refresh_from_authenticated_publication, validate_authenticated_publication_admission,
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
@@ -28,6 +28,15 @@ use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
 use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use prw_registry::{WorkspaceDeviceRegistry, WorkspaceRole};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
+
+// Keep the lower authenticated-refresh adapter compile-linked without invoking it here.
+// Bootstrap freshness remains an explicit verifier-owned gate in this reference harness.
+const _: fn(
+    &WorkspaceDeviceRegistry,
+    &AuthenticatedDeviceSession,
+    &AuthenticatedCandidatePublication,
+    &mut PeerConnectivityPlan,
+) -> Result<(), CandidateReachabilityError> = refresh_from_authenticated_publication;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestBootstrapState {
