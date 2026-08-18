@@ -424,6 +424,46 @@ impl<B: PortForwardBackend> PortForwardBroker<B> {
         forward.record.mark_closed();
         Ok(forward.record)
     }
+
+    /// Retries provider cleanup for one retained failed forwarding record.
+    ///
+    /// This operation is teardown-only. It never reactivates forwarding. On backend
+    /// failure the same failed record and handle remain tracked for a later cleanup
+    /// attempt. On success the handle is cleared, the record becomes `Closed`, and the
+    /// broker removes it.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown or non-`Failed` records before calling the backend. A missing
+    /// retained handle is an invalid state. Backend close failure preserves `Failed`.
+    pub fn retry_failed_close(
+        &mut self,
+        id: PortForwardId,
+    ) -> Result<PortForwardSession, ForwardingError> {
+        let mut forward = self
+            .sessions
+            .remove(&id)
+            .ok_or(ForwardingError::UnknownSession)?;
+        if forward.record.state() != ForwardingState::Failed {
+            self.sessions.insert(id, forward);
+            return Err(ForwardingError::InvalidState);
+        }
+
+        let Some(handle) = forward.handle.as_mut() else {
+            self.sessions.insert(id, forward);
+            return Err(ForwardingError::InvalidState);
+        };
+
+        if self.backend.close(handle).is_err() {
+            forward.record.mark_failed();
+            self.sessions.insert(id, forward);
+            return Err(ForwardingError::Backend);
+        }
+
+        forward.handle = None;
+        forward.record.mark_closed();
+        Ok(forward.record)
+    }
 }
 
 /// Stable Phase 134 forwarding failure classification.
@@ -684,6 +724,75 @@ mod tests {
         assert_eq!(
             broker.close_session(id(1)),
             Err(ForwardingError::InvalidState)
+        );
+    }
+
+    #[test]
+    fn failed_close_can_be_retried_to_closed_and_removed() {
+        let mut broker = PortForwardBroker::new(SpyBackend {
+            failure: FailureMode::Close,
+            ..SpyBackend::default()
+        });
+        broker
+            .open_session(id(2), principal(), spec(2201))
+            .expect("open");
+        assert_eq!(broker.close_session(id(2)), Err(ForwardingError::Backend));
+        assert_eq!(broker.backend.close_calls, 1);
+        assert_eq!(
+            broker.session(id(2)).expect("retained").state(),
+            ForwardingState::Failed
+        );
+
+        broker.backend.failure = FailureMode::None;
+        let closed = broker.retry_failed_close(id(2)).expect("retry close");
+        assert_eq!(closed.state(), ForwardingState::Closed);
+        assert_eq!(broker.backend.close_calls, 2);
+        assert!(broker.session(id(2)).is_none());
+        assert_eq!(
+            broker.close_session(id(2)),
+            Err(ForwardingError::UnknownSession)
+        );
+    }
+
+    #[test]
+    fn failed_close_retry_failure_retains_failed_record() {
+        let mut broker = PortForwardBroker::new(SpyBackend {
+            failure: FailureMode::Close,
+            ..SpyBackend::default()
+        });
+        broker
+            .open_session(id(3), principal(), spec(2202))
+            .expect("open");
+        assert_eq!(broker.close_session(id(3)), Err(ForwardingError::Backend));
+        assert_eq!(
+            broker.retry_failed_close(id(3)),
+            Err(ForwardingError::Backend)
+        );
+        assert_eq!(broker.backend.close_calls, 2);
+        assert_eq!(
+            broker.session(id(3)).expect("retained").state(),
+            ForwardingState::Failed
+        );
+    }
+
+    #[test]
+    fn failed_close_retry_rejects_active_or_unknown_before_backend_call() {
+        let mut broker = PortForwardBroker::new(SpyBackend::default());
+        broker
+            .open_session(id(4), principal(), spec(2203))
+            .expect("open");
+        assert_eq!(
+            broker.retry_failed_close(id(4)),
+            Err(ForwardingError::InvalidState)
+        );
+        assert_eq!(
+            broker.retry_failed_close(id(5)),
+            Err(ForwardingError::UnknownSession)
+        );
+        assert_eq!(broker.backend.close_calls, 0);
+        assert_eq!(
+            broker.session(id(4)).expect("active retained").state(),
+            ForwardingState::Active
         );
     }
 }
