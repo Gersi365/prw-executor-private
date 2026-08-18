@@ -12,6 +12,8 @@ use crate::ipc;
 use crate::management;
 use crate::state::{DesktopPresentationState, NavigationDestination};
 
+const EMPTY_LOCAL_ACTIVITY: &str = "No local validation events yet.";
+
 pub fn build(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -39,8 +41,9 @@ pub fn build(app: &adw::Application) {
         NavigationDestination::Overview.title(),
     );
 
+    let activity_log = local_activity_label();
     for destination in NavigationDestination::ALL.into_iter().skip(1) {
-        let page = destination_page(destination);
+        let page = destination_page(destination, activity_log.clone());
         let scroller = gtk::ScrolledWindow::new();
         scroller.set_hexpand(true);
         scroller.set_vexpand(true);
@@ -116,19 +119,19 @@ fn overview_page() -> (gtk::Box, gtk::Label, gtk::Label, gtk::Label) {
     (page, agent_label, dns_label, detail_label)
 }
 
-fn destination_page(destination: NavigationDestination) -> gtk::Box {
+fn destination_page(destination: NavigationDestination, activity_log: gtk::Label) -> gtk::Box {
     match destination {
         NavigationDestination::Overview => overview_page().0,
-        NavigationDestination::Machines => machines_page(),
-        NavigationDestination::Sessions => sessions_page(),
-        NavigationDestination::Files => files_page(),
-        NavigationDestination::Transfers => transfers_page(),
-        NavigationDestination::Activity => activity_page(),
-        NavigationDestination::Settings => settings_page(),
+        NavigationDestination::Machines => machines_page(activity_log),
+        NavigationDestination::Sessions => sessions_page(activity_log),
+        NavigationDestination::Files => files_page(activity_log),
+        NavigationDestination::Transfers => transfers_page(activity_log),
+        NavigationDestination::Activity => activity_page(&activity_log),
+        NavigationDestination::Settings => settings_page(activity_log),
     }
 }
 
-fn machines_page() -> gtk::Box {
+fn machines_page(activity_log: gtk::Label) -> gtk::Box {
     let page = page_shell(
         "Machines",
         "Dynamic reachability is represented by typed PRW identity and connectivity state. This desktop surface does not probe the network or infer device identity from IP addresses.",
@@ -142,8 +145,12 @@ fn machines_page() -> gtk::Box {
     page.append(&detail_label(
         "Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.",
     ));
-    append_connectivity_preview(&page);
+    append_connectivity_preview(&page, activity_log.clone());
+    append_forwarding_intent(&page, activity_log);
+    page
+}
 
+fn append_forwarding_intent(page: &gtk::Box, activity_log: gtk::Label) {
     page.append(&section_label("Port forwarding intent"));
     page.append(&detail_label(
         "Forwarding validation is loopback-bind only and accepts an explicit target IP. Validation does not open a listener or make the forwarding state Active.",
@@ -187,27 +194,39 @@ fn machines_page() -> gtk::Box {
         } else {
             LoopbackFamily::Ipv4
         };
-        match parsed {
-            (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) => {
-                match management::encode_forward_open(
-                    forward_id,
-                    family,
-                    bind_port,
-                    target_address,
-                    target_port,
-                ) {
-                    Ok(payload) => forward_result_output.set_text(&format!(
-                        "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
-                        payload.len()
-                    )),
-                    Err(_) => forward_result_output.set_text(
-                        "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
-                    ),
-                }
+        if let (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) = parsed {
+            if let Ok(payload) = management::encode_forward_open(
+                forward_id,
+                family,
+                bind_port,
+                target_address,
+                target_port,
+            ) {
+                forward_result_output.set_text(&format!(
+                    "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                    payload.len()
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: forwarding intent validated; no listener opened",
+                );
+            } else {
+                forward_result_output.set_text(
+                    "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: forwarding intent rejected by typed validation",
+                );
             }
-            _ => forward_result_output.set_text(
+        } else {
+            forward_result_output.set_text(
                 "Forward ID, bind port, explicit target IP and target port must be valid typed values.",
-            ),
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: forwarding input rejected before canonical request construction",
+            );
         }
     });
 
@@ -218,10 +237,9 @@ fn machines_page() -> gtk::Box {
     page.append(&target_port);
     page.append(&validate_forward);
     page.append(&forward_result);
-    page
 }
 
-fn sessions_page() -> gtk::Box {
+fn sessions_page(activity_log: gtk::Label) -> gtk::Box {
     let page = page_shell(
         "Sessions",
         "Build and validate the canonical terminal-open intent locally. Validation does not dispatch the request or claim that a terminal is open.",
@@ -252,24 +270,38 @@ fn sessions_page() -> gtk::Box {
             columns_input.text().parse::<u16>(),
             rows_input.text().parse::<u16>(),
         );
-        match parsed {
-            (Ok(session_id), Ok(columns), Ok(rows)) => match management::encode_terminal_open(
+        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {
+            if let Ok(payload) = management::encode_terminal_open(
                 session_id,
                 TerminalProfile::BashShell,
                 columns,
                 rows,
             ) {
-                Ok(payload) => result_output.set_text(&format!(
+                result_output.set_text(&format!(
                     "Validated canonical terminal-open request: {} bytes. Not dispatched; authoritative state remains unchanged.",
                     payload.len()
-                )),
-                Err(_) => result_output.set_text(
+                ));
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: terminal-open intent validated; session not opened",
+                );
+            } else {
+                result_output.set_text(
                     "Rejected by typed terminal/bridge validation. No request was dispatched.",
-                ),
-            },
-            _ => result_output.set_text(
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: terminal-open intent rejected by typed validation",
+                );
+            }
+        } else {
+            result_output.set_text(
                 "Session ID, columns and rows must be valid positive integer values within terminal bounds.",
-            ),
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: terminal input rejected before canonical request construction",
+            );
         }
     });
 
@@ -282,7 +314,7 @@ fn sessions_page() -> gtk::Box {
     page
 }
 
-fn files_page() -> gtk::Box {
+fn files_page(activity_log: gtk::Label) -> gtk::Box {
     let page = page_shell(
         "Files",
         "Validate a descriptor-safe PRW RemotePath and canonical file-list intent. The desktop does not select a host filesystem root and does not read files directly.",
@@ -298,14 +330,23 @@ fn files_page() -> gtk::Box {
     let path_input = path.clone();
     let result_output = result.clone();
     validate.connect_clicked(move |_| {
-        match management::encode_file_list(path_input.text().as_str()) {
-            Ok(payload) => result_output.set_text(&format!(
+        if let Ok(payload) = management::encode_file_list(path_input.text().as_str()) {
+            result_output.set_text(&format!(
                 "Validated canonical file-list request: {} bytes. No filesystem operation was performed.",
                 payload.len()
-            )),
-            Err(_) => result_output.set_text(
+            ));
+            record_local_activity(
+                &activity_log,
+                "LOCAL: file-list intent validated; filesystem not read",
+            );
+        } else {
+            result_output.set_text(
                 "Rejected by RemotePath/bridge validation. Absolute or escaping paths are not accepted.",
-            ),
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: file-list intent rejected by path/bridge validation",
+            );
         }
     });
 
@@ -316,7 +357,7 @@ fn files_page() -> gtk::Box {
     page
 }
 
-fn transfers_page() -> gtk::Box {
+fn transfers_page(activity_log: gtk::Label) -> gtk::Box {
     let page = page_shell(
         "Transfers",
         "Validate the canonical upload-begin plan. Progress and completion remain authoritative only after correlated provider acknowledgements.",
@@ -344,21 +385,34 @@ fn transfers_page() -> gtk::Box {
     validate.connect_clicked(move |_| {
         let Ok(total_bytes) = total_bytes_input.text().parse::<u64>() else {
             result_output.set_text("Total bytes must be a valid non-negative integer.");
+            record_local_activity(
+                &activity_log,
+                "LOCAL: upload-begin input rejected before canonical request construction",
+            );
             return;
         };
-        match management::encode_upload_begin(
+        if let Ok(payload) = management::encode_upload_begin(
             transfer_id_input.text().as_str(),
             destination_input.text().as_str(),
             total_bytes,
             [1; 32],
         ) {
-            Ok(payload) => result_output.set_text(&format!(
+            result_output.set_text(&format!(
                 "Validated canonical upload-begin request: {} bytes. Committed progress remains 0 until an authoritative acknowledgement.",
                 payload.len()
-            )),
-            Err(_) => result_output.set_text(
+            ));
+            record_local_activity(
+                &activity_log,
+                "LOCAL: upload-begin intent validated; committed progress remains 0",
+            );
+        } else {
+            result_output.set_text(
                 "Rejected by transfer/path/bridge validation. No upload state was advanced.",
-            ),
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: upload-begin intent rejected; upload state unchanged",
+            );
         }
     });
 
@@ -371,19 +425,24 @@ fn transfers_page() -> gtk::Box {
     page
 }
 
-fn activity_page() -> gtk::Box {
+fn activity_page(activity_log: &gtk::Label) -> gtk::Box {
     let page = page_shell(
         "Activity",
-        "Authoritative management outcomes will appear here only after correlated Agent/provider results exist.",
+        "Local validation events are shown separately from authoritative Agent/provider outcomes.",
     );
-    page.append(&section_label("Current state"));
+    page.append(&section_label("Local validation activity"));
     page.append(&detail_label(
-        "No local management operation is dispatched by this UI tranche, so the application intentionally does not fabricate an activity history.",
+        "These entries describe only typed request validation or disposable selection previews inside the desktop process. They are not evidence of remote execution.",
+    ));
+    page.append(activity_log);
+    page.append(&section_label("Authoritative outcomes"));
+    page.append(&detail_label(
+        "No local management operation is dispatched by this UI tranche, so the application intentionally does not fabricate an authoritative remote history.",
     ));
     page
 }
 
-fn settings_page() -> gtk::Box {
+fn settings_shell() -> gtk::Box {
     let page = page_shell(
         "Settings",
         "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
@@ -392,6 +451,11 @@ fn settings_page() -> gtk::Box {
     page.append(&detail_label(
         "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
     ));
+    page
+}
+
+fn settings_page(activity_log: gtk::Label) -> gtk::Box {
+    let page = settings_shell();
 
     let enabled = gtk::CheckButton::with_label("Enable private DNS request");
     enabled.set_active(true);
@@ -438,28 +502,47 @@ fn settings_page() -> gtk::Box {
                 dns_result_output.set_text(
                     "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
                 );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: private-DNS request rejected by resolver input validation",
+                );
                 return;
             }
         } else {
             dns_result_output.set_text(
                 "Resolver address and port must be supplied together, or both fields must be empty.",
             );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: private-DNS request rejected because resolver fields are incomplete",
+            );
             return;
         };
 
-        match management::validate_private_dns(
+        if management::validate_private_dns(
             enabled_input.is_active(),
             device_naming_input.is_active(),
             device_domain_input.text().as_str(),
             resolver,
             split_domain_input.text().as_str(),
-        ) {
-            Ok(_) => dns_result_output.set_text(
+        )
+        .is_ok()
+        {
+            dns_result_output.set_text(
                 "Validated private-DNS requested configuration. OS-applied state remains unchanged and is not claimed by this UI.",
-            ),
-            Err(_) => dns_result_output.set_text(
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: private-DNS requested configuration validated; OS state unchanged",
+            );
+        } else {
+            dns_result_output.set_text(
                 "Rejected by typed private-DNS validation. No operating-system DNS state was changed.",
-            ),
+            );
+            record_local_activity(
+                &activity_log,
+                "LOCAL: private-DNS request rejected by typed validation",
+            );
         }
     });
 
@@ -474,7 +557,7 @@ fn settings_page() -> gtk::Box {
     page
 }
 
-fn append_connectivity_preview(page: &gtk::Box) {
+fn append_connectivity_preview(page: &gtk::Box, activity_log: gtk::Label) {
     page.append(&section_label("Connectivity selection preview"));
     page.append(&detail_label(
         "Declare disposable observations below to preview the existing deterministic LocalDirect → InternetDirect → Relay → Offline selector. This does not probe the network.",
@@ -500,17 +583,33 @@ fn append_connectivity_preview(page: &gtk::Box) {
             selected_reachability(&relay_observation),
         ) {
             Ok(SelectedConnectivityPath::Candidate(candidate)) => {
+                let path = connectivity_path_label(candidate.kind());
                 connectivity_result_output.set_text(&format!(
-                    "Preview selected {} from disposable declared observations. No network probe or reachability publication occurred.",
-                    connectivity_path_label(candidate.kind())
+                    "Preview selected {path} from disposable declared observations. No network probe or reachability publication occurred."
                 ));
+                record_local_activity(
+                    &activity_log,
+                    &format!("LOCAL: connectivity preview selected {path}; no network probe"),
+                );
             }
-            Ok(SelectedConnectivityPath::Offline) => connectivity_result_output.set_text(
-                "Preview selected Offline because no declared candidate is Reachable. No network probe occurred.",
-            ),
-            Err(_) => connectivity_result_output.set_text(
-                "Connectivity preview could not construct the bounded disposable plan. No network state was changed.",
-            ),
+            Ok(SelectedConnectivityPath::Offline) => {
+                connectivity_result_output.set_text(
+                    "Preview selected Offline because no declared candidate is Reachable. No network probe occurred.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: connectivity preview selected Offline; no network probe",
+                );
+            }
+            Err(_) => {
+                connectivity_result_output.set_text(
+                    "Connectivity preview could not construct the bounded disposable plan. No network state was changed.",
+                );
+                record_local_activity(
+                    &activity_log,
+                    "LOCAL: connectivity preview rejected; network state unchanged",
+                );
+            }
         }
     });
     page.append(&preview_connectivity);
@@ -536,6 +635,21 @@ const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
         ConnectivityPathKind::LocalDirect => "LocalDirect",
         ConnectivityPathKind::InternetDirect => "InternetDirect",
         ConnectivityPathKind::Relay => "Relay",
+    }
+}
+
+fn local_activity_label() -> gtk::Label {
+    let label = detail_label(EMPTY_LOCAL_ACTIVITY);
+    label.set_selectable(true);
+    label
+}
+
+fn record_local_activity(activity_log: &gtk::Label, entry: &str) {
+    let current = activity_log.text();
+    if current == EMPTY_LOCAL_ACTIVITY {
+        activity_log.set_text(entry);
+    } else {
+        activity_log.set_text(&format!("{current}\n{entry}"));
     }
 }
 
