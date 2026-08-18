@@ -69,6 +69,9 @@ jobs:
           FOCUSED_CLIPPY_RC=$?
           cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
           WORKSPACE_CLIPPY_RC=$?
+
+          git checkout -- target
+          TARGET_RESTORE_RC=$?
           set -e
 
           AFTER_SHA="$(sha256sum "$SOURCE" | awk '{print $1}')"
@@ -86,6 +89,7 @@ jobs:
             "FOCUSED_TEST:$FOCUSED_TEST_RC" \
             "FOCUSED_CLIPPY:$FOCUSED_CLIPPY_RC" \
             "WORKSPACE_CLIPPY:$WORKSPACE_CLIPPY_RC" \
+            "TARGET_RESTORE:$TARGET_RESTORE_RC" \
             "DIFF_SCOPE:$DIFF_SCOPE_RC"; do
             name="${pair%%:*}"
             rc="${pair##*:}"
@@ -106,6 +110,7 @@ jobs:
             echo "FOCUSED_TEST_RC=$FOCUSED_TEST_RC"
             echo "FOCUSED_CLIPPY_RC=$FOCUSED_CLIPPY_RC"
             echo "WORKSPACE_CLIPPY_RC=$WORKSPACE_CLIPPY_RC"
+            echo "TARGET_RESTORE_RC=$TARGET_RESTORE_RC"
             echo "DIFF_SCOPE_RC=$DIFF_SCOPE_RC"
             echo "DIFF_PATHS=$(printf '%s,' "${DIFF_PATHS[@]}" | sed 's/,$//')"
             echo "SEMANTIC_CHANGE=CONST_QUALIFIER_ONLY"
