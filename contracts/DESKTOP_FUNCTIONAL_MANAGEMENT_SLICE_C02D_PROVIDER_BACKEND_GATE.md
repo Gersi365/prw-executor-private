@@ -1,6 +1,6 @@
 # Phase 152 Slice C02d — Provider Backend and Cleanup Recovery Gate
 
-Status: `DESIGN_LOCK / PURE_PROVIDER_POLICY_SEAM_STAGED / NO_OS_IO / NO_RUNTIME_ACTIVATION`
+Status: `DESIGN_LOCK / FORWARDING_BOUNDS_LOCKED / NO_OS_IO / NO_RUNTIME_ACTIVATION`
 
 Stacked predecessor: `6141ecf08976e26c99329592d52cbd8d736b0edf` (`phase-152-c02c-authority-foundation`).
 
@@ -8,9 +8,9 @@ Stacked predecessor: `6141ecf08976e26c99329592d52cbd8d736b0edf` (`phase-152-c02c
 
 C02c staged the complete crate-internal management path through authenticated admission, real Agent-owned authority, typed provider dispatch, deterministic local response encoding, and explicit lifecycle quiescence. It deliberately did not select concrete terminal or forwarding backends and did not wire management into production runtime.
 
-C02d prepares the provider layer for later concrete Linux adapters. The first staged source slice added provider-neutral cleanup recovery so retained failed backend handles can be explicitly drained. The second staged source slice adds pure Agent-owned provider policy seams without performing OS I/O: terminal profiles map only to provider-owned template identifiers, and forwarding egress has an explicit policy boundary with a fail-closed deny-all implementation before production target policy selection.
+C02d prepares the provider layer for later concrete Linux adapters. The first staged source slice added provider-neutral cleanup recovery so retained failed backend handles can be explicitly drained. The second staged slice added pure Agent-owned provider policy seams. The current design step additionally locks finite forwarding connection, timeout, buffer, half-close, cancellation, and join ordering by reusing existing Phase 140 transport bounds instead of introducing wider ad hoc limits.
 
-C02d does not authorize PTY creation, child-process spawning, TCP listeners, target connections, byte pumps, runtime wiring, production executable/environment selection, production forwarding allowlists, service activation, deployment, or C03.
+C02d still does not authorize PTY creation, child-process spawning, TCP listeners, target connections, byte pumps, runtime wiring, production terminal executable/environment selection, production forwarding allowlists, service activation, deployment, or C03.
 
 ## Provider-neutral cleanup recovery
 
@@ -53,7 +53,7 @@ Source tests prove the intended state machine, but remain unexecuted while the b
 
 ## Pure provider-policy source seam
 
-C02d now includes a crate-internal, OS-I/O-free Agent module at:
+C02d includes a crate-internal, OS-I/O-free Agent module at:
 
 `crates/prw-agent/src/local_commands/management_provider_backend_policy.rs`
 
@@ -82,14 +82,6 @@ The policy boundary receives no raw request bytes, DNS name, arbitrary bind addr
 
 A production allowlist/CIDR/port policy is not selected by C02d. Real forwarding connect remains blocked until such an Agent-owned policy is explicitly reviewed and wired before the concrete backend connection step.
 
-### Staged policy tests
-
-The pure-source tests, not yet executed, establish that:
-
-- each `TerminalProfile` maps only to its provider-owned template identifier;
-- the pre-production forwarding egress policy denies every validated specification;
-- the egress trait can represent an exact-spec allow policy without widening the typed forwarding domain.
-
 ## Terminal backend design lock
 
 The Phase 133 `TerminalBackend` boundary remains authoritative. A future Linux PTY adapter must preserve all existing type constraints.
@@ -111,7 +103,7 @@ A concrete backend may map the provider-owned C02d template identifiers only to 
 - startup scripts;
 - privilege instructions.
 
-The exact executable/template choices remain a later implementation review.
+Repository review found no existing `/bin/sh`, `/bin/bash`, or environment-clearing production precedent to reuse. C02d therefore does not invent terminal executable/environment values. Exact terminal materialization remains blocked pending a separate explicit lock.
 
 ### OS identity boundary
 
@@ -180,25 +172,41 @@ The typed domain allows any non-zero bind port, but a production backend must no
 
 No Linux capability, setuid helper, privileged service, firewall, or system setting may be added to make such binds succeed in C02d.
 
-### Connection/pump lifecycle
+### Locked forwarding connection/pump bounds
 
-Before real forwarding OS I/O is implemented, the concrete design must still lock finite numerical bounds for:
+C02d now locks finite values by reusing the already-reviewed Phase 140 remote-transport profile:
 
-- simultaneously accepted connections per forward;
-- aggregate forwarding connections per Agent/provider lifecycle;
-- connect timeout;
-- read/write or idle deadlines;
-- bounded buffer sizes;
-- half-close behavior;
-- listener cancellation;
-- active connection cancellation;
-- worker/pump join and teardown ordering.
+- maximum simultaneous accepted connections for one forwarding session: `32`;
+- maximum simultaneous forwarding connections across one Agent provider lifecycle: `32`;
+- target connect timeout: `5 seconds`;
+- inactivity/idle timeout: `30 seconds`;
+- per-direction copy buffer: `65,536 bytes` (`64 KiB`).
 
-C02d has not selected these production numerical values. Their absence remains an explicit blocker to a real forwarding adapter.
+The aggregate cap equals the per-forward cap, so one forward may consume the full provider connection budget but no combination of forwards may exceed 32 active connections. No per-forward multiplier can expand the aggregate surface.
 
-A forwarding handle must not detach listener or byte-pump workers. Successful close must cancel/close owned sockets and join owned workers before reporting provider close success.
+These values mirror the existing Phase 140 `MAX_REMOTE_BIDI_STREAMS = 32`, `OPERATION_TIMEOUT = 5s`, `IDLE_TIMEOUT = 30s`, and 64 KiB control/stream bound. C02d copies the reviewed design values into a pure Agent policy module; it does not add a dependency on `prw-remote-transport` and performs no network I/O.
 
-Close failure must retain sufficient handle state for later cleanup retry.
+### Half-close behavior
+
+The locked policy is `PropagateEofAndDrainPeer`:
+
+1. EOF in one direction is propagated as write-half completion to the peer side;
+2. the opposite direction continues draining;
+3. draining ends on opposite EOF, explicit cancellation, or the 30-second idle timeout;
+4. half-close never creates a detached background worker.
+
+### Listener/connection cancellation and join order
+
+A future concrete forwarding close must follow this order:
+
+1. `StopAccepting` — make the listener unable to admit new loopback connections;
+2. `CancelActiveConnections` — cancel/close every currently owned connection so blocked pumps can terminate;
+3. `JoinWorkers` — join every owned connection/pump worker;
+4. only then may `PortForwardBackend::close` report success.
+
+If any required close/join step cannot establish cleanup, backend close must fail and retain sufficient handle state for `retry_failed_close`.
+
+No forwarding worker may be detached or treated as cleaned merely because an owner object was dropped.
 
 ## No ambient privilege or network mutation
 
@@ -221,7 +229,7 @@ C02c `LocalManagementProviderLifecycle` remains the Agent-owned aggregate owner.
 
 The C02c rule remains unchanged: dropping active/failed provider state is not cleanup evidence.
 
-The new pure policy seam does not alter C02c admission, authority, response encoding, or lifecycle ownership.
+The new pure policy/bounds seam does not alter C02c admission, authority, response encoding, or lifecycle ownership.
 
 ## Staged C02d source slices
 
@@ -232,9 +240,11 @@ C02d currently stages only:
 3. source tests for those state transitions;
 4. provider-owned terminal template identifiers derived only from `TerminalProfile`;
 5. a pure forwarding egress policy interface and deny-all pre-production implementation;
-6. source tests for those policy seams;
-7. manual-only validation specification;
-8. corresponding contract/audit evidence.
+6. finite forwarding connection/timeout/buffer bounds derived from Phase 140 precedent;
+7. explicit forwarding half-close policy and close-stage ordering;
+8. source tests for those pure policy/bounds seams;
+9. manual-only validation specification;
+10. corresponding contract/audit evidence.
 
 No staged C02d source performs PTY/process/socket/thread I/O or connects the new seams to production runtime.
 
@@ -247,7 +257,7 @@ The build gate remains closed.
 - manual validation workflow: `STAGED / WORKFLOW_DISPATCH_ONLY / NOT_RUN`;
 - PTY/process execution: `NOT_RUN / NOT_AUTHORIZED`;
 - TCP listener/connect/pump execution: `NOT_RUN / NOT_AUTHORIZED`;
-- production executable/environment/cwd selection: `NOT_AUTHORIZED`;
+- production terminal executable/environment/cwd selection: `NOT_AUTHORIZED`;
 - production forwarding egress allowlist selection: `NOT_AUTHORIZED`;
 - runtime wiring: `NOT_AUTHORIZED`;
 - deployment/privileged changes: `NOT_AUTHORIZED`;
@@ -255,11 +265,13 @@ The build gate remains closed.
 
 ## Next reviewed step
 
-Concrete OS adapter source remains blocked. The next C02d design step is to lock the remaining materialization and lifecycle values without performing OS I/O:
+Forwarding lifecycle numerics are now locked, but concrete OS adapter source remains blocked.
 
-1. exact fixed terminal executable/argument templates;
-2. fixed/minimal terminal environment and trusted working-directory policy;
-3. forwarding connection-count, timeout, buffer, half-close, cancellation, join, and teardown bounds;
-4. production forwarding egress policy shape and assembly ownership.
+The next safe C02d design work is narrower:
 
-Only after those values are explicitly locked and build validation is separately authorized should Linux PTY or TCP adapter implementation begin.
+1. lock exact fixed terminal executable/argument templates;
+2. lock fixed/minimal terminal environment and trusted working-directory policy;
+3. lock production forwarding egress policy shape and assembly ownership without selecting request-controlled targets;
+4. separately authorize and run build validation.
+
+Only after terminal materialization and production egress policy are explicitly locked, and build validation is separately authorized, should Linux PTY or TCP adapter implementation begin.
