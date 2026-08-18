@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::glib;
+use prw_connectivity::{ConnectivityPathKind, ReachabilityObservation, SelectedConnectivityPath};
 use prw_forwarding::LoopbackFamily;
 use prw_terminal::TerminalProfile;
 
@@ -40,7 +41,16 @@ pub fn build(app: &adw::Application) {
 
     for destination in NavigationDestination::ALL.into_iter().skip(1) {
         let page = destination_page(destination);
-        stack.add_titled(&page, Some(destination.stack_name()), destination.title());
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hexpand(true);
+        scroller.set_vexpand(true);
+        scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+        scroller.set_child(Some(&page));
+        stack.add_titled(
+            &scroller,
+            Some(destination.stack_name()),
+            destination.title(),
+        );
     }
 
     let sidebar = gtk::StackSidebar::new();
@@ -132,6 +142,7 @@ fn machines_page() -> gtk::Box {
     page.append(&detail_label(
         "Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.",
     ));
+    append_connectivity_preview(&page);
 
     page.append(&section_label("Port forwarding intent"));
     page.append(&detail_label(
@@ -461,6 +472,71 @@ fn settings_page() -> gtk::Box {
     page.append(&validate_dns);
     page.append(&dns_result);
     page
+}
+
+fn append_connectivity_preview(page: &gtk::Box) {
+    page.append(&section_label("Connectivity selection preview"));
+    page.append(&detail_label(
+        "Declare disposable observations below to preview the existing deterministic LocalDirect → InternetDirect → Relay → Offline selector. This does not probe the network.",
+    ));
+
+    let local_observation = reachability_selector();
+    let internet_observation = reachability_selector();
+    let relay_observation = reachability_selector();
+    page.append(&detail_label("LocalDirect observation"));
+    page.append(&local_observation);
+    page.append(&detail_label("InternetDirect observation"));
+    page.append(&internet_observation);
+    page.append(&detail_label("Relay observation"));
+    page.append(&relay_observation);
+
+    let connectivity_result = management_result_label();
+    let preview_connectivity = gtk::Button::with_label("Preview selected connectivity path");
+    let connectivity_result_output = connectivity_result.clone();
+    preview_connectivity.connect_clicked(move |_| {
+        match management::select_disposable_connectivity_path(
+            selected_reachability(&local_observation),
+            selected_reachability(&internet_observation),
+            selected_reachability(&relay_observation),
+        ) {
+            Ok(SelectedConnectivityPath::Candidate(candidate)) => {
+                connectivity_result_output.set_text(&format!(
+                    "Preview selected {} from disposable declared observations. No network probe or reachability publication occurred.",
+                    connectivity_path_label(candidate.kind())
+                ));
+            }
+            Ok(SelectedConnectivityPath::Offline) => connectivity_result_output.set_text(
+                "Preview selected Offline because no declared candidate is Reachable. No network probe occurred.",
+            ),
+            Err(_) => connectivity_result_output.set_text(
+                "Connectivity preview could not construct the bounded disposable plan. No network state was changed.",
+            ),
+        }
+    });
+    page.append(&preview_connectivity);
+    page.append(&connectivity_result);
+}
+
+fn reachability_selector() -> gtk::DropDown {
+    let selector = gtk::DropDown::from_strings(&["Unknown", "Reachable", "Unreachable"]);
+    selector.set_selected(0);
+    selector
+}
+
+fn selected_reachability(selector: &gtk::DropDown) -> ReachabilityObservation {
+    match selector.selected() {
+        1 => ReachabilityObservation::Reachable,
+        2 => ReachabilityObservation::Unreachable,
+        _ => ReachabilityObservation::Unknown,
+    }
+}
+
+const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
+    match kind {
+        ConnectivityPathKind::LocalDirect => "LocalDirect",
+        ConnectivityPathKind::InternetDirect => "InternetDirect",
+        ConnectivityPathKind::Relay => "Relay",
+    }
 }
 
 fn section_label(title: &str) -> gtk::Label {
