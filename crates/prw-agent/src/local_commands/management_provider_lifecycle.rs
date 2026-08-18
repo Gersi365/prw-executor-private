@@ -64,9 +64,19 @@ where
         &mut self.transfers
     }
 
+    /// Returns the terminal broker for principal-binding inspection.
+    pub(crate) const fn terminal(&self) -> &TerminalBroker<T> {
+        &self.terminal
+    }
+
     /// Returns the terminal broker for typed terminal operations.
     pub(crate) fn terminal_mut(&mut self) -> &mut TerminalBroker<T> {
         &mut self.terminal
+    }
+
+    /// Returns the forwarding broker for principal-binding inspection.
+    pub(crate) const fn forwarding(&self) -> &PortForwardBroker<F> {
+        &self.forwarding
     }
 
     /// Returns the forwarding broker for typed forwarding operations.
