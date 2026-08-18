@@ -1,8 +1,9 @@
-//! Phase 152 C02e Tranche 3 provider-neutral candidate-publication freshness representation.
+//! Phase 152 C02e verifier-owned candidate-publication freshness representation.
 //!
-//! This source selects the production value representation and durable lifecycle states only.
-//! It does not select the upper reachability owner, persistence backend, synchronization
-//! primitive, wire message, runtime task, or network transport.
+//! Tranche 3 selected the production token/lifecycle representation. Tranche 4 consumes this
+//! representation from the production reachability owner and durable compare-and-commit seam.
+//! This module still selects no database product, persistence serialization, wire message, socket,
+//! async runtime, network transport, Agent bootstrap activation, or deployment behavior.
 
 use std::fmt;
 
