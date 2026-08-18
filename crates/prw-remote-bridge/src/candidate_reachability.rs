@@ -118,6 +118,52 @@ pub fn publish_current_candidates(
     })
 }
 
+/// Revalidates requester, publisher, workspace and exact target currentness without mutating the
+/// target connectivity plan.
+///
+/// This source-only precheck exists so a later upper composition authority can place its
+/// independent publication-freshness comparison after current identity/workspace admission but
+/// before candidate-plan mutation.
+///
+/// Admission order is intentionally fixed:
+///
+/// 1. requester authenticated session is registry-current;
+/// 2. publisher authenticated session is registry-current;
+/// 3. requester and publisher share the same current workspace;
+/// 4. publication peer exactly matches the target plan and publisher device;
+/// 5. target transport identity remains registry-current.
+///
+/// # Errors
+///
+/// Fails closed on stale/cross-workspace/retargeted identity. The supplied plan is never mutated.
+pub fn validate_authenticated_publication_admission(
+    registry: &WorkspaceDeviceRegistry,
+    requester_session: &AuthenticatedDeviceSession,
+    publication: &AuthenticatedCandidatePublication,
+    plan: &PeerConnectivityPlan,
+) -> Result<(), CandidateReachabilityError> {
+    let requester = registry
+        .validate_authenticated_session(requester_session)
+        .map_err(CandidateReachabilityError::Registry)?;
+    let publisher = registry
+        .validate_authenticated_session(publication.publisher_session())
+        .map_err(CandidateReachabilityError::Registry)?;
+
+    if requester.workspace_id() != publisher.workspace_id() {
+        return Err(CandidateReachabilityError::WorkspaceMismatch);
+    }
+    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
+        return Err(CandidateReachabilityError::PublicationTargetMismatch);
+    }
+
+    registry
+        .validate_transport_identity(
+            publication.peer().device_id(),
+            publication.peer().transport_identity(),
+        )
+        .map_err(CandidateReachabilityError::Registry)
+}
+
 /// Applies one publication only after requester, publisher, workspace and target currentness.
 ///
 /// Admission order is intentionally fixed:
@@ -141,26 +187,12 @@ pub fn refresh_from_authenticated_publication(
     publication: &AuthenticatedCandidatePublication,
     plan: &mut PeerConnectivityPlan,
 ) -> Result<(), CandidateReachabilityError> {
-    let requester = registry
-        .validate_authenticated_session(requester_session)
-        .map_err(CandidateReachabilityError::Registry)?;
-    let publisher = registry
-        .validate_authenticated_session(publication.publisher_session())
-        .map_err(CandidateReachabilityError::Registry)?;
-
-    if requester.workspace_id() != publisher.workspace_id() {
-        return Err(CandidateReachabilityError::WorkspaceMismatch);
-    }
-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
-        return Err(CandidateReachabilityError::PublicationTargetMismatch);
-    }
-
-    registry
-        .validate_transport_identity(
-            publication.peer().device_id(),
-            publication.peer().transport_identity(),
-        )
-        .map_err(CandidateReachabilityError::Registry)?;
+    validate_authenticated_publication_admission(
+        registry,
+        requester_session,
+        publication,
+        plan,
+    )?;
 
     plan.refresh_candidates(publication.candidates.clone())
         .map_err(CandidateReachabilityError::Connectivity)
