@@ -98,6 +98,45 @@ impl PolicyEvaluator for BoundedLocalReadPolicy {
     }
 }
 
+/// Explicit decision bundle for the reviewed local-management capability surface.
+///
+/// Using a named bundle keeps every capability decision visible while avoiding an
+/// order-sensitive multi-argument policy constructor. Capabilities absent from this
+/// bundle are not implicitly granted by the resulting policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoundedLocalManagementDecisions {
+    /// Agent status-read decision.
+    pub agent_status: Decision,
+    /// Existing private-DNS read decision retained for the local command surface.
+    pub private_dns: Decision,
+    /// Terminal-open decision.
+    pub terminal_open: Decision,
+    /// Terminal execution/I/O decision.
+    pub terminal_exec: Decision,
+    /// File/read-download decision.
+    pub files_read: Decision,
+    /// File/create-upload decision.
+    pub files_write: Decision,
+    /// Forwarding-create/close decision.
+    pub forwarding_create: Decision,
+}
+
+impl BoundedLocalManagementDecisions {
+    /// Creates the explicit fail-closed decision bundle.
+    #[must_use]
+    pub const fn deny_all() -> Self {
+        Self {
+            agent_status: Decision::Deny,
+            private_dns: Decision::Deny,
+            terminal_open: Decision::Deny,
+            terminal_exec: Decision::Deny,
+            files_read: Decision::Deny,
+            files_write: Decision::Deny,
+            forwarding_create: Decision::Deny,
+        }
+    }
+}
+
 /// Explicit bounded policy for the currently represented local management bridge.
 ///
 /// This type is a configuration primitive only. Constructing it does not authenticate
@@ -109,66 +148,33 @@ impl PolicyEvaluator for BoundedLocalReadPolicy {
 /// There is intentionally no `allow_all` constructor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoundedLocalManagementPolicy {
-    agent_status: Decision,
-    private_dns: Decision,
-    terminal_open: Decision,
-    terminal_exec: Decision,
-    files_read: Decision,
-    files_write: Decision,
-    forwarding_create: Decision,
+    decisions: BoundedLocalManagementDecisions,
 }
 
 impl BoundedLocalManagementPolicy {
-    /// Creates one fully explicit management policy.
-    ///
-    /// Every currently admitted bridge capability must be supplied independently;
-    /// omitted or unsupported capabilities cannot become implicitly allowed.
+    /// Creates one fully explicit management policy from named capability decisions.
     #[must_use]
-    pub const fn new(
-        agent_status: Decision,
-        private_dns: Decision,
-        terminal_open: Decision,
-        terminal_exec: Decision,
-        files_read: Decision,
-        files_write: Decision,
-        forwarding_create: Decision,
-    ) -> Self {
-        Self {
-            agent_status,
-            private_dns,
-            terminal_open,
-            terminal_exec,
-            files_read,
-            files_write,
-            forwarding_create,
-        }
+    pub const fn new(decisions: BoundedLocalManagementDecisions) -> Self {
+        Self { decisions }
     }
 
     /// Creates the fail-closed management policy.
     #[must_use]
     pub const fn deny_all() -> Self {
-        Self::new(
-            Decision::Deny,
-            Decision::Deny,
-            Decision::Deny,
-            Decision::Deny,
-            Decision::Deny,
-            Decision::Deny,
-            Decision::Deny,
-        )
+        Self::new(BoundedLocalManagementDecisions::deny_all())
     }
 }
 
 impl PolicyEvaluator for BoundedLocalManagementPolicy {
     fn evaluate(&self, capability: Capability) -> Decision {
         match capability {
-            Capability::AgentStatusRead => self.agent_status,
-            Capability::PrivateDnsConfigRead => self.private_dns,
-            Capability::TerminalOpen => self.terminal_open,
-            Capability::TerminalExec => self.terminal_exec,
-            Capability::FilesRead => self.files_read,
-            Capability::FilesWrite => self.files_write,
-            Capability::ForwardingCreate => self.forwarding_create,
+            Capability::AgentStatusRead => self.decisions.agent_status,
+            Capability::PrivateDnsConfigRead => self.decisions.private_dns,
+            Capability::TerminalOpen => self.decisions.terminal_open,
+            Capability::TerminalExec => self.decisions.terminal_exec,
+            Capability::FilesRead => self.decisions.files_read,
+            Capability::FilesWrite => self.decisions.files_write,
+            Capability::ForwardingCreate => self.decisions.forwarding_create,
             Capability::FilesDelete | Capability::DeviceManage | Capability::PolicyManage => {
                 Decision::Deny
             }
@@ -179,8 +185,8 @@ impl PolicyEvaluator for BoundedLocalManagementPolicy {
 #[cfg(test)]
 mod tests {
     use super::{
-        BoundedLocalManagementPolicy, BoundedLocalReadPolicy, Capability, Decision,
-        PolicyEvaluator,
+        BoundedLocalManagementDecisions, BoundedLocalManagementPolicy, BoundedLocalReadPolicy,
+        Capability, Decision, PolicyEvaluator,
     };
 
     struct DenyAll;
@@ -276,15 +282,15 @@ mod tests {
 
     #[test]
     fn management_policy_configures_only_existing_bridge_capabilities() {
-        let policy = BoundedLocalManagementPolicy::new(
-            Decision::Allow,
-            Decision::Deny,
-            Decision::Allow,
-            Decision::Deny,
-            Decision::Allow,
-            Decision::Deny,
-            Decision::Allow,
-        );
+        let policy = BoundedLocalManagementPolicy::new(BoundedLocalManagementDecisions {
+            agent_status: Decision::Allow,
+            private_dns: Decision::Deny,
+            terminal_open: Decision::Allow,
+            terminal_exec: Decision::Deny,
+            files_read: Decision::Allow,
+            files_write: Decision::Deny,
+            forwarding_create: Decision::Allow,
+        });
 
         assert_eq!(policy.evaluate(Capability::AgentStatusRead), Decision::Allow);
         assert_eq!(
@@ -303,15 +309,15 @@ mod tests {
 
     #[test]
     fn management_policy_always_denies_unrepresented_high_risk_capabilities() {
-        let policy = BoundedLocalManagementPolicy::new(
-            Decision::Allow,
-            Decision::Allow,
-            Decision::Allow,
-            Decision::Allow,
-            Decision::Allow,
-            Decision::Allow,
-            Decision::Allow,
-        );
+        let policy = BoundedLocalManagementPolicy::new(BoundedLocalManagementDecisions {
+            agent_status: Decision::Allow,
+            private_dns: Decision::Allow,
+            terminal_open: Decision::Allow,
+            terminal_exec: Decision::Allow,
+            files_read: Decision::Allow,
+            files_write: Decision::Allow,
+            forwarding_create: Decision::Allow,
+        });
 
         for capability in [
             Capability::FilesDelete,
@@ -344,6 +350,7 @@ mod tests {
     #[test]
     fn bounded_management_policy_is_copy_send_sync() {
         fn assert_copy_send_sync<T: Copy + Send + Sync>() {}
+        assert_copy_send_sync::<BoundedLocalManagementDecisions>();
         assert_copy_send_sync::<BoundedLocalManagementPolicy>();
     }
 }
