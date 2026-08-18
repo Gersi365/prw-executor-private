@@ -15,7 +15,7 @@ use prw_remote_bridge::{BridgeCommand, RemoteBridgeError};
 /// Pure client-side failure while composing one typed local management request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalManagementClientError {
-    /// Canonical PRWC encoding rejected the typed operation.
+    /// Canonical PRWC encoding or decoding rejected the typed operation.
     Bridge(RemoteBridgeError),
     /// Agent-owned local command-3 framing rejected the encoded body.
     Local(LocalManagementRequestBuildError),
@@ -42,6 +42,26 @@ pub fn build_bridge_management_request(
         .map_err(LocalManagementClientError::Local)
 }
 
+/// Revalidates one canonical PRWC payload as an existing [`BridgeCommand`]
+/// before delegating to the typed local command-3 request builder.
+///
+/// This is a presentation/integration adapter only: canonical bridge bytes are
+/// not an alternate command schema, and successful construction still performs
+/// no socket I/O, authorization, dispatch, acknowledgement, or completion.
+///
+/// # Errors
+///
+/// Rejects malformed canonical PRWC payloads and preserves local command-3
+/// framing failures through the existing client error surface.
+pub fn build_encoded_bridge_management_request(
+    request_id: LocalIpcRequestId,
+    bridge_payload: &[u8],
+) -> Result<LocalIpcFrame, LocalManagementClientError> {
+    let command =
+        BridgeCommand::decode(bridge_payload).map_err(LocalManagementClientError::Bridge)?;
+    build_bridge_management_request(request_id, &command)
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
@@ -62,7 +82,7 @@ mod tests {
     use prw_remote_bridge::BridgeCommand;
     use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
 
-    use super::build_bridge_management_request;
+    use super::{build_bridge_management_request, build_encoded_bridge_management_request};
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
@@ -127,6 +147,26 @@ mod tests {
             assert_eq!(decoded, command);
             assert_eq!(decoded.required_capability(), expected_capability);
         }
+    }
+
+    #[test]
+    fn encoded_bridge_adapter_reuses_command_three_without_alternate_schema() {
+        let command = BridgeCommand::FileList(
+            RemotePath::parse("workspace").expect("valid relative path"),
+        );
+        let bridge_payload = command.encode().expect("canonical PRWC encoding");
+        let frame = build_encoded_bridge_management_request(id(156), &bridge_payload)
+            .expect("encoded canonical bridge payload builds local request");
+
+        assert_eq!(frame.header().request_id(), id(156));
+        assert_eq!(&frame.payload().as_bytes()[..2], &[0, 3]);
+        assert_eq!(
+            &frame.payload().as_bytes()[LOCAL_MANAGEMENT_REQUEST_PREFIX_LENGTH..],
+            bridge_payload.as_slice()
+        );
+        let local = decode_local_management_request_frame(&frame)
+            .expect("Agent-owned management envelope decodes");
+        assert_eq!(local.bridge_payload(), bridge_payload.as_slice());
     }
 
     #[test]
