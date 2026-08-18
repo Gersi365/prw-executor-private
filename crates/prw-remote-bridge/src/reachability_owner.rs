@@ -638,7 +638,7 @@ where
         Ok(self.mode)
     }
 
-    fn require_current(&self) -> Result<(), ReachabilityOwnerError> {
+    const fn require_current(&self) -> Result<(), ReachabilityOwnerError> {
         match self.mode {
             ReachabilityOwnerMode::Current => Ok(()),
             ReachabilityOwnerMode::RecoveryRequired => {
