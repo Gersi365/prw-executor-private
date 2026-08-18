@@ -1,0 +1,77 @@
+PHASE=152-C02e-Tranche3-Freshness
+BASE_HEAD=846ed8965756bc96d9125fa17f67b25b4d09e681
+RUSTC=rustc 1.97.1 (8bab26f4f 2026-07-14)
+CARGO=cargo 1.97.1 (c980f4866 2026-06-30)
+RUSTFMT=rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+CLIPPY=clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GTK4=4.14.5
+LIBADWAITA=1.5.0
+LOCK_SHA256_BEFORE=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+LOCK_SHA256_AFTER=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+ROOT_MANIFEST_SHA256_BEFORE=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+ROOT_MANIFEST_SHA256_AFTER=cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503
+BRIDGE_MANIFEST_SHA256_BEFORE=c710efc174437ba69ae09ebbb3d184c11f03e6662cd335900a5ba7528701d3a5
+BRIDGE_MANIFEST_SHA256_AFTER=c710efc174437ba69ae09ebbb3d184c11f03e6662cd335900a5ba7528701d3a5
+SOURCE_SHA256_BEFORE=32b108c7191275ec782ecdb0c3876a2ad461ffcd50b04779d427205e28414619
+SOURCE_SHA256_AFTER=32b108c7191275ec782ecdb0c3876a2ad461ffcd50b04779d427205e28414619
+TEST_SHA256_BEFORE=e88bc1a9c42a6835d85e54e324409d5b34c7394c789326ae9d2461cc907833ab
+TEST_SHA256_AFTER=e88bc1a9c42a6835d85e54e324409d5b34c7394c789326ae9d2461cc907833ab
+LOCKED_METADATA_RC=0
+FORMAT_RC=1
+FOCUSED_TEST_RC=SKIPPED
+FOCUSED_CLIPPY_RC=SKIPPED
+WORKSPACE_CLIPPY_RC=SKIPPED
+WORKSPACE_TESTS_RC=SKIPPED
+WORKSPACE_BUILD_RC=SKIPPED
+PRE_NORMALIZE_DRIFT_RC=0
+TARGET_RESTORE_RC=0
+HASH_DRIFT_RC=0
+FINAL_DRIFT_RC=0
+PRE_NORMALIZE_TRACKED_DIFF=
+FINAL_TRACKED_DIFF=
+TOKEN_REPRESENTATION=OPAQUE_NONZERO_32_BYTES
+LIFECYCLE_STATES=NEW_LIFECYCLE_ELIGIBLE,ESTABLISHED,RECOVERY_REQUIRED,RETIRED
+NETWORK_RUNTIME_ACTIVATION=NO
+PRODUCTION_UPPER_OWNER_SELECTION=NO
+WIRE_KIND_SELECTION=NO
+FIRST_FAILURE=FORMAT
+STATUS=FAIL
+
+===== FORMAT FAILURE TAIL =====
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_publication_freshness.rs:17:
+ /// must generate each installed token from a cryptographically secure verifier-owned entropy
+ /// source and must never accept an all-zero value as a current or bootstrap token.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+-pub struct CandidatePublicationFreshnessToken(
+-    [u8; CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES],
+-);
++pub struct CandidatePublicationFreshnessToken([u8; CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES]);
+ 
+ impl CandidatePublicationFreshnessToken {
+     /// Creates one exact non-zero opaque token from verifier-owned bytes.
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/candidate_publication_freshness_representation.rs:48:
+     let bootstrap = token(2);
+     let established = token(3);
+ 
+-    let new_record = CandidatePublicationFreshnessRecord::new_lifecycle_eligible(
+-        target.clone(),
+-        bootstrap,
+-    );
++    let new_record =
++        CandidatePublicationFreshnessRecord::new_lifecycle_eligible(target.clone(), bootstrap);
+     let established_record =
+         CandidatePublicationFreshnessRecord::established(target.clone(), established);
+     let recovery_record = CandidatePublicationFreshnessRecord::recovery_required(target.clone());
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/candidate_publication_freshness_representation.rs:104:
+ fn retired_exact_peer_identity_remains_distinct_from_new_lifecycle_eligibility() {
+     let historical_peer = peer("target-retired-freshness-representation", 12);
+     let retired = CandidatePublicationFreshnessRecord::retired(historical_peer.clone());
+-    let hypothetical_new = CandidatePublicationFreshnessRecord::new_lifecycle_eligible(
+-        historical_peer,
+-        token(13),
+-    );
++    let hypothetical_new =
++        CandidatePublicationFreshnessRecord::new_lifecycle_eligible(historical_peer, token(13));
+ 
+     assert_ne!(retired.lifecycle(), hypothetical_new.lifecycle());
+     assert_eq!(retired.lifecycle().current_token(), None);
