@@ -42,6 +42,11 @@ pub(crate) mod management_authority;
 pub(crate) mod management_dispatch;
 #[allow(
     dead_code,
+    reason = "C02c complete typed management execution seam is intentionally not runtime-wired"
+)]
+pub(crate) mod management_execution;
+#[allow(
+    dead_code,
     reason = "C02c provider lifecycle ownership seam is intentionally not runtime-wired"
 )]
 pub(crate) mod management_provider_lifecycle;
