@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Freshness Bootstrap Clippy Corrective
+name: PRW Phase 152 C02e Reference Harness Clippy Corrective
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-c02e-freshness-bootstrap-clippy-corrective
+  group: prw-phase-152-c02e-reference-harness-clippy-corrective
   cancel-in-progress: true
 
 jobs:
@@ -24,13 +24,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply exact bootstrap-reference const correctives and capture next lint
+      - name: Apply exact reference-harness lint correctives and capture next lint
         id: corrective
         shell: bash
         run: |
           set -u -o pipefail
           BASE_HEAD="$(git rev-parse HEAD)"
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_FRESHNESS_BOOTSTRAP_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_REFERENCE_HARNESS_CLIPPY_CORRECTIVE_${BASE_HEAD}.txt"
           mkdir -p "$(dirname "${REPORT}")"; : > "${REPORT}"
           echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
           overall=0
@@ -51,20 +51,37 @@ jobs:
             set +e
             python3 - <<'PY' 2>&1 | tee -a "${REPORT}"
           from pathlib import Path
-          p = Path('crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs')
-          s = p.read_text()
+
+          bootstrap = Path('crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs')
+          s = bootstrap.read_text()
+          old_use = '''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    validate_authenticated_publication_admission,\n};\n'''
+          new_use = '''use candidate_reachability::{\n    AuthenticatedCandidatePublication, CandidateReachabilityError, publish_current_candidates,\n    refresh_from_authenticated_publication, validate_authenticated_publication_admission,\n};\n'''
+          assert s.count(old_use) == 1, ('bootstrap use block', s.count(old_use))
+          s = s.replace(old_use, new_use, 1)
+          anchor = '''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n'''
+          linkage = '''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n// Keep the lower authenticated-refresh adapter compile-linked without invoking it here.\n// Bootstrap freshness remains an explicit verifier-owned gate in this reference harness.\nconst _: fn(\n    &WorkspaceDeviceRegistry,\n    &AuthenticatedDeviceSession,\n    &AuthenticatedCandidatePublication,\n    &mut PeerConnectivityPlan,\n) -> Result<(), CandidateReachabilityError> = refresh_from_authenticated_publication;\n\n'''
+          assert s.count(anchor) == 1, ('bootstrap linkage anchor', s.count(anchor))
+          s = s.replace(anchor, linkage, 1)
+          bootstrap.write_text(s)
+
+          composition = Path('crates/prw-remote-bridge/tests/reachability_composition_reference.rs')
+          s = composition.read_text()
+          anchor = '''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n'''
+          linkage = '''use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};\n\n// This test exercises the authenticated refresh path directly. Keep the publication candidate\n// accessor compile-linked as part of the same private semantic adapter without adding runtime work.\nconst _: fn(&AuthenticatedCandidatePublication) -> &[ConnectivityCandidate] =\n    AuthenticatedCandidatePublication::candidates;\n\n'''
+          assert s.count(anchor) == 1, ('composition linkage anchor', s.count(anchor))
+          s = s.replace(anchor, linkage, 1)
           replacements = [
-              ('    fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {\n',
-               '    const fn new_lifecycle(plan: PeerConnectivityPlan, bootstrap: TestBootstrapState) -> Self {\n'),
-              ('    fn recovery_required(plan: PeerConnectivityPlan) -> Self {\n',
-               '    const fn recovery_required(plan: PeerConnectivityPlan) -> Self {\n'),
+              ('    fn new(plan: PeerConnectivityPlan, traversal: TestTraversalLifecycle) -> Self {\n',
+               '    const fn new(plan: PeerConnectivityPlan, traversal: TestTraversalLifecycle) -> Self {\n'),
               ('    fn plan(&self) -> &PeerConnectivityPlan {\n',
                '    const fn plan(&self) -> &PeerConnectivityPlan {\n'),
+              ('    fn current_traversal(&self) -> Option<TestTraversalLifecycle> {\n',
+               '    const fn current_traversal(&self) -> Option<TestTraversalLifecycle> {\n'),
           ]
           for old, new in replacements:
               assert s.count(old) == 1, (old, s.count(old))
               s = s.replace(old, new, 1)
-          p.write_text(s)
+          composition.write_text(s)
           PY
             edit_rc=${PIPESTATUS[0]}
             set -u -o pipefail
@@ -93,14 +110,16 @@ jobs:
           cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || fail 73
           sha256sum Cargo.toml Cargo.lock crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
           diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || fail 74
-
           git restore --source=HEAD -- target/.rustc_info.json 2>/dev/null || true
+
           changed="$(git diff --name-only)"
-          expected='crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs'
+          expected=$'crates/prw-remote-bridge/tests/reachability_composition_reference.rs\ncrates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs'
           [[ "${changed}" = "${expected}" ]] || { record "UNEXPECTED_CHANGED_PATHS=${changed}"; fail 75; }
 
-          record 'SOURCE_MUTATION=crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs'
-          record 'CONST_FN_CORRECTIVES=new_lifecycle,recovery_required,plan'
+          record 'SOURCE_MUTATIONS=reachability_composition_reference.rs,reachability_freshness_bootstrap_reference.rs'
+          record 'COMPILE_LINKAGE_ONLY=refresh_from_authenticated_publication,AuthenticatedCandidatePublication::candidates'
+          record 'CONST_FN_CORRECTIVES=ReachabilityCompositionReference::new,plan,current_traversal'
+          record 'LINT_SUPPRESSIONS_ADDED=NONE'
           record 'DEPENDENCY_STATE=UNCHANGED'
           record 'RUNTIME_NETWORK_ACTIVATION=NONE'
           record "CORRECTIVE_RC=${overall}"
@@ -111,7 +130,7 @@ jobs:
           fi
           echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
 
-      - name: Commit bootstrap corrective and evidence
+      - name: Commit reference-harness correctives and evidence
         if: always()
         shell: bash
         env:
@@ -123,9 +142,12 @@ jobs:
           git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs "${REPORT}"
+          git add \
+            crates/prw-remote-bridge/tests/reachability_composition_reference.rs \
+            crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs \
+            "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: apply freshness bootstrap lint correctives ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: apply reference harness lint correctives ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Surface focused Clippy result
