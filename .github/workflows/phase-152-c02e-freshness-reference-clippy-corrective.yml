@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Agent Clippy Probe
+name: PRW Phase 152 C02e Agent Visibility Corrective
 
 on:
   push:
@@ -15,8 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  probe:
-    name: Probe locked prw-agent Clippy without source mutation
+  correct:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -25,74 +24,92 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run source-neutral prw-agent Clippy probe
-        id: probe
+      - name: Apply exact visibility corrective and capture focused Clippy
+        id: corrective
         shell: bash
         run: |
           set -u -o pipefail
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_AGENT_CLIPPY_PROBE_${GITHUB_SHA}.txt"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_AGENT_VISIBILITY_CORRECTIVE_${BASE_HEAD}.txt"
           mkdir -p "$(dirname "${REPORT}")"; : > "${REPORT}"
           overall=0; first_failure=""
           record(){ printf '%s\n' "$*" | tee -a "${REPORT}"; }
-          gate(){
-            local name="$1" command="$2"
-            if [[ "${overall}" -ne 0 ]]; then record "GATE_${name}=SKIPPED_AFTER_${first_failure}"; return 0; fi
-            record "===== GATE ${name} ====="
-            set +e; bash -o pipefail -c "${command}" 2>&1 | tee -a "${REPORT}"; local rc=${PIPESTATUS[0]}; set -u -o pipefail
-            record "GATE_${name}_RC=${rc}"
-            if [[ "${rc}" -ne 0 ]]; then overall="${rc}"; first_failure="${name}"; fi
-          }
-
+          fail(){ [[ ${overall} -ne 0 ]] || { overall="$1"; first_failure="$2"; }; }
           record STATUS=RUNNING
-          record WORKFLOW=phase-152-c02e-agent-clippy-probe
+          record "BASE_HEAD=${BASE_HEAD}"
           record "RUN_ID=${GITHUB_RUN_ID}"
           record "REF=${GITHUB_REF_NAME}"
-          record "HEAD=${GITHUB_SHA}"
-          record "SOURCE_PARENT=$(git rev-parse HEAD^)"
-          record FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
-          gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD && test \"$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)\" = \"857583b25ed1206317641a93fd8f927819c954d8\""
-          gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
+          [[ "${BASE_HEAD}" = "${GITHUB_SHA}" ]] || fail 70 lineage
+          [[ "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design" ]] || fail 71 lineage
+          git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD || fail 72 lineage
+          test "$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)" = "857583b25ed1206317641a93fd8f927819c954d8" || fail 73 lineage
 
-          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
-          gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml"
-          gate fmt "cargo fmt --all -- --check"
-          gate agent_clippy "cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings"
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
 
+          if [[ ${overall} -eq 0 ]]; then
+            set +e
+            python3 - <<'PY' 2>&1 | tee -a "${REPORT}"
+          from pathlib import Path
+          p=Path('crates/prw-agent/src/local_commands/management_dispatch.rs')
+          s=p.read_text()
+          old='''    pub(crate) fn from_agent_owned_authority(\n'''
+          new='''    pub(super) fn from_agent_owned_authority(\n'''
+          assert s.count(old) == 1, ('visibility anchor count', s.count(old))
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+            edit_rc=${PIPESTATUS[0]}
+            set -u -o pipefail
+            record "EDIT_RC=${edit_rc}"
+            [[ ${edit_rc} -eq 0 ]] || fail ${edit_rc} edit
+          fi
+
+          if [[ ${overall} -eq 0 ]]; then
+            set +e; cargo fmt --all -- --check 2>&1 | tee -a "${REPORT}"; rc=${PIPESTATUS[0]}; set -u -o pipefail
+            record "FMT_RC=${rc}"; [[ ${rc} -eq 0 ]] || fail ${rc} fmt
+          fi
+          if [[ ${overall} -eq 0 ]]; then
+            set +e; cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings 2>&1 | tee -a "${REPORT}"; rc=${PIPESTATUS[0]}; set -u -o pipefail
+            record "AGENT_CLIPPY_RC=${rc}"; [[ ${rc} -eq 0 ]] || fail ${rc} agent_clippy
+          fi
+
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || fail 74 dependency_drift
           sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
-          drift_rc=0
-          diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || drift_rc=$?
-          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift_rc=$?
-          git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >> "${REPORT}" 2>&1 || drift_rc=$?
-          record "ZERO_DEPENDENCY_DRIFT_RC=${drift_rc}"
-          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then overall="${drift_rc}"; first_failure=dependency_source_drift; fi
-          record SOURCE_MUTATION=NONE
+          diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || fail 75 dependency_drift
+          git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
+          changed="$(git diff --name-only)"
+          [[ "${changed}" = "crates/prw-agent/src/local_commands/management_dispatch.rs" ]] || { record "UNEXPECTED_CHANGED_PATHS=${changed}"; fail 76 changed_paths; }
+          record SOURCE_MUTATION=crates/prw-agent/src/local_commands/management_dispatch.rs
+          record VISIBILITY_CORRECTIVE=LocalManagementAuthorityContext::from_agent_owned_authority_pub_crate_to_pub_super
+          record LINT_SUPPRESSIONS_ADDED=NONE
+          record DEPENDENCY_STATE=UNCHANGED
           record RUNTIME_NETWORK_ACTIVATION=NONE
-          if [[ "${overall}" -eq 0 ]]; then record STATUS=PASS_AGENT_CLIPPY; record FIRST_FAILURE=NONE; else record STATUS=FAIL; record "FIRST_FAILURE=${first_failure}"; fi
-          record "PROBE_RC=${overall}"
-          echo "probe_rc=${overall}" >> "${GITHUB_OUTPUT}"
+          if [[ ${overall} -eq 0 ]]; then record STATUS=PASS_AGENT_CLIPPY; record FIRST_FAILURE=NONE; else record STATUS=FAIL; record "FIRST_FAILURE=${first_failure}"; fi
+          record "CORRECTIVE_RC=${overall}"
+          echo "rc=${overall}" >> "${GITHUB_OUTPUT}"
           echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
 
-      - name: Commit probe evidence only
+      - name: Commit source corrective and evidence
         if: always()
         shell: bash
         env:
-          REPORT: ${{ steps.probe.outputs.report }}
+          REPORT: ${{ steps.corrective.outputs.report }}
         run: |
           set -euo pipefail
           test -n "${REPORT}"; test -f "${REPORT}"
           git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- "${REPORT}"
+          git add crates/prw-agent/src/local_commands/management_dispatch.rs "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: record agent clippy probe ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: align agent authority visibility ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
-      - name: Surface probe result
+      - name: Surface corrective result
         if: always()
         shell: bash
         env:
-          PROBE_RC: ${{ steps.probe.outputs.probe_rc }}
+          CORRECTIVE_RC: ${{ steps.corrective.outputs.rc }}
         run: |
           set -euo pipefail
-          test -n "${PROBE_RC}"; test "${PROBE_RC}" -eq 0
+          test -n "${CORRECTIVE_RC}"; test "${CORRECTIVE_RC}" -eq 0
