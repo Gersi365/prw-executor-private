@@ -295,7 +295,7 @@ impl ReachabilityFreshnessWireMessage {
 /// # Errors
 ///
 /// Rejects any lifecycle other than `NewLifecycleEligible`.
-pub fn bootstrap_token_delivery(
+pub const fn bootstrap_token_delivery(
     record: &CandidatePublicationFreshnessRecord,
 ) -> Result<ReachabilityFreshnessWireMessage, ReachabilityFreshnessWireError> {
     let CandidatePublicationFreshnessLifecycle::NewLifecycleEligible(token) = record.lifecycle()
