@@ -1,10 +1,14 @@
+use std::net::IpAddr;
 use std::sync::mpsc::{self, TryRecvError};
 use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::glib;
+use prw_forwarding::LoopbackFamily;
+use prw_terminal::TerminalProfile;
 
 use crate::ipc;
+use crate::management;
 use crate::state::{DesktopPresentationState, NavigationDestination};
 
 pub fn build(app: &adw::Application) {
@@ -35,7 +39,7 @@ pub fn build(app: &adw::Application) {
     );
 
     for destination in NavigationDestination::ALL.into_iter().skip(1) {
-        let page = placeholder_page(destination);
+        let page = destination_page(destination);
         stack.add_titled(&page, Some(destination.stack_name()), destination.title());
     }
 
@@ -60,25 +64,32 @@ pub fn build(app: &adw::Application) {
     start_startup_probe(agent_label, dns_label, detail_label);
 }
 
-fn overview_page() -> (gtk::Box, gtk::Label, gtk::Label, gtk::Label) {
-    let page = gtk::Box::new(gtk::Orientation::Vertical, 18);
+fn page_shell(title: &str, subtitle: &str) -> gtk::Box {
+    let page = gtk::Box::new(gtk::Orientation::Vertical, 14);
     page.set_margin_top(32);
     page.set_margin_bottom(32);
     page.set_margin_start(32);
     page.set_margin_end(32);
 
-    let title = gtk::Label::new(Some("Overview"));
-    title.set_xalign(0.0);
-    title.add_css_class("title-1");
-    page.append(&title);
+    let title_label = gtk::Label::new(Some(title));
+    title_label.set_xalign(0.0);
+    title_label.add_css_class("title-1");
+    page.append(&title_label);
 
-    let subtitle = gtk::Label::new(Some(
-        "Read-only local Agent status. Phase 151 performs no production network mutation.",
-    ));
-    subtitle.set_xalign(0.0);
-    subtitle.set_wrap(true);
-    subtitle.add_css_class("dim-label");
-    page.append(&subtitle);
+    let subtitle_label = gtk::Label::new(Some(subtitle));
+    subtitle_label.set_xalign(0.0);
+    subtitle_label.set_wrap(true);
+    subtitle_label.add_css_class("dim-label");
+    page.append(&subtitle_label);
+
+    page
+}
+
+fn overview_page() -> (gtk::Box, gtk::Label, gtk::Label, gtk::Label) {
+    let page = page_shell(
+        "Overview",
+        "Read-only local Agent status. Management activation remains capability-gated.",
+    );
 
     let agent_label = section_label("Agent status");
     page.append(&agent_label);
@@ -95,6 +106,363 @@ fn overview_page() -> (gtk::Box, gtk::Label, gtk::Label, gtk::Label) {
     (page, agent_label, dns_label, detail_label)
 }
 
+fn destination_page(destination: NavigationDestination) -> gtk::Box {
+    match destination {
+        NavigationDestination::Overview => overview_page().0,
+        NavigationDestination::Machines => machines_page(),
+        NavigationDestination::Sessions => sessions_page(),
+        NavigationDestination::Files => files_page(),
+        NavigationDestination::Transfers => transfers_page(),
+        NavigationDestination::Activity => activity_page(),
+        NavigationDestination::Settings => settings_page(),
+    }
+}
+
+fn machines_page() -> gtk::Box {
+    let page = page_shell(
+        "Machines",
+        "Dynamic reachability is represented by typed PRW identity and connectivity state. This desktop surface does not probe the network or infer device identity from IP addresses.",
+    );
+
+    page.append(&section_label("Identity boundary"));
+    page.append(&detail_label(
+        "DeviceId remains the logical machine identity. TransportIdentity may rotate independently; IP/port endpoints remain transient reachability candidates.",
+    ));
+    page.append(&section_label("Live reachability"));
+    page.append(&detail_label(
+        "Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.",
+    ));
+
+    page.append(&section_label("Port forwarding intent"));
+    page.append(&detail_label(
+        "Forwarding validation is loopback-bind only and accepts an explicit target IP. Validation does not open a listener or make the forwarding state Active.",
+    ));
+
+    let forward_id = gtk::Entry::builder()
+        .placeholder_text("Forward ID")
+        .text("1")
+        .build();
+    let bind_port = gtk::Entry::builder()
+        .placeholder_text("Loopback bind port")
+        .text("8080")
+        .build();
+    let ipv6_bind = gtk::CheckButton::with_label("Use IPv6 loopback bind (::1)");
+    let target_address = gtk::Entry::builder()
+        .placeholder_text("Explicit target IP")
+        .text("127.0.0.1")
+        .build();
+    let target_port = gtk::Entry::builder()
+        .placeholder_text("Target TCP port")
+        .text("22")
+        .build();
+    let forward_result = management_result_label();
+    let validate_forward = gtk::Button::with_label("Validate forwarding intent");
+
+    let forward_id_input = forward_id.clone();
+    let bind_port_input = bind_port.clone();
+    let ipv6_bind_input = ipv6_bind.clone();
+    let target_address_input = target_address.clone();
+    let target_port_input = target_port.clone();
+    let forward_result_output = forward_result.clone();
+    validate_forward.connect_clicked(move |_| {
+        let parsed = (
+            forward_id_input.text().parse::<u64>(),
+            bind_port_input.text().parse::<u16>(),
+            target_address_input.text().parse::<IpAddr>(),
+            target_port_input.text().parse::<u16>(),
+        );
+        let family = if ipv6_bind_input.is_active() {
+            LoopbackFamily::Ipv6
+        } else {
+            LoopbackFamily::Ipv4
+        };
+        match parsed {
+            (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) => {
+                match management::encode_forward_open(
+                    forward_id,
+                    family,
+                    bind_port,
+                    target_address,
+                    target_port,
+                ) {
+                    Ok(payload) => forward_result_output.set_text(&format!(
+                        "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                        payload.len()
+                    )),
+                    Err(_) => forward_result_output.set_text(
+                        "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
+                    ),
+                }
+            }
+            _ => forward_result_output.set_text(
+                "Forward ID, bind port, explicit target IP and target port must be valid typed values.",
+            ),
+        }
+    });
+
+    page.append(&forward_id);
+    page.append(&bind_port);
+    page.append(&ipv6_bind);
+    page.append(&target_address);
+    page.append(&target_port);
+    page.append(&validate_forward);
+    page.append(&forward_result);
+    page
+}
+
+fn sessions_page() -> gtk::Box {
+    let page = page_shell(
+        "Sessions",
+        "Build and validate the canonical terminal-open intent locally. Validation does not dispatch the request or claim that a terminal is open.",
+    );
+
+    let session_id = gtk::Entry::builder()
+        .placeholder_text("Session ID")
+        .text("1")
+        .build();
+    let columns = gtk::Entry::builder()
+        .placeholder_text("Columns")
+        .text("120")
+        .build();
+    let rows = gtk::Entry::builder()
+        .placeholder_text("Rows")
+        .text("40")
+        .build();
+    let result = management_result_label();
+    let validate = gtk::Button::with_label("Validate terminal open intent");
+
+    let session_id_input = session_id.clone();
+    let columns_input = columns.clone();
+    let rows_input = rows.clone();
+    let result_output = result.clone();
+    validate.connect_clicked(move |_| {
+        let parsed = (
+            session_id_input.text().parse::<u64>(),
+            columns_input.text().parse::<u16>(),
+            rows_input.text().parse::<u16>(),
+        );
+        match parsed {
+            (Ok(session_id), Ok(columns), Ok(rows)) => match management::encode_terminal_open(
+                session_id,
+                TerminalProfile::BashShell,
+                columns,
+                rows,
+            ) {
+                Ok(payload) => result_output.set_text(&format!(
+                    "Validated canonical terminal-open request: {} bytes. Not dispatched; authoritative state remains unchanged.",
+                    payload.len()
+                )),
+                Err(_) => result_output.set_text(
+                    "Rejected by typed terminal/bridge validation. No request was dispatched.",
+                ),
+            },
+            _ => result_output.set_text(
+                "Session ID, columns and rows must be valid positive integer values within terminal bounds.",
+            ),
+        }
+    });
+
+    page.append(&section_label("Terminal request"));
+    page.append(&session_id);
+    page.append(&columns);
+    page.append(&rows);
+    page.append(&validate);
+    page.append(&result);
+    page
+}
+
+fn files_page() -> gtk::Box {
+    let page = page_shell(
+        "Files",
+        "Validate a descriptor-safe PRW RemotePath and canonical file-list intent. The desktop does not select a host filesystem root and does not read files directly.",
+    );
+
+    let path = gtk::Entry::builder()
+        .placeholder_text("Relative remote path")
+        .text("workspace")
+        .build();
+    let result = management_result_label();
+    let validate = gtk::Button::with_label("Validate file-list intent");
+
+    let path_input = path.clone();
+    let result_output = result.clone();
+    validate.connect_clicked(move |_| {
+        match management::encode_file_list(path_input.text().as_str()) {
+            Ok(payload) => result_output.set_text(&format!(
+                "Validated canonical file-list request: {} bytes. No filesystem operation was performed.",
+                payload.len()
+            )),
+            Err(_) => result_output.set_text(
+                "Rejected by RemotePath/bridge validation. Absolute or escaping paths are not accepted.",
+            ),
+        }
+    });
+
+    page.append(&section_label("Directory request"));
+    page.append(&path);
+    page.append(&validate);
+    page.append(&result);
+    page
+}
+
+fn transfers_page() -> gtk::Box {
+    let page = page_shell(
+        "Transfers",
+        "Validate the canonical upload-begin plan. Progress and completion remain authoritative only after correlated provider acknowledgements.",
+    );
+
+    let transfer_id = gtk::Entry::builder()
+        .placeholder_text("32-character transfer ID")
+        .text("abababababababababababababababab")
+        .build();
+    let destination = gtk::Entry::builder()
+        .placeholder_text("Relative destination")
+        .text("uploads/demo.bin")
+        .build();
+    let total_bytes = gtk::Entry::builder()
+        .placeholder_text("Total bytes")
+        .text("1024")
+        .build();
+    let result = management_result_label();
+    let validate = gtk::Button::with_label("Validate upload-begin intent");
+
+    let transfer_id_input = transfer_id.clone();
+    let destination_input = destination.clone();
+    let total_bytes_input = total_bytes.clone();
+    let result_output = result.clone();
+    validate.connect_clicked(move |_| {
+        let Ok(total_bytes) = total_bytes_input.text().parse::<u64>() else {
+            result_output.set_text("Total bytes must be a valid non-negative integer.");
+            return;
+        };
+        match management::encode_upload_begin(
+            transfer_id_input.text().as_str(),
+            destination_input.text().as_str(),
+            total_bytes,
+            [1; 32],
+        ) {
+            Ok(payload) => result_output.set_text(&format!(
+                "Validated canonical upload-begin request: {} bytes. Committed progress remains 0 until an authoritative acknowledgement.",
+                payload.len()
+            )),
+            Err(_) => result_output.set_text(
+                "Rejected by transfer/path/bridge validation. No upload state was advanced.",
+            ),
+        }
+    });
+
+    page.append(&section_label("Upload plan"));
+    page.append(&transfer_id);
+    page.append(&destination);
+    page.append(&total_bytes);
+    page.append(&validate);
+    page.append(&result);
+    page
+}
+
+fn activity_page() -> gtk::Box {
+    let page = page_shell(
+        "Activity",
+        "Authoritative management outcomes will appear here only after correlated Agent/provider results exist.",
+    );
+    page.append(&section_label("Current state"));
+    page.append(&detail_label(
+        "No local management operation is dispatched by this UI tranche, so the application intentionally does not fabricate an activity history.",
+    ));
+    page
+}
+
+fn settings_page() -> gtk::Box {
+    let page = page_shell(
+        "Settings",
+        "Configuration surfaces remain validation-first. Operating-system DNS or privileged network mutation is not enabled in Phase 152.",
+    );
+    page.append(&section_label("Private DNS"));
+    page.append(&detail_label(
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
+    ));
+
+    let enabled = gtk::CheckButton::with_label("Enable private DNS request");
+    enabled.set_active(true);
+    let device_naming = gtk::CheckButton::with_label("Enable device naming");
+    device_naming.set_active(true);
+    let device_domain = gtk::Entry::builder()
+        .placeholder_text("Device domain suffix")
+        .text("prw.internal")
+        .build();
+    let resolver_address = gtk::Entry::builder()
+        .placeholder_text("Resolver IP (optional)")
+        .text("127.0.0.1")
+        .build();
+    let resolver_port = gtk::Entry::builder()
+        .placeholder_text("Resolver port (optional)")
+        .text("53")
+        .build();
+    let split_domain = gtk::Entry::builder()
+        .placeholder_text("Split domain suffix (optional)")
+        .text("dev.internal")
+        .build();
+    let dns_result = management_result_label();
+    let validate_dns = gtk::Button::with_label("Validate private DNS request");
+
+    let enabled_input = enabled.clone();
+    let device_naming_input = device_naming.clone();
+    let device_domain_input = device_domain.clone();
+    let resolver_address_input = resolver_address.clone();
+    let resolver_port_input = resolver_port.clone();
+    let split_domain_input = split_domain.clone();
+    let dns_result_output = dns_result.clone();
+    validate_dns.connect_clicked(move |_| {
+        let resolver_address = resolver_address_input.text();
+        let resolver_port = resolver_port_input.text();
+        let resolver = if resolver_address.is_empty() && resolver_port.is_empty() {
+            None
+        } else if !resolver_address.is_empty() && !resolver_port.is_empty() {
+            if let (Ok(address), Ok(port)) = (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                Some((address, port))
+            } else {
+                dns_result_output.set_text(
+                    "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                );
+                return;
+            }
+        } else {
+            dns_result_output.set_text(
+                "Resolver address and port must be supplied together, or both fields must be empty.",
+            );
+            return;
+        };
+
+        match management::validate_private_dns(
+            enabled_input.is_active(),
+            device_naming_input.is_active(),
+            device_domain_input.text().as_str(),
+            resolver,
+            split_domain_input.text().as_str(),
+        ) {
+            Ok(_) => dns_result_output.set_text(
+                "Validated private-DNS requested configuration. OS-applied state remains unchanged and is not claimed by this UI.",
+            ),
+            Err(_) => dns_result_output.set_text(
+                "Rejected by typed private-DNS validation. No operating-system DNS state was changed.",
+            ),
+        }
+    });
+
+    page.append(&enabled);
+    page.append(&device_naming);
+    page.append(&device_domain);
+    page.append(&resolver_address);
+    page.append(&resolver_port);
+    page.append(&split_domain);
+    page.append(&validate_dns);
+    page.append(&dns_result);
+    page
+}
+
 fn section_label(title: &str) -> gtk::Label {
     let label = gtk::Label::new(Some(title));
     label.set_xalign(0.0);
@@ -103,27 +471,16 @@ fn section_label(title: &str) -> gtk::Label {
     label
 }
 
-fn placeholder_page(destination: NavigationDestination) -> gtk::Box {
-    let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    page.set_margin_top(32);
-    page.set_margin_bottom(32);
-    page.set_margin_start(32);
-    page.set_margin_end(32);
+fn detail_label(text: &str) -> gtk::Label {
+    let label = gtk::Label::new(Some(text));
+    label.set_xalign(0.0);
+    label.set_wrap(true);
+    label.add_css_class("dim-label");
+    label
+}
 
-    let title = gtk::Label::new(Some(destination.title()));
-    title.set_xalign(0.0);
-    title.add_css_class("title-1");
-    page.append(&title);
-
-    let detail = gtk::Label::new(Some(
-        "Not implemented in Phase 151. No capability is implied by this navigation surface.",
-    ));
-    detail.set_xalign(0.0);
-    detail.set_wrap(true);
-    detail.add_css_class("dim-label");
-    page.append(&detail);
-
-    page
+fn management_result_label() -> gtk::Label {
+    detail_label("No request validated yet.")
 }
 
 fn start_startup_probe(agent_label: gtk::Label, dns_label: gtk::Label, detail_label: gtk::Label) {
