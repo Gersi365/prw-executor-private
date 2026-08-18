@@ -1,151 +1,200 @@
 # PRW Phase 152 C02c Authority Foundation Audit
 
-Status: `SOURCE_SEAM_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED`
+Status: `IMPLEMENTATION_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_RUNTIME_ACTIVATION`
 
 - repository_id: `1334911207`
 - canonical_repository: `powercode2026/prw-executor-private`
 - frozen_predecessor: `01f5466504684ea6a2c504613901d24018485887`
 - branch: `phase-152-c02c-authority-foundation`
-- implementation_head_before_audit_refresh: `e2344a34d0bc21e02935ee789f940cc3fc1028e8`
+- implementation_head_before_audit_refresh: `dbf62628a2e96d2febabc3922acccb7199dfe642`
 
 ## Scope
 
-C02c resumes Phase 152 implementation after successful real-host reconciliation. It now stages the Agent-owned authority, explicit management policy, provider lifecycle, and typed provider-dispatch seams required before any response encoding or production activation can be reviewed.
+C02c resumes Phase 152 after successful real-host reconciliation and stages the smallest complete crate-internal management implementation seam that remains unreachable from production runtime.
 
-Changed files relative to the frozen predecessor before this audit refresh:
+Changed files relative to the frozen predecessor immediately before this audit refresh:
 
 - `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md`
 - `crates/prw-agent/Cargo.toml`
 - `crates/prw-agent/src/local_commands.rs`
 - `crates/prw-agent/src/local_commands/management_authority.rs`
 - `crates/prw-agent/src/local_commands/management_dispatch.rs`
+- `crates/prw-agent/src/local_commands/management_execution.rs`
 - `crates/prw-agent/src/local_commands/management_provider_lifecycle.rs`
+- `crates/prw-agent/src/local_commands/management_response.rs`
 - `crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs`
 - `crates/prw-policy/src/lib.rs`
 - this audit file
 
 Static compare result immediately before this audit refresh:
 
-- branch relation: `ahead 14 / behind 0`
-- changed files: `9`
-- additions: `1193`
+- branch relation: `ahead 20 / behind 0`
+- changed files: `11`
+- additions: `1716`
 - deletions: `17`
 - root `Cargo.toml`: `UNCHANGED`
 - root `Cargo.lock`: `UNCHANGED`
 - `crates/prw-agent/src/main.rs`: `UNCHANGED`
 - production runtime loop/bootstrap files: `UNCHANGED`
-- existing production `BoundedLocalReadPolicy::allow_local_reads()`: `UNCHANGED`
-- desktop/Android/deployment files: `UNCHANGED`
+- desktop/Android source: `UNCHANGED`
+- deployment/service-manager files: `UNCHANGED`
+- production runtime signing/systemd credential loading: `UNCHANGED / NOT_ACTIVATED`
 
-## Locked identity seam
+## Authority foundation
 
-`LocalManagementRemoteSessionAuthority` can be constructed only by passing an already-authenticated `AuthenticatedDeviceSession` through `WorkspaceDeviceRegistry::validate_authenticated_session`.
+### Remote-session identity
 
-It retains:
+`LocalManagementRemoteSessionAuthority` requires an already-authenticated `AuthenticatedDeviceSession` and current `WorkspaceDeviceRegistry::validate_authenticated_session` revalidation.
+
+It retains only:
 
 - the returned `RegistryValidatedPrincipal`; and
-- the `SessionId` copied from the same authenticated session.
+- the authenticated PRW `SessionId` copied from the same session.
 
-It derives terminal/forwarding provider principals only through the existing provider APIs:
+Terminal and forwarding principals are derived only through:
 
 - `TerminalPrincipal::from_registry`;
 - `ForwardingPrincipal::from_registry`.
 
-No workspace/user/device/session identity is derived from local PID/UID/GID or request payload bytes.
+No workspace/user/device/session identity is fabricated from local PID/UID/GID, request bytes, desktop process identity, or ambient process state.
 
-## Locked filesystem seam
+### Filesystem authority
 
-`LocalManagementFilesystemAuthority` owns an already-opened `prw_file_service::AnchoredFileRoot`.
+`LocalManagementFilesystemAuthority` owns one `prw_file_service::AnchoredFileRoot` opened by a crate-internal trusted-root constructor.
 
-Its host-path constructor is crate-internal and named `open_trusted_root`; no public request-facing host-root API is introduced. File/transfer family evidence can retain only a reference to this Agent-owned anchored authority.
+Request bytes carry only validated `RemotePath` values and cannot select or replace the host root.
 
-The typed provider-dispatch seam additionally requires pointer identity between the supplied family authority and the lifecycle's exact `LocalManagementFilesystemAuthority`. A file/transfer authority for one trusted root cannot authorize operations through another lifecycle root merely because the family enum matches.
+`LocalManagementFamilyAuthority` is crate-internal with private variants. File/transfer values reference the real filesystem authority; terminal/forwarding values reference the real registry/session authority.
 
-## Family authority and request-bound context
+### Request-bound context
 
-`LocalManagementFamilyAuthority` is crate-internal with private variants. Constructors require the corresponding real authority object:
+`LocalManagementAuthorityContext::from_agent_owned_authority` requires an already-admitted request plus real family authority and fails closed on family mismatch.
 
-- Agent: no external provider identity;
-- File: `&LocalManagementFilesystemAuthority`;
-- Transfer: `&LocalManagementFilesystemAuthority`;
-- Terminal: `&LocalManagementRemoteSessionAuthority`;
-- Forwarding: `&LocalManagementRemoteSessionAuthority`.
+The resulting context binds only admission-derived request ID, kernel peer credentials, capability, operation code, and required family.
 
-`LocalManagementAuthorityContext::from_agent_owned_authority` remains crate-internal and requires an already-admitted `LocalManagementAdmission` plus one family authority. Construction returns `None` on family mismatch. On success the context copies request ID, authenticated kernel peer PID/UID/GID, exact admitted capability, canonical operation code, and required family only from the admission token.
+## Explicit policy seam
 
-This constructor does not dispatch providers and does not make runtime management reachable.
+`prw-policy` stages `BoundedLocalManagementPolicy` as a separate evaluator. The existing production `BoundedLocalReadPolicy::allow_local_reads()` remains unchanged.
 
-## Explicit management policy seam
+Management capability decisions are explicit and independent. No `allow_all()` constructor exists.
 
-`prw-policy` now stages `BoundedLocalManagementPolicy` as a separate evaluator rather than widening `BoundedLocalReadPolicy`.
+Capabilities outside the reviewed bridge surface remain fail-closed, including:
 
-The management policy carries independent decisions only for capabilities represented by the current canonical bridge surface:
+- `FilesDelete`;
+- `DeviceManage`;
+- `PolicyManage`.
 
-- `AgentStatusRead`;
-- `FilesRead`;
-- `FilesWrite`;
-- `TerminalOpen`;
-- `TerminalExec`;
-- `ForwardingCreate`.
+Production management-policy selection remains absent.
 
-`PrivateDnsConfigRead` remains independently represented for the existing local read surface. Capabilities with no authorized C02c management operation remain fail-closed, including `FilesDelete`, `DeviceManage`, and `PolicyManage`.
+## Provider lifecycle ownership
 
-No `allow_all()` constructor is introduced. Production bootstrap policy selection is unchanged.
+`LocalManagementProviderLifecycle<'authority, T, F>` composes:
 
-## Provider lifecycle seam
+- `&LocalManagementFilesystemAuthority`;
+- `UploadTransferManager<'authority>` borrowing the anchored root;
+- `TerminalBroker<T>`;
+- `PortForwardBroker<F>`.
 
-`LocalManagementProviderLifecycle` composes:
+The transfer manager cannot outlive the filesystem authority by construction. No provider backend is selected from request data.
 
-- a borrowed exact `LocalManagementFilesystemAuthority`;
-- `UploadTransferManager` borrowing the authority's `AnchoredFileRoot`;
-- `TerminalBroker<T>` around a caller-supplied typed terminal backend;
-- `PortForwardBroker<F>` around a caller-supplied typed forwarding backend.
+### Explicit quiescence
 
-This avoids self-referential ownership: the filesystem authority outlives the transfer manager by construction.
+The lifecycle deliberately has no `Drop` implementation claiming provider cleanup.
 
-The lifecycle deliberately has no `Drop` implementation claiming cleanup. `try_finish(self)` returns `Ok(())` only when:
+`try_finish(self)` returns `Ok(())` only when:
 
 - active transfer count is zero;
-- terminal broker is empty; and
+- terminal broker is empty;
 - forwarding broker is empty.
 
-If any provider state remains active, `try_finish` returns the entire lifecycle owner unchanged so typed cleanup can continue. C02c therefore does not fabricate clean rollback evidence by silently dropping active broker state.
+If state remains active, the whole lifecycle owner is returned unchanged. Active state is therefore not silently discarded and is not recorded as clean rollback evidence.
 
-## Typed provider dispatch seam
+## Typed provider dispatch
 
-`dispatch_admitted_management_command` consumes only:
+`dispatch_admitted_management_command` operates only on the already-decoded canonical `BridgeCommand` plus real family authority and an already-assembled lifecycle.
 
-- an already-admitted canonical management request;
-- one real `LocalManagementFamilyAuthority`;
-- an already-assembled `LocalManagementProviderLifecycle`; and
-- the existing bounded Agent status snapshot.
+It covers the existing typed operations for:
 
-It returns `LocalManagementTypedProviderResult`, not local response bytes. Response encoding remains a later reviewed gate.
-
-The typed dispatcher reuses the already-decoded `BridgeCommand` domain values and existing provider APIs for:
-
+- Agent status;
 - descriptor-anchored file list/stat/create/directory-create;
-- create-only upload begin/resume/chunk/finalize/abort;
+- upload begin/resume/chunk/finalize/abort;
 - bounded download chunks;
 - terminal open/input/resize/read/close;
-- forwarding open/close; and
-- bounded Agent status.
+- forwarding open/close.
 
-It does not parse raw shell text, executable paths, host filesystem roots, DNS names, arbitrary bind addresses, privilege instructions, or provider configuration from request bytes.
+It does not accept raw shell text, executable paths, host roots, DNS names, arbitrary bind addresses, environment bags, privilege instructions, routes, firewall rules, or provider configuration.
 
-### Principal-binding protection
+### Pre-mutation security guards
 
-Terminal and forwarding broker IDs are broker-scoped identifiers, not principals. Therefore C02c explicitly checks principal ownership before using an existing broker record.
+Every typed dispatch first proves family correlation through the request-bound authority constructor.
 
-For terminal input/resize/read/close and forwarding close, the dispatcher derives the current provider principal only from the registry-revalidated PRW-session authority and compares it with the immutable principal already stored in the broker record. Principal mismatch fails before provider mutation.
+File/transfer operations additionally require reference identity between the supplied family authority and the lifecycle's exact filesystem authority. A family token for root A cannot drive lifecycle root B.
 
-For terminal/forwarding open, if the requested broker ID already exists under another principal, the same fail-closed principal mismatch is applied before the provider open path.
+Terminal/forwarding operations against existing broker records derive the current provider principal from registry-revalidated PRW-session authority and compare it with the immutable principal stored in the record before mutation.
 
-This prevents a valid authority for one registry/session principal from reusing another principal's known terminal or forwarding broker ID.
+This prevents cross-principal reuse of known terminal or forwarding broker identifiers.
+
+## Deterministic response semantics
+
+The existing local terminal-response framing remains authoritative:
+
+- two-byte `LocalAgentResponseStatus` prefix;
+- `Response` outer kind only for `Ok`;
+- `Error` outer kind for non-success;
+- existing request ID correlation.
+
+C02c success bodies add one stable result tag:
+
+- `1` — Agent status + existing five-byte status codec;
+- `2` — directory list: `u16 count` then repeated `u8 type + u16 name_len + UTF-8 name`;
+- `3` — metadata: `u8 type + u64 size`;
+- `4` — empty acknowledgement;
+- `5` — big-endian `u64` offset;
+- `6` — bounded raw bytes.
+
+File-type codes are:
+
+- `1` regular file;
+- `2` directory;
+- `3` symbolic link;
+- `4` other.
+
+All success bodies must fit the existing local terminal-response body bound. If provider success cannot be encoded within that bound, the response becomes correlated `InternalError` with an empty body; an encoding failure never creates `Ok`.
+
+Provider strings and host details are never serialized.
+
+Typed failures collapse into the existing coarse statuses:
+
+- invalid operation/bound semantics → `InvalidRequest`;
+- stale/duplicate/missing state or authority/principal mismatch → `Conflict`;
+- backend/filesystem/storage/postcondition/encoding failure → `InternalError`.
+
+Capability denial occurs earlier and remains `Unauthorized`.
+
+## Complete C02c execution seam
+
+`process_authenticated_linux_management_with_typed_providers` composes:
+
+1. existing authenticated C01 admission;
+2. canonical decode and exact capability policy evaluation;
+3. caller-supplied real family authority;
+4. typed provider dispatch with exact root/principal guards;
+5. deterministic correlated response construction.
+
+This function is crate-internal and is not called by:
+
+- production local server loop;
+- Linux production runtime loop;
+- Linux bootstrap;
+- `main.rs`;
+- service-manager integration;
+- deployment code.
+
+Therefore C02c is implementation-staged, not runtime-activated.
 
 ## Dependency delta and cycle inspection
 
-`prw-agent` adds only existing workspace path dependencies needed by the authority/lifecycle seams:
+`prw-agent` adds only existing workspace path dependencies required by the C02c seams:
 
 - `prw-file-service`;
 - `prw-file-transfer`;
@@ -154,32 +203,41 @@ This prevents a valid authority for one registry/session principal from reusing 
 - `prw-session`;
 - `prw-terminal`.
 
-Static inspection of frozen dependency manifests confirms no dependency returns to `prw-agent`:
+Static frozen-manifest inspection confirms no dependency returns to `prw-agent`:
 
-- `prw-file-service` depends on `rustix` and `aws-lc-rs`;
-- `prw-file-transfer` depends only on `prw-file-service`;
-- `prw-forwarding` depends on `prw-core` and `prw-registry`;
-- `prw-terminal` depends on `prw-core`, `prw-registry`, and `prw-session`;
-- `prw-registry` depends on `prw-connectivity`, `prw-control-plane`, `prw-core`, and `prw-session`.
+- `prw-file-service` → `rustix`, `aws-lc-rs`;
+- `prw-file-transfer` → `prw-file-service`;
+- `prw-forwarding` → `prw-core`, `prw-registry`;
+- `prw-terminal` → `prw-core`, `prw-registry`, `prw-session`;
+- `prw-registry` → `prw-connectivity`, `prw-control-plane`, `prw-core`, `prw-session`.
 
-No external crate version is added and no lockfile is modified in this staged source change.
+No external crate version was added and no lockfile was changed by C02c.
+
+## Contract/source alignment
+
+`DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md` was refreshed after implementation to match the actual source semantics.
+
+The previous design wording that implied automatic best-effort cleanup on `Drop` was intentionally removed because the staged source does not possess reviewed provider-specific cleanup semantics. The contract now records explicit quiescence and no fabricated cleanup evidence.
 
 ## Validation classification
 
-The build/test/clippy/format gate remains closed by project authorization. Therefore no Cargo command, formatter, linter, test, build, runtime execution, or deployment action is claimed for this branch.
+The project build gate remains closed. Therefore this audit claims no Cargo, format, Clippy, test, build, runtime, service-manager, signing, systemd-credential, deployment, or privileged validation.
 
-Current validation is limited to connector-grounded source/API inspection, exact dependency-manifest inspection, security-boundary inspection, and exact GitHub compare scope.
+Current validation is limited to connector-grounded source/API inspection, exact dependency-manifest inspection, security-boundary review, contract/source alignment, and exact GitHub diff scope.
 
-- source syntax/build validation: `NOT_RUN / GATE_CLOSED`
-- formatter/linter/tests: `NOT_RUN / GATE_CLOSED`
+- source syntax/build validation: `NOT_RUN / BUILD_GATE_CLOSED`
+- formatter/linter/tests: `NOT_RUN / BUILD_GATE_CLOSED`
 - runtime validation: `NOT_RUN`
-- production activation: `NOT_AUTHORIZED`
-- runtime signer/systemd credential loading: `NOT_AUTHORIZED`
+- production management policy: `NOT_SELECTED`
+- runtime signing: `NOT_AUTHORIZED`
+- systemd credential loading: `NOT_AUTHORIZED`
 - deployment/privileged changes: `NOT_AUTHORIZED`
 - C03: `NOT_AUTHORIZED`
 
-## Next reviewed step
+## Next gate
 
-The remaining C02c blocker is response semantics: define a bounded, deterministic mapping from `LocalManagementTypedProviderResult` and typed provider failures into correlated local response payloads without exposing implementation-sensitive detail.
+C02c is now `IMPLEMENTATION_STAGED` from a source/design perspective.
 
-That next step must remain disconnected from the production server loop and must not change production policy defaults, `main.rs`, service-manager behavior, deployment, or C03 activation.
+The next technical promotion gate is an explicitly authorized implementation-validation scope for syntax/format/Clippy/tests/build. A separate later gate may design concrete terminal/forwarding backends.
+
+Neither validation nor backend design authorizes production server-loop wiring. Production policy selection, runtime activation, deployment, and C03 remain separate and closed.
