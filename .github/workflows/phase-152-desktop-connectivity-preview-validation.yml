@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: phase-152-desktop-connectivity-preview-validation
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -53,23 +53,28 @@ jobs:
           path = Path("apps/desktop/src/ui.rs")
           text = path.read_text()
 
-          replacements = []
-          replacements.append((
-              "use gtk::glib;\nuse prw_forwarding::LoopbackFamily;",
-              "use gtk::glib;\nuse prw_connectivity::{ConnectivityPathKind, ReachabilityObservation, SelectedConnectivityPath};\nuse prw_forwarding::LoopbackFamily;",
-          ))
-          replacements.append((
-              "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        stack.add_titled(&page, Some(destination.stack_name()), destination.title());\n    }",
-              "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        let scroller = gtk::ScrolledWindow::new();\n        scroller.set_hexpand(true);\n        scroller.set_vexpand(true);\n        scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);\n        scroller.set_child(Some(&page));\n        stack.add_titled(\n            &scroller,\n            Some(destination.stack_name()),\n            destination.title(),\n        );\n    }",
-          ))
-          replacements.append((
-              "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n\n    page.append(&section_label(\"Port forwarding intent\"));",
-              "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n\n    page.append(&section_label(\"Connectivity selection preview\"));\n    page.append(&detail_label(\n        \"Declare disposable observations below to preview the existing deterministic LocalDirect → InternetDirect → Relay → Offline selector. This does not probe the network.\",\n    ));\n    let local_observation = reachability_selector();\n    let internet_observation = reachability_selector();\n    let relay_observation = reachability_selector();\n    page.append(&detail_label(\"LocalDirect observation\"));\n    page.append(&local_observation);\n    page.append(&detail_label(\"InternetDirect observation\"));\n    page.append(&internet_observation);\n    page.append(&detail_label(\"Relay observation\"));\n    page.append(&relay_observation);\n    let connectivity_result = management_result_label();\n    let preview_connectivity = gtk::Button::with_label(\"Preview selected connectivity path\");\n\n    let local_observation_input = local_observation.clone();\n    let internet_observation_input = internet_observation.clone();\n    let relay_observation_input = relay_observation.clone();\n    let connectivity_result_output = connectivity_result.clone();\n    preview_connectivity.connect_clicked(move |_| {\n        match management::select_disposable_connectivity_path(\n            selected_reachability(&local_observation_input),\n            selected_reachability(&internet_observation_input),\n            selected_reachability(&relay_observation_input),\n        ) {\n            Ok(SelectedConnectivityPath::Candidate(candidate)) => {\n                connectivity_result_output.set_text(&format!(\n                    \"Preview selected {} from disposable declared observations. No network probe or reachability publication occurred.\",\n                    connectivity_path_label(candidate.kind())\n                ));\n            }\n            Ok(SelectedConnectivityPath::Offline) => connectivity_result_output.set_text(\n                \"Preview selected Offline because no declared candidate is Reachable. No network probe occurred.\",\n            ),\n            Err(_) => connectivity_result_output.set_text(\n                \"Connectivity preview could not construct the bounded disposable plan. No network state was changed.\",\n            ),\n        }\n    });\n    page.append(&preview_connectivity);\n    page.append(&connectivity_result);\n\n    page.append(&section_label(\"Port forwarding intent\"));",
-          ))
-          replacements.append((
-              "fn section_label(title: &str) -> gtk::Label {",
-              "fn reachability_selector() -> gtk::ComboBoxText {\n    let selector = gtk::ComboBoxText::new();\n    selector.append(Some(\"unknown\"), \"Unknown\");\n    selector.append(Some(\"reachable\"), \"Reachable\");\n    selector.append(Some(\"unreachable\"), \"Unreachable\");\n    selector.set_active_id(Some(\"unknown\"));\n    selector\n}\n\nfn selected_reachability(selector: &gtk::ComboBoxText) -> ReachabilityObservation {\n    match selector.active_id().as_deref() {\n        Some(\"reachable\") => ReachabilityObservation::Reachable,\n        Some(\"unreachable\") => ReachabilityObservation::Unreachable,\n        _ => ReachabilityObservation::Unknown,\n    }\n}\n\nconst fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {\n    match kind {\n        ConnectivityPathKind::LocalDirect => \"LocalDirect\",\n        ConnectivityPathKind::InternetDirect => \"InternetDirect\",\n        ConnectivityPathKind::Relay => \"Relay\",\n    }\n}\n\nfn section_label(title: &str) -> gtk::Label {",
-          ))
+          replacements = [
+              (
+                  "use gtk::glib;\nuse prw_forwarding::LoopbackFamily;",
+                  "use gtk::glib;\nuse prw_connectivity::{ConnectivityPathKind, ReachabilityObservation, SelectedConnectivityPath};\nuse prw_forwarding::LoopbackFamily;",
+              ),
+              (
+                  "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        stack.add_titled(&page, Some(destination.stack_name()), destination.title());\n    }",
+                  "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        let scroller = gtk::ScrolledWindow::new();\n        scroller.set_hexpand(true);\n        scroller.set_vexpand(true);\n        scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);\n        scroller.set_child(Some(&page));\n        stack.add_titled(\n            &scroller,\n            Some(destination.stack_name()),\n            destination.title(),\n        );\n    }",
+              ),
+              (
+                  "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n\n    page.append(&section_label(\"Port forwarding intent\"));",
+                  "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n    let connectivity_preview = connectivity_preview_section();\n    page.append(&connectivity_preview);\n\n    page.append(&section_label(\"Port forwarding intent\"));",
+              ),
+              (
+                  "fn section_label(title: &str) -> gtk::Label {",
+                  "fn connectivity_preview_section() -> gtk::Box {\n    let section = gtk::Box::new(gtk::Orientation::Vertical, 8);\n    section.append(&section_label(\"Connectivity selection preview\"));\n    section.append(&detail_label(\n        \"Declare disposable observations below to preview the existing deterministic LocalDirect → InternetDirect → Relay → Offline selector. This does not probe the network.\",\n    ));\n\n    let local_observation = reachability_selector();\n    let internet_observation = reachability_selector();\n    let relay_observation = reachability_selector();\n    section.append(&detail_label(\"LocalDirect observation\"));\n    section.append(&local_observation);\n    section.append(&detail_label(\"InternetDirect observation\"));\n    section.append(&internet_observation);\n    section.append(&detail_label(\"Relay observation\"));\n    section.append(&relay_observation);\n\n    let result = management_result_label();\n    let result_output = result.clone();\n    let preview = gtk::Button::with_label(\"Preview selected connectivity path\");\n    preview.connect_clicked(move |_| {\n        match management::select_disposable_connectivity_path(\n            selected_reachability(&local_observation),\n            selected_reachability(&internet_observation),\n            selected_reachability(&relay_observation),\n        ) {\n            Ok(SelectedConnectivityPath::Candidate(candidate)) => result_output.set_text(&format!(\n                \"Preview selected {} from disposable declared observations. No network probe or reachability publication occurred.\",\n                connectivity_path_label(candidate.kind())\n            )),\n            Ok(SelectedConnectivityPath::Offline) => result_output.set_text(\n                \"Preview selected Offline because no declared candidate is Reachable. No network probe occurred.\",\n            ),\n            Err(_) => result_output.set_text(\n                \"Connectivity preview could not construct the bounded disposable plan. No network state was changed.\",\n            ),\n        }\n    });\n    section.append(&preview);\n    section.append(&result);\n    section\n}\n\nfn reachability_selector() -> gtk::DropDown {\n    let selector = gtk::DropDown::from_strings(&[\"Unknown\", \"Reachable\", \"Unreachable\"]);\n    selector.set_selected(0);\n    selector\n}\n\nfn selected_reachability(selector: &gtk::DropDown) -> ReachabilityObservation {\n    match selector.selected() {\n        1 => ReachabilityObservation::Reachable,\n        2 => ReachabilityObservation::Unreachable,\n        _ => ReachabilityObservation::Unknown,\n    }\n}\n\nconst fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {\n    match kind {\n        ConnectivityPathKind::LocalDirect => \"LocalDirect\",\n        ConnectivityPathKind::InternetDirect => \"InternetDirect\",\n        ConnectivityPathKind::Relay => \"Relay\",\n    }\n}\n\nfn section_label(title: &str) -> gtk::Label {",
+              ),
+              (
+                  '''            match (\n                resolver_address.parse::<IpAddr>(),\n                resolver_port.parse::<u16>(),\n            ) {\n                (Ok(address), Ok(port)) => Some((address, port)),\n                _ => {\n                    dns_result_output.set_text(\n                        \"Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.\",\n                    );\n                    return;\n                }\n            }\n''',
+                  '''            if let (Ok(address), Ok(port)) = (\n                resolver_address.parse::<IpAddr>(),\n                resolver_port.parse::<u16>(),\n            ) {\n                Some((address, port))\n            } else {\n                dns_result_output.set_text(\n                    \"Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.\",\n                );\n                return;\n            }\n''',
+              ),
+          ]
 
           for old, new in replacements:
               if text.count(old) != 1:
@@ -82,9 +87,6 @@ jobs:
 
           cargo fmt --all
           FMT_APPLY_RC=$?
-          FORMAT_DIFF="$(git diff --name-only)"
-          if [[ "$FORMAT_DIFF" == "$SOURCE" ]]; then FORMAT_SCOPE_RC=0; else FORMAT_SCOPE_RC=91; fi
-
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           METADATA_RC=$?
           cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings >"$CLIPPY_LOG" 2>&1
@@ -93,21 +95,34 @@ jobs:
           APP_TEST_RC=$?
           cargo build --locked -p prw-desktop --all-targets
           APP_BUILD_RC=$?
+
+          git checkout -- target
+          TARGET_RESTORE_RC=$?
           set -e
+
+          mapfile -t FINAL_DIFF < <(git diff --name-only)
+          DIFF_SCOPE_RC=0
+          if [[ "${#FINAL_DIFF[@]}" -ne 1 || "${FINAL_DIFF[0]:-}" != "$SOURCE" ]]; then
+            DIFF_SCOPE_RC=91
+          fi
 
           STATUS=PASS
           FIRST_FAILURE=NONE
           for pair in \
             "PATCH:$PATCH_RC" \
             "FORMAT_APPLY:$FMT_APPLY_RC" \
-            "FORMAT_SCOPE:$FORMAT_SCOPE_RC" \
             "METADATA:$METADATA_RC" \
             "APP_CLIPPY:$APP_CLIPPY_RC" \
             "APP_TEST:$APP_TEST_RC" \
-            "APP_BUILD:$APP_BUILD_RC"; do
+            "APP_BUILD:$APP_BUILD_RC" \
+            "TARGET_RESTORE:$TARGET_RESTORE_RC" \
+            "DIFF_SCOPE:$DIFF_SCOPE_RC"; do
             name="${pair%%:*}"
             rc="${pair##*:}"
-            if [[ "$rc" -ne 0 && "$STATUS" == PASS ]]; then STATUS=FAIL; FIRST_FAILURE="$name"; fi
+            if [[ "$rc" -ne 0 && "$STATUS" == PASS ]]; then
+              STATUS=FAIL
+              FIRST_FAILURE="$name"
+            fi
           done
 
           {
@@ -115,14 +130,18 @@ jobs:
             echo "BASE_HEAD=$BASE_HEAD"
             echo "PATCH_RC=$PATCH_RC"
             echo "FMT_APPLY_RC=$FMT_APPLY_RC"
-            echo "FORMAT_SCOPE_RC=$FORMAT_SCOPE_RC"
-            echo "FORMAT_DIFF=$FORMAT_DIFF"
             echo "METADATA_RC=$METADATA_RC"
             echo "APP_CLIPPY_SCOPE=PRW_DESKTOP_NO_DEPS"
             echo "APP_CLIPPY_RC=$APP_CLIPPY_RC"
             echo "APP_TEST_RC=$APP_TEST_RC"
             echo "APP_BUILD_RC=$APP_BUILD_RC"
+            echo "TARGET_RESTORE_RC=$TARGET_RESTORE_RC"
+            echo "DIFF_SCOPE_RC=$DIFF_SCOPE_RC"
+            echo "DIFF_PATHS=$(printf '%s,' "${FINAL_DIFF[@]}" | sed 's/,$//')"
+            echo "CONNECTIVITY_WIDGET=GTK_DROPDOWN"
             echo "CONNECTIVITY_SELECTOR_AUTHORITY=PRW_CONNECTIVITY"
+            echo "DNS_CORRECTIVE=SINGLE_MATCH_ELSE_TO_IF_LET"
+            echo "MANAGEMENT_PAGES_SCROLLABLE=YES"
             echo "NETWORK_PROBING=NO"
             echo "CANDIDATE_PUBLICATION=NO"
             echo "NETWORK_RUNTIME_ACTIVATION=NO"
