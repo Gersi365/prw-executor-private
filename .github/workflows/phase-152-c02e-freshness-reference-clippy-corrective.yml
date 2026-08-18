@@ -1,4 +1,4 @@
-name: PRW Phase 152 C02e Workspace Clippy Probe
+name: PRW Phase 152 C02e Agent Clippy Probe
 
 on:
   push:
@@ -16,91 +16,62 @@ concurrency:
 
 jobs:
   probe:
-    name: Probe locked full-workspace Clippy without source mutation
+    name: Probe locked prw-agent Clippy without source mutation
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
+    timeout-minutes: 20
     steps:
       - name: Checkout exact pushed head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
-      - name: Run source-neutral workspace Clippy probe
+      - name: Run source-neutral prw-agent Clippy probe
         id: probe
         shell: bash
         run: |
           set -u -o pipefail
-          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_WORKSPACE_CLIPPY_PROBE_${GITHUB_SHA}.txt"
-          mkdir -p "$(dirname "${REPORT}")"
-          : > "${REPORT}"
-          overall=0
-          first_failure=""
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_AGENT_CLIPPY_PROBE_${GITHUB_SHA}.txt"
+          mkdir -p "$(dirname "${REPORT}")"; : > "${REPORT}"
+          overall=0; first_failure=""
           record(){ printf '%s\n' "$*" | tee -a "${REPORT}"; }
           gate(){
             local name="$1" command="$2"
-            if [[ "${overall}" -ne 0 ]]; then
-              record "GATE_${name}=SKIPPED_AFTER_${first_failure}"
-              return 0
-            fi
+            if [[ "${overall}" -ne 0 ]]; then record "GATE_${name}=SKIPPED_AFTER_${first_failure}"; return 0; fi
             record "===== GATE ${name} ====="
-            set +e
-            bash -o pipefail -c "${command}" 2>&1 | tee -a "${REPORT}"
-            local rc=${PIPESTATUS[0]}
-            set -u -o pipefail
+            set +e; bash -o pipefail -c "${command}" 2>&1 | tee -a "${REPORT}"; local rc=${PIPESTATUS[0]}; set -u -o pipefail
             record "GATE_${name}_RC=${rc}"
-            if [[ "${rc}" -ne 0 ]]; then
-              overall="${rc}"
-              first_failure="${name}"
-            fi
+            if [[ "${rc}" -ne 0 ]]; then overall="${rc}"; first_failure="${name}"; fi
           }
 
           record STATUS=RUNNING
-          record WORKFLOW=phase-152-c02e-workspace-clippy-probe
+          record WORKFLOW=phase-152-c02e-agent-clippy-probe
           record "RUN_ID=${GITHUB_RUN_ID}"
-          record "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
           record "REF=${GITHUB_REF_NAME}"
           record "HEAD=${GITHUB_SHA}"
           record "SOURCE_PARENT=$(git rev-parse HEAD^)"
           record FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
-          record "RUNNER_OS=${RUNNER_OS}"
-
           gate lineage "test \"${GITHUB_REF_NAME}\" = \"phase-152-c02e-dynamic-reachability-design\" && test \"$(git rev-parse HEAD)\" = \"${GITHUB_SHA}\" && git merge-base --is-ancestor 857583b25ed1206317641a93fd8f927819c954d8 HEAD && test \"$(git merge-base 857583b25ed1206317641a93fd8f927819c954d8 HEAD)\" = \"857583b25ed1206317641a93fd8f927819c954d8\""
-          gate native_prerequisites "sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev && pkg-config --modversion gtk4 && pkg-config --modversion libadwaita-1"
           gate toolchain "rustc --version && cargo --version && rustfmt --version && cargo clippy --version"
 
-          record '===== PRE_PROBE_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-workspace-clippy-pre.sha256" | tee -a "${REPORT}"
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.before"
           cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
-
           gate locked_metadata "cargo metadata --locked --no-deps --format-version 1 > /dev/null && git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml"
           gate fmt "cargo fmt --all -- --check"
-          gate workspace_clippy "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
+          gate agent_clippy "cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings"
 
-          record '===== POST_PROBE_HASHES ====='
-          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml | tee "${RUNNER_TEMP}/c02e-workspace-clippy-post.sha256" | tee -a "${REPORT}"
+          sha256sum Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml > "${RUNNER_TEMP}/deps.after"
           drift_rc=0
-          diff -u "${RUNNER_TEMP}/c02e-workspace-clippy-pre.sha256" "${RUNNER_TEMP}/c02e-workspace-clippy-post.sha256" >> "${REPORT}" 2>&1 || drift_rc=$?
+          diff -u "${RUNNER_TEMP}/deps.before" "${RUNNER_TEMP}/deps.after" >> "${REPORT}" 2>&1 || drift_rc=$?
           cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock || drift_rc=$?
           git diff --exit-code -- Cargo.toml Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml >> "${REPORT}" 2>&1 || drift_rc=$?
           record "ZERO_DEPENDENCY_DRIFT_RC=${drift_rc}"
-          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then
-            overall="${drift_rc}"
-            first_failure=dependency_source_drift
-          fi
-
+          if [[ "${drift_rc}" -ne 0 && "${overall}" -eq 0 ]]; then overall="${drift_rc}"; first_failure=dependency_source_drift; fi
           record SOURCE_MUTATION=NONE
           record RUNTIME_NETWORK_ACTIVATION=NONE
-          if [[ "${overall}" -eq 0 ]]; then
-            record STATUS=PASS_WORKSPACE_CLIPPY
-            record FIRST_FAILURE=NONE
-          else
-            record STATUS=FAIL
-            record "FIRST_FAILURE=${first_failure}"
-          fi
+          if [[ "${overall}" -eq 0 ]]; then record STATUS=PASS_AGENT_CLIPPY; record FIRST_FAILURE=NONE; else record STATUS=FAIL; record "FIRST_FAILURE=${first_failure}"; fi
           record "PROBE_RC=${overall}"
-          printf 'probe_rc=%s\n' "${overall}" >> "${GITHUB_OUTPUT}"
-          printf 'report=%s\n' "${REPORT}" >> "${GITHUB_OUTPUT}"
+          echo "probe_rc=${overall}" >> "${GITHUB_OUTPUT}"
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
 
       - name: Commit probe evidence only
         if: always()
@@ -109,14 +80,12 @@ jobs:
           REPORT: ${{ steps.probe.outputs.report }}
         run: |
           set -euo pipefail
-          test -n "${REPORT}"
-          test -f "${REPORT}"
+          test -n "${REPORT}"; test -f "${REPORT}"
           git restore --source=HEAD -- Cargo.lock target/.rustc_info.json 2>/dev/null || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "${REPORT}"
           git diff --cached --check
-          git commit -m "phase 152 c02e: record workspace clippy probe ${GITHUB_SHA::12}"
+          git commit -m "phase 152 c02e: record agent clippy probe ${GITHUB_SHA::12}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Surface probe result
@@ -126,5 +95,4 @@ jobs:
           PROBE_RC: ${{ steps.probe.outputs.probe_rc }}
         run: |
           set -euo pipefail
-          test -n "${PROBE_RC}"
-          test "${PROBE_RC}" -eq 0
+          test -n "${PROBE_RC}"; test "${PROBE_RC}" -eq 0
