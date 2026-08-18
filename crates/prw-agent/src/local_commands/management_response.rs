@@ -188,11 +188,6 @@ const fn file_error_status(error: FileServiceError) -> LocalAgentResponseStatus 
         FileServiceError::AlreadyExists
         | FileServiceError::NotRegularFile
         | FileServiceError::NotDirectory => LocalAgentResponseStatus::Conflict,
-        FileServiceError::InvalidRoot
-        | FileServiceError::Filesystem
-        | FileServiceError::NonUtf8Entry
-        | FileServiceError::DirectoryTooLarge
-        | FileServiceError::PostconditionFailed => LocalAgentResponseStatus::InternalError,
         _ => LocalAgentResponseStatus::InternalError,
     }
 }
@@ -209,7 +204,6 @@ const fn transfer_error_status(error: FileTransferError) -> LocalAgentResponseSt
         | FileTransferError::OffsetMismatch
         | FileTransferError::Incomplete
         | FileTransferError::DigestMismatch => LocalAgentResponseStatus::Conflict,
-        FileTransferError::Storage => LocalAgentResponseStatus::InternalError,
         _ => LocalAgentResponseStatus::InternalError,
     }
 }
@@ -225,9 +219,6 @@ const fn terminal_error_status(error: TerminalError) -> LocalAgentResponseStatus
         | TerminalError::DuplicateSession
         | TerminalError::SessionCapacity
         | TerminalError::InvalidState => LocalAgentResponseStatus::Conflict,
-        TerminalError::Backend | TerminalError::BackendOutputTooLarge => {
-            LocalAgentResponseStatus::InternalError
-        }
         _ => LocalAgentResponseStatus::InternalError,
     }
 }
@@ -242,7 +233,6 @@ const fn forwarding_error_status(error: ForwardingError) -> LocalAgentResponseSt
         | ForwardingError::SessionCapacity
         | ForwardingError::UnknownSession
         | ForwardingError::InvalidState => LocalAgentResponseStatus::Conflict,
-        ForwardingError::Backend => LocalAgentResponseStatus::InternalError,
         _ => LocalAgentResponseStatus::InternalError,
     }
 }
