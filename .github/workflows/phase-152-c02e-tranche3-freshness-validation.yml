@@ -1,0 +1,258 @@
+name: PRW Phase 152 C02e Tranche3 Freshness Validation
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - ".github/workflows/phase-152-c02e-tranche3-freshness-validation.yml"
+      - "crates/prw-remote-bridge/src/candidate_publication_freshness.rs"
+      - "crates/prw-remote-bridge/tests/candidate_publication_freshness_representation.rs"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-tranche3-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate dormant freshness representation and workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install native workspace prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+
+      - name: Validate candidate and prepare evidence
+        id: validate
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          SELF=".github/workflows/phase-152-c02e-tranche3-freshness-validation.yml"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          AUDIT_DIR="logs/audits/phase-152-c02e-dynamic-reachability-design"
+          REPORT="${AUDIT_DIR}/C02E_TRANCHE3_FRESHNESS_VALIDATION_${BASE_HEAD}.txt"
+          mkdir -p "${AUDIT_DIR}"
+
+          LOCK_SHA256_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          ROOT_MANIFEST_SHA256_BEFORE="$(sha256sum Cargo.toml | awk '{print $1}')"
+          BRIDGE_MANIFEST_SHA256_BEFORE="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          SOURCE_SHA256_BEFORE="$(sha256sum crates/prw-remote-bridge/src/candidate_publication_freshness.rs | awk '{print $1}')"
+          TEST_SHA256_BEFORE="$(sha256sum crates/prw-remote-bridge/tests/candidate_publication_freshness_representation.rs | awk '{print $1}')"
+
+          STATUS="PASS"
+          FIRST_FAILURE="NONE"
+          LOCKED_METADATA_RC=SKIPPED
+          FORMAT_RC=SKIPPED
+          FOCUSED_TEST_RC=SKIPPED
+          FOCUSED_CLIPPY_RC=SKIPPED
+          WORKSPACE_CLIPPY_RC=SKIPPED
+          WORKSPACE_TESTS_RC=SKIPPED
+          WORKSPACE_BUILD_RC=SKIPPED
+          PRE_NORMALIZE_DRIFT_RC=SKIPPED
+          TARGET_RESTORE_RC=SKIPPED
+          HASH_DRIFT_RC=SKIPPED
+          FINAL_DRIFT_RC=SKIPPED
+
+          fail_once() {
+            local gate="$1"
+            local rc="$2"
+            if [[ "${STATUS}" == "PASS" ]]; then
+              STATUS="FAIL"
+              FIRST_FAILURE="${gate}"
+            fi
+            return "${rc}"
+          }
+
+          run_gate() {
+            local gate="$1"
+            shift
+            local log="${RUNNER_TEMP}/${gate}.log"
+            set +e
+            "$@" >"${log}" 2>&1
+            local rc=$?
+            set -e
+            printf '%s_RC=%s\n' "${gate}" "${rc}" >> "${RUNNER_TEMP}/gate-rcs.txt"
+            if [[ ${rc} -ne 0 ]]; then
+              fail_once "${gate}" "${rc}" || true
+              {
+                printf '\n===== %s FAILURE TAIL =====\n' "${gate}"
+                tail -n 240 "${log}"
+              } >> "${RUNNER_TEMP}/failure-tail.txt"
+            fi
+            return 0
+          }
+
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate LOCKED_METADATA cargo metadata --locked --no-deps --format-version 1
+            LOCKED_METADATA_RC="$(awk -F= '$1=="LOCKED_METADATA_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate FORMAT cargo fmt --all -- --check
+            FORMAT_RC="$(awk -F= '$1=="FORMAT_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate FOCUSED_TEST cargo test --locked -p prw-remote-bridge --test candidate_publication_freshness_representation
+            FOCUSED_TEST_RC="$(awk -F= '$1=="FOCUSED_TEST_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate FOCUSED_CLIPPY cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+            FOCUSED_CLIPPY_RC="$(awk -F= '$1=="FOCUSED_CLIPPY_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate WORKSPACE_CLIPPY cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+            WORKSPACE_CLIPPY_RC="$(awk -F= '$1=="WORKSPACE_CLIPPY_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate WORKSPACE_TESTS cargo test --locked --workspace --all-targets
+            WORKSPACE_TESTS_RC="$(awk -F= '$1=="WORKSPACE_TESTS_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+          if [[ "${STATUS}" == "PASS" ]]; then
+            run_gate WORKSPACE_BUILD cargo build --locked --workspace --all-targets
+            WORKSPACE_BUILD_RC="$(awk -F= '$1=="WORKSPACE_BUILD_RC"{print $2}' "${RUNNER_TEMP}/gate-rcs.txt" | tail -1)"
+          fi
+
+          mapfile -t PRE_NORMALIZE_DIFF < <(git diff --name-only)
+          printf '%s\n' "${PRE_NORMALIZE_DIFF[@]}" > "${RUNNER_TEMP}/pre-normalize-diff.txt"
+          PRE_NORMALIZE_DRIFT_RC=0
+          for changed in "${PRE_NORMALIZE_DIFF[@]}"; do
+            if [[ "${changed}" != target/* ]]; then
+              PRE_NORMALIZE_DRIFT_RC=91
+              fail_once "PRE_NORMALIZE_DRIFT" "${PRE_NORMALIZE_DRIFT_RC}" || true
+              break
+            fi
+          done
+
+          set +e
+          git checkout -- target
+          TARGET_RESTORE_RC=$?
+          set -e
+          if [[ ${TARGET_RESTORE_RC} -ne 0 ]]; then
+            fail_once "TARGET_RESTORE" "${TARGET_RESTORE_RC}" || true
+          fi
+
+          LOCK_SHA256_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          ROOT_MANIFEST_SHA256_AFTER="$(sha256sum Cargo.toml | awk '{print $1}')"
+          BRIDGE_MANIFEST_SHA256_AFTER="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          SOURCE_SHA256_AFTER="$(sha256sum crates/prw-remote-bridge/src/candidate_publication_freshness.rs | awk '{print $1}')"
+          TEST_SHA256_AFTER="$(sha256sum crates/prw-remote-bridge/tests/candidate_publication_freshness_representation.rs | awk '{print $1}')"
+
+          HASH_DRIFT_RC=0
+          if [[ "${LOCK_SHA256_BEFORE}" != "${LOCK_SHA256_AFTER}" \
+             || "${ROOT_MANIFEST_SHA256_BEFORE}" != "${ROOT_MANIFEST_SHA256_AFTER}" \
+             || "${BRIDGE_MANIFEST_SHA256_BEFORE}" != "${BRIDGE_MANIFEST_SHA256_AFTER}" \
+             || "${SOURCE_SHA256_BEFORE}" != "${SOURCE_SHA256_AFTER}" \
+             || "${TEST_SHA256_BEFORE}" != "${TEST_SHA256_AFTER}" ]]; then
+            HASH_DRIFT_RC=92
+            fail_once "HASH_DRIFT" "${HASH_DRIFT_RC}" || true
+          fi
+
+          mapfile -t FINAL_DIFF < <(git diff --name-only)
+          printf '%s\n' "${FINAL_DIFF[@]}" > "${RUNNER_TEMP}/final-diff.txt"
+          FINAL_DRIFT_RC=0
+          if [[ ${#FINAL_DIFF[@]} -ne 0 ]]; then
+            FINAL_DRIFT_RC=93
+            fail_once "FINAL_DRIFT" "${FINAL_DRIFT_RC}" || true
+          fi
+
+          {
+            echo "PHASE=152-C02e-Tranche3-Freshness"
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "RUSTC=$(rustc --version)"
+            echo "CARGO=$(cargo --version)"
+            echo "RUSTFMT=$(rustfmt --version)"
+            echo "CLIPPY=$(cargo clippy --version)"
+            echo "GTK4=$(pkg-config --modversion gtk4)"
+            echo "LIBADWAITA=$(pkg-config --modversion libadwaita-1)"
+            echo "LOCK_SHA256_BEFORE=${LOCK_SHA256_BEFORE}"
+            echo "LOCK_SHA256_AFTER=${LOCK_SHA256_AFTER}"
+            echo "ROOT_MANIFEST_SHA256_BEFORE=${ROOT_MANIFEST_SHA256_BEFORE}"
+            echo "ROOT_MANIFEST_SHA256_AFTER=${ROOT_MANIFEST_SHA256_AFTER}"
+            echo "BRIDGE_MANIFEST_SHA256_BEFORE=${BRIDGE_MANIFEST_SHA256_BEFORE}"
+            echo "BRIDGE_MANIFEST_SHA256_AFTER=${BRIDGE_MANIFEST_SHA256_AFTER}"
+            echo "SOURCE_SHA256_BEFORE=${SOURCE_SHA256_BEFORE}"
+            echo "SOURCE_SHA256_AFTER=${SOURCE_SHA256_AFTER}"
+            echo "TEST_SHA256_BEFORE=${TEST_SHA256_BEFORE}"
+            echo "TEST_SHA256_AFTER=${TEST_SHA256_AFTER}"
+            echo "LOCKED_METADATA_RC=${LOCKED_METADATA_RC}"
+            echo "FORMAT_RC=${FORMAT_RC}"
+            echo "FOCUSED_TEST_RC=${FOCUSED_TEST_RC}"
+            echo "FOCUSED_CLIPPY_RC=${FOCUSED_CLIPPY_RC}"
+            echo "WORKSPACE_CLIPPY_RC=${WORKSPACE_CLIPPY_RC}"
+            echo "WORKSPACE_TESTS_RC=${WORKSPACE_TESTS_RC}"
+            echo "WORKSPACE_BUILD_RC=${WORKSPACE_BUILD_RC}"
+            echo "PRE_NORMALIZE_DRIFT_RC=${PRE_NORMALIZE_DRIFT_RC}"
+            echo "TARGET_RESTORE_RC=${TARGET_RESTORE_RC}"
+            echo "HASH_DRIFT_RC=${HASH_DRIFT_RC}"
+            echo "FINAL_DRIFT_RC=${FINAL_DRIFT_RC}"
+            echo "PRE_NORMALIZE_TRACKED_DIFF=$(paste -sd, "${RUNNER_TEMP}/pre-normalize-diff.txt")"
+            echo "FINAL_TRACKED_DIFF=$(paste -sd, "${RUNNER_TEMP}/final-diff.txt")"
+            echo "TOKEN_REPRESENTATION=OPAQUE_NONZERO_32_BYTES"
+            echo "LIFECYCLE_STATES=NEW_LIFECYCLE_ELIGIBLE,ESTABLISHED,RECOVERY_REQUIRED,RETIRED"
+            echo "NETWORK_RUNTIME_ACTIVATION=NO"
+            echo "PRODUCTION_UPPER_OWNER_SELECTION=NO"
+            echo "WIRE_KIND_SELECTION=NO"
+            echo "FIRST_FAILURE=${FIRST_FAILURE}"
+            echo "STATUS=${STATUS}"
+            cat "${RUNNER_TEMP}/failure-tail.txt" 2>/dev/null || true
+          } > "${REPORT}"
+
+          echo "status=${STATUS}" >> "${GITHUB_OUTPUT}"
+          echo "base_head=${BASE_HEAD}" >> "${GITHUB_OUTPUT}"
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit authoritative evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="${{ steps.validate.outputs.status }}"
+          BASE_HEAD="${{ steps.validate.outputs.base_head }}"
+          REPORT="${{ steps.validate.outputs.report }}"
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          SELF=".github/workflows/phase-152-c02e-tranche3-freshness-validation.yml"
+
+          if [[ -z "${BASE_HEAD}" || -z "${REPORT}" || ! -f "${REPORT}" ]]; then
+            echo "validation step did not produce evidence outputs" >&2
+            exit 1
+          fi
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          if [[ "${REMOTE_HEAD}" != "${BASE_HEAD}" ]]; then
+            echo "branch advanced during validation: base=${BASE_HEAD} remote=${REMOTE_HEAD}" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${REPORT}"
+          if [[ "${STATUS}" == "PASS" ]]; then
+            git rm "${SELF}"
+            git commit -m "phase 152 c02e: validate tranche3 freshness ${BASE_HEAD:0:12}"
+          else
+            git commit -m "phase 152 c02e: record tranche3 freshness validation failure ${BASE_HEAD:0:12}"
+          fi
+          git push origin "HEAD:${BRANCH}"
+
+      - name: Surface validation result
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.validate.outputs.status }}" != "PASS" ]]; then
+            echo "Tranche3 freshness validation failed at ${{ steps.validate.outputs.base_head }}" >&2
+            exit 1
+          fi
