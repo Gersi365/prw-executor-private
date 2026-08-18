@@ -1,8 +1,10 @@
+use std::net::IpAddr;
 use std::sync::mpsc::{self, TryRecvError};
 use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::glib;
+use prw_forwarding::LoopbackFamily;
 use prw_terminal::TerminalProfile;
 
 use crate::ipc;
@@ -130,6 +132,81 @@ fn machines_page() -> gtk::Box {
     page.append(&detail_label(
         "Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.",
     ));
+
+    page.append(&section_label("Port forwarding intent"));
+    page.append(&detail_label(
+        "Forwarding validation is loopback-bind only and accepts an explicit target IP. Validation does not open a listener or make the forwarding state Active.",
+    ));
+
+    let forward_id = gtk::Entry::builder()
+        .placeholder_text("Forward ID")
+        .text("1")
+        .build();
+    let bind_port = gtk::Entry::builder()
+        .placeholder_text("Loopback bind port")
+        .text("8080")
+        .build();
+    let ipv6_bind = gtk::CheckButton::with_label("Use IPv6 loopback bind (::1)");
+    let target_address = gtk::Entry::builder()
+        .placeholder_text("Explicit target IP")
+        .text("127.0.0.1")
+        .build();
+    let target_port = gtk::Entry::builder()
+        .placeholder_text("Target TCP port")
+        .text("22")
+        .build();
+    let forward_result = management_result_label();
+    let validate_forward = gtk::Button::with_label("Validate forwarding intent");
+
+    let forward_id_input = forward_id.clone();
+    let bind_port_input = bind_port.clone();
+    let ipv6_bind_input = ipv6_bind.clone();
+    let target_address_input = target_address.clone();
+    let target_port_input = target_port.clone();
+    let forward_result_output = forward_result.clone();
+    validate_forward.connect_clicked(move |_| {
+        let parsed = (
+            forward_id_input.text().parse::<u64>(),
+            bind_port_input.text().parse::<u16>(),
+            target_address_input.text().parse::<IpAddr>(),
+            target_port_input.text().parse::<u16>(),
+        );
+        let family = if ipv6_bind_input.is_active() {
+            LoopbackFamily::Ipv6
+        } else {
+            LoopbackFamily::Ipv4
+        };
+        match parsed {
+            (Ok(forward_id), Ok(bind_port), Ok(target_address), Ok(target_port)) => {
+                match management::encode_forward_open(
+                    forward_id,
+                    family,
+                    bind_port,
+                    target_address,
+                    target_port,
+                ) {
+                    Ok(payload) => forward_result_output.set_text(&format!(
+                        "Validated canonical forward-open request: {} bytes. Not dispatched; no listener was opened and state is not Active.",
+                        payload.len()
+                    )),
+                    Err(_) => forward_result_output.set_text(
+                        "Rejected by typed forwarding validation. IDs and ports must be non-zero and the target must be an allowed explicit IP.",
+                    ),
+                }
+            }
+            _ => forward_result_output.set_text(
+                "Forward ID, bind port, explicit target IP and target port must be valid typed values.",
+            ),
+        }
+    });
+
+    page.append(&forward_id);
+    page.append(&bind_port);
+    page.append(&ipv6_bind);
+    page.append(&target_address);
+    page.append(&target_port);
+    page.append(&validate_forward);
+    page.append(&forward_result);
     page
 }
 
@@ -302,8 +379,88 @@ fn settings_page() -> gtk::Box {
     );
     page.append(&section_label("Private DNS"));
     page.append(&detail_label(
-        "Overview continues to show the authoritative read-only Agent snapshot. A validated requested configuration must never be rendered as OS-applied without a separately authorized result.",
+        "Build a validated requested configuration using the existing private-DNS authority. A valid request is not an OS-applied configuration.",
     ));
+
+    let enabled = gtk::CheckButton::with_label("Enable private DNS request");
+    enabled.set_active(true);
+    let device_naming = gtk::CheckButton::with_label("Enable device naming");
+    device_naming.set_active(true);
+    let device_domain = gtk::Entry::builder()
+        .placeholder_text("Device domain suffix")
+        .text("prw.internal")
+        .build();
+    let resolver_address = gtk::Entry::builder()
+        .placeholder_text("Resolver IP (optional)")
+        .text("127.0.0.1")
+        .build();
+    let resolver_port = gtk::Entry::builder()
+        .placeholder_text("Resolver port (optional)")
+        .text("53")
+        .build();
+    let split_domain = gtk::Entry::builder()
+        .placeholder_text("Split domain suffix (optional)")
+        .text("dev.internal")
+        .build();
+    let dns_result = management_result_label();
+    let validate_dns = gtk::Button::with_label("Validate private DNS request");
+
+    let enabled_input = enabled.clone();
+    let device_naming_input = device_naming.clone();
+    let device_domain_input = device_domain.clone();
+    let resolver_address_input = resolver_address.clone();
+    let resolver_port_input = resolver_port.clone();
+    let split_domain_input = split_domain.clone();
+    let dns_result_output = dns_result.clone();
+    validate_dns.connect_clicked(move |_| {
+        let resolver_address = resolver_address_input.text();
+        let resolver_port = resolver_port_input.text();
+        let resolver = if resolver_address.is_empty() && resolver_port.is_empty() {
+            None
+        } else if !resolver_address.is_empty() && !resolver_port.is_empty() {
+            match (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                (Ok(address), Ok(port)) => Some((address, port)),
+                _ => {
+                    dns_result_output.set_text(
+                        "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                    );
+                    return;
+                }
+            }
+        } else {
+            dns_result_output.set_text(
+                "Resolver address and port must be supplied together, or both fields must be empty.",
+            );
+            return;
+        };
+
+        match management::validate_private_dns(
+            enabled_input.is_active(),
+            device_naming_input.is_active(),
+            device_domain_input.text().as_str(),
+            resolver,
+            split_domain_input.text().as_str(),
+        ) {
+            Ok(_) => dns_result_output.set_text(
+                "Validated private-DNS requested configuration. OS-applied state remains unchanged and is not claimed by this UI.",
+            ),
+            Err(_) => dns_result_output.set_text(
+                "Rejected by typed private-DNS validation. No operating-system DNS state was changed.",
+            ),
+        }
+    });
+
+    page.append(&enabled);
+    page.append(&device_naming);
+    page.append(&device_domain);
+    page.append(&resolver_address);
+    page.append(&resolver_port);
+    page.append(&split_domain);
+    page.append(&validate_dns);
+    page.append(&dns_result);
     page
 }
 
