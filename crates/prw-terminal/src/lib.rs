@@ -503,6 +503,46 @@ impl<B: TerminalBackend> TerminalBroker<B> {
         terminal.record.mark_closed();
         Ok(terminal.record)
     }
+
+    /// Retries provider cleanup for one retained failed terminal record.
+    ///
+    /// This operation is teardown-only. It never reopens the terminal or resumes I/O.
+    /// On backend failure the same failed record and handle remain tracked so cleanup
+    /// may be attempted again later. On success the handle is cleared, the record is
+    /// marked `Closed`, and the broker removes it.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown or non-`Failed` records before calling the backend. A missing
+    /// retained handle is an invalid state. Backend close failure preserves `Failed`.
+    pub fn retry_failed_close(
+        &mut self,
+        id: TerminalSessionId,
+    ) -> Result<TerminalSession, TerminalError> {
+        let mut terminal = self
+            .sessions
+            .remove(&id)
+            .ok_or(TerminalError::UnknownSession)?;
+        if terminal.record.state() != TerminalState::Failed {
+            self.sessions.insert(id, terminal);
+            return Err(TerminalError::InvalidState);
+        }
+
+        let Some(handle) = terminal.handle.as_mut() else {
+            self.sessions.insert(id, terminal);
+            return Err(TerminalError::InvalidState);
+        };
+
+        if self.backend.close(handle).is_err() {
+            terminal.record.mark_failed();
+            self.sessions.insert(id, terminal);
+            return Err(TerminalError::Backend);
+        }
+
+        terminal.handle = None;
+        terminal.record.mark_closed();
+        Ok(terminal.record)
+    }
 }
 
 /// Stable terminal failure classification.
@@ -879,6 +919,74 @@ mod tests {
         assert_eq!(
             broker.write_input(id(10), b"later"),
             Err(TerminalError::InvalidState)
+        );
+    }
+
+    #[test]
+    fn failed_close_can_be_retried_to_closed_and_removed() {
+        let backend = SpyBackend {
+            failure: FailureMode::Close,
+            ..SpyBackend::default()
+        };
+        let mut broker = TerminalBroker::new(backend);
+        broker
+            .open_session(id(12), principal(), TerminalProfile::PosixShell, geometry())
+            .expect("open");
+        assert_eq!(broker.close_session(id(12)), Err(TerminalError::Backend));
+        assert_eq!(broker.backend.close_calls, 1);
+        assert_eq!(
+            broker.session(id(12)).expect("retained").state(),
+            TerminalState::Failed
+        );
+
+        broker.backend.failure = FailureMode::None;
+        let closed = broker.retry_failed_close(id(12)).expect("retry close");
+        assert_eq!(closed.state(), TerminalState::Closed);
+        assert_eq!(broker.backend.close_calls, 2);
+        assert!(broker.session(id(12)).is_none());
+        assert_eq!(
+            broker.write_input(id(12), b"later"),
+            Err(TerminalError::UnknownSession)
+        );
+    }
+
+    #[test]
+    fn failed_close_retry_failure_retains_failed_record() {
+        let backend = SpyBackend {
+            failure: FailureMode::Close,
+            ..SpyBackend::default()
+        };
+        let mut broker = TerminalBroker::new(backend);
+        broker
+            .open_session(id(13), principal(), TerminalProfile::PosixShell, geometry())
+            .expect("open");
+        assert_eq!(broker.close_session(id(13)), Err(TerminalError::Backend));
+        assert_eq!(broker.retry_failed_close(id(13)), Err(TerminalError::Backend));
+        assert_eq!(broker.backend.close_calls, 2);
+        assert_eq!(
+            broker.session(id(13)).expect("retained").state(),
+            TerminalState::Failed
+        );
+    }
+
+    #[test]
+    fn failed_close_retry_rejects_open_or_unknown_before_backend_call() {
+        let mut broker = TerminalBroker::new(SpyBackend::default());
+        broker
+            .open_session(id(14), principal(), TerminalProfile::PosixShell, geometry())
+            .expect("open");
+        assert_eq!(
+            broker.retry_failed_close(id(14)),
+            Err(TerminalError::InvalidState)
+        );
+        assert_eq!(
+            broker.retry_failed_close(id(15)),
+            Err(TerminalError::UnknownSession)
+        );
+        assert_eq!(broker.backend.close_calls, 0);
+        assert_eq!(
+            broker.session(id(14)).expect("open retained").state(),
+            TerminalState::Open
         );
     }
 
