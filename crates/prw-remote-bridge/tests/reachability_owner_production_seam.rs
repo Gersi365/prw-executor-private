@@ -228,7 +228,11 @@ fn endpoint(port: u16) -> ConnectivityEndpoint {
 }
 
 fn candidate(id: u64, kind: ConnectivityPathKind, port: u16) -> ConnectivityCandidate {
-    ConnectivityCandidate::new(CandidateId::new(id).expect("candidate id"), kind, endpoint(port))
+    ConnectivityCandidate::new(
+        CandidateId::new(id).expect("candidate id"),
+        kind,
+        endpoint(port),
+    )
 }
 
 fn fixture() -> Fixture {
@@ -337,12 +341,7 @@ fn successful_commit_advances_durable_freshness_and_invalidates_current_traversa
     )
     .expect("authenticated publication");
     let outcome = owner
-        .commit_candidate_publication(
-            &fixture.registry,
-            &fixture.requester,
-            &publication,
-            current,
-        )
+        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
         .expect("durable publication commit");
 
     assert_eq!(outcome.replacement_freshness(), replacement);
@@ -510,12 +509,7 @@ fn postcommit_traversal_factory_failure_recovers_forward_without_plan_rollback()
     )
     .expect("publication");
     owner
-        .commit_candidate_publication(
-            &fixture.registry,
-            &fixture.requester,
-            &publication,
-            current,
-        )
+        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
         .expect("commit");
 
     assert_eq!(
@@ -543,11 +537,7 @@ fn transport_rotation_durably_retires_old_peer_and_drops_traversal() {
         .expect("current traversal");
     fixture
         .registry
-        .rotate_transport_identity(
-            &fixture.target_device_id,
-            fixture.transport,
-            transport(22),
-        )
+        .rotate_transport_identity(&fixture.target_device_id, fixture.transport, transport(22))
         .expect("authoritative transport rotation");
 
     owner

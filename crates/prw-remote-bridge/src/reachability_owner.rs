@@ -281,7 +281,10 @@ pub enum ReachabilityOwnerError {
 impl fmt::Display for ReachabilityOwnerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Candidate(error) => write!(formatter, "reachability candidate transition failed: {error}"),
+            Self::Candidate(error) => write!(
+                formatter,
+                "reachability candidate transition failed: {error}"
+            ),
             Self::Snapshot(error) => write!(formatter, "reachability snapshot rejected: {error}"),
             Self::StalePublicationFreshness => {
                 formatter.write_str("candidate publication freshness is stale")
@@ -292,8 +295,12 @@ impl fmt::Display for ReachabilityOwnerError {
             Self::ReplacementFreshnessUnchanged => {
                 formatter.write_str("replacement reachability freshness must change")
             }
-            Self::TokenSource(error) => write!(formatter, "reachability token source failed: {error}"),
-            Self::Persistence(error) => write!(formatter, "reachability persistence failed: {error}"),
+            Self::TokenSource(error) => {
+                write!(formatter, "reachability token source failed: {error}")
+            }
+            Self::Persistence(error) => {
+                write!(formatter, "reachability persistence failed: {error}")
+            }
             Self::DurableStateOutOfSync => {
                 formatter.write_str("durable reachability state is ahead of the local owner")
             }
@@ -308,9 +315,15 @@ impl fmt::Display for ReachabilityOwnerError {
             Self::NoCurrentTraversal => formatter.write_str("no current traversal session exists"),
             Self::Traversal(error) => write!(formatter, "current traversal failed: {error}"),
             Self::TraversalFactory(error) => {
-                write!(formatter, "replacement traversal construction failed: {error}")
+                write!(
+                    formatter,
+                    "replacement traversal construction failed: {error}"
+                )
             }
-            Self::Registry(error) => write!(formatter, "current reachability registry check failed: {error}"),
+            Self::Registry(error) => write!(
+                formatter,
+                "current reachability registry check failed: {error}"
+            ),
             Self::TransportStillCurrent => {
                 formatter.write_str("reachability transport identity is still current")
             }
@@ -455,11 +468,9 @@ where
             staged_plan.peer().clone(),
             replacement_freshness,
         );
-        let staged_snapshot = ReachabilityDurableSnapshot::new(
-            staged_plan.clone(),
-            staged_freshness.clone(),
-        )
-        .map_err(ReachabilityOwnerError::Snapshot)?;
+        let staged_snapshot =
+            ReachabilityDurableSnapshot::new(staged_plan.clone(), staged_freshness.clone())
+                .map_err(ReachabilityOwnerError::Snapshot)?;
 
         match self
             .store
@@ -630,7 +641,9 @@ where
     fn require_current(&self) -> Result<(), ReachabilityOwnerError> {
         match self.mode {
             ReachabilityOwnerMode::Current => Ok(()),
-            ReachabilityOwnerMode::RecoveryRequired => Err(ReachabilityOwnerError::RecoveryRequired),
+            ReachabilityOwnerMode::RecoveryRequired => {
+                Err(ReachabilityOwnerError::RecoveryRequired)
+            }
             ReachabilityOwnerMode::Retired => Err(ReachabilityOwnerError::Retired),
         }
     }
