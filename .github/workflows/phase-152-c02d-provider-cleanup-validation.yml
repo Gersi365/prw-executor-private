@@ -1,0 +1,153 @@
+name: PRW Phase 152 C02d Provider Cleanup Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact C02d commit SHA approved for provider cleanup validation
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-c02d-provider-cleanup-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate C02d provider-neutral cleanup recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout explicitly selected C02d ref
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Require exact branch and approved head
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "phase-152-c02d-provider-backend-design"
+          actual_head="$(git rev-parse HEAD)"
+          test "${actual_head}" = "${EXPECTED_HEAD}"
+          test "${#EXPECTED_HEAD}" -eq 40
+          echo "C02d validation head: ${actual_head}"
+
+      - name: Verify stacked lineage and exact C02d scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          C02C=6141ecf08976e26c99329592d52cbd8d736b0edf
+          git merge-base --is-ancestor "${C02C}" HEAD
+          test "$(git merge-base "${C02C}" HEAD)" = "${C02C}"
+
+          mapfile -t changed < <(git diff --name-only "${C02C}..HEAD")
+          printf 'C02d changed files:\n'
+          printf '  %s\n' "${changed[@]}"
+
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              .github/workflows/phase-152-c02d-provider-cleanup-validation.yml|\
+              contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md|\
+              crates/prw-terminal/src/lib.rs|\
+              crates/prw-forwarding/src/lib.rs|\
+              logs/audits/phase-152-c02d-provider-backend-design/C02D_PROVIDER_BACKEND_AUDIT.md)
+                ;;
+              *)
+                echo "Unexpected C02d path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          for forbidden in \
+            Cargo.toml \
+            Cargo.lock \
+            crates/prw-agent/Cargo.toml \
+            crates/prw-agent/src/main.rs \
+            crates/prw-agent/src/linux_bootstrap.rs \
+            crates/prw-agent/src/linux_production_runtime_loop.rs \
+            crates/prw-policy/src/lib.rs; do
+            if git diff --name-only "${C02C}..HEAD" -- "${forbidden}" | grep -q .; then
+              echo "Forbidden C02d mutation: ${forbidden}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Verify cleanup recovery and non-activation invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fn 'Status: `DESIGN_LOCK / PROVIDER_CLEANUP_RECOVERY / NO_OS_IO / NO_RUNTIME_ACTIVATION`' \
+            contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md
+          grep -Fn 'pub fn retry_failed_close(' crates/prw-terminal/src/lib.rs
+          grep -Fn 'pub fn retry_failed_close(' crates/prw-forwarding/src/lib.rs
+          grep -Fn 'failed_close_can_be_retried_to_closed_and_removed' crates/prw-terminal/src/lib.rs
+          grep -Fn 'failed_close_can_be_retried_to_closed_and_removed' crates/prw-forwarding/src/lib.rs
+
+          if git diff --name-only 6141ecf08976e26c99329592d52cbd8d736b0edf..HEAD \
+            | grep -E '^crates/prw-agent/|^crates/prw-policy/|^apps/'; then
+            echo 'C02d provider-neutral cleanup slice escaped its locked boundary' >&2
+            exit 1
+          fi
+
+          echo 'C02d remains provider-neutral and runtime-unwired'
+
+      - name: Verify locked dependency graph remains deterministic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+          cargo generate-lockfile
+          cmp -s "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          git diff --exit-code -- Cargo.lock
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+
+      - name: Run provider cleanup Clippy scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked \
+            -p prw-terminal \
+            -p prw-forwarding \
+            --all-targets \
+            --all-features \
+            -- -D warnings
+
+      - name: Run provider cleanup tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked \
+            -p prw-terminal \
+            -p prw-forwarding \
+            --all-targets
+
+      - name: Build provider cleanup scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked \
+            -p prw-terminal \
+            -p prw-forwarding \
+            --all-targets
+
+      - name: Reconfirm no source drift after validation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          echo 'C02d validation produced no committed-source drift'
