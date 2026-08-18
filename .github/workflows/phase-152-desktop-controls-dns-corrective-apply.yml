@@ -1,0 +1,82 @@
+name: Phase 152 Desktop Controls DNS Corrective Apply
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-management-ui-controls
+    paths:
+      - ".github/workflows/phase-152-desktop-controls-dns-corrective-apply.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-desktop-controls-dns-corrective-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact DNS lint corrective
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_HEAD="$GITHUB_SHA"
+          BRANCH="phase-152-desktop-management-ui-controls"
+          SOURCE="apps/desktop/src/ui.rs"
+          SELF=".github/workflows/phase-152-desktop-controls-dns-corrective-apply.yml"
+          OLD_VALIDATOR=".github/workflows/phase-152-desktop-management-ui-controls-validation.yml"
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | awk '{print $1}')"
+          [[ "$REMOTE_HEAD" == "$BASE_HEAD" ]]
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+          old = '''            match (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                (Ok(address), Ok(port)) => Some((address, port)),
+                _ => {
+                    dns_result_output.set_text(
+                        "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                    );
+                    return;
+                }
+            }
+'''
+          new = '''            if let (Ok(address), Ok(port)) = (
+                resolver_address.parse::<IpAddr>(),
+                resolver_port.parse::<u16>(),
+            ) {
+                Some((address, port))
+            } else {
+                dns_result_output.set_text(
+                    "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+                );
+                return;
+            }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one DNS single-match block, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          mapfile -t DIFF_PATHS < <(git diff --name-only)
+          [[ "${#DIFF_PATHS[@]}" -eq 1 ]]
+          [[ "${DIFF_PATHS[0]}" == "$SOURCE" ]]
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SOURCE"
+          git rm "$SELF" "$OLD_VALIDATOR"
+          git commit -m "phase 152 desktop: apply dns clippy corrective ${BASE_HEAD:0:12}"
+          git push origin "HEAD:$BRANCH"
