@@ -1,4 +1,5 @@
 name: Phase 152 Desktop Management Controls Validation
+# PR-only app validation retrigger; no desktop source or runtime semantics change.
 
 on:
   push:
