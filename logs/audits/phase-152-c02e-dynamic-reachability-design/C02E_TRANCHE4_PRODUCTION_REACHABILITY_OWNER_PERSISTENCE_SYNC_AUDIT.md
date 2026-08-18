@@ -1,6 +1,6 @@
 # C02e Tranche 4 — Production Reachability Owner / Persistence-Synchronization Audit
 
-Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / EXECUTABLE_REVALIDATION_PENDING`
+Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / CLIPPY_CONST_CORRECTED / EXECUTABLE_REVALIDATION_PENDING`
 
 Tranche 3 closeout head: `6168d500b25627190aa272ff34fdc186465ebc04`
 Frozen C02d head: `857583b25ed1206317641a93fd8f927819c954d8`
@@ -75,5 +75,24 @@ The first run proved before failure:
 A one-shot corrective harness ran `cargo fmt --all`, rejected any diff outside those two files, committed the formatter output and self-deleted. Corrective commit: `88703e8543fccaa617bf009960682820e9e14514`.
 
 The formatter corrective changes no owner semantics, dependency graph, Cargo.lock, persistence contract, runtime boundary or network activation.
+
+## Second exact-head validation and Clippy corrective
+
+Second validator head: `c30bef8b4059c4cabbc681384549e684ff7208f8`
+Failure evidence child: `75a27d0bed20969018359e57df453abb33ac1fcf`
+Failure report: `C02E_TRANCHE4_PRODUCTION_OWNER_VALIDATION_c30bef8b4059c4cabbc681384549e684ff7208f8.txt`
+
+The second run proved before failure:
+
+- locked Cargo hash exactly matched the Tranche 3 lock;
+- dependency audit passed with exactly one normal `prw-nat-traversal` dependency and no dev duplicate;
+- locked metadata passed;
+- rustfmt passed;
+- the focused production-owner test passed;
+- tracked/source/hash drift guards passed.
+
+`FIRST_FAILURE=FOCUSED_CLIPPY` was limited to Clippy `missing_const_for_fn` on `ProductionReachabilityOwner::require_current`. The compiler-provided corrective was applied exactly: `fn require_current` became `const fn require_current`. No branch logic, error classification, persistence behavior, ownership state or runtime/network boundary changed.
+
+The one-shot corrective harness committed only that exact source change and self-deleted. Corrective commit: `97ebfd32568a40e9a5fd90bf15607acb7d8660ad`.
 
 The final classification remains pending until a new exact-head Cargo metadata, formatting, focused tests/Clippy and full locked workspace validation all pass with drift normalization.
