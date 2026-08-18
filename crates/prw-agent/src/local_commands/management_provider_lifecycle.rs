@@ -119,14 +119,15 @@ where
 
     /// Consumes the lifecycle only when all provider resources are explicitly drained.
     ///
-    /// On active state, returns the entire lifecycle owner unchanged so the caller can
-    /// continue typed cleanup. This avoids reporting clean completion while provider
-    /// state is still tracked and avoids silently discarding active broker state.
-    pub(crate) fn try_finish(self) -> Result<(), Self> {
+    /// On active state, returns the complete lifecycle owner in a box so the caller can
+    /// continue typed cleanup without making the `Result` carry a large inline error
+    /// variant. This avoids reporting clean completion while provider state is still
+    /// tracked and avoids silently discarding active broker state.
+    pub(crate) fn try_finish(self) -> Result<(), Box<Self>> {
         if self.is_quiescent() {
             Ok(())
         } else {
-            Err(self)
+            Err(Box::new(self))
         }
     }
 }
