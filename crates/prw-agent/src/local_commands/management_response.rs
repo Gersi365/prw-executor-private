@@ -41,7 +41,7 @@ pub(super) enum LocalManagementSuccessBodyEncodeError {
     DirectoryEntryCount,
     /// One provider entry name did not fit the locked two-byte name-length field.
     DirectoryEntryNameLength,
-    /// Encoded result exceeded the existing local terminal response body bound.
+    /// Encoded result exceeded the existing local terminal-response body bound.
     BodyTooLarge,
 }
 
