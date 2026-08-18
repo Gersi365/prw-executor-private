@@ -1,0 +1,1401 @@
+STATUS=RUNNING
+WORKFLOW=phase-152-c02e-tranche1-validation.yml
+RUN_ID=32114797104
+RUN_ATTEMPT=1
+REF=phase-152-c02e-dynamic-reachability-design
+HEAD=54ae2211bb9d54eaff16509c5e9b4b7d21719a85
+FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
+RUNNER_OS=Linux
+===== GATE lineage =====
+GATE_lineage_RC=0
+===== GATE native_prerequisites =====
+Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+Get:6 https://packages.microsoft.com/repos/azure-cli noble InRelease [3564 B]
+Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+Get:8 https://dl.google.com/linux/chrome-stable/deb stable InRelease [2548 B]
+Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:9 https://packages.microsoft.com/repos/azure-cli noble/main amd64 Packages [2452 B]
+Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [288 kB]
+Get:11 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.4 kB]
+Get:12 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [329 kB]
+Get:13 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages [1416 B]
+Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1208 kB]
+Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [284 kB]
+Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [181 kB]
+Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [336 kB]
+Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1452 kB]
+Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [330 kB]
+Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [12.6 kB]
+Get:23 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:24 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [5744 B]
+Get:25 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+Get:26 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [934 kB]
+Get:27 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [202 kB]
+Get:28 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [46.3 kB]
+Get:29 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1201 kB]
+Get:30 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [240 kB]
+Get:31 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.2 kB]
+Get:32 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1330 kB]
+Get:33 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [304 kB]
+Get:34 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse Translation-en [10.9 kB]
+Fetched 11.3 MB in 2s (5899 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+pkg-config is already the newest version (1.8.1-2build1).
+The following additional packages will be installed:
+  gir1.2-adw-1 gir1.2-appstream-1.0 gir1.2-freedesktop gir1.2-freedesktop-dev
+  gir1.2-gdkpixbuf-2.0 gir1.2-glib-2.0-dev gir1.2-graphene-1.0 gir1.2-gtk-4.0
+  gir1.2-harfbuzz-0.0 gir1.2-pango-1.0 libadwaita-1-0 libappstream-dev
+  libblkid-dev libbrotli-dev libbz2-dev libcairo-script-interpreter2
+  libcairo2-dev libdatrie-dev libdeflate-dev libegl-dev libegl-mesa0 libegl1
+  libegl1-mesa-dev libepoxy-dev libfontconfig-dev libfreetype-dev
+  libfribidi-dev libgdk-pixbuf-2.0-dev libgdk-pixbuf2.0-bin
+  libgirepository-2.0-0 libgl-dev libgles-dev libgles1 libgles2 libglib2.0-dev
+  libglib2.0-dev-bin libglvnd-core-dev libglvnd-dev libglx-dev
+  libgraphene-1.0-0 libgraphene-1.0-dev libgraphite2-dev libgtk-4-1
+  libgtk-4-common libharfbuzz-cairo0 libharfbuzz-dev libharfbuzz-gobject0
+  libharfbuzz-icu0 libharfbuzz-subset0 libice-dev libjbig-dev libjpeg-dev
+  libjpeg-turbo8-dev libjpeg8-dev liblerc-dev liblzma-dev libmount-dev
+  libopengl-dev libopengl0 libpango1.0-dev libpangoxft-1.0-0 libpixman-1-dev
+  libpng-dev libpthread-stubs0-dev libselinux1-dev libsepol-dev
+  libsharpyuv-dev libsm-dev libthai-dev libtiff-dev libtiffxx6 libvulkan-dev
+  libwayland-bin libwayland-dev libwayland-server0 libwebp-dev libwebpdecoder3
+  libx11-dev libxau-dev libxcb-render0-dev libxcb-shm0-dev libxcb1-dev
+  libxcomposite-dev libxcursor-dev libxdamage-dev libxdmcp-dev libxext-dev
+  libxfixes-dev libxft-dev libxi-dev libxinerama-dev libxkbcommon-dev
+  libxrandr-dev libxrender-dev pango1.0-tools uuid-dev wayland-protocols
+  x11proto-core-dev x11proto-dev xorg-sgml-doctools xtrans-dev
+Suggested packages:
+  libadwaita-1-doc libcairo2-doc libdatrie-doc freetype2-doc libglib2.0-doc
+  libxml2-utils libgraphene-doc libgraphite2-utils gvfs libgtk-4-doc
+  gtk-4-examples libice-doc liblzma-doc libpango1.0-doc libsm-doc libthai-doc
+  libwayland-doc libx11-doc libxcb-doc libxext-doc graphicsmagick
+Recommended packages:
+  bzip2-doc libgtk-4-bin librsvg2-common libgtk-4-media-gstreamer libpng-tools
+The following NEW packages will be installed:
+  gir1.2-adw-1 gir1.2-appstream-1.0 gir1.2-freedesktop gir1.2-freedesktop-dev
+  gir1.2-gdkpixbuf-2.0 gir1.2-glib-2.0-dev gir1.2-graphene-1.0 gir1.2-gtk-4.0
+  gir1.2-harfbuzz-0.0 gir1.2-pango-1.0 libadwaita-1-0 libadwaita-1-dev
+  libappstream-dev libblkid-dev libbrotli-dev libbz2-dev
+  libcairo-script-interpreter2 libcairo2-dev libdatrie-dev libdeflate-dev
+  libegl-dev libegl-mesa0 libegl1 libegl1-mesa-dev libepoxy-dev
+  libfontconfig-dev libfreetype-dev libfribidi-dev libgdk-pixbuf-2.0-dev
+  libgdk-pixbuf2.0-bin libgirepository-2.0-0 libgl-dev libgles-dev libgles1
+  libgles2 libglib2.0-dev libglib2.0-dev-bin libglvnd-core-dev libglvnd-dev
+  libglx-dev libgraphene-1.0-0 libgraphene-1.0-dev libgraphite2-dev libgtk-4-1
+  libgtk-4-common libgtk-4-dev libharfbuzz-cairo0 libharfbuzz-dev
+  libharfbuzz-gobject0 libharfbuzz-icu0 libharfbuzz-subset0 libice-dev
+  libjbig-dev libjpeg-dev libjpeg-turbo8-dev libjpeg8-dev liblerc-dev
+  liblzma-dev libmount-dev libopengl-dev libopengl0 libpango1.0-dev
+  libpangoxft-1.0-0 libpixman-1-dev libpng-dev libpthread-stubs0-dev
+  libselinux1-dev libsepol-dev libsharpyuv-dev libsm-dev libthai-dev
+  libtiff-dev libtiffxx6 libvulkan-dev libwayland-bin libwayland-dev
+  libwayland-server0 libwebp-dev libwebpdecoder3 libx11-dev libxau-dev
+  libxcb-render0-dev libxcb-shm0-dev libxcb1-dev libxcomposite-dev
+  libxcursor-dev libxdamage-dev libxdmcp-dev libxext-dev libxfixes-dev
+  libxft-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev
+  libxrender-dev pango1.0-tools uuid-dev wayland-protocols x11proto-core-dev
+  x11proto-dev xorg-sgml-doctools xtrans-dev
+0 upgraded, 103 newly installed, 0 to remove and 12 not upgraded.
+Need to get 19.3 MB of archives.
+After this operation, 129 MB of additional disk space will be used.
+Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+Get:2 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-freedesktop amd64 1.80.1-1 [49.7 kB]
+Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-gdkpixbuf-2.0 amd64 2.42.10+dfsg-3ubuntu3.3 [9482 B]
+Get:4 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgraphene-1.0-0 amd64 1.10.8-3build2 [46.2 kB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-graphene-1.0 amd64 1.10.8-3build2 [11.1 kB]
+Get:6 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-gobject0 amd64 8.3.0-2build2 [34.3 kB]
+Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-harfbuzz-0.0 amd64 8.3.0-2build2 [44.5 kB]
+Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpangoxft-1.0-0 amd64 1.52.1+ds-1build1 [20.3 kB]
+Get:9 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-pango-1.0 amd64 1.52.1+ds-1build1 [34.8 kB]
+Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libcairo-script-interpreter2 amd64 1.18.0-3build1 [60.3 kB]
+Get:11 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles2 amd64 1.7.0-1build1 [17.1 kB]
+Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-common all 4.14.5+ds-0ubuntu0.10 [1497 kB]
+Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-1 amd64 4.14.5+ds-0ubuntu0.10 [3295 kB]
+Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-gtk-4.0 amd64 4.14.5+ds-0ubuntu0.10 [223 kB]
+Get:15 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libadwaita-1-0 amd64 1.5.0-1ubuntu2 [408 kB]
+Get:16 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-adw-1 amd64 1.5.0-1ubuntu2 [41.8 kB]
+Get:17 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-appstream-1.0 amd64 1.0.2-1build6 [29.3 kB]
+Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-glib-2.0-dev amd64 2.80.0-6ubuntu3.8 [848 kB]
+Get:19 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 gir1.2-freedesktop-dev amd64 1.80.1-1 [28.8 kB]
+Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-dev-bin amd64 2.80.0-6ubuntu3.8 [138 kB]
+Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 uuid-dev amd64 2.39.3-9ubuntu6.5 [33.5 kB]
+Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libblkid-dev amd64 2.39.3-9ubuntu6.5 [204 kB]
+Get:23 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsepol-dev amd64 3.5-2build1 [384 kB]
+Get:24 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libselinux1-dev amd64 3.5-2ubuntu2.1 [164 kB]
+Get:25 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libmount-dev amd64 2.39.3-9ubuntu6.5 [14.9 kB]
+Get:26 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgirepository-2.0-0 amd64 2.80.0-6ubuntu3.8 [73.6 kB]
+Get:27 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-dev amd64 2.80.0-6ubuntu3.8 [1860 kB]
+Get:28 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libappstream-dev amd64 1.0.2-1build6 [103 kB]
+Get:29 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libbrotli-dev amd64 1.1.0-2build2 [353 kB]
+Get:30 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libbz2-dev amd64 1.0.8-5.1build0.1 [33.6 kB]
+Get:31 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libpng-dev amd64 1.6.43-5ubuntu0.6 [265 kB]
+Get:32 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libfreetype-dev amd64 2.13.2+dfsg-1ubuntu0.1 [575 kB]
+Get:33 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libfontconfig-dev amd64 2.15.0-1.1ubuntu2 [161 kB]
+Get:34 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpixman-1-dev amd64 0.42.2-1build1 [296 kB]
+Get:35 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xorg-sgml-doctools all 1:1.11-1.1 [10.9 kB]
+Get:36 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 x11proto-dev all 2023.2-1 [602 kB]
+Get:37 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 x11proto-core-dev all 2023.2-1 [2444 B]
+Get:38 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libice-dev amd64 2:1.0.10-1build3 [51.0 kB]
+Get:39 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsm-dev amd64 2:1.2.3-1build3 [17.8 kB]
+Get:40 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxau-dev amd64 1:1.0.9-1build6 [9570 B]
+Get:41 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxdmcp-dev amd64 1:1.1.3-0ubuntu6 [26.5 kB]
+Get:42 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xtrans-dev all 1.4.0-1 [68.9 kB]
+Get:43 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpthread-stubs0-dev amd64 0.4-1build3 [4746 B]
+Get:44 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb1-dev amd64 1.15-1ubuntu2 [85.8 kB]
+Get:45 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libx11-dev amd64 2:1.8.7-1build1 [732 kB]
+Get:46 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb-render0-dev amd64 1.15-1ubuntu2 [19.6 kB]
+Get:47 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcb-shm0-dev amd64 1.15-1ubuntu2 [8246 B]
+Get:48 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxext-dev amd64 2:1.3.4-1build2 [83.5 kB]
+Get:49 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxrender-dev amd64 1:0.9.10-1.1build1 [26.3 kB]
+Get:50 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libcairo2-dev amd64 1.18.0-3build1 [41.1 kB]
+Get:51 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libegl-mesa0 amd64 25.2.8-0ubuntu0.24.04.2 [117 kB]
+Get:52 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libegl1 amd64 1.7.0-1build1 [28.7 kB]
+Get:53 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglx-dev amd64 1.7.0-1build1 [14.2 kB]
+Get:54 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgl-dev amd64 1.7.0-1build1 [102 kB]
+Get:55 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libegl-dev amd64 1.7.0-1build1 [18.2 kB]
+Get:56 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglvnd-core-dev amd64 1.7.0-1build1 [13.6 kB]
+Get:57 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles1 amd64 1.7.0-1build1 [11.6 kB]
+Get:58 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgles-dev amd64 1.7.0-1build1 [50.5 kB]
+Get:59 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libopengl0 amd64 1.7.0-1build1 [32.8 kB]
+Get:60 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libopengl-dev amd64 1.7.0-1build1 [3454 B]
+Get:61 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libglvnd-dev amd64 1.7.0-1build1 [3198 B]
+Get:62 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libegl1-mesa-dev amd64 25.2.8-0ubuntu0.24.04.2 [26.7 kB]
+Get:63 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libepoxy-dev amd64 1.5.10-1build1 [132 kB]
+Get:64 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgdk-pixbuf2.0-bin amd64 2.42.10+dfsg-3ubuntu3.3 [13.9 kB]
+Get:65 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg-turbo8-dev amd64 2.1.5-2ubuntu2 [295 kB]
+Get:66 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg8-dev amd64 8c-2ubuntu11 [1484 B]
+Get:67 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjpeg-dev amd64 8c-2ubuntu11 [1482 B]
+Get:68 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libjbig-dev amd64 2.1-6.1ubuntu2 [27.9 kB]
+Get:69 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 liblzma-dev amd64 5.6.1+really5.4.5-1ubuntu0.3 [176 kB]
+Get:70 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwebpdecoder3 amd64 1.3.2-0.4build3 [114 kB]
+Get:71 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libsharpyuv-dev amd64 1.3.2-0.4build3 [16.0 kB]
+Get:72 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwebp-dev amd64 1.3.2-0.4build3 [367 kB]
+Get:73 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libtiffxx6 amd64 4.5.1+git230720-4ubuntu2.5 [5642 B]
+Get:74 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdeflate-dev amd64 1.19-1build1.1 [50.9 kB]
+Get:75 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 liblerc-dev amd64 4.0.0+ds-4ubuntu2 [182 kB]
+Get:76 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libtiff-dev amd64 4.5.1+git230720-4ubuntu2.5 [338 kB]
+Get:77 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgdk-pixbuf-2.0-dev amd64 2.42.10+dfsg-3ubuntu3.3 [47.9 kB]
+Get:78 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libgraphene-1.0-dev amd64 1.10.8-3build2 [58.6 kB]
+Get:79 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libfribidi-dev amd64 1.0.13-3build1 [64.8 kB]
+Get:80 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-icu0 amd64 8.3.0-2build2 [13.3 kB]
+Get:81 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-subset0 amd64 8.3.0-2build2 [448 kB]
+Get:82 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-cairo0 amd64 8.3.0-2build2 [26.2 kB]
+Get:83 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgraphite2-dev amd64 1.3.14-2ubuntu0.24.04.1 [14.7 kB]
+Get:84 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libharfbuzz-dev amd64 8.3.0-2build2 [142 kB]
+Get:85 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libdatrie-dev amd64 0.2.13-3build1 [19.4 kB]
+Get:86 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libthai-dev amd64 0.1.29-2build1 [26.6 kB]
+Get:87 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxft-dev amd64 2.3.6-1build1 [64.3 kB]
+Get:88 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 pango1.0-tools amd64 1.52.1+ds-1build1 [36.7 kB]
+Get:89 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libpango1.0-dev amd64 1.52.1+ds-1build1 [147 kB]
+Get:90 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-server0 amd64 1.22.0-2.1build1 [33.9 kB]
+Get:91 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-bin amd64 1.22.0-2.1build1 [20.6 kB]
+Get:92 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libwayland-dev amd64 1.22.0-2.1build1 [71.3 kB]
+Get:93 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxfixes-dev amd64 1:6.0.0-2build1 [12.1 kB]
+Get:94 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcomposite-dev amd64 1:0.4.5-1build3 [9374 B]
+Get:95 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxcursor-dev amd64 1:1.2.1-1build1 [31.8 kB]
+Get:96 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxdamage-dev amd64 1:1.1.6-1build1 [5270 B]
+Get:97 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxi-dev amd64 2:1.8.1-1build1 [194 kB]
+Get:98 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxinerama-dev amd64 2:1.1.4-3build1 [7988 B]
+Get:99 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxkbcommon-dev amd64 1.6.0-1build1 [56.3 kB]
+Get:100 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libxrandr-dev amd64 2:1.5.2-2build1 [26.4 kB]
+Get:101 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libvulkan-dev amd64 1.3.275.0-1build1 [1239 kB]
+Get:102 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 wayland-protocols all 1.45-1~ubuntu0.24.04.2 [114 kB]
+Get:103 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk-4-dev amd64 4.14.5+ds-0ubuntu0.10 [939 kB]
+Get:104 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 libadwaita-1-dev amd64 1.5.0-1ubuntu2 [157 kB]
+Fetched 19.3 MB in 4s (5210 kB/s)
+Selecting previously unselected package gir1.2-freedesktop:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 203139 files and directories currently installed.)
+Preparing to unpack .../000-gir1.2-freedesktop_1.80.1-1_amd64.deb ...
+Unpacking gir1.2-freedesktop:amd64 (1.80.1-1) ...
+Selecting previously unselected package gir1.2-gdkpixbuf-2.0:amd64.
+Preparing to unpack .../001-gir1.2-gdkpixbuf-2.0_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking gir1.2-gdkpixbuf-2.0:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libgraphene-1.0-0:amd64.
+Preparing to unpack .../002-libgraphene-1.0-0_1.10.8-3build2_amd64.deb ...
+Unpacking libgraphene-1.0-0:amd64 (1.10.8-3build2) ...
+Selecting previously unselected package gir1.2-graphene-1.0:amd64.
+Preparing to unpack .../003-gir1.2-graphene-1.0_1.10.8-3build2_amd64.deb ...
+Unpacking gir1.2-graphene-1.0:amd64 (1.10.8-3build2) ...
+Selecting previously unselected package libharfbuzz-gobject0:amd64.
+Preparing to unpack .../004-libharfbuzz-gobject0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-gobject0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package gir1.2-harfbuzz-0.0:amd64.
+Preparing to unpack .../005-gir1.2-harfbuzz-0.0_8.3.0-2build2_amd64.deb ...
+Unpacking gir1.2-harfbuzz-0.0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libpangoxft-1.0-0:amd64.
+Preparing to unpack .../006-libpangoxft-1.0-0_1.52.1+ds-1build1_amd64.deb ...
+Unpacking libpangoxft-1.0-0:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package gir1.2-pango-1.0:amd64.
+Preparing to unpack .../007-gir1.2-pango-1.0_1.52.1+ds-1build1_amd64.deb ...
+Unpacking gir1.2-pango-1.0:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package libcairo-script-interpreter2:amd64.
+Preparing to unpack .../008-libcairo-script-interpreter2_1.18.0-3build1_amd64.deb ...
+Unpacking libcairo-script-interpreter2:amd64 (1.18.0-3build1) ...
+Selecting previously unselected package libgles2:amd64.
+Preparing to unpack .../009-libgles2_1.7.0-1build1_amd64.deb ...
+Unpacking libgles2:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgtk-4-common.
+Preparing to unpack .../010-libgtk-4-common_4.14.5+ds-0ubuntu0.10_all.deb ...
+Unpacking libgtk-4-common (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libgtk-4-1:amd64.
+Preparing to unpack .../011-libgtk-4-1_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking libgtk-4-1:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package gir1.2-gtk-4.0:amd64.
+Preparing to unpack .../012-gir1.2-gtk-4.0_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking gir1.2-gtk-4.0:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libadwaita-1-0:amd64.
+Preparing to unpack .../013-libadwaita-1-0_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking libadwaita-1-0:amd64 (1.5.0-1ubuntu2) ...
+Selecting previously unselected package gir1.2-adw-1:amd64.
+Preparing to unpack .../014-gir1.2-adw-1_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking gir1.2-adw-1:amd64 (1.5.0-1ubuntu2) ...
+Selecting previously unselected package gir1.2-appstream-1.0:amd64.
+Preparing to unpack .../015-gir1.2-appstream-1.0_1.0.2-1build6_amd64.deb ...
+Unpacking gir1.2-appstream-1.0:amd64 (1.0.2-1build6) ...
+Selecting previously unselected package gir1.2-glib-2.0-dev:amd64.
+Preparing to unpack .../016-gir1.2-glib-2.0-dev_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking gir1.2-glib-2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package gir1.2-freedesktop-dev:amd64.
+Preparing to unpack .../017-gir1.2-freedesktop-dev_1.80.1-1_amd64.deb ...
+Unpacking gir1.2-freedesktop-dev:amd64 (1.80.1-1) ...
+Selecting previously unselected package libglib2.0-dev-bin.
+Preparing to unpack .../018-libglib2.0-dev-bin_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libglib2.0-dev-bin (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package uuid-dev:amd64.
+Preparing to unpack .../019-uuid-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking uuid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libblkid-dev:amd64.
+Preparing to unpack .../020-libblkid-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking libblkid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libsepol-dev:amd64.
+Preparing to unpack .../021-libsepol-dev_3.5-2build1_amd64.deb ...
+Unpacking libsepol-dev:amd64 (3.5-2build1) ...
+Selecting previously unselected package libselinux1-dev:amd64.
+Preparing to unpack .../022-libselinux1-dev_3.5-2ubuntu2.1_amd64.deb ...
+Unpacking libselinux1-dev:amd64 (3.5-2ubuntu2.1) ...
+Selecting previously unselected package libmount-dev:amd64.
+Preparing to unpack .../023-libmount-dev_2.39.3-9ubuntu6.5_amd64.deb ...
+Unpacking libmount-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Selecting previously unselected package libgirepository-2.0-0:amd64.
+Preparing to unpack .../024-libgirepository-2.0-0_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libgirepository-2.0-0:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package libglib2.0-dev:amd64.
+Preparing to unpack .../025-libglib2.0-dev_2.80.0-6ubuntu3.8_amd64.deb ...
+Unpacking libglib2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Selecting previously unselected package libappstream-dev:amd64.
+Preparing to unpack .../026-libappstream-dev_1.0.2-1build6_amd64.deb ...
+Unpacking libappstream-dev:amd64 (1.0.2-1build6) ...
+Selecting previously unselected package libbrotli-dev:amd64.
+Preparing to unpack .../027-libbrotli-dev_1.1.0-2build2_amd64.deb ...
+Unpacking libbrotli-dev:amd64 (1.1.0-2build2) ...
+Selecting previously unselected package libbz2-dev:amd64.
+Preparing to unpack .../028-libbz2-dev_1.0.8-5.1build0.1_amd64.deb ...
+Unpacking libbz2-dev:amd64 (1.0.8-5.1build0.1) ...
+Selecting previously unselected package libpng-dev:amd64.
+Preparing to unpack .../029-libpng-dev_1.6.43-5ubuntu0.6_amd64.deb ...
+Unpacking libpng-dev:amd64 (1.6.43-5ubuntu0.6) ...
+Selecting previously unselected package libfreetype-dev:amd64.
+Preparing to unpack .../030-libfreetype-dev_2.13.2+dfsg-1ubuntu0.1_amd64.deb ...
+Unpacking libfreetype-dev:amd64 (2.13.2+dfsg-1ubuntu0.1) ...
+Selecting previously unselected package libfontconfig-dev:amd64.
+Preparing to unpack .../031-libfontconfig-dev_2.15.0-1.1ubuntu2_amd64.deb ...
+Unpacking libfontconfig-dev:amd64 (2.15.0-1.1ubuntu2) ...
+Selecting previously unselected package libpixman-1-dev:amd64.
+Preparing to unpack .../032-libpixman-1-dev_0.42.2-1build1_amd64.deb ...
+Unpacking libpixman-1-dev:amd64 (0.42.2-1build1) ...
+Selecting previously unselected package xorg-sgml-doctools.
+Preparing to unpack .../033-xorg-sgml-doctools_1%3a1.11-1.1_all.deb ...
+Unpacking xorg-sgml-doctools (1:1.11-1.1) ...
+Selecting previously unselected package x11proto-dev.
+Preparing to unpack .../034-x11proto-dev_2023.2-1_all.deb ...
+Unpacking x11proto-dev (2023.2-1) ...
+Selecting previously unselected package x11proto-core-dev.
+Preparing to unpack .../035-x11proto-core-dev_2023.2-1_all.deb ...
+Unpacking x11proto-core-dev (2023.2-1) ...
+Selecting previously unselected package libice-dev:amd64.
+Preparing to unpack .../036-libice-dev_2%3a1.0.10-1build3_amd64.deb ...
+Unpacking libice-dev:amd64 (2:1.0.10-1build3) ...
+Selecting previously unselected package libsm-dev:amd64.
+Preparing to unpack .../037-libsm-dev_2%3a1.2.3-1build3_amd64.deb ...
+Unpacking libsm-dev:amd64 (2:1.2.3-1build3) ...
+Selecting previously unselected package libxau-dev:amd64.
+Preparing to unpack .../038-libxau-dev_1%3a1.0.9-1build6_amd64.deb ...
+Unpacking libxau-dev:amd64 (1:1.0.9-1build6) ...
+Selecting previously unselected package libxdmcp-dev:amd64.
+Preparing to unpack .../039-libxdmcp-dev_1%3a1.1.3-0ubuntu6_amd64.deb ...
+Unpacking libxdmcp-dev:amd64 (1:1.1.3-0ubuntu6) ...
+Selecting previously unselected package xtrans-dev.
+Preparing to unpack .../040-xtrans-dev_1.4.0-1_all.deb ...
+Unpacking xtrans-dev (1.4.0-1) ...
+Selecting previously unselected package libpthread-stubs0-dev:amd64.
+Preparing to unpack .../041-libpthread-stubs0-dev_0.4-1build3_amd64.deb ...
+Unpacking libpthread-stubs0-dev:amd64 (0.4-1build3) ...
+Selecting previously unselected package libxcb1-dev:amd64.
+Preparing to unpack .../042-libxcb1-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb1-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libx11-dev:amd64.
+Preparing to unpack .../043-libx11-dev_2%3a1.8.7-1build1_amd64.deb ...
+Unpacking libx11-dev:amd64 (2:1.8.7-1build1) ...
+Selecting previously unselected package libxcb-render0-dev:amd64.
+Preparing to unpack .../044-libxcb-render0-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb-render0-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libxcb-shm0-dev:amd64.
+Preparing to unpack .../045-libxcb-shm0-dev_1.15-1ubuntu2_amd64.deb ...
+Unpacking libxcb-shm0-dev:amd64 (1.15-1ubuntu2) ...
+Selecting previously unselected package libxext-dev:amd64.
+Preparing to unpack .../046-libxext-dev_2%3a1.3.4-1build2_amd64.deb ...
+Unpacking libxext-dev:amd64 (2:1.3.4-1build2) ...
+Selecting previously unselected package libxrender-dev:amd64.
+Preparing to unpack .../047-libxrender-dev_1%3a0.9.10-1.1build1_amd64.deb ...
+Unpacking libxrender-dev:amd64 (1:0.9.10-1.1build1) ...
+Selecting previously unselected package libcairo2-dev:amd64.
+Preparing to unpack .../048-libcairo2-dev_1.18.0-3build1_amd64.deb ...
+Unpacking libcairo2-dev:amd64 (1.18.0-3build1) ...
+Selecting previously unselected package libegl-mesa0:amd64.
+Preparing to unpack .../049-libegl-mesa0_25.2.8-0ubuntu0.24.04.2_amd64.deb ...
+Unpacking libegl-mesa0:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Selecting previously unselected package libegl1:amd64.
+Preparing to unpack .../050-libegl1_1.7.0-1build1_amd64.deb ...
+Unpacking libegl1:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglx-dev:amd64.
+Preparing to unpack .../051-libglx-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglx-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgl-dev:amd64.
+Preparing to unpack .../052-libgl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libgl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libegl-dev:amd64.
+Preparing to unpack .../053-libegl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libegl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglvnd-core-dev:amd64.
+Preparing to unpack .../054-libglvnd-core-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglvnd-core-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgles1:amd64.
+Preparing to unpack .../055-libgles1_1.7.0-1build1_amd64.deb ...
+Unpacking libgles1:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libgles-dev:amd64.
+Preparing to unpack .../056-libgles-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libgles-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libopengl0:amd64.
+Preparing to unpack .../057-libopengl0_1.7.0-1build1_amd64.deb ...
+Unpacking libopengl0:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libopengl-dev:amd64.
+Preparing to unpack .../058-libopengl-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libopengl-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libglvnd-dev:amd64.
+Preparing to unpack .../059-libglvnd-dev_1.7.0-1build1_amd64.deb ...
+Unpacking libglvnd-dev:amd64 (1.7.0-1build1) ...
+Selecting previously unselected package libegl1-mesa-dev:amd64.
+Preparing to unpack .../060-libegl1-mesa-dev_25.2.8-0ubuntu0.24.04.2_amd64.deb ...
+Unpacking libegl1-mesa-dev:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Selecting previously unselected package libepoxy-dev:amd64.
+Preparing to unpack .../061-libepoxy-dev_1.5.10-1build1_amd64.deb ...
+Unpacking libepoxy-dev:amd64 (1.5.10-1build1) ...
+Selecting previously unselected package libgdk-pixbuf2.0-bin.
+Preparing to unpack .../062-libgdk-pixbuf2.0-bin_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking libgdk-pixbuf2.0-bin (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libjpeg-turbo8-dev:amd64.
+Preparing to unpack .../063-libjpeg-turbo8-dev_2.1.5-2ubuntu2_amd64.deb ...
+Unpacking libjpeg-turbo8-dev:amd64 (2.1.5-2ubuntu2) ...
+Selecting previously unselected package libjpeg8-dev:amd64.
+Preparing to unpack .../064-libjpeg8-dev_8c-2ubuntu11_amd64.deb ...
+Unpacking libjpeg8-dev:amd64 (8c-2ubuntu11) ...
+Selecting previously unselected package libjpeg-dev:amd64.
+Preparing to unpack .../065-libjpeg-dev_8c-2ubuntu11_amd64.deb ...
+Unpacking libjpeg-dev:amd64 (8c-2ubuntu11) ...
+Selecting previously unselected package libjbig-dev:amd64.
+Preparing to unpack .../066-libjbig-dev_2.1-6.1ubuntu2_amd64.deb ...
+Unpacking libjbig-dev:amd64 (2.1-6.1ubuntu2) ...
+Selecting previously unselected package liblzma-dev:amd64.
+Preparing to unpack .../067-liblzma-dev_5.6.1+really5.4.5-1ubuntu0.3_amd64.deb ...
+Unpacking liblzma-dev:amd64 (5.6.1+really5.4.5-1ubuntu0.3) ...
+Selecting previously unselected package libwebpdecoder3:amd64.
+Preparing to unpack .../068-libwebpdecoder3_1.3.2-0.4build3_amd64.deb ...
+Unpacking libwebpdecoder3:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libsharpyuv-dev:amd64.
+Preparing to unpack .../069-libsharpyuv-dev_1.3.2-0.4build3_amd64.deb ...
+Unpacking libsharpyuv-dev:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libwebp-dev:amd64.
+Preparing to unpack .../070-libwebp-dev_1.3.2-0.4build3_amd64.deb ...
+Unpacking libwebp-dev:amd64 (1.3.2-0.4build3) ...
+Selecting previously unselected package libtiffxx6:amd64.
+Preparing to unpack .../071-libtiffxx6_4.5.1+git230720-4ubuntu2.5_amd64.deb ...
+Unpacking libtiffxx6:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Selecting previously unselected package libdeflate-dev:amd64.
+Preparing to unpack .../072-libdeflate-dev_1.19-1build1.1_amd64.deb ...
+Unpacking libdeflate-dev:amd64 (1.19-1build1.1) ...
+Selecting previously unselected package liblerc-dev:amd64.
+Preparing to unpack .../073-liblerc-dev_4.0.0+ds-4ubuntu2_amd64.deb ...
+Unpacking liblerc-dev:amd64 (4.0.0+ds-4ubuntu2) ...
+Selecting previously unselected package libtiff-dev:amd64.
+Preparing to unpack .../074-libtiff-dev_4.5.1+git230720-4ubuntu2.5_amd64.deb ...
+Unpacking libtiff-dev:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Selecting previously unselected package libgdk-pixbuf-2.0-dev:amd64.
+Preparing to unpack .../075-libgdk-pixbuf-2.0-dev_2.42.10+dfsg-3ubuntu3.3_amd64.deb ...
+Unpacking libgdk-pixbuf-2.0-dev:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Selecting previously unselected package libgraphene-1.0-dev.
+Preparing to unpack .../076-libgraphene-1.0-dev_1.10.8-3build2_amd64.deb ...
+Unpacking libgraphene-1.0-dev (1.10.8-3build2) ...
+Selecting previously unselected package libfribidi-dev:amd64.
+Preparing to unpack .../077-libfribidi-dev_1.0.13-3build1_amd64.deb ...
+Unpacking libfribidi-dev:amd64 (1.0.13-3build1) ...
+Selecting previously unselected package libharfbuzz-icu0:amd64.
+Preparing to unpack .../078-libharfbuzz-icu0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-icu0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libharfbuzz-subset0:amd64.
+Preparing to unpack .../079-libharfbuzz-subset0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-subset0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libharfbuzz-cairo0:amd64.
+Preparing to unpack .../080-libharfbuzz-cairo0_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-cairo0:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libgraphite2-dev:amd64.
+Preparing to unpack .../081-libgraphite2-dev_1.3.14-2ubuntu0.24.04.1_amd64.deb ...
+Unpacking libgraphite2-dev:amd64 (1.3.14-2ubuntu0.24.04.1) ...
+Selecting previously unselected package libharfbuzz-dev:amd64.
+Preparing to unpack .../082-libharfbuzz-dev_8.3.0-2build2_amd64.deb ...
+Unpacking libharfbuzz-dev:amd64 (8.3.0-2build2) ...
+Selecting previously unselected package libdatrie-dev:amd64.
+Preparing to unpack .../083-libdatrie-dev_0.2.13-3build1_amd64.deb ...
+Unpacking libdatrie-dev:amd64 (0.2.13-3build1) ...
+Selecting previously unselected package libthai-dev:amd64.
+Preparing to unpack .../084-libthai-dev_0.1.29-2build1_amd64.deb ...
+Unpacking libthai-dev:amd64 (0.1.29-2build1) ...
+Selecting previously unselected package libxft-dev:amd64.
+Preparing to unpack .../085-libxft-dev_2.3.6-1build1_amd64.deb ...
+Unpacking libxft-dev:amd64 (2.3.6-1build1) ...
+Selecting previously unselected package pango1.0-tools.
+Preparing to unpack .../086-pango1.0-tools_1.52.1+ds-1build1_amd64.deb ...
+Unpacking pango1.0-tools (1.52.1+ds-1build1) ...
+Selecting previously unselected package libpango1.0-dev:amd64.
+Preparing to unpack .../087-libpango1.0-dev_1.52.1+ds-1build1_amd64.deb ...
+Unpacking libpango1.0-dev:amd64 (1.52.1+ds-1build1) ...
+Selecting previously unselected package libwayland-server0:amd64.
+Preparing to unpack .../088-libwayland-server0_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-server0:amd64 (1.22.0-2.1build1) ...
+Selecting previously unselected package libwayland-bin.
+Preparing to unpack .../089-libwayland-bin_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-bin (1.22.0-2.1build1) ...
+Selecting previously unselected package libwayland-dev:amd64.
+Preparing to unpack .../090-libwayland-dev_1.22.0-2.1build1_amd64.deb ...
+Unpacking libwayland-dev:amd64 (1.22.0-2.1build1) ...
+Selecting previously unselected package libxfixes-dev:amd64.
+Preparing to unpack .../091-libxfixes-dev_1%3a6.0.0-2build1_amd64.deb ...
+Unpacking libxfixes-dev:amd64 (1:6.0.0-2build1) ...
+Selecting previously unselected package libxcomposite-dev:amd64.
+Preparing to unpack .../092-libxcomposite-dev_1%3a0.4.5-1build3_amd64.deb ...
+Unpacking libxcomposite-dev:amd64 (1:0.4.5-1build3) ...
+Selecting previously unselected package libxcursor-dev:amd64.
+Preparing to unpack .../093-libxcursor-dev_1%3a1.2.1-1build1_amd64.deb ...
+Unpacking libxcursor-dev:amd64 (1:1.2.1-1build1) ...
+Selecting previously unselected package libxdamage-dev:amd64.
+Preparing to unpack .../094-libxdamage-dev_1%3a1.1.6-1build1_amd64.deb ...
+Unpacking libxdamage-dev:amd64 (1:1.1.6-1build1) ...
+Selecting previously unselected package libxi-dev:amd64.
+Preparing to unpack .../095-libxi-dev_2%3a1.8.1-1build1_amd64.deb ...
+Unpacking libxi-dev:amd64 (2:1.8.1-1build1) ...
+Selecting previously unselected package libxinerama-dev:amd64.
+Preparing to unpack .../096-libxinerama-dev_2%3a1.1.4-3build1_amd64.deb ...
+Unpacking libxinerama-dev:amd64 (2:1.1.4-3build1) ...
+Selecting previously unselected package libxkbcommon-dev:amd64.
+Preparing to unpack .../097-libxkbcommon-dev_1.6.0-1build1_amd64.deb ...
+Unpacking libxkbcommon-dev:amd64 (1.6.0-1build1) ...
+Selecting previously unselected package libxrandr-dev:amd64.
+Preparing to unpack .../098-libxrandr-dev_2%3a1.5.2-2build1_amd64.deb ...
+Unpacking libxrandr-dev:amd64 (2:1.5.2-2build1) ...
+Selecting previously unselected package libvulkan-dev:amd64.
+Preparing to unpack .../099-libvulkan-dev_1.3.275.0-1build1_amd64.deb ...
+Unpacking libvulkan-dev:amd64 (1.3.275.0-1build1) ...
+Selecting previously unselected package wayland-protocols.
+Preparing to unpack .../100-wayland-protocols_1.45-1~ubuntu0.24.04.2_all.deb ...
+Unpacking wayland-protocols (1.45-1~ubuntu0.24.04.2) ...
+Selecting previously unselected package libgtk-4-dev:amd64.
+Preparing to unpack .../101-libgtk-4-dev_4.14.5+ds-0ubuntu0.10_amd64.deb ...
+Unpacking libgtk-4-dev:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Selecting previously unselected package libadwaita-1-dev:amd64.
+Preparing to unpack .../102-libadwaita-1-dev_1.5.0-1ubuntu2_amd64.deb ...
+Unpacking libadwaita-1-dev:amd64 (1.5.0-1ubuntu2) ...
+Setting up libcairo-script-interpreter2:amd64 (1.18.0-3build1) ...
+Setting up libglib2.0-dev-bin (2.80.0-6ubuntu3.8) ...
+Setting up libwayland-server0:amd64 (1.22.0-2.1build1) ...
+Setting up libjpeg-turbo8-dev:amd64 (2.1.5-2ubuntu2) ...
+Setting up libvulkan-dev:amd64 (1.3.275.0-1build1) ...
+Setting up gir1.2-freedesktop:amd64 (1.80.1-1) ...
+Setting up libharfbuzz-icu0:amd64 (8.3.0-2build2) ...
+Setting up libpixman-1-dev:amd64 (0.42.2-1build1) ...
+Setting up libpangoxft-1.0-0:amd64 (1.52.1+ds-1build1) ...
+Setting up libglvnd-core-dev:amd64 (1.7.0-1build1) ...
+Setting up gir1.2-gdkpixbuf-2.0:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libgirepository-2.0-0:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libfribidi-dev:amd64 (1.0.13-3build1) ...
+Setting up libxkbcommon-dev:amd64 (1.6.0-1build1) ...
+Setting up libpng-dev:amd64 (1.6.43-5ubuntu0.6) ...
+Setting up pango1.0-tools (1.52.1+ds-1build1) ...
+Setting up libjbig-dev:amd64 (2.1-6.1ubuntu2) ...
+Setting up libwebpdecoder3:amd64 (1.3.2-0.4build3) ...
+Setting up libharfbuzz-gobject0:amd64 (8.3.0-2build2) ...
+Setting up gir1.2-harfbuzz-0.0:amd64 (8.3.0-2build2) ...
+Setting up libpthread-stubs0-dev:amd64 (0.4-1build3) ...
+Setting up libopengl0:amd64 (1.7.0-1build1) ...
+Setting up xtrans-dev (1.4.0-1) ...
+Setting up libwayland-bin (1.22.0-2.1build1) ...
+Setting up libgraphite2-dev:amd64 (1.3.14-2ubuntu0.24.04.1) ...
+Setting up gir1.2-pango-1.0:amd64 (1.52.1+ds-1build1) ...
+Setting up libegl-mesa0:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Setting up libgles2:amd64 (1.7.0-1build1) ...
+Setting up libharfbuzz-cairo0:amd64 (8.3.0-2build2) ...
+Setting up uuid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libgles1:amd64 (1.7.0-1build1) ...
+Setting up gir1.2-appstream-1.0:amd64 (1.0.2-1build6) ...
+Setting up libsepol-dev:amd64 (3.5-2build1) ...
+Setting up liblerc-dev:amd64 (4.0.0+ds-4ubuntu2) ...
+Setting up liblzma-dev:amd64 (5.6.1+really5.4.5-1ubuntu0.3) ...
+Setting up wayland-protocols (1.45-1~ubuntu0.24.04.2) ...
+Setting up libdatrie-dev:amd64 (0.2.13-3build1) ...
+Setting up gir1.2-glib-2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libgdk-pixbuf2.0-bin (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libegl1:amd64 (1.7.0-1build1) ...
+Setting up libharfbuzz-subset0:amd64 (8.3.0-2build2) ...
+Setting up xorg-sgml-doctools (1:1.11-1.1) ...
+Setting up libgtk-4-common (4.14.5+ds-0ubuntu0.10) ...
+Setting up libopengl-dev:amd64 (1.7.0-1build1) ...
+Setting up libjpeg8-dev:amd64 (8c-2ubuntu11) ...
+Setting up libsharpyuv-dev:amd64 (1.3.2-0.4build3) ...
+Setting up libtiffxx6:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Setting up libdeflate-dev:amd64 (1.19-1build1.1) ...
+Setting up libbrotli-dev:amd64 (1.1.0-2build2) ...
+Setting up libgraphene-1.0-0:amd64 (1.10.8-3build2) ...
+Setting up libbz2-dev:amd64 (1.0.8-5.1build0.1) ...
+Setting up gir1.2-graphene-1.0:amd64 (1.10.8-3build2) ...
+Setting up libblkid-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libselinux1-dev:amd64 (3.5-2ubuntu2.1) ...
+Setting up libjpeg-dev:amd64 (8c-2ubuntu11) ...
+Setting up libwayland-dev:amd64 (1.22.0-2.1build1) ...
+Setting up libfreetype-dev:amd64 (2.13.2+dfsg-1ubuntu0.1) ...
+Setting up libwebp-dev:amd64 (1.3.2-0.4build3) ...
+Setting up libtiff-dev:amd64 (4.5.1+git230720-4ubuntu2.5) ...
+Setting up gir1.2-freedesktop-dev:amd64 (1.80.1-1) ...
+Setting up libthai-dev:amd64 (0.1.29-2build1) ...
+Setting up libmount-dev:amd64 (2.39.3-9ubuntu6.5) ...
+Setting up libfontconfig-dev:amd64 (2.15.0-1.1ubuntu2) ...
+Setting up libglib2.0-dev:amd64 (2.80.0-6ubuntu3.8) ...
+Processing triggers for sgml-base (1.31) ...
+Setting up x11proto-dev (2023.2-1) ...
+Setting up libxau-dev:amd64 (1:1.0.9-1build6) ...
+Setting up libice-dev:amd64 (2:1.0.10-1build3) ...
+Setting up libsm-dev:amd64 (2:1.2.3-1build3) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Not building database; man-db/auto-update is not 'true'.
+Setting up libxdmcp-dev:amd64 (1:1.1.3-0ubuntu6) ...
+Processing triggers for libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.8) ...
+Setting up libappstream-dev:amd64 (1.0.2-1build6) ...
+Setting up x11proto-core-dev (2023.2-1) ...
+Setting up libgraphene-1.0-dev (1.10.8-3build2) ...
+Setting up libgtk-4-1:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up gir1.2-gtk-4.0:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up libgdk-pixbuf-2.0-dev:amd64 (2.42.10+dfsg-3ubuntu3.3) ...
+Setting up libharfbuzz-dev:amd64 (8.3.0-2build2) ...
+Setting up libxcb1-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libx11-dev:amd64 (2:1.8.7-1build1) ...
+Setting up libadwaita-1-0:amd64 (1.5.0-1ubuntu2) ...
+Setting up libxfixes-dev:amd64 (1:6.0.0-2build1) ...
+Setting up libxcb-shm0-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libxcb-render0-dev:amd64 (1.15-1ubuntu2) ...
+Setting up libxext-dev:amd64 (2:1.3.4-1build2) ...
+Setting up libglx-dev:amd64 (1.7.0-1build1) ...
+Setting up libxi-dev:amd64 (2:1.8.1-1build1) ...
+Setting up libxrender-dev:amd64 (1:0.9.10-1.1build1) ...
+Setting up libgl-dev:amd64 (1.7.0-1build1) ...
+Setting up libxft-dev:amd64 (2.3.6-1build1) ...
+Setting up libxdamage-dev:amd64 (1:1.1.6-1build1) ...
+Setting up libegl-dev:amd64 (1.7.0-1build1) ...
+Setting up libxcomposite-dev:amd64 (1:0.4.5-1build3) ...
+Setting up libxcursor-dev:amd64 (1:1.2.1-1build1) ...
+Setting up libepoxy-dev:amd64 (1.5.10-1build1) ...
+Setting up gir1.2-adw-1:amd64 (1.5.0-1ubuntu2) ...
+Setting up libxrandr-dev:amd64 (2:1.5.2-2build1) ...
+Setting up libxinerama-dev:amd64 (2:1.1.4-3build1) ...
+Setting up libcairo2-dev:amd64 (1.18.0-3build1) ...
+Setting up libgles-dev:amd64 (1.7.0-1build1) ...
+Setting up libglvnd-dev:amd64 (1.7.0-1build1) ...
+Setting up libpango1.0-dev:amd64 (1.52.1+ds-1build1) ...
+Setting up libegl1-mesa-dev:amd64 (25.2.8-0ubuntu0.24.04.2) ...
+Setting up libgtk-4-dev:amd64 (4.14.5+ds-0ubuntu0.10) ...
+Setting up libadwaita-1-dev:amd64 (1.5.0-1ubuntu2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+4.14.5
+1.5.0
+GATE_native_prerequisites_RC=0
+===== GATE toolchain =====
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GATE_toolchain_RC=0
+===== PRE_VALIDATION_HASHES =====
+cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503  Cargo.toml
+1f42f678b8c83ee4ce6c35d30a1bf30aff1d20006f1ce9495afa5df3cf47a5dc  Cargo.lock
+51227c7f0a1216df83c1e2ac7526961d096b7508ff1aaa1c7410f15102ba182e  crates/prw-remote-bridge/Cargo.toml
+===== GATE locked_metadata =====
+GATE_locked_metadata_RC=0
+===== GATE focused_fmt =====
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_execution.rs:82:
+         return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
+     };
+ 
+-    let result = dispatch_admitted_management_command(
+-        &admission,
+-        authority,
+-        lifecycle,
+-        agent_status,
+-    );
++    let result =
++        dispatch_admitted_management_command(&admission, authority, lifecycle, agent_status);
+     build_management_provider_response(request_id, result)
+ }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_provider_backend_policy.rs:220:
+         let policy = DenyAllForwardingEgressPolicy;
+         let ssh = target(Ipv4Addr::LOCALHOST, 22);
+         let https = target(Ipv4Addr::LOCALHOST, 443);
+-        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Deny);
+         assert_eq!(
++            policy.evaluate(spec(2200, ssh)),
++            ForwardingEgressDecision::Deny
++        );
++        assert_eq!(
+             policy.evaluate(spec(8443, https)),
+             ForwardingEgressDecision::Deny
+         );
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_provider_backend_policy.rs:234:
+             .expect("one exact target is within policy bound");
+ 
+         assert_eq!(policy.target_count(), 1);
+-        assert_eq!(policy.evaluate(spec(2200, ssh)), ForwardingEgressDecision::Allow);
+-        assert_eq!(policy.evaluate(spec(2201, ssh)), ForwardingEgressDecision::Allow);
++        assert_eq!(
++            policy.evaluate(spec(2200, ssh)),
++            ForwardingEgressDecision::Allow
++        );
++        assert_eq!(
++            policy.evaluate(spec(2201, ssh)),
++            ForwardingEgressDecision::Allow
++        );
+         assert_eq!(
+             policy.evaluate(spec(2200, target(Ipv4Addr::new(10, 0, 0, 10), 23))),
+             ForwardingEgressDecision::Deny
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_provider_lifecycle.rs:112:
+     /// Returns whether all provider resources have been explicitly drained.
+     #[must_use]
+     pub(crate) fn is_quiescent(&self) -> bool {
+-        self.transfers.active_count() == 0
+-            && self.terminal.is_empty()
+-            && self.forwarding.is_empty()
++        self.transfers.active_count() == 0 && self.terminal.is_empty() && self.forwarding.is_empty()
+     }
+ 
+     /// Consumes the lifecycle only when all provider resources are explicitly drained.
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_response.rs:19:
+     LOCAL_IPC_MAX_TERMINAL_BODY_LENGTH, LocalTerminalResponseBuildError,
+     build_terminal_response_frame,
+ };
+-use crate::frame_object::LocalIpcFrame;
+ use crate::LocalIpcRequestId;
++use crate::frame_object::LocalIpcFrame;
+ 
+ const RESULT_AGENT_STATUS: u8 = 1;
+ const RESULT_DIRECTORY_ENTRIES: u8 = 2;
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_response.rs:168:
+             LocalAgentResponseStatus::Conflict
+         }
+         LocalManagementTypedProviderDispatchError::File(error) => file_error_status(error),
+-        LocalManagementTypedProviderDispatchError::Transfer(error) => {
+-            transfer_error_status(error)
+-        }
+-        LocalManagementTypedProviderDispatchError::Terminal(error) => {
+-            terminal_error_status(error)
+-        }
++        LocalManagementTypedProviderDispatchError::Transfer(error) => transfer_error_status(error),
++        LocalManagementTypedProviderDispatchError::Terminal(error) => terminal_error_status(error),
+         LocalManagementTypedProviderDispatchError::Forwarding(error) => {
+             forwarding_error_status(error)
+         }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs:198:
+             path,
+             offset,
+             requested_len,
+-        } => download_chunk(
+-            lifecycle.filesystem().root(),
+-            path,
+-            *offset,
+-            *requested_len,
+-        )
+-        .map(LocalManagementTypedProviderResult::Bytes)
+-        .map_err(LocalManagementTypedProviderDispatchError::Transfer),
++        } => download_chunk(lifecycle.filesystem().root(), path, *offset, *requested_len)
++            .map(LocalManagementTypedProviderResult::Bytes)
++            .map_err(LocalManagementTypedProviderDispatchError::Transfer),
+         _ => Err(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch),
+     }
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs:376:
+     T: TerminalBackend,
+     F: PortForwardBackend,
+ {
+-    let existing = lifecycle
+-        .terminal()
+-        .session(session_id)
+-        .ok_or(LocalManagementTypedProviderDispatchError::Terminal(
+-            TerminalError::UnknownSession,
+-        ))?;
++    let existing = lifecycle.terminal().session(session_id).ok_or(
++        LocalManagementTypedProviderDispatchError::Terminal(TerminalError::UnknownSession),
++    )?;
+     require_same_terminal_principal(existing.principal(), current)
+ }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs:405:
+     T: TerminalBackend,
+     F: PortForwardBackend,
+ {
+-    let existing = lifecycle
+-        .forwarding()
+-        .session(forward_id)
+-        .ok_or(LocalManagementTypedProviderDispatchError::Forwarding(
+-            ForwardingError::UnknownSession,
+-        ))?;
++    let existing = lifecycle.forwarding().session(forward_id).ok_or(
++        LocalManagementTypedProviderDispatchError::Forwarding(ForwardingError::UnknownSession),
++    )?;
+     require_same_forwarding_principal(existing.principal(), current)
+ }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands.rs:55:
+     reason = "C02c provider lifecycle ownership seam is intentionally not runtime-wired"
+ )]
+ pub(crate) mod management_provider_lifecycle;
++pub mod management_request;
+ #[allow(
+     dead_code,
+     reason = "C02c deterministic management response semantics are intentionally not runtime-wired"
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands.rs:65:
+     reason = "C02c typed provider dispatch seam is intentionally not response-encoded or runtime-wired"
+ )]
+ pub(crate) mod management_typed_provider_dispatch;
+-pub mod management_request;
+ #[allow(
+     dead_code,
+     reason = "pre-runtime policy response pipeline is intentionally crate-internal"
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent/src/local_commands.rs:310:
+         assert_eq!(response.status(), LocalAgentResponseStatus::Ok);
+     }
+ }
++
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity/src/lib.rs:425:
+             Self::CandidateCapacity => "connectivity candidate capacity exceeded",
+             Self::DuplicateCandidateId => "connectivity candidate identifier is duplicated",
+             Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
+-            Self::CandidateIdRebound => "connectivity candidate identifier cannot be rebound or reused",
++            Self::CandidateIdRebound => {
++                "connectivity candidate identifier cannot be rebound or reused"
++            }
+             Self::UnknownCandidate => "connectivity candidate is unknown",
+         })
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-policy/src/lib.rs:292:
+             forwarding_create: Decision::Allow,
+         });
+ 
+-        assert_eq!(policy.evaluate(Capability::AgentStatusRead), Decision::Allow);
++        assert_eq!(
++            policy.evaluate(Capability::AgentStatusRead),
++            Decision::Allow
++        );
+         assert_eq!(
+             policy.evaluate(Capability::PrivateDnsConfigRead),
+             Decision::Deny
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs:12:
+ };
+ use prw_connectivity::{
+     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
+-    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan,
+-    ReachabilityObservation, SelectedConnectivityPath, TransportIdentity,
++    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, ReachabilityObservation,
++    SelectedConnectivityPath, TransportIdentity,
+ };
+ use prw_control_plane::DeviceIdentityBinding;
+ use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs:49:
+         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
+         .map_err(CandidateProvenanceError::Registry)?;
+ 
+-    let peer = PeerConnectivityIdentity::new(
+-        publisher.device_id().clone(),
+-        presented_transport_identity,
+-    );
++    let peer =
++        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
+     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
+         .map_err(CandidateProvenanceError::Connectivity)?;
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs:95:
+ }
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable C02e provenance key");
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable C02e provenance key");
+     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+         .expect("load disposable C02e provenance signer")
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs:187:
+         &requester_binding,
+         "session-requester-provenance",
+     );
+-    let target_session = authenticated_session(
+-        &target_signer,
+-        &target_binding,
+-        "session-target-provenance",
+-    );
++    let target_session =
++        authenticated_session(&target_signer, &target_binding, "session-target-provenance");
+     let requester_transport = transport(1);
+     let target_transport = transport(2);
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs:277:
+ 
+     assert_eq!(fixture.plan.peer(), &expected_identity);
+     assert_eq!(fixture.plan.candidate_count(), 2);
+-    assert_eq!(fixture.plan.selected_path(), SelectedConnectivityPath::Offline);
++    assert_eq!(
++        fixture.plan.selected_path(),
++        SelectedConnectivityPath::Offline
++    );
+     assert_eq!(
+         fixture.plan.set_observation(
+             CandidateId::new(1).expect("removed candidate id"),
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:32:
+ impl fmt::Display for CandidateReachabilityError {
+     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+         match self {
+-            Self::Registry(error) => write!(formatter, "candidate registry admission failed: {error}"),
++            Self::Registry(error) => {
++                write!(formatter, "candidate registry admission failed: {error}")
++            }
+             Self::WorkspaceMismatch => {
+                 formatter.write_str("candidate publisher and requester workspace mismatch")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:40:
+                 formatter.write_str("candidate publication target identity mismatch")
+             }
+             Self::Connectivity(error) => {
+-                write!(formatter, "candidate connectivity validation failed: {error}")
++                write!(
++                    formatter,
++                    "candidate connectivity validation failed: {error}"
++                )
+             }
+         }
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:104:
+         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
+         .map_err(CandidateReachabilityError::Registry)?;
+ 
+-    let peer = PeerConnectivityIdentity::new(
+-        publisher.device_id().clone(),
+-        presented_transport_identity,
+-    );
++    let peer =
++        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
+     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)?;
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:152:
+     if requester.workspace_id() != publisher.workspace_id() {
+         return Err(CandidateReachabilityError::WorkspaceMismatch);
+     }
+-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
++    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer()
++    {
+         return Err(CandidateReachabilityError::PublicationTargetMismatch);
+     }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:187:
+     publication: &AuthenticatedCandidatePublication,
+     plan: &mut PeerConnectivityPlan,
+ ) -> Result<(), CandidateReachabilityError> {
+-    validate_authenticated_publication_admission(
+-        registry,
+-        requester_session,
+-        publication,
+-        plan,
+-    )?;
++    validate_authenticated_publication_admission(registry, requester_session, publication, plan)?;
+ 
+     plan.refresh_candidates(publication.candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/candidate_reachability_semantic_adapter.rs:14:
+     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
+ };
+ use candidate_reachability::{
+-    CandidateReachabilityError, publish_current_candidates,
+-    refresh_from_authenticated_publication,
++    CandidateReachabilityError, publish_current_candidates, refresh_from_authenticated_publication,
+ };
+ use prw_connectivity::{
+     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/candidate_reachability_semantic_adapter.rs:28:
+ use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable semantic-adapter key");
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable semantic-adapter key");
+     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+         .expect("load disposable semantic-adapter signer")
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:13:
+ };
+ use prw_connectivity::{
+     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
+-    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan,
+-    ReachabilityObservation, SelectedConnectivityPath, TransportIdentity,
++    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, ReachabilityObservation,
++    SelectedConnectivityPath, TransportIdentity,
+ };
+ use prw_control_plane::DeviceIdentityBinding;
+ use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:39:
+         .validate_authenticated_session(requester_session)
+         .map_err(ReachabilityAdmissionError::Registry)?;
+ 
+-    let target = registry
+-        .device(plan.peer().device_id())
+-        .ok_or(ReachabilityAdmissionError::Registry(
+-            RegistryError::DeviceUnknown,
+-        ))?;
++    let target =
++        registry
++            .device(plan.peer().device_id())
++            .ok_or(ReachabilityAdmissionError::Registry(
++                RegistryError::DeviceUnknown,
++            ))?;
+     if target.binding().workspace_id != *requester.workspace_id() {
+         return Err(ReachabilityAdmissionError::WorkspaceMismatch);
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:50:
+ 
+     registry
+-        .validate_transport_identity(
+-            plan.peer().device_id(),
+-            plan.peer().transport_identity(),
+-        )
++        .validate_transport_identity(plan.peer().device_id(), plan.peer().transport_identity())
+         .map_err(ReachabilityAdmissionError::Registry)?;
+ 
+     plan.refresh_candidates(candidates)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:60:
+ }
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable C02e key");
+-    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+-        .expect("load disposable C02e signer")
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable C02e key");
++    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("load disposable C02e signer")
+ }
+ 
+ fn authenticated_session(
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:145:
+ 
+     let mut registry = WorkspaceDeviceRegistry::new();
+     registry
+-        .add_membership(
+-            workspace_id.clone(),
+-            user_id.clone(),
+-            WorkspaceRole::Member,
+-        )
++        .add_membership(workspace_id.clone(), user_id.clone(), WorkspaceRole::Member)
+         .expect("active membership");
+     registry
+         .register_device(requester_binding)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs:325:
+ 
+     let mut registry = WorkspaceDeviceRegistry::new();
+     registry
+-        .add_membership(
+-            requester_workspace,
+-            requester_user,
+-            WorkspaceRole::Member,
+-        )
++        .add_membership(requester_workspace, requester_user, WorkspaceRole::Member)
+         .expect("requester membership");
+     registry
+         .add_membership(target_workspace, target_user, WorkspaceRole::Member)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:32:
+ impl fmt::Display for CandidateReachabilityError {
+     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+         match self {
+-            Self::Registry(error) => write!(formatter, "candidate registry admission failed: {error}"),
++            Self::Registry(error) => {
++                write!(formatter, "candidate registry admission failed: {error}")
++            }
+             Self::WorkspaceMismatch => {
+                 formatter.write_str("candidate publisher and requester workspace mismatch")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:40:
+                 formatter.write_str("candidate publication target identity mismatch")
+             }
+             Self::Connectivity(error) => {
+-                write!(formatter, "candidate connectivity validation failed: {error}")
++                write!(
++                    formatter,
++                    "candidate connectivity validation failed: {error}"
++                )
+             }
+         }
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:104:
+         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
+         .map_err(CandidateReachabilityError::Registry)?;
+ 
+-    let peer = PeerConnectivityIdentity::new(
+-        publisher.device_id().clone(),
+-        presented_transport_identity,
+-    );
++    let peer =
++        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
+     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)?;
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:152:
+     if requester.workspace_id() != publisher.workspace_id() {
+         return Err(CandidateReachabilityError::WorkspaceMismatch);
+     }
+-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
++    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer()
++    {
+         return Err(CandidateReachabilityError::PublicationTargetMismatch);
+     }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:187:
+     publication: &AuthenticatedCandidatePublication,
+     plan: &mut PeerConnectivityPlan,
+ ) -> Result<(), CandidateReachabilityError> {
+-    validate_authenticated_publication_admission(
+-        registry,
+-        requester_session,
+-        publication,
+-        plan,
+-    )?;
++    validate_authenticated_publication_admission(registry, requester_session, publication, plan)?;
+ 
+     plan.refresh_candidates(publication.candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:116:
+ }
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable composition-reference key");
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable composition-reference key");
+     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+         .expect("load disposable composition-reference signer")
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:278:
+         .expect("successful full refresh commits");
+ 
+     assert_eq!(owner.current_traversal(), None);
+-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
+     assert_eq!(
++        owner.plan().selected_path(),
++        SelectedConnectivityPath::Offline
++    );
++    assert_eq!(
+         owner.apply_observation(
+             TestTraversalLifecycle::BeforeRefresh,
+             retained.id(),
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:287:
+         ),
+         Err(ReferenceObservationError::StaleTraversal)
+     );
+-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
++    assert_eq!(
++        owner.plan().selected_path(),
++        SelectedConnectivityPath::Offline
++    );
+ 
+     owner.install_replacement(TestTraversalLifecycle::Replacement);
+     owner
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:350:
+             ReachabilityObservation::Unreachable,
+         )
+         .expect("rejected refresh does not invalidate current traversal");
+-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
++    assert_eq!(
++        owner.plan().selected_path(),
++        SelectedConnectivityPath::Offline
++    );
+ }
+ 
+ #[test]
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:363:
+         vec![candidate(2, ConnectivityPathKind::InternetDirect, 3002)],
+     )
+     .expect("current target publication");
+-    let mut owner = ReachabilityCompositionReference::new(
+-        fixture.plan,
+-        TestTraversalLifecycle::BeforeRefresh,
+-    );
++    let mut owner =
++        ReachabilityCompositionReference::new(fixture.plan, TestTraversalLifecycle::BeforeRefresh);
+     let before = owner.plan().clone();
+ 
+     fixture
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_composition_reference.rs:446:
+         ),
+         Err(ReferenceObservationError::StaleTraversal)
+     );
+-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
++    assert_eq!(
++        owner.plan().selected_path(),
++        SelectedConnectivityPath::Offline
++    );
+ }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:32:
+ impl fmt::Display for CandidateReachabilityError {
+     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+         match self {
+-            Self::Registry(error) => write!(formatter, "candidate registry admission failed: {error}"),
++            Self::Registry(error) => {
++                write!(formatter, "candidate registry admission failed: {error}")
++            }
+             Self::WorkspaceMismatch => {
+                 formatter.write_str("candidate publisher and requester workspace mismatch")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:40:
+                 formatter.write_str("candidate publication target identity mismatch")
+             }
+             Self::Connectivity(error) => {
+-                write!(formatter, "candidate connectivity validation failed: {error}")
++                write!(
++                    formatter,
++                    "candidate connectivity validation failed: {error}"
++                )
+             }
+         }
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:104:
+         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
+         .map_err(CandidateReachabilityError::Registry)?;
+ 
+-    let peer = PeerConnectivityIdentity::new(
+-        publisher.device_id().clone(),
+-        presented_transport_identity,
+-    );
++    let peer =
++        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
+     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)?;
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:152:
+     if requester.workspace_id() != publisher.workspace_id() {
+         return Err(CandidateReachabilityError::WorkspaceMismatch);
+     }
+-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
++    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer()
++    {
+         return Err(CandidateReachabilityError::PublicationTargetMismatch);
+     }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:187:
+     publication: &AuthenticatedCandidatePublication,
+     plan: &mut PeerConnectivityPlan,
+ ) -> Result<(), CandidateReachabilityError> {
+-    validate_authenticated_publication_admission(
+-        registry,
+-        requester_session,
+-        publication,
+-        plan,
+-    )?;
++    validate_authenticated_publication_admission(registry, requester_session, publication, plan)?;
+ 
+     plan.refresh_candidates(publication.candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs:172:
+ }
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable freshness-reference key");
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable freshness-reference key");
+     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+         .expect("load disposable freshness-reference signer")
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs:242:
+     let target_signer = signer();
+     let workspace_id = WorkspaceId::new("workspace-freshness-reference").expect("workspace id");
+     let requester_user = UserId::new("requester-freshness-reference").expect("user id");
+-    let second_requester_user =
+-        UserId::new("requester-two-freshness-reference").expect("user id");
++    let second_requester_user = UserId::new("requester-two-freshness-reference").expect("user id");
+     let target_user = UserId::new("target-freshness-reference").expect("user id");
+     let requester_binding = binding(
+         &requester_signer,
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs:407:
+         ))
+     );
+     assert_eq!(owner.plan(), &before);
++    assert_eq!(owner.current_freshness(), Some(TestFreshnessState::Initial));
+     assert_eq!(
+-        owner.current_freshness(),
+-        Some(TestFreshnessState::Initial)
+-    );
+-    assert_eq!(
+         owner.current_traversal(),
+         Some(TestTraversalLifecycle::BeforeRefresh)
+     );
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_freshness_authority_reference.rs:605:
+         Some(TestFreshnessState::AfterFirstCommit)
+     );
+     assert_eq!(owner.current_traversal(), None);
+-    assert_eq!(owner.plan().selected_path(), SelectedConnectivityPath::Offline);
++    assert_eq!(
++        owner.plan().selected_path(),
++        SelectedConnectivityPath::Offline
++    );
+ }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:32:
+ impl fmt::Display for CandidateReachabilityError {
+     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+         match self {
+-            Self::Registry(error) => write!(formatter, "candidate registry admission failed: {error}"),
++            Self::Registry(error) => {
++                write!(formatter, "candidate registry admission failed: {error}")
++            }
+             Self::WorkspaceMismatch => {
+                 formatter.write_str("candidate publisher and requester workspace mismatch")
+             }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:40:
+                 formatter.write_str("candidate publication target identity mismatch")
+             }
+             Self::Connectivity(error) => {
+-                write!(formatter, "candidate connectivity validation failed: {error}")
++                write!(
++                    formatter,
++                    "candidate connectivity validation failed: {error}"
++                )
+             }
+         }
+     }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:104:
+         .validate_transport_identity(publisher.device_id(), presented_transport_identity)
+         .map_err(CandidateReachabilityError::Registry)?;
+ 
+-    let peer = PeerConnectivityIdentity::new(
+-        publisher.device_id().clone(),
+-        presented_transport_identity,
+-    );
++    let peer =
++        PeerConnectivityIdentity::new(publisher.device_id().clone(), presented_transport_identity);
+     PeerConnectivityPlan::new(peer.clone(), candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)?;
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:152:
+     if requester.workspace_id() != publisher.workspace_id() {
+         return Err(CandidateReachabilityError::WorkspaceMismatch);
+     }
+-    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer() {
++    if publisher.device_id() != publication.peer().device_id() || plan.peer() != publication.peer()
++    {
+         return Err(CandidateReachabilityError::PublicationTargetMismatch);
+     }
+ 
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/../src/candidate_reachability.rs:187:
+     publication: &AuthenticatedCandidatePublication,
+     plan: &mut PeerConnectivityPlan,
+ ) -> Result<(), CandidateReachabilityError> {
+-    validate_authenticated_publication_admission(
+-        registry,
+-        requester_session,
+-        publication,
+-        plan,
+-    )?;
++    validate_authenticated_publication_admission(registry, requester_session, publication, plan)?;
+ 
+     plan.refresh_candidates(publication.candidates.clone())
+         .map_err(CandidateReachabilityError::Connectivity)
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge/tests/reachability_freshness_bootstrap_reference.rs:129:
+ }
+ 
+ fn signer() -> UbuntuEnrollmentSigner {
+-    let pkcs8 =
+-        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
+-            .expect("generate disposable bootstrap-reference key");
++    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
++        .expect("generate disposable bootstrap-reference key");
+     UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
+         .expect("load disposable bootstrap-reference signer")
+ }
+Diff in /home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal/src/lib.rs:961:
+             .open_session(id(13), principal(), TerminalProfile::PosixShell, geometry())
+             .expect("open");
+         assert_eq!(broker.close_session(id(13)), Err(TerminalError::Backend));
+-        assert_eq!(broker.retry_failed_close(id(13)), Err(TerminalError::Backend));
++        assert_eq!(
++            broker.retry_failed_close(id(13)),
++            Err(TerminalError::Backend)
++        );
+         assert_eq!(broker.backend.close_calls, 2);
+         assert_eq!(
+             broker.session(id(13)).expect("retained").state(),
+GATE_focused_fmt_RC=1
+GATE_focused_clippy=SKIPPED_AFTER_focused_fmt
+GATE_focused_connectivity_tests=SKIPPED_AFTER_focused_fmt
+GATE_focused_remote_bridge_tests=SKIPPED_AFTER_focused_fmt
+GATE_locked_metadata_recheck=SKIPPED_AFTER_focused_fmt
+GATE_workspace_fmt=SKIPPED_AFTER_focused_fmt
+GATE_workspace_clippy=SKIPPED_AFTER_focused_fmt
+GATE_workspace_tests=SKIPPED_AFTER_focused_fmt
+GATE_workspace_build=SKIPPED_AFTER_focused_fmt
+===== POST_VALIDATION_HASHES =====
+cea7d487296f6faed8765436b59a0613a5e487c1a69d38c16a13dc03e9035503  Cargo.toml
+1f42f678b8c83ee4ce6c35d30a1bf30aff1d20006f1ce9495afa5df3cf47a5dc  Cargo.lock
+51227c7f0a1216df83c1e2ac7526961d096b7508ff1aaa1c7410f15102ba182e  crates/prw-remote-bridge/Cargo.toml
+ZERO_DEPENDENCY_DRIFT_RC=0
+STATUS=FAIL
+FIRST_FAILURE=focused_fmt
+VALIDATION_RC=1
