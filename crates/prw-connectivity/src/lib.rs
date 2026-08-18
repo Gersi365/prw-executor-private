@@ -320,11 +320,10 @@ impl PeerConnectivityPlan {
                 Some(existing) if existing.candidate != *candidate => {
                     return Err(ConnectivityError::CandidateIdRebound);
                 }
-                Some(_) => {}
                 None if candidate.id.get() <= self.candidate_id_high_watermark => {
                     return Err(ConnectivityError::CandidateIdRebound);
                 }
-                None => {}
+                Some(_) | None => {}
             }
             for existing in &candidates[..index] {
                 if existing.id == candidate.id {
