@@ -57,7 +57,7 @@ jobs:
             FORMAT_SCOPE_RC=1
           fi
 
-          cargo clippy --locked -p prw-desktop --all-targets --all-features -- -D warnings
+          cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings
           CLIPPY_RC=$?
           cargo test --locked -p prw-desktop --all-targets
           TEST_RC=$?
@@ -84,9 +84,12 @@ jobs:
             echo "FMT_APPLY_RC=$FMT_APPLY_RC"
             echo "FORMAT_SCOPE_RC=$FORMAT_SCOPE_RC"
             echo "FORMAT_DIFF=$FORMAT_DIFF"
+            echo "CLIPPY_SCOPE=PRW_DESKTOP_NO_DEPS"
             echo "CLIPPY_RC=$CLIPPY_RC"
             echo "TEST_RC=$TEST_RC"
             echo "BUILD_RC=$BUILD_RC"
+            echo "WORKSPACE_CLIPPY_SEPARATELY_GATED=YES"
+            echo "KNOWN_WORKSPACE_BLOCKER=PRW_REMOTE_BRIDGE_TRANCHE5_MISSING_CONST_FOR_FN"
             echo "FORWARDING_PROVIDER_DISPATCH=NO"
             echo "FORWARDING_SOCKET_ACTIVATION=NO"
             echo "PRIVATE_DNS_OS_MUTATION=NO"
