@@ -1,0 +1,149 @@
+name: Phase 152 Desktop Connectivity Preview Corrective Apply
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-connectivity-preview
+    paths:
+      - ".github/workflows/phase-152-desktop-connectivity-preview-corrective-apply.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-desktop-connectivity-preview-corrective-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply bounded corrected preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_HEAD="$GITHUB_SHA"
+          BRANCH="phase-152-desktop-connectivity-preview"
+          SOURCE="apps/desktop/src/ui.rs"
+          SELF=".github/workflows/phase-152-desktop-connectivity-preview-corrective-apply.yml"
+          OLD_VALIDATOR=".github/workflows/phase-152-desktop-connectivity-preview-validation.yml"
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | awk '{print $1}')"
+          [[ "$REMOTE_HEAD" == "$BASE_HEAD" ]]
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+
+          replacements = [
+          (
+              "use gtk::glib;\nuse prw_forwarding::LoopbackFamily;",
+              "use gtk::glib;\nuse prw_connectivity::{ConnectivityPathKind, ReachabilityObservation, SelectedConnectivityPath};\nuse prw_forwarding::LoopbackFamily;",
+          ),
+          (
+              "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        stack.add_titled(&page, Some(destination.stack_name()), destination.title());\n    }",
+              "    for destination in NavigationDestination::ALL.into_iter().skip(1) {\n        let page = destination_page(destination);\n        let scroller = gtk::ScrolledWindow::new();\n        scroller.set_hexpand(true);\n        scroller.set_vexpand(true);\n        scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);\n        scroller.set_child(Some(&page));\n        stack.add_titled(\n            &scroller,\n            Some(destination.stack_name()),\n            destination.title(),\n        );\n    }",
+          ),
+          (
+              "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n\n    page.append(&section_label(\"Port forwarding intent\"));",
+              "    page.append(&section_label(\"Live reachability\"));\n    page.append(&detail_label(\n        \"Agent-backed candidate publication and traversal activation are not enabled from this desktop branch. Unknown reachability is never rendered as connected.\",\n    ));\n    append_connectivity_preview(&page);\n\n    page.append(&section_label(\"Port forwarding intent\"));",
+          ),
+          (
+              "            match (\n                resolver_address.parse::<IpAddr>(),\n                resolver_port.parse::<u16>(),\n            ) {\n                (Ok(address), Ok(port)) => Some((address, port)),\n                _ => {\n                    dns_result_output.set_text(\n                        \"Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.\",\n                    );\n                    return;\n                }\n            }",
+              "            if let (Ok(address), Ok(port)) = (\n                resolver_address.parse::<IpAddr>(),\n                resolver_port.parse::<u16>(),\n            ) {\n                Some((address, port))\n            } else {\n                dns_result_output.set_text(\n                    \"Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.\",\n                );\n                return;\n            }",
+          ),
+          (
+              "fn section_label(title: &str) -> gtk::Label {",
+              '''fn append_connectivity_preview(page: &gtk::Box) {
+    page.append(&section_label("Connectivity selection preview"));
+    page.append(&detail_label(
+        "Declare disposable observations below to preview the existing deterministic LocalDirect → InternetDirect → Relay → Offline selector. This does not probe the network.",
+    ));
+
+    let local_observation = reachability_selector();
+    let internet_observation = reachability_selector();
+    let relay_observation = reachability_selector();
+    page.append(&detail_label("LocalDirect observation"));
+    page.append(&local_observation);
+    page.append(&detail_label("InternetDirect observation"));
+    page.append(&internet_observation);
+    page.append(&detail_label("Relay observation"));
+    page.append(&relay_observation);
+
+    let connectivity_result = management_result_label();
+    let preview_connectivity = gtk::Button::with_label("Preview selected connectivity path");
+    let connectivity_result_output = connectivity_result.clone();
+    preview_connectivity.connect_clicked(move |_| {
+        match management::select_disposable_connectivity_path(
+            selected_reachability(&local_observation),
+            selected_reachability(&internet_observation),
+            selected_reachability(&relay_observation),
+        ) {
+            Ok(SelectedConnectivityPath::Candidate(candidate)) => {
+                connectivity_result_output.set_text(&format!(
+                    "Preview selected {} from disposable declared observations. No network probe or reachability publication occurred.",
+                    connectivity_path_label(candidate.kind())
+                ));
+            }
+            Ok(SelectedConnectivityPath::Offline) => connectivity_result_output.set_text(
+                "Preview selected Offline because no declared candidate is Reachable. No network probe occurred.",
+            ),
+            Err(_) => connectivity_result_output.set_text(
+                "Connectivity preview could not construct the bounded disposable plan. No network state was changed.",
+            ),
+        }
+    });
+    page.append(&preview_connectivity);
+    page.append(&connectivity_result);
+}
+
+fn reachability_selector() -> gtk::DropDown {
+    let selector = gtk::DropDown::from_strings(&["Unknown", "Reachable", "Unreachable"]);
+    selector.set_selected(0);
+    selector
+}
+
+fn selected_reachability(selector: &gtk::DropDown) -> ReachabilityObservation {
+    match selector.selected() {
+        1 => ReachabilityObservation::Reachable,
+        2 => ReachabilityObservation::Unreachable,
+        _ => ReachabilityObservation::Unknown,
+    }
+}
+
+const fn connectivity_path_label(kind: ConnectivityPathKind) -> &'static str {
+    match kind {
+        ConnectivityPathKind::LocalDirect => "LocalDirect",
+        ConnectivityPathKind::InternetDirect => "InternetDirect",
+        ConnectivityPathKind::Relay => "Relay",
+    }
+}
+
+fn section_label(title: &str) -> gtk::Label {''',
+          ),
+          ]
+
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f"patch guard failed: {old[:80]!r}; count={text.count(old)}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+          mapfile -t DIFF_PATHS < <(git diff --name-only)
+          [[ "${#DIFF_PATHS[@]}" -eq 1 ]]
+          [[ "${DIFF_PATHS[0]}" == "$SOURCE" ]]
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SOURCE"
+          git rm "$SELF" "$OLD_VALIDATOR"
+          git commit -m "phase 152 desktop: apply corrected connectivity preview ${BASE_HEAD:0:12}"
+          git push origin "HEAD:$BRANCH"
