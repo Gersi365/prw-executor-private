@@ -1,6 +1,6 @@
 # C02e Tranche 5 — Freshness-Token Wire / Authenticated Resynchronization Audit
 
-Status: `IMPLEMENTATION_STAGING`
+Status: `IMPLEMENTATION_STAGED / RUSTFMT_CORRECTED / EXACT_HEAD_REVALIDATION_TRIGGERED`
 
 Tranche 4 closeout head: `eea6b8743eebf21002ae173dfcfd5cbbf93378a8`
 Frozen C02d head: `857583b25ed1206317641a93fd8f927819c954d8`
@@ -60,3 +60,13 @@ The focused Tranche 5 test will prove:
 6. wrong/stale transport currentness fails before durable lookup;
 7. `RecoveryRequired`, `Retired` and missing durable state disclose no token;
 8. full locked workspace format/Clippy/tests/build and tracked-drift checks remain clean.
+
+## Rustfmt corrective and exact-head revalidation
+
+The staged source/test candidate was normalized by the repository-pinned formatter using a one-shot workflow that ran `cargo fmt --all`, rejected any diff outside the two Tranche 5 Rust files, verified the frozen Cargo.lock SHA-256, guarded the branch head before push and self-deleted.
+
+Rustfmt corrective commit: `63db80674e30f85b79d40fd07690c7f332afbf50`.
+
+The corrective patch contains formatting only: line wrapping, brace layout and whitespace. It changes no PRWF field, operation, failure code, authentication/currentness ordering, durable-read semantics, token disclosure rule, dependency graph, Cargo.lock, runtime boundary or network activation.
+
+Because commits pushed by a workflow token do not recursively trigger the validator workflow, this audit-only user commit intentionally retriggers the existing exact-head Tranche 5 validator without changing source semantics. Final classification remains pending the new authoritative validation evidence child/report.
