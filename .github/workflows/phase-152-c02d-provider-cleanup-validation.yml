@@ -100,9 +100,13 @@ jobs:
             crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
           grep -Fn 'pub(crate) struct DenyAllForwardingEgressPolicy' \
             crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
+          grep -Fn 'pub(crate) struct ExactForwardingEgressPolicy' \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
           grep -Fn 'MAX_FORWARD_CONNECTIONS_PER_SESSION: usize = 32' \
             crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
           grep -Fn 'MAX_FORWARD_CONNECTIONS_AGGREGATE: usize = 32' \
+            crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
+          grep -Fn 'MAX_FORWARD_EGRESS_TARGETS: usize = 32' \
             crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
           grep -Fn 'FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(5)' \
             crates/prw-agent/src/local_commands/management_provider_backend_policy.rs
