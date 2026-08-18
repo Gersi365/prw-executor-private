@@ -1,0 +1,124 @@
+name: PRW Phase 152 Inherited Lock Reconciliation
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - '.github/workflows/phase-152-inherited-lock-reconciliation.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-inherited-lock-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Materialize only inherited workspace lock metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "phase-152-c02e-dynamic-reachability-design"
+          C02D=857583b25ed1206317641a93fd8f927819c954d8
+          git merge-base --is-ancestor "${C02D}" HEAD
+          test "$(git merge-base "${C02D}" HEAD)" = "${C02D}"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          test "${BASE_HEAD}" = "${GITHUB_SHA}"
+
+          rustc --version
+          cargo --version
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
+
+          python3 - <<'PY'
+          import json, tomllib
+          from pathlib import Path
+          data = tomllib.loads(Path('Cargo.lock').read_text())
+          external = sorted(
+              (p['name'], p['version'], p.get('source'), p.get('checksum'))
+              for p in data['package'] if p.get('source') is not None
+          )
+          locals_ = sorted((p['name'], p['version']) for p in data['package'] if p.get('source') is None)
+          agent = next(p for p in data['package'] if p['name'] == 'prw-agent')
+          Path('/tmp/external-before.json').write_text(json.dumps(external, sort_keys=True))
+          Path('/tmp/locals-before.json').write_text(json.dumps(locals_, sort_keys=True))
+          Path('/tmp/agent-deps-before.json').write_text(json.dumps(sorted(agent.get('dependencies', []))))
+          PY
+
+          # Full metadata resolution intentionally materializes the committed workspace manifests.
+          cargo metadata --format-version 1 > /dev/null
+
+          test -n "$(git diff --name-only -- Cargo.lock)"
+          mapfile -t changed < <(git diff --name-only)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "Cargo.lock"
+
+          cargo metadata --locked --format-version 1 > /dev/null
+
+          python3 - <<'PY'
+          import json, tomllib
+          from pathlib import Path
+          data = tomllib.loads(Path('Cargo.lock').read_text())
+          external = sorted(
+              (p['name'], p['version'], p.get('source'), p.get('checksum'))
+              for p in data['package'] if p.get('source') is not None
+          )
+          locals_ = sorted((p['name'], p['version']) for p in data['package'] if p.get('source') is None)
+          before_external = json.loads(Path('/tmp/external-before.json').read_text())
+          before_locals = json.loads(Path('/tmp/locals-before.json').read_text())
+          if external != [tuple(x) for x in before_external]:
+              raise SystemExit('external package/version/source/checksum drift detected')
+          if locals_ != [tuple(x) for x in before_locals]:
+              raise SystemExit('workspace/local package identity drift detected')
+
+          agent = next(p for p in data['package'] if p['name'] == 'prw-agent')
+          before = set(json.loads(Path('/tmp/agent-deps-before.json').read_text()))
+          after = set(agent.get('dependencies', []))
+          expected_added = {
+              'prw-file-service',
+              'prw-file-transfer',
+              'prw-forwarding',
+              'prw-registry',
+              'prw-session',
+              'prw-terminal',
+          }
+          if after - before != expected_added:
+              raise SystemExit(f'unexpected prw-agent lock dependency additions: {sorted(after-before)}')
+          if before - after:
+              raise SystemExit(f'unexpected prw-agent lock dependency removals: {sorted(before-after)}')
+          Path('/tmp/agent-deps-after.txt').write_text('\n'.join(sorted(after)) + '\n')
+          PY
+
+          git diff --check -- Cargo.lock
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_INHERITED_LOCK_RECONCILIATION_${BASE_HEAD}.txt"
+          {
+            echo 'STATUS=PASS_TOOL_MATERIALIZED_INHERITED_LOCK_RECONCILIATION'
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "RUN_ID=${GITHUB_RUN_ID}"
+            echo "RUSTC=$(rustc --version)"
+            echo "CARGO=$(cargo --version)"
+            echo "LOCK_BEFORE_SHA256=$(sha256sum "${RUNNER_TEMP}/Cargo.lock.before" | awk '{print $1}')"
+            echo "LOCK_AFTER_SHA256=$(sha256sum Cargo.lock | awk '{print $1}')"
+            echo 'EXTERNAL_PACKAGE_IDENTITY_DRIFT=NONE'
+            echo 'WORKSPACE_PACKAGE_IDENTITY_DRIFT=NONE'
+            echo 'PRW_AGENT_LOCK_ADDED_DEPENDENCIES=prw-file-service,prw-file-transfer,prw-forwarding,prw-registry,prw-session,prw-terminal'
+            echo 'MANIFEST_MUTATION=NONE'
+            echo 'LOCK_MATERIALIZER=cargo metadata --format-version 1'
+          } > "${REPORT}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock "${REPORT}"
+          git diff --cached --check
+          git commit -m "phase 152 c02e: reconcile inherited workspace lock ${BASE_HEAD::12}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
