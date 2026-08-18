@@ -1,0 +1,48 @@
+name: PRW Phase 152 C02e Tranche5 Rustfmt Corrective
+on:
+  push:
+    branches: [phase-152-c02e-dynamic-reachability-design]
+    paths: [.github/workflows/phase-152-c02e-tranche5-rustfmt-corrective.yml]
+permissions:
+  contents: write
+concurrency:
+  group: prw-c02e-tranche5-rustfmt-corrective-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Apply exact rustfmt corrective
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH=phase-152-c02e-dynamic-reachability-design
+          SELF=.github/workflows/phase-152-c02e-tranche5-rustfmt-corrective.yml
+          SOURCE=crates/prw-remote-bridge/src/reachability_freshness_wire.rs
+          TEST=crates/prw-remote-bridge/tests/reachability_freshness_wire.rs
+          BASE_HEAD="$(git rev-parse HEAD)"
+          LOCK_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          EXPECTED_LOCK=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+          [[ "${LOCK_BEFORE}" == "${EXPECTED_LOCK}" ]]
+          cargo fmt --all
+          mapfile -t CHANGED < <(git diff --name-only)
+          [[ ${#CHANGED[@]} -gt 0 ]]
+          for path in "${CHANGED[@]}"; do
+            [[ "${path}" == "${SOURCE}" || "${path}" == "${TEST}" ]] || {
+              echo "unexpected rustfmt path: ${path}" >&2
+              exit 21
+            }
+          done
+          LOCK_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          [[ "${LOCK_AFTER}" == "${EXPECTED_LOCK}" ]]
+          REMOTE="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          [[ "${REMOTE}" == "${BASE_HEAD}" ]]
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "${SOURCE}" "${TEST}"
+          git rm "${SELF}"
+          git commit -m "phase 152 c02e: apply tranche5 rustfmt corrective"
+          git push origin "HEAD:${BRANCH}"
