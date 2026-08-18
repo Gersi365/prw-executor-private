@@ -7,6 +7,10 @@ mod local_management_ipc;
 )]
 pub(crate) mod management;
 mod state;
+#[expect(
+    clippy::option_if_let_else,
+    reason = "Phase 152 command-3 preview keeps explicit success/failure rendering auditable at the NOT DISPATCHED boundary"
+)]
 mod ui;
 
 use adw::prelude::*;
