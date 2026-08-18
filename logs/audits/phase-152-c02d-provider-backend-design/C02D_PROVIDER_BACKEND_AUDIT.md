@@ -1,39 +1,46 @@
 # PRW Phase 152 C02d Provider Backend and Cleanup Recovery Audit
 
-Status: `PROVIDER_NEUTRAL_CLEANUP_RECOVERY_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_OS_IO`
+Status: `CLEANUP_RECOVERY_AND_PURE_POLICY_SEAMS_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_OS_IO`
 
 - repository_id: `1334911207`
 - canonical_repository: `powercode2026/prw-executor-private`
 - stacked_predecessor: `6141ecf08976e26c99329592d52cbd8d736b0edf`
 - predecessor_branch: `phase-152-c02c-authority-foundation`
 - branch: `phase-152-c02d-provider-backend-design`
-- staged_head_before_audit: `d1b2aecda192321b2b692782620e771bd36b0b7e`
+- staged_head_before_audit_refresh: `92bd1ef6d4324467b387376b38b761451772b6b5`
 
 ## Scope
 
-C02d is stacked directly on the frozen C02c implementation-staged checkpoint. Its first source slice closes one provider-neutral lifecycle gap before any concrete PTY or TCP backend can be reviewed: retryable teardown for retained failed terminal/forwarding handles.
+C02d remains stacked directly on the C02c implementation-staged checkpoint. It now contains two bounded source slices before any concrete PTY or TCP backend can be reviewed:
 
-Exact stacked compare immediately before this audit:
+1. provider-neutral retryable teardown for retained failed terminal/forwarding handles;
+2. a pure Agent-owned provider policy seam for terminal template identifiers and forwarding egress decisions.
 
-- relation: `ahead 4 / behind 0`
+Exact stacked compare immediately before this audit refresh:
+
+- relation: `ahead 9 / behind 0`
 - merge base: exact C02c head `6141ecf08976e26c99329592d52cbd8d736b0edf`
-- changed files: `4`
-- additions: `579`
-- deletions: `0`
+- changed files: `7`
+- additions: `983`
+- deletions: `1`
 
-C02d-specific changed paths:
+C02d-specific changed paths before this audit refresh:
 
 - `.github/workflows/phase-152-c02d-provider-cleanup-validation.yml`
 - `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md`
+- `crates/prw-agent/src/local_commands.rs`
+- `crates/prw-agent/src/local_commands/management_provider_backend_policy.rs`
 - `crates/prw-forwarding/src/lib.rs`
 - `crates/prw-terminal/src/lib.rs`
+- `logs/audits/phase-152-c02d-provider-backend-design/C02D_PROVIDER_BACKEND_AUDIT.md`
 
 The C02d delta does not modify:
 
 - root `Cargo.toml`;
 - root `Cargo.lock`;
 - `crates/prw-agent/Cargo.toml`;
-- any Agent runtime/bootstrap/main source;
+- Agent `main.rs`;
+- Agent Linux bootstrap/runtime source;
 - `crates/prw-policy`;
 - desktop or Android source;
 - service-manager/deployment files;
@@ -47,115 +54,139 @@ Locked behavior:
 
 1. removes the requested broker entry temporarily;
 2. returns `UnknownSession` if no record exists;
-3. requires the retained record state to be exactly `TerminalState::Failed`;
+3. requires retained state to be exactly `TerminalState::Failed`;
 4. reinserts a non-failed record unchanged and returns `InvalidState` before backend close;
 5. requires the failed record to retain a backend handle;
-6. invokes only the existing `TerminalBackend::close(&mut handle)` operation;
-7. on backend close failure, keeps the record `Failed`, reinserts it with its handle, and returns `Backend`;
-8. on success, clears the handle, marks the record `Closed`, removes it from the broker, and returns the closed immutable session record.
+6. invokes only existing `TerminalBackend::close(&mut handle)`;
+7. on backend close failure, retains `Failed` + handle and returns `Backend`;
+8. on success, clears the handle, marks `Closed`, removes the broker record, and returns the closed immutable session record.
 
-The retry path never transitions `Failed` back to `Open`, never replays terminal input/output/resize, and never changes the immutable principal/profile/geometry record.
+The retry path never transitions `Failed` back to `Open`, never replays terminal input/output/resize, and never changes immutable principal/profile/geometry state.
 
-### Terminal source tests staged
-
-The staged source adds tests proving the intended state machine:
-
-- initial close failure retains `Failed`;
-- changing the deterministic spy backend from close-failure to success allows `retry_failed_close` to return `Closed` and remove the record;
-- repeated retry failure keeps the record `Failed` and calls backend close again;
-- retry on an open record returns `InvalidState` before backend close;
-- retry on an unknown identifier returns `UnknownSession` before backend close;
-- after successful recovery, later terminal I/O sees `UnknownSession` rather than a revived record.
-
-These tests are authored but **not executed** while the build gate is closed.
+Staged source tests cover fail-then-success recovery, repeated failure retention, open/unknown rejection before backend close, and terminal removal after successful cleanup. They are authored but **not executed** while the build gate is closed.
 
 ## Forwarding cleanup recovery
 
 `PortForwardBroker::retry_failed_close` mirrors the same teardown-only semantics.
 
-Locked behavior:
+Unknown/non-failed records fail before backend close; repeated backend failure retains the failed record and handle; success clears the handle, marks `Closed`, removes the record, and returns the immutable closed forwarding record.
 
-1. unknown forward ID fails before backend mutation;
-2. only exact `ForwardingState::Failed` is accepted;
-3. active/non-failed records are reinserted unchanged and return `InvalidState`;
-4. a retained backend handle is required;
-5. only the existing `PortForwardBackend::close(&mut handle)` operation is retried;
-6. backend retry failure retains `Failed` state and the handle;
-7. retry success clears the handle, marks `Closed`, removes the broker record, and returns the closed immutable forwarding record.
+The retry path does not reopen a listener, reconnect a target, resume pumps, or mutate forwarding principal/specification state.
 
-The retry path does not reopen a listener, reconnect a target, resume pumps, or mutate the forwarding specification/principal.
+Staged source tests cover fail-then-success recovery, repeated cleanup failure retention, active/unknown rejection, and removal after successful retry. They are authored but **not executed**.
 
-### Forwarding source tests staged
-
-The staged tests cover:
-
-- initial close failure retention;
-- fail-then-success cleanup recovery;
-- repeated cleanup failure retention;
-- active/unknown retry rejection before backend close;
-- removal after successful retry.
-
-These tests are authored but **not executed**.
-
-## Why this closes the C02c quiescence blocker
+## C02c quiescence blocker closure
 
 C02c `LocalManagementProviderLifecycle::try_finish` reports clean completion only when terminal and forwarding brokers are empty.
 
-Before C02d, a backend close failure retained a failed record but exposed no provider-neutral retry path. The lifecycle could therefore remain permanently non-quiescent even if the same backend handle could later close successfully.
+Before C02d, backend close failure retained a failed record but exposed no provider-neutral retry path. C02d now provides an explicit route from retained `Failed` state to terminal `Closed` + broker removal only through another real backend close attempt.
 
-C02d adds an explicit route from retained `Failed` state to terminal `Closed` + broker removal, but only through another real backend close attempt. It does not fake cleanup through `Drop`, record deletion, or state reassignment without provider success.
+No cleanup is inferred from `Drop`, record deletion, or state reassignment without backend close success.
 
-## Concrete backend design lock
+## Pure Agent-owned provider policy seam
 
-`DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02D_PROVIDER_BACKEND_GATE.md` additionally locks later concrete-provider constraints without implementing OS I/O.
+New source:
 
-### Terminal
+`crates/prw-agent/src/local_commands/management_provider_backend_policy.rs`
 
-A future Linux terminal provider:
+The module is registered in `local_commands.rs` only as a `pub(crate)` module with an explicit pre-runtime `dead_code` allowance. It is not referenced by `main.rs`, bootstrap, server loop, production runtime, or deployment source.
 
-- accepts only the existing named `PosixShell` / `BashShell` profiles;
-- maps them to provider-owned audited fixed executable/argument templates;
-- accepts no request-selected executable, argv, command string, environment bag, cwd, startup script, or privilege instruction;
-- treats PRW principal identity as authorization/audit identity, not a Linux username mapping;
-- runs under the Agent's already-existing effective OS credentials in the first concrete design;
-- performs no `setuid`/`setgid`, `sudo`, `su`, `pkexec`, PAM login, capability elevation, or account selection from PRW identity;
-- must keep child/PTY/worker ownership joinable and non-detached;
-- may report close success only after provider-specific cleanup/reap conditions are satisfied.
+### Terminal template IDs
 
-No executable path, environment, cwd, PTY library, or process API is selected by this C02d slice.
+`LinuxTerminalLaunchTemplateId` contains exactly:
 
-### Forwarding
+- `PosixInteractiveShell`;
+- `BashInteractiveShell`.
 
-A future forwarding provider:
+`for_profile(TerminalProfile)` is a total mapping from the already-typed provider-neutral profile to a provider-owned template identifier.
 
-- preserves named IPv4/IPv6 loopback-only bind semantics;
-- retains explicit IP + non-zero TCP port target semantics;
-- adds no DNS/hostname resolution;
-- requires a separate Agent-owned default-deny target/egress policy before connection;
-- must not assume privilege for low local ports;
-- must define bounded connection counts, timeouts, buffers, cancellation, half-close, and join ordering before OS I/O implementation;
-- may report close success only after owned listener/connection/pump workers are cancelled/closed/joined according to the reviewed design;
-- adds no firewall, route, DNS, TUN/TAP, arbitrary bind address, UDP, SOCKS, or privilege mutation.
+The production type carries no:
+
+- executable path;
+- argv vector;
+- raw command or shell fragment;
+- environment bag;
+- working directory;
+- startup script;
+- privilege instruction;
+- request-controlled string.
+
+No exact executable/argument/environment/cwd values are selected by this slice.
+
+### Forwarding egress policy
+
+The new module defines:
+
+- `ForwardingEgressDecision::{Allow, Deny}`;
+- `ForwardingEgressPolicy`, accepting only an already-validated `TcpForwardSpec`;
+- `DenyAllForwardingEgressPolicy`, which always returns `Deny`.
+
+The production module imports only `prw_forwarding::TcpForwardSpec` and `prw_terminal::TerminalProfile`. It has no process, PTY, socket, thread, filesystem, runtime, resolver, firewall, or privilege API.
+
+`std::net::{IpAddr, Ipv4Addr}` is used only inside `#[cfg(test)]` to construct typed `TcpForwardSpec` fixtures. No network operation is performed by those source tests.
+
+Staged tests prove the intended pure semantics:
+
+- each terminal profile maps to only its provider-owned template ID;
+- default forwarding egress is deny-all;
+- a fixture policy can allow one exact validated specification while denying different bind/target specifications.
+
+These tests remain **NOT_RUN / BUILD_GATE_CLOSED**.
+
+## Concrete backend design remains blocked
+
+The contract now explicitly separates the staged pure policy seam from concrete OS adapter materialization.
+
+### Terminal blockers still open
+
+Before PTY/process adapter source begins, a later reviewed design must lock:
+
+- exact fixed executable for each template ID;
+- exact provider-owned argument template;
+- fixed/minimal environment policy and values;
+- trusted working-directory policy;
+- child/PTY ownership and reaping evidence;
+- cancellation/join/teardown ordering.
+
+PRW principal identity remains authorization/audit identity only and must not select a Linux account or trigger `setuid`/`setgid`, PAM, sudo/su/pkexec, Linux capability elevation, or related privilege changes.
+
+### Forwarding blockers still open
+
+Before listener/connect/pump source begins, a later reviewed design must lock:
+
+- production egress allowlist/CIDR/port policy shape and assembly ownership;
+- per-forward simultaneous connection bound;
+- aggregate provider connection bound;
+- connect timeout;
+- read/write or idle deadline;
+- bounded per-direction buffer size;
+- half-close semantics;
+- listener cancellation;
+- active connection cancellation;
+- worker/pump join ordering;
+- close-success cleanup evidence.
+
+Loopback-only bind and explicit-IP/no-DNS target constraints remain unchanged.
 
 ## Manual-only validation specification
 
-`.github/workflows/phase-152-c02d-provider-cleanup-validation.yml` is staged with **only `workflow_dispatch`**.
+`.github/workflows/phase-152-c02d-provider-cleanup-validation.yml` remains **workflow_dispatch-only** and has not been dispatched.
 
-It is not automatically triggered by push or pull request and has not been dispatched.
+The updated future validation specification requires:
 
-The future validation sequence requires:
+1. exact branch and caller-supplied 40-character expected head;
+2. exact C02c stacked lineage;
+3. an explicit seven-path C02d allowlist;
+4. hard bans on root Cargo/lock, Agent Cargo, `main.rs`, Linux bootstrap/runtime, policy crate, and app source;
+5. cleanup recovery and pure-policy source invariant greps;
+6. locked metadata/lockfile determinism;
+7. `cargo fmt --all -- --check`;
+8. Clippy for terminal/forwarding plus `prw-agent --lib`, all with `-D warnings`;
+9. provider tests plus only the Agent library tests matching `management_provider_backend_policy`;
+10. provider build plus `prw-agent --lib` build;
+11. final clean source diff.
 
-1. exact C02d branch and explicit expected 40-character head;
-2. exact stacked C02c lineage and allowlisted C02d paths;
-3. explicit non-activation checks;
-4. locked metadata/lockfile determinism;
-5. `cargo fmt --all -- --check`;
-6. Clippy for `prw-terminal` + `prw-forwarding` with `-D warnings`;
-7. tests for the same packages;
-8. build for the same packages;
-9. final clean diff.
-
-The workflow file is a specification only. It is **not validation evidence** while the build gate remains closed.
+The workflow is a staged specification only. It is **not build/test evidence** while the build gate remains closed.
 
 ## Validation classification
 
@@ -163,10 +194,11 @@ No Rust toolchain command was executed for this C02d slice.
 
 - source syntax/build validation: `NOT_RUN / BUILD_GATE_CLOSED`
 - formatter/Clippy/tests: `NOT_RUN / BUILD_GATE_CLOSED`
-- manual validation workflow: `STAGED / NOT_RUN`
+- manual validation workflow: `STAGED / WORKFLOW_DISPATCH_ONLY / NOT_RUN`
 - concrete PTY/process I/O: `NOT_IMPLEMENTED / NOT_AUTHORIZED`
 - concrete TCP listener/connect/pump I/O: `NOT_IMPLEMENTED / NOT_AUTHORIZED`
-- production target/egress policy: `NOT_SELECTED`
+- production terminal executable/environment/cwd policy: `NOT_SELECTED / NOT_AUTHORIZED`
+- production forwarding egress policy: `DENY_ALL_PRE_PRODUCTION / PRODUCTION_POLICY_NOT_SELECTED`
 - runtime wiring: `NOT_AUTHORIZED`
 - runtime signing/systemd credential loading: `NOT_AUTHORIZED`
 - deployment/privileged changes: `NOT_AUTHORIZED`
@@ -174,8 +206,8 @@ No Rust toolchain command was executed for this C02d slice.
 
 ## Next C02d work
 
-The provider-neutral cleanup recovery slice is source-staged and statically bounded.
+Cleanup recovery and the pure provider policy seams are source-staged and statically bounded.
 
-While the build gate remains closed, C02d may continue only with concrete backend **design/evidence**: fixed terminal profile templates and environment/cwd ownership, forwarding target-policy shape, finite worker/connection bounds, cancellation/join ordering, and cleanup evidence requirements.
+Concrete OS adapter source remains blocked. The next safe C02d work is design/evidence only: lock exact terminal materialization policy and finite forwarding worker/connection lifecycle values, then update the manual validation specification accordingly.
 
-Actual PTY child creation, TCP listener/connect/pump implementation, production runtime wiring, policy selection, deployment, or C03 remain closed.
+Actual PTY child creation, TCP listener/connect/pump implementation, production runtime wiring, production policy selection, deployment, privileged changes, or C03 remain closed.
