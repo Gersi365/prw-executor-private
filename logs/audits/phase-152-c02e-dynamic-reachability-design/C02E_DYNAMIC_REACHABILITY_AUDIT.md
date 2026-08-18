@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Audit
 
-Status: `IMPLEMENTATION_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `IMPLEMENTATION_STAGED / REGISTRY_CURRENT_REFRESH_ORDER_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor head:
 
@@ -28,11 +28,15 @@ Existing `prw-connectivity` already separates:
 - `ConnectivityCandidate` — one candidate endpoint/path class;
 - `PeerConnectivityPlan` — bounded candidate set and reachability observations.
 
+Existing `prw-registry` already owns current enrolled-device lifecycle and current transport-identity validation through `WorkspaceDeviceRegistry::validate_transport_identity(...)`.
+
+Existing `prw-remote-bridge` already depends on both `prw-connectivity` and `prw-registry`, so C02e can stage their required admission ordering without adding a new dependency edge or parallel registry model.
+
 Phase 139 also explicitly states that actual QUIC destination discovery comes from selected explicit IP/UDP candidates and does not use the transport certificate DNS SAN for endpoint discovery.
 
-Therefore the correct C02e change is candidate refresh under stable peer identity, not static-IP identity and not a second registry model.
+Therefore the correct C02e direction is candidate refresh under stable peer identity plus current-registry revalidation, not static-IP identity and not a second discovery authority.
 
-## Source staged
+## Connectivity source staged
 
 Changed source:
 
@@ -56,30 +60,63 @@ Semantics staged:
 
 No new dependency or Cargo mutation was introduced.
 
+## Registry-current admission ordering staged
+
+New integration-test source:
+
+`crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs`
+
+It stages the required pure admission ordering:
+
+1. read `DeviceId` and `TransportIdentity` from the current `PeerConnectivityPlan`;
+2. revalidate that exact transport identity through `WorkspaceDeviceRegistry::validate_transport_identity(...)`;
+3. on registry failure, return before calling `refresh_candidates(...)`;
+4. only a registry-current peer identity may proceed to candidate-set validation/mutation.
+
+This specifically means:
+
+- device revocation blocks refresh before endpoint mutation;
+- transport identity rotation makes a plan carrying the old identity stale and blocks refresh before endpoint mutation;
+- a normal endpoint change with the same current device/transport identity remains admissible;
+- registry validation does not by itself authenticate arbitrary candidate bytes; authenticated control-plane/session candidate provenance remains a later integration boundary.
+
+The staged helper exists only inside integration-test source. No production bridge/runtime API was activated by this checkpoint.
+
 ## Tests authored but NOT RUN
 
-Two new source tests are staged:
+Connectivity source tests:
 
 - `candidate_refresh_preserves_identity_and_replaces_transient_endpoints`
 - `invalid_candidate_refresh_preserves_previous_state`
 
-They cover:
+Bridge integration tests:
+
+- `current_registry_identity_allows_transient_candidate_refresh`
+- `transport_rotation_rejects_stale_plan_before_endpoint_mutation`
+- `device_revocation_rejects_refresh_before_endpoint_mutation`
+
+Together they specify:
 
 - stable peer identity across endpoint replacement;
 - removal of stale candidate IDs;
 - observation reset to `Unknown`/Offline after refresh;
-- new candidate observation and selection;
-- transactional preservation of prior state on invalid refresh.
+- transactional preservation of prior state on invalid refresh;
+- current registry identity is checked before endpoint mutation;
+- stale transport identity after rotation fails before mutation;
+- revoked device fails before mutation.
 
 These tests are source specifications only while the build/test gate remains closed.
 
 ## Static mutation review
 
-At the first implementation checkpoint the branch is stacked exactly on C02d and changes only:
+C02e remains stacked exactly on C02d.
+
+Current intended mutation surface is limited to:
 
 1. `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02E_DYNAMIC_REACHABILITY_GATE.md`
 2. `crates/prw-connectivity/src/lib.rs`
-3. this audit file
+3. `crates/prw-remote-bridge/tests/dynamic_reachability_registry.rs`
+4. this audit file
 
 No changes are intended to:
 
@@ -105,7 +142,7 @@ It is not the device identity model.
 
 C02e locks the higher-level device flow as:
 
-`authenticated PRW device/session identity -> current registry/control-plane candidate state -> current candidate selection -> authenticated transport`
+`authenticated PRW device/session identity -> current registry/control-plane candidate state -> registry-current transport identity revalidation -> current candidate selection -> authenticated transport`
 
 A mobile client's IP changing is therefore a candidate refresh event, not a device re-enrollment or static allowlist identity change.
 
@@ -114,6 +151,7 @@ A mobile client's IP changing is therefore a candidate refresh event, not a devi
 C02e does not claim:
 
 - production candidate discovery is wired;
+- arbitrary candidate bytes are authenticated by registry validation alone;
 - STUN/ICE/TURN is activated;
 - real sockets are opened;
 - a QUIC connection is established;
@@ -124,4 +162,4 @@ C02e does not claim:
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_IMPLEMENTATION_STAGED / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / TRANSACTIONAL_REFRESH / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_IMPLEMENTATION_STAGED / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / TRANSACTIONAL_REFRESH / REGISTRY_CURRENT_REFRESH_ORDER_STAGED / STALE_TRANSPORT_AND_REVOKED_DEVICE_FAIL_BEFORE_MUTATION / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
