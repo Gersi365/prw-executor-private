@@ -1,12 +1,12 @@
 # PRW Phase 152 C02c Authority Foundation Audit
 
-Status: `IMPLEMENTATION_STAGED / STATIC_SCOPE_VERIFIED / BUILD_GATE_CLOSED / NO_RUNTIME_ACTIVATION`
+Status: `IMPLEMENTATION_STAGED / PRE_BUILD_STATIC_CORRECTIVE_COMPLETE / BUILD_GATE_CLOSED / NO_RUNTIME_ACTIVATION`
 
 - repository_id: `1334911207`
 - canonical_repository: `powercode2026/prw-executor-private`
 - frozen_predecessor: `01f5466504684ea6a2c504613901d24018485887`
 - branch: `phase-152-c02c-authority-foundation`
-- implementation_head_before_audit_refresh: `dbf62628a2e96d2febabc3922acccb7199dfe642`
+- implementation_head_before_audit_refresh: `72d3636abf8d3c017e9f0128f5cf4c992b2a0dd3`
 
 ## Scope
 
@@ -14,6 +14,7 @@ C02c resumes Phase 152 after successful real-host reconciliation and stages the 
 
 Changed files relative to the frozen predecessor immediately before this audit refresh:
 
+- `.github/workflows/phase-152-c02c-implementation-validation.yml`
 - `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md`
 - `crates/prw-agent/Cargo.toml`
 - `crates/prw-agent/src/local_commands.rs`
@@ -28,10 +29,11 @@ Changed files relative to the frozen predecessor immediately before this audit r
 
 Static compare result immediately before this audit refresh:
 
-- branch relation: `ahead 20 / behind 0`
-- changed files: `11`
-- additions: `1716`
+- branch relation: `ahead 30 / behind 0`
+- changed files: `12`
+- additions: `2040`
 - deletions: `17`
+- merge base: exact frozen predecessor `01f5466504684ea6a2c504613901d24018485887`
 - root `Cargo.toml`: `UNCHANGED`
 - root `Cargo.lock`: `UNCHANGED`
 - `crates/prw-agent/src/main.rs`: `UNCHANGED`
@@ -58,6 +60,8 @@ Terminal and forwarding principals are derived only through:
 
 No workspace/user/device/session identity is fabricated from local PID/UID/GID, request bytes, desktop process identity, or ambient process state.
 
+Pure constructors/accessors that create or return authority evidence are explicitly marked `#[must_use]` in the staged source so discarded authority values are not silently treated as meaningful work.
+
 ### Filesystem authority
 
 `LocalManagementFilesystemAuthority` owns one `prw_file_service::AnchoredFileRoot` opened by a crate-internal trusted-root constructor.
@@ -76,7 +80,9 @@ The resulting context binds only admission-derived request ID, kernel peer crede
 
 `prw-policy` stages `BoundedLocalManagementPolicy` as a separate evaluator. The existing production `BoundedLocalReadPolicy::allow_local_reads()` remains unchanged.
 
-Management capability decisions are explicit and independent. No `allow_all()` constructor exists.
+Management capability decisions are carried by `BoundedLocalManagementDecisions`, whose fields are named by capability family rather than supplied as an order-sensitive seven-argument constructor.
+
+The policy constructor accepts that single explicit decision bundle. No `allow_all()` constructor exists.
 
 Capabilities outside the reviewed bridge surface remain fail-closed, including:
 
@@ -107,7 +113,9 @@ The lifecycle deliberately has no `Drop` implementation claiming provider cleanu
 - terminal broker is empty;
 - forwarding broker is empty.
 
-If state remains active, the whole lifecycle owner is returned unchanged. Active state is therefore not silently discarded and is not recorded as clean rollback evidence.
+If state remains active, `try_finish` returns `Err(Box<Self>)`. The box preserves the complete lifecycle owner for continued typed cleanup while avoiding a large inline error variant. Active state is not silently discarded and is not recorded as clean rollback evidence.
+
+Lifecycle constructors/accessors and quiescence observations are explicitly `#[must_use]` where applicable.
 
 ## Typed provider dispatch
 
@@ -133,6 +141,12 @@ File/transfer operations additionally require reference identity between the sup
 Terminal/forwarding operations against existing broker records derive the current provider principal from registry-revalidated PRW-session authority and compare it with the immutable principal stored in the record before mutation.
 
 This prevents cross-principal reuse of known terminal or forwarding broker identifiers.
+
+### Pre-build structural corrective
+
+The original single large typed-dispatch match was split into file, transfer, terminal, and forwarding family helpers before toolchain validation. This preserves the same outer exhaustive `BridgeCommand` classification while reducing function-size/lint risk.
+
+Each family helper retains a fail-closed wildcard guard for commands outside its preclassified family. Those local wildcard arms carry narrow `clippy::wildcard_enum_match_arm` allowances with reasons; no crate- or workspace-wide suppression was added.
 
 ## Deterministic response semantics
 
@@ -170,6 +184,8 @@ Typed failures collapse into the existing coarse statuses:
 - backend/filesystem/storage/postcondition/encoding failure → `InternalError`.
 
 Capability denial occurs earlier and remains `Unauthorized`.
+
+External provider error enums are non-exhaustive. Their fail-closed wildcard fallbacks are locally annotated with a narrow lint allowance and reason so future unknown variants remain `InternalError` without adding a global warning suppression.
 
 ## Complete C02c execution seam
 
@@ -215,18 +231,49 @@ No external crate version was added and no lockfile was changed by C02c.
 
 ## Contract/source alignment
 
-`DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md` was refreshed after implementation to match the actual source semantics.
+`DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02C_AUTHORITY_FOUNDATION_GATE.md` matches the staged source semantics: no fabricated identity, no request-selected host root, exact root/principal binding, no fabricated Drop cleanup, deterministic bounded response semantics, and no runtime activation.
 
-The previous design wording that implied automatic best-effort cleanup on `Drop` was intentionally removed because the staged source does not possess reviewed provider-specific cleanup semantics. The contract now records explicit quiescence and no fabricated cleanup evidence.
+The explicit quiescence contract remains intact after boxing the active lifecycle return path: boxing changes only the in-memory error representation, not cleanup or authority semantics.
+
+## Manual-only implementation-validation specification
+
+`.github/workflows/phase-152-c02c-implementation-validation.yml` is staged as a validation specification with **only** a `workflow_dispatch` trigger. It has no `push`, `pull_request`, schedule, deployment, or environment trigger.
+
+The specification requires an exact caller-supplied 40-character approved head, exact C02c branch name, frozen-lineage ancestry, and an allowlisted changed-file scope before any Cargo command.
+
+Its future validation sequence is limited to:
+
+1. `cargo metadata --locked --no-deps` and deterministic lockfile comparison;
+2. `cargo fmt --all -- --check`;
+3. `cargo clippy --locked -p prw-policy -p prw-agent --all-targets --all-features -- -D warnings`;
+4. `cargo test --locked -p prw-policy -p prw-agent --all-targets`;
+5. `cargo build --locked -p prw-policy -p prw-agent --all-targets`;
+6. final `git diff --exit-code`.
+
+The workflow definition itself is **not** build evidence. It has not been dispatched or run under the current gate.
+
+## Pre-build static corrective summary
+
+Before opening any toolchain gate, the staged source was tightened by inspection to reduce predictable strict-warning failures:
+
+- split the typed provider dispatcher into family-specific helpers;
+- changed active lifecycle finish failure from large inline `Self` to `Box<Self>`;
+- added `#[must_use]` to authority/lifecycle constructors and accessors where discarded values would be misleading;
+- replaced the seven-position management policy constructor with named `BoundedLocalManagementDecisions`;
+- simplified duplicated provider error mappings;
+- documented narrow wildcard enum lint allowances only at intentional fail-closed family/error boundaries.
+
+No `cargo`, `rustfmt`, `clippy`, test, build, runtime, package, deployment, or privileged command was executed as part of these corrective changes.
 
 ## Validation classification
 
 The project build gate remains closed. Therefore this audit claims no Cargo, format, Clippy, test, build, runtime, service-manager, signing, systemd-credential, deployment, or privileged validation.
 
-Current validation is limited to connector-grounded source/API inspection, exact dependency-manifest inspection, security-boundary review, contract/source alignment, and exact GitHub diff scope.
+Current validation is limited to connector-grounded source/API inspection, exact dependency-manifest inspection, security-boundary review, contract/source alignment, static warning-risk reduction, workflow-definition inspection, and exact GitHub diff scope.
 
 - source syntax/build validation: `NOT_RUN / BUILD_GATE_CLOSED`
 - formatter/linter/tests: `NOT_RUN / BUILD_GATE_CLOSED`
+- manual validation workflow: `STAGED / NOT_RUN`
 - runtime validation: `NOT_RUN`
 - production management policy: `NOT_SELECTED`
 - runtime signing: `NOT_AUTHORIZED`
@@ -236,8 +283,8 @@ Current validation is limited to connector-grounded source/API inspection, exact
 
 ## Next gate
 
-C02c is now `IMPLEMENTATION_STAGED` from a source/design perspective.
+C02c is `IMPLEMENTATION_STAGED` with its pre-build static corrective pass complete.
 
-The next technical promotion gate is an explicitly authorized implementation-validation scope for syntax/format/Clippy/tests/build. A separate later gate may design concrete terminal/forwarding backends.
+The next technical promotion gate is explicit authorization to run the staged implementation-validation scope. A separate later gate may design concrete terminal/forwarding backends.
 
 Neither validation nor backend design authorizes production server-loop wiring. Production policy selection, runtime activation, deployment, and C03 remain separate and closed.
