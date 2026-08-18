@@ -1,0 +1,156 @@
+name: PRW Phase 152 C02e Tranche2 Target Cache Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - ".github/workflows/phase-152-c02e-tranche2-target-cache-corrective.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02e-tranche2-target-cache-corrective-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    name: Normalize tracked Cargo target cache before drift guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact corrective base
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch validator and prepare evidence
+        id: correct
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          BASE_HEAD="$(git rev-parse HEAD)"
+          VALIDATOR=".github/workflows/phase-152-c02e-tranche2-phase141-validation.yml"
+          SELF=".github/workflows/phase-152-c02e-tranche2-target-cache-corrective.yml"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE2_TARGET_CACHE_CORRECTIVE_${BASE_HEAD}.txt"
+          mkdir -p "$(dirname "${REPORT}")"
+
+          VALIDATOR_BEFORE="$(sha256sum "${VALIDATOR}" | awk '{print $1}')"
+          LOCK_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          MANIFEST_BEFORE="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          TEST_BEFORE="$(sha256sum crates/prw-remote-bridge/tests/reachability_phase141_integration.rs | awk '{print $1}')"
+
+          python3 - "${VALIDATOR}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          old = '''          ZERO_DEPENDENCY_DRIFT_RC=SKIPPED
+          LOCK_SHA256_CANDIDATE=UNAVAILABLE
+'''
+          new = '''          ZERO_DEPENDENCY_DRIFT_RC=SKIPPED
+          TARGET_CACHE_RESTORE_RC=SKIPPED
+          LOCK_SHA256_CANDIDATE=UNAVAILABLE
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one initialization insertion point, found {text.count(old)}")
+          text = text.replace(old, new)
+
+          old = '''          if [[ ${HAD_RUSTC_INFO} -eq 1 ]]; then
+            cp "${RUSTC_INFO_BEFORE}" target/.rustc_info.json
+          fi
+
+          MANIFEST_SHA256_AFTER="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+'''
+          new = '''          mapfile -t TRACKED_DIFF_BEFORE_TARGET_RESTORE < <(git diff --name-only)
+          printf '%s\\n' "${TRACKED_DIFF_BEFORE_TARGET_RESTORE[@]}" > "${RUNNER_TEMP}/tracked-diff-before-target-restore.txt"
+          set +e
+          git checkout -- target
+          TARGET_CACHE_RESTORE_RC=$?
+          set -e
+          if [[ ${TARGET_CACHE_RESTORE_RC} -ne 0 ]]; then
+            ZERO_DEPENDENCY_DRIFT_RC=93
+            fail_once "TARGET_CACHE_RESTORE" "${TARGET_CACHE_RESTORE_RC}" || true
+          fi
+
+          MANIFEST_SHA256_AFTER="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one target restore block, found {text.count(old)}")
+          text = text.replace(old, new)
+
+          old = '''            echo "ZERO_DEPENDENCY_DRIFT_RC=${ZERO_DEPENDENCY_DRIFT_RC}"
+            echo "FIRST_FAILURE=${FIRST_FAILURE}"
+'''
+          new = '''            echo "ZERO_DEPENDENCY_DRIFT_RC=${ZERO_DEPENDENCY_DRIFT_RC}"
+            echo "TARGET_CACHE_RESTORE_RC=${TARGET_CACHE_RESTORE_RC}"
+            echo "TRACKED_DIFF_BEFORE_TARGET_RESTORE=$(paste -sd, "${RUNNER_TEMP}/tracked-diff-before-target-restore.txt" 2>/dev/null || true)"
+            echo "TRACKED_DIFF_AFTER_TARGET_RESTORE=$(git diff --name-only | paste -sd, -)"
+            echo "FIRST_FAILURE=${FIRST_FAILURE}"
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one report insertion point, found {text.count(old)}")
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+
+          git diff --check -- "${VALIDATOR}"
+
+          VALIDATOR_AFTER="$(sha256sum "${VALIDATOR}" | awk '{print $1}')"
+          LOCK_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          MANIFEST_AFTER="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          TEST_AFTER="$(sha256sum crates/prw-remote-bridge/tests/reachability_phase141_integration.rs | awk '{print $1}')"
+
+          [[ "${LOCK_BEFORE}" == "${LOCK_AFTER}" ]]
+          [[ "${MANIFEST_BEFORE}" == "${MANIFEST_AFTER}" ]]
+          [[ "${TEST_BEFORE}" == "${TEST_AFTER}" ]]
+
+          mapfile -t CHANGED < <(git diff --name-only)
+          [[ ${#CHANGED[@]} -eq 1 && "${CHANGED[0]}" == "${VALIDATOR}" ]]
+
+          {
+            echo "PHASE=152-C02e-Tranche2-Target-Cache-Corrective"
+            echo "BASE_HEAD=${BASE_HEAD}"
+            echo "VALIDATOR_SHA256_BEFORE=${VALIDATOR_BEFORE}"
+            echo "VALIDATOR_SHA256_AFTER=${VALIDATOR_AFTER}"
+            echo "LOCK_SHA256_BEFORE=${LOCK_BEFORE}"
+            echo "LOCK_SHA256_AFTER=${LOCK_AFTER}"
+            echo "MANIFEST_SHA256_BEFORE=${MANIFEST_BEFORE}"
+            echo "MANIFEST_SHA256_AFTER=${MANIFEST_AFTER}"
+            echo "TEST_SHA256_BEFORE=${TEST_BEFORE}"
+            echo "TEST_SHA256_AFTER=${TEST_AFTER}"
+            echo "CORRECTIVE=RESTORE_ENTIRE_TRACKED_TARGET_TREE_BEFORE_TRACKED_DRIFT_GUARD"
+            echo "DRIFT_POLICY=UNCHANGED_ONLY_CARGO_LOCK_ALLOWED_AFTER_TARGET_NORMALIZATION"
+            echo "STATUS=PASS"
+            echo
+            echo "===== VALIDATOR DIFF ====="
+            git diff -- "${VALIDATOR}"
+          } > "${REPORT}"
+
+          echo "base_head=${BASE_HEAD}" >> "${GITHUB_OUTPUT}"
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit corrective and remove one-shot harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="phase-152-c02e-dynamic-reachability-design"
+          BASE_HEAD="${{ steps.correct.outputs.base_head }}"
+          REPORT="${{ steps.correct.outputs.report }}"
+          VALIDATOR=".github/workflows/phase-152-c02e-tranche2-phase141-validation.yml"
+          SELF=".github/workflows/phase-152-c02e-tranche2-target-cache-corrective.yml"
+
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          [[ "${REMOTE_HEAD}" == "${BASE_HEAD}" ]]
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm "${SELF}"
+          git add "${VALIDATOR}" "${REPORT}"
+          git commit -m "phase 152 c02e: normalize tranche2 tracked target cache ${BASE_HEAD:0:12}"
+          git push origin "HEAD:${BRANCH}"
