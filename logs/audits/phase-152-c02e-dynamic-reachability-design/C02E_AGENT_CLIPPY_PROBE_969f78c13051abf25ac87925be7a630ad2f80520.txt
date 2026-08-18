@@ -1,0 +1,161 @@
+STATUS=RUNNING
+WORKFLOW=phase-152-c02e-agent-clippy-probe
+RUN_ID=32129292804
+REF=phase-152-c02e-dynamic-reachability-design
+HEAD=969f78c13051abf25ac87925be7a630ad2f80520
+SOURCE_PARENT=b7922d7b08951fec830a379621d16e5a8e39b193
+FROZEN_C02D=857583b25ed1206317641a93fd8f927819c954d8
+===== GATE lineage =====
+GATE_lineage_RC=0
+===== GATE toolchain =====
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: downloading 5 components
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy 0.1.97 (8bab26f4f6 2026-07-14)
+GATE_toolchain_RC=0
+===== GATE locked_metadata =====
+GATE_locked_metadata_RC=0
+===== GATE fmt =====
+GATE_fmt_RC=0
+===== GATE agent_clippy =====
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cfg-if v1.0.4
+  Downloaded cfg_aliases v0.2.2
+  Downloaded bitflags v2.13.1
+  Downloaded lru-slab v0.1.2
+  Downloaded bytes v1.12.1
+  Downloaded cmake v0.1.58
+  Downloaded fs_extra v1.3.0
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded cc v1.4.3
+  Downloaded tokio-macros v2.7.2
+  Downloaded untrusted v0.7.1
+  Downloaded dunce v1.0.5
+  Downloaded errno v0.3.14
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded quinn-udp v0.5.15
+  Downloaded rand_pcg v0.10.2
+  Downloaded subtle v2.6.1
+  Downloaded rustc-hash v2.1.3
+  Downloaded cpufeatures v0.3.0
+  Downloaded quote v1.0.47
+  Downloaded slab v0.4.12
+  Downloaded untrusted v0.9.0
+  Downloaded jobserver v0.1.35
+  Downloaded shlex v2.0.1
+  Downloaded thiserror v2.0.20
+  Downloaded chacha20 v0.10.1
+  Downloaded rand_core v0.10.1
+  Downloaded thiserror-impl v2.0.20
+  Downloaded zeroize v1.9.0
+  Downloaded once_cell v1.21.4
+  Downloaded rustls-pki-types v1.15.1
+  Downloaded getrandom v0.2.17
+  Downloaded pin-project-lite v0.2.17
+  Downloaded proc-macro2 v1.0.107
+  Downloaded getrandom v0.4.3
+  Downloaded tinyvec v1.12.0
+  Downloaded tracing-core v0.1.36
+  Downloaded unicode-ident v1.0.24
+  Downloaded pkg-config v0.3.34
+  Downloaded rustls-webpki v0.103.14
+  Downloaded socket2 v0.6.5
+  Downloaded quinn v0.11.11
+  Downloaded rand v0.10.2
+  Downloaded mio v1.2.2
+  Downloaded aws-lc-rs v1.18.0
+  Downloaded quinn-proto v0.11.16
+  Downloaded syn v3.0.3
+  Downloaded nix v0.31.3
+  Downloaded rustls v0.23.43
+  Downloaded rustix v1.1.4
+  Downloaded tracing v0.1.44
+  Downloaded libc v0.2.189
+  Downloaded tokio v1.53.1
+  Downloaded ring v0.17.14
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded aws-lc-sys v0.44.0
+   Compiling jobserver v0.1.35
+   Compiling aws-lc-rs v1.18.0
+    Checking untrusted v0.7.1
+   Compiling cc v1.4.3
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling cmake v0.1.58
+   Compiling syn v3.0.3
+   Compiling aws-lc-sys v0.44.0
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Checking rand_core v0.10.1
+    Checking once_cell v1.21.4
+    Checking pin-project-lite v0.2.17
+   Compiling getrandom v0.4.3
+    Checking tracing-core v0.1.36
+    Checking rustls-pki-types v1.15.1
+   Compiling thiserror v2.0.20
+   Compiling rustls v0.23.43
+    Checking cpufeatures v0.3.0
+    Checking chacha20 v0.10.1
+    Checking tracing v0.1.44
+   Compiling thiserror-impl v2.0.20
+   Compiling quinn-udp v0.5.15
+    Checking socket2 v0.6.5
+    Checking prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+    Checking tinyvec_macros v0.1.1
+    Checking bytes v1.12.1
+    Checking tinyvec v1.12.0
+    Checking rand v0.10.2
+    Checking rand_pcg v0.10.2
+   Compiling tokio-macros v2.7.2
+   Compiling quinn v0.11.11
+    Checking mio v1.2.2
+    Checking slab v0.4.12
+    Checking rustc-hash v2.1.3
+    Checking lru-slab v0.1.2
+    Checking tokio v1.53.1
+   Compiling nix v0.31.3
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking rustls-webpki v0.103.14
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking quinn-proto v0.11.16
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+error: type `local_commands::management_authority::LocalManagementFamilyAuthority<'_>` is more private than the item `local_commands::management_dispatch::LocalManagementAuthorityContext::from_agent_owned_authority`
+   --> crates/prw-agent/src/local_commands/management_dispatch.rs:70:5
+    |
+ 70 | /     pub(crate) fn from_agent_owned_authority(
+ 71 | |         admission: &LocalManagementAdmission,
+ 72 | |         authority: LocalManagementFamilyAuthority<'_>,
+ 73 | |     ) -> Option<Self> {
+    | |_____________________^ associated function `local_commands::management_dispatch::LocalManagementAuthorityContext::from_agent_owned_authority` is reachable at visibility `pub(crate)`
+    |
+note: but type `local_commands::management_authority::LocalManagementFamilyAuthority<'_>` is only usable at visibility `pub(in crate::local_commands)`
+   --> crates/prw-agent/src/local_commands/management_authority.rs:109:1
+    |
+109 | pub(super) struct LocalManagementFamilyAuthority<'authority> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `-D private-interfaces` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(private_interfaces)]`
+
+error: could not compile `prw-agent` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `prw-agent` (lib test) due to 1 previous error
+GATE_agent_clippy_RC=101
+ZERO_DEPENDENCY_DRIFT_RC=0
+SOURCE_MUTATION=NONE
+RUNTIME_NETWORK_ACTIVATION=NONE
+STATUS=FAIL
+FIRST_FAILURE=agent_clippy
+PROBE_RC=101
