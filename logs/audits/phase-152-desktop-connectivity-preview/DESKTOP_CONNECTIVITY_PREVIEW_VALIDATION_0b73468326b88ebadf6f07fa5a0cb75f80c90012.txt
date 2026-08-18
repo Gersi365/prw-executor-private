@@ -1,0 +1,178 @@
+PHASE=152_DESKTOP_CONNECTIVITY_PREVIEW
+BASE_HEAD=0b73468326b88ebadf6f07fa5a0cb75f80c90012
+PATCH_RC=0
+FMT_APPLY_RC=0
+FORMAT_SCOPE_RC=0
+FORMAT_DIFF=apps/desktop/src/ui.rs
+METADATA_RC=0
+APP_CLIPPY_SCOPE=PRW_DESKTOP_NO_DEPS
+APP_CLIPPY_RC=101
+APP_TEST_RC=0
+APP_BUILD_RC=0
+CONNECTIVITY_SELECTOR_AUTHORITY=PRW_CONNECTIVITY
+NETWORK_PROBING=NO
+CANDIDATE_PUBLICATION=NO
+NETWORK_RUNTIME_ACTIVATION=NO
+FIRST_FAILURE=APP_CLIPPY
+STATUS=FAIL
+===== APP_CLIPPY_FAILURE_TAIL =====
+    Checking prw-network v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-network)
+    Checking prw-files v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-files)
+    Checking libadwaita v0.9.2
+    Checking prw-private-dns v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-private-dns)
+    Checking rustls-webpki v0.103.14
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking rtc-stun v0.20.2
+    Checking rtc-ice v0.20.2
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking quinn-proto v0.11.16
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+    Checking prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+error: use of deprecated struct `gtk4::ComboBoxText`: Since 4.10
+   --> apps/desktop/src/ui.rs:520:36
+    |
+520 | fn reachability_selector() -> gtk::ComboBoxText {
+    |                                    ^^^^^^^^^^^^
+    |
+    = note: `-D deprecated` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(deprecated)]`
+
+error: use of deprecated struct `gtk4::ComboBoxText`: Since 4.10
+   --> apps/desktop/src/ui.rs:521:25
+    |
+521 |     let selector = gtk::ComboBoxText::new();
+    |                         ^^^^^^^^^^^^
+
+error: use of deprecated struct `gtk4::ComboBoxText`: Since 4.10
+   --> apps/desktop/src/ui.rs:529:42
+    |
+529 | fn selected_reachability(selector: &gtk::ComboBoxText) -> ReachabilityObservation {
+    |                                          ^^^^^^^^^^^^
+
+error: use of deprecated associated function `gtk4::ComboBoxText::new`: Since 4.10
+   --> apps/desktop/src/ui.rs:521:39
+    |
+521 |     let selector = gtk::ComboBoxText::new();
+    |                                       ^^^
+
+error: use of deprecated method `gtk4::ComboBoxText::append`: Since 4.10
+   --> apps/desktop/src/ui.rs:522:14
+    |
+522 |     selector.append(Some("unknown"), "Unknown");
+    |              ^^^^^^
+
+error: use of deprecated method `gtk4::ComboBoxText::append`: Since 4.10
+   --> apps/desktop/src/ui.rs:523:14
+    |
+523 |     selector.append(Some("reachable"), "Reachable");
+    |              ^^^^^^
+
+error: use of deprecated method `gtk4::ComboBoxText::append`: Since 4.10
+   --> apps/desktop/src/ui.rs:524:14
+    |
+524 |     selector.append(Some("unreachable"), "Unreachable");
+    |              ^^^^^^
+
+error: use of deprecated method `gtk4::prelude::ComboBoxExt::set_active_id`: Since 4.10
+   --> apps/desktop/src/ui.rs:525:14
+    |
+525 |     selector.set_active_id(Some("unknown"));
+    |              ^^^^^^^^^^^^^
+
+error: use of deprecated method `gtk4::prelude::ComboBoxExt::active_id`: Since 4.10
+   --> apps/desktop/src/ui.rs:530:20
+    |
+530 |     match selector.active_id().as_deref() {
+    |                    ^^^^^^^^^
+
+error: this function has too many lines (125/100)
+   --> apps/desktop/src/ui.rs:131:1
+    |
+131 | fn machines_page() -> gtk::Box {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_lines)]`
+
+error: redundant clone
+   --> apps/desktop/src/ui.rs:162:52
+    |
+162 |     let local_observation_input = local_observation.clone();
+    |                                                    ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> apps/desktop/src/ui.rs:162:35
+    |
+162 |     let local_observation_input = local_observation.clone();
+    |                                   ^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#redundant_clone
+    = note: `-D clippy::redundant-clone` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::redundant_clone)]`
+
+error: redundant clone
+   --> apps/desktop/src/ui.rs:163:58
+    |
+163 |     let internet_observation_input = internet_observation.clone();
+    |                                                          ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> apps/desktop/src/ui.rs:163:38
+    |
+163 |     let internet_observation_input = internet_observation.clone();
+    |                                      ^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#redundant_clone
+
+error: redundant clone
+   --> apps/desktop/src/ui.rs:164:52
+    |
+164 |     let relay_observation_input = relay_observation.clone();
+    |                                                    ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> apps/desktop/src/ui.rs:164:35
+    |
+164 |     let relay_observation_input = relay_observation.clone();
+    |                                   ^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#redundant_clone
+
+error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> apps/desktop/src/ui.rs:474:13
+    |
+474 | /             match (
+475 | |                 resolver_address.parse::<IpAddr>(),
+476 | |                 resolver_port.parse::<u16>(),
+477 | |             ) {
+...   |
+485 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#single_match_else
+    = note: `-D clippy::single-match-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_match_else)]`
+help: try
+    |
+474 ~             if let (Ok(address), Ok(port)) = (
+475 +                 resolver_address.parse::<IpAddr>(),
+476 +                 resolver_port.parse::<u16>(),
+477 +             ) { Some((address, port)) } else {
+478 +                 dns_result_output.set_text(
+479 +                     "Resolver must be an explicit IP plus a valid non-zero port, or both resolver fields must be empty.",
+480 +                 );
+481 +                 return;
+482 +             }
+    |
+
+error: could not compile `prw-desktop` (bin "prw-desktop") due to 14 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `prw-desktop` (bin "prw-desktop" test) due to 14 previous errors
