@@ -433,7 +433,7 @@ fn transport_rotation_creates_a_distinct_replacement_peer_bootstrap_lifecycle() 
             fixture.plan.peer().device_id().clone(),
             replacement_transport,
         ),
-        vec![candidate(1, ConnectivityPathKind::LocalDirect, 4000)],
+        vec![candidate(1, ConnectivityPathKind::LocalDirect, 4001)],
     )
     .expect("replacement peer plan");
     let mut replacement_owner = BootstrapFreshnessReference::new_lifecycle(
