@@ -1,0 +1,17 @@
+PHASE=152_C02E_TRANCHE5_CLIPPY_CORRECTIVE
+BASE_HEAD=f05129065c574767a53bee2f6c0f26c55f16c8d4
+SOURCE=crates/prw-remote-bridge/src/reachability_freshness_wire.rs
+SOURCE_SHA256_BEFORE=7081be4eaae062f4ca6d1b520dad2c2b5ae4fb59a34bb8ce878adba52785ecac
+SOURCE_SHA256_AFTER=ae3a3f7505a8db08839ea47292fe085860a1c8751b2fa257a12a4ece840e6347
+PATCH_RC=0
+FORMAT_RC=0
+FOCUSED_TEST_RC=0
+FOCUSED_CLIPPY_RC=0
+WORKSPACE_CLIPPY_RC=0
+DIFF_SCOPE_RC=91
+DIFF_PATHS=crates/prw-remote-bridge/src/reachability_freshness_wire.rs,target/.rustc_info.json,target/debug/.fingerprint/prw-control-plane-608a95297df85987/dep-lib-prw_control_plane,target/debug/.fingerprint/prw-control-plane-fd2318530bb7f1f3/dep-lib-prw_control_plane,target/debug/build/aws-lc-sys-bbcf55ca4d69cb00/output,target/debug/deps/libprw_control_plane-fd2318530bb7f1f3.rlib
+SEMANTIC_CHANGE=CONST_QUALIFIER_ONLY
+NETWORK_RUNTIME_ACTIVATION=NO
+AGENT_BOOTSTRAP_ACTIVATION=NO
+FIRST_FAILURE=DIFF_SCOPE
+STATUS=FAIL
