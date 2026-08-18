@@ -17,9 +17,7 @@ pub const CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES: usize = 32;
 /// must generate each installed token from a cryptographically secure verifier-owned entropy
 /// source and must never accept an all-zero value as a current or bootstrap token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CandidatePublicationFreshnessToken(
-    [u8; CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES],
-);
+pub struct CandidatePublicationFreshnessToken([u8; CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES]);
 
 impl CandidatePublicationFreshnessToken {
     /// Creates one exact non-zero opaque token from verifier-owned bytes.

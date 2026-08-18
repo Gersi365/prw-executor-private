@@ -48,10 +48,8 @@ fn durable_lifecycle_states_do_not_alias_missing_recovery_or_retired_state() {
     let bootstrap = token(2);
     let established = token(3);
 
-    let new_record = CandidatePublicationFreshnessRecord::new_lifecycle_eligible(
-        target.clone(),
-        bootstrap,
-    );
+    let new_record =
+        CandidatePublicationFreshnessRecord::new_lifecycle_eligible(target.clone(), bootstrap);
     let established_record =
         CandidatePublicationFreshnessRecord::established(target.clone(), established);
     let recovery_record = CandidatePublicationFreshnessRecord::recovery_required(target.clone());
@@ -104,10 +102,8 @@ fn same_transport_bytes_for_another_device_are_a_distinct_peer_scope() {
 fn retired_exact_peer_identity_remains_distinct_from_new_lifecycle_eligibility() {
     let historical_peer = peer("target-retired-freshness-representation", 12);
     let retired = CandidatePublicationFreshnessRecord::retired(historical_peer.clone());
-    let hypothetical_new = CandidatePublicationFreshnessRecord::new_lifecycle_eligible(
-        historical_peer,
-        token(13),
-    );
+    let hypothetical_new =
+        CandidatePublicationFreshnessRecord::new_lifecycle_eligible(historical_peer, token(13));
 
     assert_ne!(retired.lifecycle(), hypothetical_new.lifecycle());
     assert_eq!(retired.lifecycle().current_token(), None);
