@@ -1352,10 +1352,16 @@ dependencies = [
  "nix",
  "prw-core",
  "prw-device-identity-custody",
+ "prw-file-service",
+ "prw-file-transfer",
  "prw-files",
+ "prw-forwarding",
  "prw-network",
  "prw-policy",
+ "prw-registry",
  "prw-remote-bridge",
+ "prw-session",
+ "prw-terminal",
  "rustix",
 ]
 
