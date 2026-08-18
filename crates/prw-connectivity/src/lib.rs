@@ -17,6 +17,8 @@ use prw_core::DeviceId;
 pub const MAX_CONNECTIVITY_CANDIDATES: usize = 16;
 
 /// Stable plan-scoped candidate identifier.
+///
+/// Within one plan lifetime, an identifier must not be rebound to a different path/endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CandidateId(u64);
 
@@ -278,12 +280,14 @@ impl PeerConnectivityPlan {
     ///
     /// Every refreshed candidate starts with an `Unknown` observation so reachability evidence
     /// from a previous Wi-Fi, mobile-data, NAT, or relay path cannot be inherited by a newly
-    /// signaled endpoint set.
+    /// signaled endpoint set. Existing candidate identifiers may be retained only for the exact
+    /// same candidate; changing path kind or endpoint requires a fresh candidate identifier.
     ///
     /// # Errors
     ///
-    /// Rejects the same invalid candidate sets as [`Self::new`]. Validation completes before
-    /// mutation, so an error preserves the complete previous candidate/observation state.
+    /// Rejects the same invalid candidate sets as [`Self::new`] and rejects rebinding an existing
+    /// candidate identifier to a different path/endpoint. Validation completes before mutation,
+    /// so an error preserves the complete previous candidate/observation state.
     pub fn refresh_candidates(
         &mut self,
         candidates: Vec<ConnectivityCandidate>,
@@ -293,6 +297,11 @@ impl PeerConnectivityPlan {
         }
 
         for (index, candidate) in candidates.iter().enumerate() {
+            if self.candidates.iter().any(|existing| {
+                existing.candidate.id == candidate.id && existing.candidate != *candidate
+            }) {
+                return Err(ConnectivityError::CandidateIdRebound);
+            }
             for existing in &candidates[..index] {
                 if existing.id == candidate.id {
                     return Err(ConnectivityError::DuplicateCandidateId);
@@ -369,6 +378,8 @@ pub enum ConnectivityError {
     DuplicateCandidateId,
     /// Exact path-kind and endpoint tuple was duplicated.
     DuplicateCandidateEndpoint,
+    /// An existing plan-scoped candidate identifier was rebound to a different candidate.
+    CandidateIdRebound,
     /// Observation referenced a candidate not in the plan.
     UnknownCandidate,
 }
@@ -383,6 +394,7 @@ impl fmt::Display for ConnectivityError {
             Self::CandidateCapacity => "connectivity candidate capacity exceeded",
             Self::DuplicateCandidateId => "connectivity candidate identifier is duplicated",
             Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
+            Self::CandidateIdRebound => "connectivity candidate identifier cannot be rebound",
             Self::UnknownCandidate => "connectivity candidate is unknown",
         })
     }
@@ -647,6 +659,28 @@ mod tests {
                 3002
             ))
         );
+    }
+
+    #[test]
+    fn candidate_refresh_rejects_rebinding_existing_id_to_new_endpoint() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::InternetDirect, 2001)],
+        )
+        .expect("initial plan");
+        plan.set_observation(id(1), ReachabilityObservation::Reachable)
+            .expect("initial reachability");
+        let before = plan.clone();
+
+        assert_eq!(
+            plan.refresh_candidates(vec![candidate(
+                1,
+                ConnectivityPathKind::InternetDirect,
+                3001,
+            )]),
+            Err(ConnectivityError::CandidateIdRebound)
+        );
+        assert_eq!(plan, before);
     }
 
     #[test]
