@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Gate
 
-Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / SESSION_WORKSPACE_REGISTRY_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / AUTHENTICATED_CANDIDATE_PUBLICATION_PROVENANCE_STAGED / SESSION_WORKSPACE_REGISTRY_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor: `phase-152-c02d-provider-backend-design`
 
@@ -29,7 +29,7 @@ It reuses the existing `prw-connectivity` Phase 135 types:
 - `ReachabilityObservation`
 - `PeerConnectivityPlan`
 
-It reuses `WorkspaceDeviceRegistry` as the authority for current session/device/transport state.
+It reuses `AuthenticatedDeviceSession` and `WorkspaceDeviceRegistry` as the existing authenticated-session and current device/transport authority boundaries.
 
 It also preserves the existing Phase 139 transport architecture:
 
@@ -39,7 +39,7 @@ The deterministic preference remains:
 
 `LocalDirect -> InternetDirect -> Relay -> Offline`
 
-Phase 141 remains the Sans-I/O ICE/STUN layer. Successful ICE selection produces reachability evidence correlated to an existing candidate; it does not become a PRW identity or authorization authority.
+Phase 139 already assigns candidate exchange and coordination to the separate control plane. Phase 141 remains the Sans-I/O ICE/STUN layer. Successful ICE selection produces reachability evidence correlated to an existing candidate; it does not become a PRW identity or authorization authority.
 
 ## Identity rule
 
@@ -78,49 +78,75 @@ Resetting observations is required because reachability evidence for an old netw
 
 A later runtime integration must not apply a target candidate refresh merely because a candidate vector is syntactically valid.
 
-The required admission order is now locked as:
+The required admission order is locked as:
 
 1. revalidate the requester's `AuthenticatedDeviceSession` through `WorkspaceDeviceRegistry::validate_authenticated_session(...)`;
-2. locate the target `DeviceId` from the existing `PeerConnectivityPlan` in the current registry;
-3. require the target registered device to belong to the same `WorkspaceId` as the current registry-validated requester;
-4. revalidate the plan's exact target `TransportIdentity` through `WorkspaceDeviceRegistry::validate_transport_identity(...)`;
-5. only after all current identity/workspace checks pass may `PeerConnectivityPlan::refresh_candidates(...)` validate and mutate transient endpoints.
+2. require the candidate publication to identify the exact target `PeerConnectivityIdentity` already held by the plan;
+3. revalidate the authenticated publisher/target session against current registry state;
+4. require requester and publisher/target to belong to the same current `WorkspaceId`;
+5. revalidate the publication/plan's exact target `TransportIdentity` through `WorkspaceDeviceRegistry::validate_transport_identity(...)`;
+6. only after all current identity/workspace/provenance checks pass may `PeerConnectivityPlan::refresh_candidates(...)` validate and mutate transient endpoints.
 
-Any failure before step 5 must leave the complete plan state unchanged.
+Any failure before step 6 must leave the complete plan state unchanged.
 
 This ordering closes these stale-authority cases before endpoint mutation:
 
 - requester membership suspension/removal;
 - requester device revocation or authenticated-session/registry mismatch;
+- target publisher membership suspension/removal;
+- target publisher device revocation or authenticated-session/registry mismatch;
 - cross-workspace target access;
-- target device revocation;
-- target transport identity rotation leaving the plan's old transport identity stale.
+- a publication created by one authenticated device being retargeted to another peer plan;
+- target transport identity rotation leaving the publication/plan identity stale.
 
 C02e stages this order in `prw-remote-bridge` integration-test source because that crate already depends on session, registry and connectivity domains. No Cargo edge or runtime wiring is added.
 
-## Candidate provenance boundary
+## Authenticated candidate publication provenance boundary
 
-Current session/workspace/target registry validation answers **who may participate and which target identity is current**.
+Registry-current admission alone does not authenticate arbitrary candidate bytes. C02e therefore stages a source-only publication boundary in `crates/prw-remote-bridge/tests/authenticated_candidate_provenance.rs`.
 
-It does not, by itself, prove that arbitrary candidate bytes came from an authenticated control-plane signaling channel.
+The staged publication semantics are:
 
-Production candidate provenance therefore remains a separate later boundary. A future signaling adapter must correlate a bounded candidate update to the already admitted workspace/target identity and must not expose a raw unauthenticated endpoint injection path.
+1. a publisher must already hold an `AuthenticatedDeviceSession`;
+2. that publisher session is revalidated against the current registry before publication;
+3. the publisher's presented `TransportIdentity` is revalidated for that authenticated publisher device;
+4. the publication target identity is derived from the authenticated publisher's own `DeviceId` plus that current `TransportIdentity`; the caller does not supply an arbitrary target `DeviceId`;
+5. the complete candidate vector is validated using the existing `PeerConnectivityPlan` candidate bounds before a publication can exist;
+6. consumption revalidates both requester and publisher/target sessions, requires the same workspace, requires exact publication-to-plan peer identity equality, and revalidates the exact target transport identity before endpoint mutation.
 
-C02e deliberately does not invent a new wire format because the current control transport supplies a generic bounded frame envelope while the repository does not yet contain a reviewed candidate-update application payload schema.
+This means an authenticated requester cannot publish candidates under its own identity and then inject them into another target's plan merely by presenting a syntactically valid candidate vector.
+
+The staged type exists only in integration-test source. It is a design/provenance specification, not a production control-plane object and not a new discovery authority.
+
+## Wire and control-transport boundary
+
+C02e deliberately does not invent a candidate-update wire encoding.
+
+The existing Phase 129 control transport already provides a bounded generic frame envelope and Phase 139 assigns candidate exchange to the authenticated control-plane coordination path, but the repository does not yet contain a reviewed candidate-update application payload schema or a production adapter that binds such a payload to an authenticated PRW session.
+
+Therefore C02e locks the semantic requirement without activating transport:
+
+`authenticated publisher session -> current publisher DeviceId + TransportIdentity -> bounded validated candidate publication -> current same-workspace requester admission -> transactional target plan refresh`
+
+A later separately reviewed adapter may serialize/deserialize this semantic object only if it preserves the same identity derivation, current-registry checks, bounds and fail-closed ordering. Raw unauthenticated endpoint injection remains forbidden.
 
 ## Registry/discovery relationship
 
 The higher-level product flow is:
 
-`authenticated PRW requester session`
+`authenticated PRW target/publisher session`
 
-`-> current registry principal`
+`-> current registry target principal + current TransportIdentity`
 
-`-> same-workspace current target device + target TransportIdentity`
+`-> bounded authenticated candidate publication`
 
-`-> authenticated control-plane candidate state`
+`-> authenticated PRW requester session`
 
-`-> bounded transient candidate refresh`
+`-> current registry requester principal`
+
+`-> same-workspace + exact target identity revalidation`
+
+`-> transactional transient candidate refresh`
 
 `-> provider reachability observations`
 
@@ -128,7 +154,7 @@ The higher-level product flow is:
 
 `-> authenticated transport establishment`
 
-The source of refreshed production candidates remains outside C02e. Existing control-plane transport, NAT traversal and relay components own their respective transport/protocol responsibilities.
+The production source/transport of candidate publications remains outside C02e. Existing control-plane transport, NAT traversal and relay components retain their respective transport/protocol responsibilities.
 
 ## Forwarding relationship
 
@@ -146,14 +172,18 @@ C02e must not:
 
 - derive PRW identity from IP address;
 - persist a candidate IP as a substitute for `DeviceId`;
+- let a candidate publisher name an arbitrary target device instead of deriving identity from the authenticated publisher;
+- accept a publication from a publisher session that is no longer registry-current;
+- consume a publication when the requester session is no longer registry-current;
+- apply a cross-workspace target refresh;
+- apply a publication whose exact peer identity differs from the target plan;
+- apply a candidate refresh after current-registry target device revocation;
+- apply a candidate refresh after the target transport identity becomes stale due to rotation;
 - carry reachability observations across candidate refresh;
 - accept more than 16 candidates;
 - preserve removed candidates as still selectable;
-- apply a refresh when the requester session is no longer registry-current;
-- apply a cross-workspace target refresh;
-- apply a candidate refresh after current-registry target device revocation;
-- apply a candidate refresh after the plan's target transport identity becomes stale due to rotation;
-- treat registry identity validation alone as authentication of arbitrary candidate bytes;
+- treat generic TLS/control-frame validity alone as PRW session authentication;
+- expose a raw unauthenticated endpoint injection path;
 - introduce DNS/hostname resolution into `prw-connectivity` candidate endpoints;
 - perform socket I/O;
 - activate STUN/ICE/TURN;
@@ -184,13 +214,22 @@ Bridge admission ordering:
 - requester membership suspension rejects refresh before endpoint mutation;
 - cross-workspace target rejects refresh before endpoint mutation.
 
+Authenticated candidate publication provenance:
+
+- a registry-current authenticated target can publish a bounded candidate set for its own current identity;
+- an authenticated requester's own publication cannot be retargeted to another peer plan;
+- target transport rotation rejects a previously published stale target identity before mutation;
+- target publisher membership suspension rejects a stale publication before mutation;
+- a cross-workspace requester cannot consume an authenticated target publication;
+- an invalid candidate set is rejected before a publication object exists.
+
 Required future separately-authorized validation:
 
 - run the staged connectivity and bridge integration tests;
 - confirm existing path-selection ordering remains unchanged;
-- confirm registry/session error ordering remains fail-closed;
+- confirm registry/session/provenance error ordering remains fail-closed;
 - workspace formatting/lints/tests/build remain clean in the authorized scope.
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / SESSION_WORKSPACE_TARGET_REGISTRY_ORDER_LOCKED / STALE_OR_CROSS_WORKSPACE_AUTHORITY_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_PROVENANCE_STILL_UNSELECTED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / AUTHENTICATED_PUBLISHER_IDENTITY_DERIVED / SESSION_WORKSPACE_TARGET_REGISTRY_ORDER_LOCKED / STALE_CROSS_WORKSPACE_OR_RETARGETED_PUBLICATION_FAILS_BEFORE_MUTATION / CANDIDATE_WIRE_ADAPTER_UNSELECTED / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
