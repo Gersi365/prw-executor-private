@@ -41,6 +41,7 @@ where
     ///
     /// This constructor performs no provider operation. In particular it does not
     /// open a terminal, create a transfer, bind a forward, or mutate the filesystem.
+    #[must_use]
     pub(crate) fn new(
         filesystem: &'authority LocalManagementFilesystemAuthority,
         terminal_backend: T,
@@ -55,51 +56,61 @@ where
     }
 
     /// Returns the exact Agent-owned descriptor authority backing file/transfer work.
+    #[must_use]
     pub(crate) const fn filesystem(&self) -> &'authority LocalManagementFilesystemAuthority {
         self.filesystem
     }
 
     /// Returns the transfer manager for typed create-only transfer operations.
+    #[must_use]
     pub(crate) fn transfers_mut(&mut self) -> &mut UploadTransferManager<'authority> {
         &mut self.transfers
     }
 
     /// Returns the terminal broker for principal-binding inspection.
+    #[must_use]
     pub(crate) const fn terminal(&self) -> &TerminalBroker<T> {
         &self.terminal
     }
 
     /// Returns the terminal broker for typed terminal operations.
+    #[must_use]
     pub(crate) fn terminal_mut(&mut self) -> &mut TerminalBroker<T> {
         &mut self.terminal
     }
 
     /// Returns the forwarding broker for principal-binding inspection.
+    #[must_use]
     pub(crate) const fn forwarding(&self) -> &PortForwardBroker<F> {
         &self.forwarding
     }
 
     /// Returns the forwarding broker for typed forwarding operations.
+    #[must_use]
     pub(crate) fn forwarding_mut(&mut self) -> &mut PortForwardBroker<F> {
         &mut self.forwarding
     }
 
     /// Returns the currently active transfer transaction count.
+    #[must_use]
     pub(crate) fn active_transfer_count(&self) -> usize {
         self.transfers.active_count()
     }
 
     /// Returns the currently tracked terminal record count.
+    #[must_use]
     pub(crate) fn active_terminal_count(&self) -> usize {
         self.terminal.session_count()
     }
 
     /// Returns the currently tracked forwarding record count.
+    #[must_use]
     pub(crate) fn active_forwarding_count(&self) -> usize {
         self.forwarding.session_count()
     }
 
     /// Returns whether all provider resources have been explicitly drained.
+    #[must_use]
     pub(crate) fn is_quiescent(&self) -> bool {
         self.transfers.active_count() == 0
             && self.terminal.is_empty()
