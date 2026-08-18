@@ -43,6 +43,7 @@ jobs:
           SOURCE="apps/desktop/src/ui.rs"
           REPORT_DIR="logs/audits/phase-152-desktop-connectivity-preview"
           REPORT="$REPORT_DIR/DESKTOP_CONNECTIVITY_PREVIEW_VALIDATION_${BASE_HEAD}.txt"
+          CLIPPY_LOG="${RUNNER_TEMP}/desktop-connectivity-clippy.log"
           mkdir -p "$REPORT_DIR"
 
           set +e
@@ -86,7 +87,7 @@ jobs:
 
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           METADATA_RC=$?
-          cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings
+          cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings >"$CLIPPY_LOG" 2>&1
           APP_CLIPPY_RC=$?
           cargo test --locked -p prw-desktop --all-targets
           APP_TEST_RC=$?
@@ -127,6 +128,10 @@ jobs:
             echo "NETWORK_RUNTIME_ACTIVATION=NO"
             echo "FIRST_FAILURE=$FIRST_FAILURE"
             echo "STATUS=$STATUS"
+            if [[ "$APP_CLIPPY_RC" -ne 0 ]]; then
+              echo "===== APP_CLIPPY_FAILURE_TAIL ====="
+              tail -n 160 "$CLIPPY_LOG"
+            fi
           } > "$REPORT"
 
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
