@@ -18,7 +18,9 @@ pub const MAX_CONNECTIVITY_CANDIDATES: usize = 16;
 
 /// Stable plan-scoped candidate identifier.
 ///
-/// Within one plan lifetime, an identifier must not be rebound to a different path/endpoint.
+/// Within one plan lifetime, a removed identifier must never be reused. Newly introduced
+/// identifiers advance above the plan's previous high-water mark; an identifier retained across
+/// refresh is valid only for the exact same path kind and endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CandidateId(u64);
 
@@ -226,6 +228,7 @@ pub enum SelectedConnectivityPath {
 pub struct PeerConnectivityPlan {
     peer: PeerConnectivityIdentity,
     candidates: Vec<CandidateState>,
+    candidate_id_high_watermark: u64,
 }
 
 impl PeerConnectivityPlan {
@@ -254,6 +257,11 @@ impl PeerConnectivityPlan {
             }
         }
 
+        let candidate_id_high_watermark = candidates
+            .iter()
+            .map(|candidate| candidate.id.get())
+            .max()
+            .unwrap_or(0);
         let candidates = candidates
             .into_iter()
             .map(|candidate| CandidateState {
@@ -261,7 +269,11 @@ impl PeerConnectivityPlan {
                 observation: ReachabilityObservation::Unknown,
             })
             .collect();
-        Ok(Self { peer, candidates })
+        Ok(Self {
+            peer,
+            candidates,
+            candidate_id_high_watermark,
+        })
     }
 
     /// Returns the logical/transport peer identity.
@@ -281,13 +293,16 @@ impl PeerConnectivityPlan {
     /// Every refreshed candidate starts with an `Unknown` observation so reachability evidence
     /// from a previous Wi-Fi, mobile-data, NAT, or relay path cannot be inherited by a newly
     /// signaled endpoint set. Existing candidate identifiers may be retained only for the exact
-    /// same candidate; changing path kind or endpoint requires a fresh candidate identifier.
+    /// same candidate. A newly introduced candidate must use an identifier above the plan's
+    /// prior high-water mark, so an identifier removed by an earlier refresh cannot later return.
     ///
     /// # Errors
     ///
-    /// Rejects the same invalid candidate sets as [`Self::new`] and rejects rebinding an existing
-    /// candidate identifier to a different path/endpoint. Validation completes before mutation,
-    /// so an error preserves the complete previous candidate/observation state.
+    /// Rejects the same invalid candidate sets as [`Self::new`], rejects rebinding an existing
+    /// candidate identifier to a different path/endpoint, and rejects reuse of an identifier at
+    /// or below the plan's prior high-water mark when that identifier is not an exact retained
+    /// candidate. Validation completes before mutation, so an error preserves the complete
+    /// previous candidate/observation/high-watermark state.
     pub fn refresh_candidates(
         &mut self,
         candidates: Vec<ConnectivityCandidate>,
@@ -297,10 +312,19 @@ impl PeerConnectivityPlan {
         }
 
         for (index, candidate) in candidates.iter().enumerate() {
-            if self.candidates.iter().any(|existing| {
-                existing.candidate.id == candidate.id && existing.candidate != *candidate
-            }) {
-                return Err(ConnectivityError::CandidateIdRebound);
+            match self
+                .candidates
+                .iter()
+                .find(|existing| existing.candidate.id == candidate.id)
+            {
+                Some(existing) if existing.candidate != *candidate => {
+                    return Err(ConnectivityError::CandidateIdRebound);
+                }
+                Some(_) => {}
+                None if candidate.id.get() <= self.candidate_id_high_watermark => {
+                    return Err(ConnectivityError::CandidateIdRebound);
+                }
+                None => {}
             }
             for existing in &candidates[..index] {
                 if existing.id == candidate.id {
@@ -312,6 +336,12 @@ impl PeerConnectivityPlan {
             }
         }
 
+        let next_candidate_id_high_watermark = candidates
+            .iter()
+            .map(|candidate| candidate.id.get())
+            .max()
+            .unwrap_or(0)
+            .max(self.candidate_id_high_watermark);
         let refreshed = candidates
             .into_iter()
             .map(|candidate| CandidateState {
@@ -320,6 +350,7 @@ impl PeerConnectivityPlan {
             })
             .collect();
         self.candidates = refreshed;
+        self.candidate_id_high_watermark = next_candidate_id_high_watermark;
         Ok(())
     }
 
@@ -378,7 +409,7 @@ pub enum ConnectivityError {
     DuplicateCandidateId,
     /// Exact path-kind and endpoint tuple was duplicated.
     DuplicateCandidateEndpoint,
-    /// An existing plan-scoped candidate identifier was rebound to a different candidate.
+    /// An existing or retired plan-scoped candidate identifier was rebound/reused.
     CandidateIdRebound,
     /// Observation referenced a candidate not in the plan.
     UnknownCandidate,
@@ -394,7 +425,7 @@ impl fmt::Display for ConnectivityError {
             Self::CandidateCapacity => "connectivity candidate capacity exceeded",
             Self::DuplicateCandidateId => "connectivity candidate identifier is duplicated",
             Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
-            Self::CandidateIdRebound => "connectivity candidate identifier cannot be rebound",
+            Self::CandidateIdRebound => "connectivity candidate identifier cannot be rebound or reused",
             Self::UnknownCandidate => "connectivity candidate is unknown",
         })
     }
@@ -677,6 +708,32 @@ mod tests {
                 1,
                 ConnectivityPathKind::InternetDirect,
                 3001,
+            )]),
+            Err(ConnectivityError::CandidateIdRebound)
+        );
+        assert_eq!(plan, before);
+    }
+
+    #[test]
+    fn candidate_refresh_rejects_reuse_after_candidate_removal() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::InternetDirect, 2001)],
+        )
+        .expect("initial plan");
+        plan.refresh_candidates(vec![candidate(
+            2,
+            ConnectivityPathKind::InternetDirect,
+            3002,
+        )])
+        .expect("fresh replacement candidate");
+        let before = plan.clone();
+
+        assert_eq!(
+            plan.refresh_candidates(vec![candidate(
+                1,
+                ConnectivityPathKind::InternetDirect,
+                2001,
             )]),
             Err(ConnectivityError::CandidateIdRebound)
         );
