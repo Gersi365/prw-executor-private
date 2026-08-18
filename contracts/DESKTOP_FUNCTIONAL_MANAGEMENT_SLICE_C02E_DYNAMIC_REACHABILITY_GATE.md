@@ -1,6 +1,6 @@
 # Phase 152 C02e — Dynamic Reachability Gate
 
-Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+Status: `DESIGN_LOCK / IDENTITY_STABLE_ENDPOINTS_TRANSIENT / REGISTRY_CURRENT_REFRESH_ORDER_LOCKED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
 
 Predecessor: `phase-152-c02d-provider-backend-design`
 
@@ -70,6 +70,24 @@ The refresh operation must:
 
 Resetting observations is required because reachability evidence for an old network path must not be silently transferred to a newly signaled endpoint set.
 
+## Registry-current refresh admission rule
+
+Before a later runtime integration may apply a refreshed candidate set to an existing peer plan, the plan's current identity must be revalidated against the current registry state.
+
+The locked ordering is:
+
+1. read the existing plan's `DeviceId` and `TransportIdentity`;
+2. call the current registry transport-identity validation boundary;
+3. if the device is unknown, revoked, unbound, or the transport identity is stale/mismatched, fail before candidate mutation;
+4. only after successful registry revalidation may `PeerConnectivityPlan::refresh_candidates(...)` run;
+5. candidate validation failure must still preserve the complete pre-refresh plan state.
+
+This ordering prevents a stale network update from surviving either device revocation or transport-key/certificate rotation.
+
+C02e stages this ordering in `prw-remote-bridge` integration-test source because that crate already depends on both `prw-registry` and `prw-connectivity`. It does not add a new dependency cycle or modify runtime wiring.
+
+The production source of candidate updates still requires authenticated current control-plane/session signaling before runtime activation. C02e does not claim that arbitrary candidate vectors are authenticated merely because registry identity revalidation succeeds.
+
 ## Registry/discovery relationship
 
 The higher-level product flow is:
@@ -107,6 +125,9 @@ C02e must not:
 - carry reachability observations across candidate refresh;
 - accept more than 16 candidates;
 - preserve removed candidates as still selectable;
+- apply a candidate refresh after current-registry device revocation;
+- apply a candidate refresh after the plan's transport identity becomes stale due to rotation;
+- treat registry identity validation alone as authentication of arbitrary candidate bytes;
 - introduce DNS/hostname resolution into `prw-connectivity` candidate endpoints;
 - perform socket I/O;
 - activate STUN/ICE/TURN;
@@ -117,18 +138,26 @@ C02e must not:
 
 ## Validation state
 
-Tests may be authored to prove candidate-refresh state transitions, but they are not execution evidence while the build/test gate is closed.
+Source tests are authored but are not execution evidence while the build/test gate is closed.
 
-Required future separately-authorized validation:
+Current staged test coverage includes:
 
 - successful refresh preserves `PeerConnectivityIdentity`;
 - successful refresh replaces stale endpoints;
 - refreshed observations begin `Unknown`;
 - removed candidate IDs fail closed;
-- invalid refresh leaves the previous plan byte/semantic state unchanged;
-- existing path-selection ordering remains unchanged;
+- invalid refresh leaves the previous plan state unchanged;
+- current registry transport identity permits refresh;
+- transport identity rotation rejects a stale plan before endpoint mutation;
+- device revocation rejects refresh before endpoint mutation.
+
+Required future separately-authorized validation:
+
+- run the staged connectivity and bridge integration tests;
+- confirm existing path-selection ordering remains unchanged;
+- confirm registry error ordering remains fail-closed;
 - workspace formatting/lints/tests/build remain clean in the authorized scope.
 
 ## Current classification
 
-`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / OBSERVATIONS_RESET / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
+`C02E_DYNAMIC_REACHABILITY_DESIGN_LOCKED / DEVICE_IDENTITY_NOT_IP_BOUND / CANDIDATE_REFRESH_TRANSACTIONAL / REGISTRY_CURRENT_REFRESH_ORDER_LOCKED / STALE_TRANSPORT_AND_REVOKED_DEVICE_FAIL_BEFORE_MUTATION / BUILD_GATE_CLOSED / NO_NETWORK_IO / NO_RUNTIME_ACTIVATION`
