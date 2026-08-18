@@ -1,0 +1,53 @@
+name: Phase 152 Desktop App-Only PR Validation
+
+on:
+  pull_request:
+    branches:
+      - phase-152-desktop-app-ci-base
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/phase-152-desktop-app-only-pr-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-152-desktop-app-only-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout PR merge
+        uses: actions/checkout@v4
+
+      - name: Install desktop native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy desktop crate only
+        run: cargo clippy --locked -p prw-desktop --all-targets --all-features --no-deps -- -D warnings
+
+      - name: Test desktop crate
+        run: cargo test --locked -p prw-desktop --all-targets
+
+      - name: Build desktop crate
+        run: cargo build --locked -p prw-desktop --all-targets
+
+      - name: Lock non-production boundary
+        run: |
+          echo "PRODUCTION_PROVIDER_DISPATCH=NO"
+          echo "NETWORK_RUNTIME_ACTIVATION=NO"
+          echo "PRIVATE_DNS_OS_MUTATION=NO"
