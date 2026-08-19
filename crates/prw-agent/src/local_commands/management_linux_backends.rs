@@ -11,19 +11,15 @@
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, sync_channel};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, PtySystem, native_pty_system};
-use prw_forwarding::{
-    ForwardingError, LoopbackFamily, PortForwardBackend, TcpForwardSpec,
-};
-use prw_terminal::{
-    TerminalBackend, TerminalError, TerminalGeometry, TerminalProfile,
-};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use prw_forwarding::{ForwardingError, LoopbackFamily, PortForwardBackend, TcpForwardSpec};
+use prw_terminal::{TerminalBackend, TerminalError, TerminalGeometry, TerminalProfile};
 
 use super::management_provider_backend_policy::{
     FORWARD_CONNECT_TIMEOUT, FORWARD_COPY_BUFFER_BYTES, FORWARD_IDLE_TIMEOUT,
@@ -107,8 +103,7 @@ impl TerminalBackend for LinuxLocalTerminalBackend {
                         Err(_) => break,
                     }
                 }
-            })
-        {
+            }) {
             Ok(thread) => thread,
             Err(_) => {
                 let _ = child.kill();
@@ -134,7 +129,9 @@ impl TerminalBackend for LinuxLocalTerminalBackend {
         bytes: &[u8],
     ) -> Result<(), TerminalError> {
         let writer = handle.writer.as_mut().ok_or(TerminalError::Backend)?;
-        writer.write_all(bytes).map_err(|_| TerminalError::Backend)?;
+        writer
+            .write_all(bytes)
+            .map_err(|_| TerminalError::Backend)?;
         writer.flush().map_err(|_| TerminalError::Backend)
     }
 
@@ -322,8 +319,8 @@ where
             return Err(ForwardingError::Backend);
         }
 
-        let listener = TcpListener::bind(loopback_socket(spec))
-            .map_err(|_| ForwardingError::Backend)?;
+        let listener =
+            TcpListener::bind(loopback_socket(spec)).map_err(|_| ForwardingError::Backend)?;
         listener
             .set_nonblocking(true)
             .map_err(|_| ForwardingError::Backend)?;
@@ -407,8 +404,7 @@ fn run_accept_loop(
                     .spawn(move || {
                         let _lease = lease;
                         pump_forward(client, target, &cancel_for_worker);
-                    })
-                {
+                    }) {
                     Ok(worker) => workers.push(worker),
                     Err(_) => {
                         session_connections.fetch_sub(1, Ordering::AcqRel);
@@ -641,7 +637,9 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(
-            observed.windows(13).any(|window| window == b"PRW_C03_PTY_OK"),
+            observed
+                .windows(13)
+                .any(|window| window == b"PRW_C03_PTY_OK"),
             "expected PTY marker in output: {}",
             String::from_utf8_lossy(&observed)
         );
@@ -655,7 +653,10 @@ mod tests {
 
     fn reserve_forward_port() -> u16 {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("reserve loopback port");
-        listener.local_addr().expect("reserved local address").port()
+        listener
+            .local_addr()
+            .expect("reserved local address")
+            .port()
     }
 
     #[test]
@@ -693,7 +694,9 @@ mod tests {
         };
         client.write_all(b"ping").expect("forward client writes");
         let mut response = [0_u8; 4];
-        client.read_exact(&mut response).expect("forward client reads");
+        client
+            .read_exact(&mut response)
+            .expect("forward client reads");
         assert_eq!(&response, b"pong");
         drop(client);
 
@@ -712,8 +715,7 @@ mod tests {
             .expect("exact forwarding policy");
         let mut backend = LinuxLocalForwardingBackend::new(policy);
         let spec = TcpForwardSpec::new(
-            LoopbackBind::new(LoopbackFamily::Ipv4, reserve_forward_port())
-                .expect("forward bind"),
+            LoopbackBind::new(LoopbackFamily::Ipv4, reserve_forward_port()).expect("forward bind"),
             denied,
         );
         assert!(backend.open(spec).is_err());
