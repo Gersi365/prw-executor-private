@@ -18,7 +18,7 @@ use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
 /// Coarse crate-internal failure for one management-capable finite worker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalLinuxManagementSessionWorkerError {
+pub(super) enum LocalLinuxManagementSessionWorkerError {
     /// One management-capable Request failed after the stated number of prior responses.
     Processing {
         /// Number of terminal responses completed before the failing Request.
@@ -38,7 +38,7 @@ pub(crate) enum LocalLinuxManagementSessionWorkerError {
 ///
 /// Returns [`LocalLinuxManagementSessionWorkerError::Processing`] on the first failed
 /// management-capable Request, preserving the number of prior terminal responses.
-pub(crate) fn run_authenticated_session_worker_with_management<RE: PolicyEvaluator + ?Sized>(
+pub(super) fn run_authenticated_session_worker_with_management<RE: PolicyEvaluator + ?Sized>(
     mut session: AuthenticatedLocalLinuxSession<UnixStream>,
     _permit: LocalLinuxWorkerPermit,
     read_evaluator: &RE,
