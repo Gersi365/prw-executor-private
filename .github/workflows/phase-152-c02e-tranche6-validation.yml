@@ -1,0 +1,75 @@
+name: PRW Phase 152 C02e Tranche 6 Validation
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-phase-152-c02e-tranche6-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate C02e Tranche 6 fencing seam
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+
+      - name: Install desktop native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev
+
+      - name: Record exact environment and lock hash
+        run: |
+          set -euo pipefail
+          echo "VALIDATED_SHA=$(git rev-parse HEAD)"
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+          sha256sum Cargo.lock
+          git status --short --untracked-files=all
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run focused live-owner tests
+        run: cargo test --locked -p prw-remote-bridge reachability_live_owner -- --nocapture
+
+      - name: Run focused remote-bridge Clippy
+        run: cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+
+      - name: Run workspace Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Build workspace
+        run: cargo build --locked --workspace --all-targets
+
+      - name: Verify lock stability and zero source drift
+        run: |
+          set -euo pipefail
+          sha256sum Cargo.lock
+          git diff --exit-code -- Cargo.lock
+          git diff --exit-code
+          test -z "$(git status --short --untracked-files=all)"
+          echo "STATUS=PASS"
