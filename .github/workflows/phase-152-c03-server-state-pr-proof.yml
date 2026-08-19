@@ -46,24 +46,17 @@ jobs:
           anchor = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
               self.response_write
           }
-
-          /// Returns whether this connection instance remains safe for another Request.
           '''
-          addition = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
-              self.response_write
-          }
-
+          addition = anchor + '''
           /// Borrows the authoritative component states for a crate-internal composed boundary.
           pub(super) fn runtime_component_states_mut(
               &mut self,
           ) -> (&mut LocalInboundRequestState, &mut LocalTerminalResponseWriteState) {
               (&mut self.inbound, &mut self.response_write)
           }
-
-          /// Returns whether this connection instance remains safe for another Request.
           '''
           if text.count(anchor) != 1:
-              raise SystemExit(f'expected one aggregate-state accessor anchor, found {text.count(anchor)}')
+              raise SystemExit(f'expected one response-write accessor anchor, found {text.count(anchor)}')
           state.write_text(text.replace(anchor, addition))
           PY
           cargo fmt --all
