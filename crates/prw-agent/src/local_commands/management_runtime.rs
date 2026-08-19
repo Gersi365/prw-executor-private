@@ -101,9 +101,7 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use prw_policy::{
-        BoundedLocalManagementDecisions, BoundedLocalManagementPolicy, Decision,
-    };
+    use prw_policy::{BoundedLocalManagementDecisions, BoundedLocalManagementPolicy, Decision};
     use prw_remote_bridge::BridgeCommand;
     use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
 
@@ -118,7 +116,9 @@ mod tests {
     use crate::local_commands::management_provider_backend_policy::ExactForwardingEgressPolicy;
     use crate::local_commands::management_provider_lifecycle::LocalManagementProviderLifecycle;
     use crate::local_commands::management_request::build_local_management_request_frame;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -194,7 +194,10 @@ mod tests {
         (server, client)
     }
 
-    fn management_frame(request_id: u64, command: &BridgeCommand) -> crate::frame_object::LocalIpcFrame {
+    fn management_frame(
+        request_id: u64,
+        command: &BridgeCommand,
+    ) -> crate::frame_object::LocalIpcFrame {
         let bytes = command.encode().expect("canonical bridge command encodes");
         build_local_management_request_frame(id(request_id), &bytes)
             .expect("command-3 management frame builds")
@@ -246,7 +249,10 @@ mod tests {
             let open_response = context
                 .process_management_frame(&open, &first_connection, status())
                 .expect("terminal-open response builds");
-            assert_eq!(response_status(&open_response), LocalAgentResponseStatus::Ok);
+            assert_eq!(
+                response_status(&open_response),
+                LocalAgentResponseStatus::Ok
+            );
             drop(first_connection);
             drop(first_client);
 
@@ -255,7 +261,10 @@ mod tests {
             let close_response = context
                 .process_management_frame(&close, &second_connection, status())
                 .expect("terminal-close response builds");
-            assert_eq!(response_status(&close_response), LocalAgentResponseStatus::Ok);
+            assert_eq!(
+                response_status(&close_response),
+                LocalAgentResponseStatus::Ok
+            );
             drop(second_connection);
             drop(second_client);
         }
