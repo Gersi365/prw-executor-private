@@ -21,7 +21,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD)" = "c602befa29e20663d6ffa740928193d228ac5eaa"
+          test "$(git rev-parse HEAD)" = "da13e2facd88f2a243d83a7e5dcffbcf7c05d8bc"
+          test "$(git rev-parse HEAD^)" = "c602befa29e20663d6ffa740928193d228ac5eaa"
+          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse HEAD^^{tree})"
       - name: Generate minimal lock delta and format
         shell: bash
         run: |
