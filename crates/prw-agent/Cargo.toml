@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+portable-pty = "=0.9.0"
 prw-core = { path = "../prw-core" }
 prw-device-identity-custody = { path = "../prw-device-identity-custody" }
 prw-file-service = { path = "../prw-file-service" }
