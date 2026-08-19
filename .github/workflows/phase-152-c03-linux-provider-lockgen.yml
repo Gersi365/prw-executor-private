@@ -21,15 +21,26 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD)" = "da13e2facd88f2a243d83a7e5dcffbcf7c05d8bc"
-          test "$(git rev-parse HEAD^)" = "c602befa29e20663d6ffa740928193d228ac5eaa"
+          test "$(git rev-parse HEAD)" = "e91d7e46f06cd247fc4e746316e0c9ee078bbc13"
+          test "$(git rev-parse HEAD^)" = "da13e2facd88f2a243d83a7e5dcffbcf7c05d8bc"
           test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse HEAD^^{tree})"
-      - name: Generate minimal lock delta and format
+      - name: Apply bounded warning corrective, generate minimal lock delta and format
         shell: bash
         run: |
           set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-agent/src/local_commands/management_linux_backends.rs')
+          text = path.read_text()
+          old = 'use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, PtySystem, native_pty_system};'
+          new = 'use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};'
+          if text.count(old) != 1:
+              raise SystemExit('unexpected PtySystem import anchor count')
+          path.write_text(text.replace(old, new, 1))
+          PY
           cargo check -p prw-agent
           cargo fmt --all
+          git restore -- target
       - name: Verify bounded source scope
         shell: bash
         run: |
@@ -43,6 +54,7 @@ jobs:
             esac
           done < /tmp/changed.txt
           grep -qx 'Cargo.lock' /tmp/changed.txt
+          grep -qx 'crates/prw-agent/src/local_commands/management_linux_backends.rs' /tmp/changed.txt
       - name: Commit generated lock and formatting
         shell: bash
         run: |
