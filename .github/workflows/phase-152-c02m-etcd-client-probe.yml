@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: prw-phase-152-c02m-etcd-client-probe-${{ github.ref }}
@@ -15,13 +15,15 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate etcd-client dependency materialization
+    name: Validate and persist etcd-client dependency lock
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
-      - name: Checkout probe merge
+      - name: Checkout probe head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Install etcd-client build prerequisite
         shell: bash
@@ -50,10 +52,21 @@ jobs:
       - name: Upload generated Cargo lockfile
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: c02m-scoped-generated-cargo-lock
+          name: c02m-persisted-generated-cargo-lock
           path: Cargo.lock
           if-no-files-found: error
           retention-days: 1
+
+      - name: Persist generated lockfile on probe branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git diff --cached --quiet && exit 0
+          git commit -m "phase 152 c02m probe: persist Cargo-generated lockfile"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
