@@ -386,7 +386,7 @@ fn run_accept_loop(
                     drop(client);
                     continue;
                 }
-                if !try_acquire_counter(&aggregate, MAX_FORWARD_CONNECTIONS_AGGREGATE) {
+                if !try_acquire_counter(aggregate, MAX_FORWARD_CONNECTIONS_AGGREGATE) {
                     session_connections.fetch_sub(1, Ordering::AcqRel);
                     drop(client);
                     continue;
@@ -623,7 +623,11 @@ mod tests {
 
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut observed = Vec::new();
-        while Instant::now() < deadline && !observed.windows(13).any(|w| w == b"PRW_C03_PTY_OK") {
+        while Instant::now() < deadline
+            && !observed
+                .windows(b"PRW_C03_PTY_OK".len())
+                .any(|w| w == b"PRW_C03_PTY_OK")
+        {
             observed.extend(
                 backend
                     .read_output(&mut handle, 65_536)
@@ -633,7 +637,7 @@ mod tests {
         }
         assert!(
             observed
-                .windows(13)
+                .windows(b"PRW_C03_PTY_OK".len())
                 .any(|window| window == b"PRW_C03_PTY_OK"),
             "expected PTY marker in output: {}",
             String::from_utf8_lossy(&observed)

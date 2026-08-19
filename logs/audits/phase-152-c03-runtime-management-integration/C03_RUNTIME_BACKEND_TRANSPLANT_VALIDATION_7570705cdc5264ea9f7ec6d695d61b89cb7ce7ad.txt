@@ -1,0 +1,302 @@
+BASE_HEAD=7570705cdc5264ea9f7ec6d695d61b89cb7ce7ad
+PARENT_EXPECTED=fb37d212e7e625cbfa6d1b71b53149ce4e217363
+SOURCE_PROOF=38629e1ad088c0a517bf2aabab349bc9f836e161
+CARGO_TARGET_DIR=/tmp/prw-c03-runtime-backend-transplant-target
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy 0.1.97 (8bab26f4f6 2026-07-14)
+METADATA_RC=0
+FMT_RC=0
+CLIPPY_RC=0
+TEST_RC=0
+BUILD_RC=0
+--- CLIPPY_TAIL ---
+    Checking polyval v0.6.2
+    Checking idna_adapter v1.2.2
+    Checking rfc6979 v0.4.0
+   Compiling substring v1.4.5
+    Checking signature v2.2.0
+   Compiling nix v0.31.3
+    Checking percent-encoding v2.3.2
+   Compiling serde v1.0.229
+    Checking form_urlencoded v1.2.2
+    Checking ecdsa v0.16.9
+    Checking idna v1.1.0
+    Checking ghash v0.5.1
+    Checking primeorder v0.13.6
+    Checking aes v0.8.4
+    Checking ctr v0.9.2
+    Checking sha2 v0.10.9
+    Checking aead v0.5.2
+   Compiling serde_derive v1.0.229
+    Checking aes-gcm v0.10.3
+    Checking p256 v0.13.2
+    Checking url v2.5.8
+    Checking tracing-core v0.1.36
+    Checking tracing v0.1.44
+   Compiling quinn-udp v0.5.15
+    Checking sansio v1.0.0
+    Checking tinyvec_macros v0.1.1
+    Checking crc-catalog v2.5.0
+    Checking log v0.4.33
+    Checking crc v3.4.0
+    Checking tinyvec v1.12.0
+    Checking rand_pcg v0.10.2
+    Checking md-5 v0.10.6
+   Compiling quinn v0.11.11
+   Compiling tokio-macros v2.7.2
+    Checking mio v1.2.2
+    Checking lazy_static v1.5.0
+    Checking lru-slab v0.1.2
+    Checking rustc-hash v2.1.3
+    Checking tokio v1.53.1
+    Checking uuid v1.24.1
+   Compiling glib-sys v0.22.8
+   Compiling gobject-sys v0.22.6
+    Checking prw-policy v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-policy)
+   Compiling gio-sys v0.22.8
+    Checking futures-core v0.3.34
+   Compiling futures-macro v0.3.34
+    Checking futures-task v0.3.34
+    Checking futures-util v0.3.34
+   Compiling cairo-sys-rs v0.22.0
+   Compiling gdk-pixbuf-sys v0.22.0
+   Compiling pango-sys v0.22.0
+    Checking futures-executor v0.3.34
+    Checking futures-channel v0.3.34
+   Compiling glib-macros v0.22.6
+    Checking memchr v2.8.3
+   Compiling cfg_aliases v0.1.1
+   Compiling thiserror v1.0.69
+   Compiling nix v0.28.0
+    Checking glib v0.22.8
+   Compiling graphene-sys v0.22.8
+   Compiling gdk4-sys v0.11.4
+   Compiling thiserror-impl v1.0.69
+   Compiling anyhow v1.0.104
+    Checking filedescriptor v0.8.3
+   Compiling gsk4-sys v0.11.4
+    Checking serial2 v0.2.38
+    Checking futures-io v0.3.34
+    Checking downcast-rs v1.2.1
+    Checking shell-words v1.1.1
+    Checking portable-pty v0.9.0
+    Checking gio v0.22.8
+   Compiling gtk4-sys v0.11.4
+    Checking prw-network v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-network)
+    Checking prw-files v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-files)
+   Compiling equivalent v1.0.2
+   Compiling semver v1.0.28
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.0
+   Compiling rustc_version v0.4.1
+   Compiling field-offset v0.3.6
+   Compiling toml_edit v0.25.13+spec-1.1.0
+    Checking gdk-pixbuf v0.22.0
+    Checking pango v0.22.8
+    Checking cairo-rs v0.22.0
+    Checking gdk4 v0.11.4
+   Compiling proc-macro-crate v3.5.0
+    Checking graphene-rs v0.22.8
+   Compiling libadwaita-sys v0.9.2
+    Checking gsk4 v0.11.4
+   Compiling gtk4-macros v0.11.4
+    Checking gtk4 v0.11.3
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking rustls-webpki v0.103.14
+    Checking rcgen v0.14.8
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking rtc-shared v0.20.2
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking rtc-mdns v0.20.2
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking rtc-stun v0.20.2
+    Checking quinn-proto v0.11.16
+    Checking rtc-ice v0.20.2
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking prw-relay v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay)
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking libadwaita v0.9.2
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+    Checking prw-device-identity-provisioning v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-provisioning)
+    Checking prw-control-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-transport)
+    Checking prw-private-dns v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-private-dns)
+    Checking prw-relay-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay-service)
+    Checking prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+    Checking prw-enrollment v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-enrollment)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 53s
+--- TEST_TAIL ---
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/candidate_reachability_semantic_adapter.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/candidate_reachability_semantic_adapter-9294134667d37068)
+
+running 3 tests
+test semantic_adapter_derives_publisher_identity_and_refreshes_exact_target_only ... ok
+test semantic_adapter_rejects_candidate_id_rebinding_transactionally ... ok
+test semantic_adapter_rejects_stale_target_transport_before_plan_mutation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/dynamic_reachability_registry.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/dynamic_reachability_registry-be561089599f0a6e)
+
+running 5 tests
+test current_session_workspace_and_target_identity_allow_transient_refresh ... ok
+test cross_workspace_target_rejects_refresh_before_endpoint_mutation ... ok
+test target_device_revocation_rejects_refresh_before_endpoint_mutation ... ok
+test requester_membership_suspension_rejects_refresh_before_endpoint_mutation ... ok
+test transport_rotation_rejects_stale_plan_before_endpoint_mutation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/end_to_end.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/end_to_end-6709499256322ad7)
+
+running 9 tests
+test all_operation_codes_round_trip_and_map_to_exact_capabilities ... ok
+test current_transport_binding_is_single_bind_compare_and_rotate ... ok
+test denied_capability_and_owner_role_never_dispatch ... ok
+test malformed_header_fields_trailing_data_and_invalid_typed_values_fail_closed ... ok
+test lease_bounds_dispatch_failure_and_oversized_response_fail_closed ... ok
+test membership_suspension_and_device_revocation_invalidate_unexpired_session ... ok
+test stale_transport_expired_or_future_session_never_dispatches ... ok
+test wrong_outer_kind_and_malformed_prwc_never_dispatch ... ok
+test valid_full_chain_dispatches_and_correlates_response ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_composition_reference.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_composition_reference-645c6838ff490181)
+
+running 4 tests
+test every_successful_full_refresh_invalidates_the_current_replacement_lifecycle ... ok
+test rejected_candidate_refresh_preserves_plan_and_current_traversal_lifecycle ... ok
+test stale_transport_admission_failure_preserves_plan_and_traversal ... ok
+test successful_refresh_invalidates_old_lifecycle_even_for_exact_retained_candidate ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_freshness_authority_reference.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_freshness_authority_reference-2ef940ca435a2ad1)
+
+running 6 tests
+test candidate_validation_failure_does_not_consume_current_freshness ... ok
+test requester_change_does_not_create_an_independent_replay_namespace ... ok
+test stale_or_duplicate_expected_freshness_fails_before_authoritative_mutation ... ok
+test same_peer_session_renewal_continues_the_existing_freshness_lifecycle ... ok
+test successful_commit_advances_freshness_resets_observation_and_invalidates_traversal_together ... ok
+test unavailable_verifier_state_fails_closed_without_resetting_to_an_initial_baseline ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/reachability_freshness_bootstrap_reference.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_freshness_bootstrap_reference-1d6e32373e8858ee)
+
+running 5 tests
+test invalid_first_candidate_vector_does_not_consume_bootstrap ... ok
+test missing_state_for_existing_lifecycle_does_not_alias_new_bootstrap ... ok
+test new_lifecycle_first_publication_establishes_freshness_once ... ok
+test same_peer_session_renewal_during_bootstrap_uses_the_existing_bootstrap_state ... ok
+test transport_rotation_creates_a_distinct_replacement_peer_bootstrap_lifecycle ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_freshness_wire.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_freshness_wire-75710cabbb314f34)
+
+running 8 tests
+test authenticated_resync_redelivers_exact_authoritative_token_without_commit ... ok
+test bootstrap_delivery_requires_an_authoritative_bootstrap_record ... ok
+test malformed_or_wrong_outer_kind_payloads_fail_closed ... ok
+test currentness_is_revalidated_before_durable_lookup ... ok
+test recovery_retired_and_missing_durable_state_never_disclose_tokens ... ok
+test request_delivery_and_failure_round_trip_with_exact_outer_kinds ... ok
+test registry_transport_rotation_blocks_old_identity_before_store_read ... ok
+test resync_reads_durable_state_each_time_and_returns_the_new_current_token ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_owner_production_seam.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_owner_production_seam-1f0a3ada0c8d561d)
+
+running 6 tests
+test candidate_validation_failure_preserves_freshness_store_and_traversal ... ok
+test ambiguous_persistence_result_forces_recovery_without_reactivating_traversal ... ok
+test postcommit_traversal_factory_failure_recovers_forward_without_plan_rollback ... ok
+test stale_durable_expected_state_forces_recovery_and_authoritative_reload ... ok
+test transport_rotation_durably_retires_old_peer_and_drops_traversal ... ok
+test successful_commit_advances_durable_freshness_and_invalidates_current_traversal ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/reachability_phase141_integration.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/reachability_phase141_integration-ce45e793d1e856a2)
+
+running 2 tests
+test failed_refresh_preserves_session_then_transport_rotation_invalidates_it ... ok
+test successful_refresh_stales_queued_phase141_update_and_replacement_becomes_current ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/prw_remote_transport-639dd35329fb3321)
+
+running 4 tests
+test tests::control_frame_rejects_header_and_length_failures ... ok
+test tests::control_frame_round_trip ... ok
+test tests::deterministic_initiator_orders_transport_identity ... ok
+test tests::server_name_uses_all_transport_identity_bytes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/loopback.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/loopback-bdfbf901c80d8f19)
+
+running 5 tests
+test missing_client_certificate_fails_closed ... ok
+test prw_expected_identity_mismatch_fails_after_valid_mtls ... ok
+test wrong_ca_fails_closed ... ok
+test wrong_server_name_fails_closed ... ok
+test loopback_quic_v1_mtls_binds_peer_identity_and_control_frame ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/prw_session-eff88c8d401ede48)
+
+running 6 tests
+test tests::challenge_time_window_fails_closed ... ok
+test tests::changed_bound_identity_signature_is_rejected_without_consumption ... ok
+test tests::pending_and_revoked_bindings_fail_before_pending_state ... ok
+test tests::valid_typed_proof_authenticates_exact_bound_identity_once ... ok
+test tests::proof_for_other_session_is_rejected_without_consuming_correct_challenge ... ok
+test tests::wrong_nonce_is_rejected_before_correct_proof_can_complete ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/tmp/prw-c03-runtime-backend-transplant-target/debug/deps/prw_terminal-372ec8e6694b2573)
+
+running 17 tests
+test tests::backend_open_failure_never_creates_open_record ... ok
+test tests::backend_failure_marks_session_failed_and_rejects_later_io ... ok
+test tests::backend_oversized_output_fails_session ... ok
+test tests::broker_passes_only_named_profile_and_valid_geometry ... ok
+test tests::broker_capacity_fails_before_backend_call ... ok
+test tests::broker_rejects_duplicate_identifier_before_backend_call ... ok
+test tests::close_failure_retains_failed_record ... ok
+test tests::close_is_terminal_for_returned_record_and_later_io_is_rejected ... ok
+test tests::failed_close_can_be_retried_to_closed_and_removed ... ok
+test tests::empty_and_oversized_input_fail_before_backend_call ... ok
+test tests::failed_close_retry_failure_retains_failed_record ... ok
+test tests::failed_close_retry_rejects_open_or_unknown_before_backend_call ... ok
+test tests::identifiers_and_geometry_are_bounded ... ok
+test tests::identity_binding_is_immutable_in_session_record ... ok
+test tests::local_same_uid_principal_is_distinct_from_registry_identity ... ok
+test tests::output_request_bound_fails_before_backend_call ... ok
+test tests::resize_geometry_is_rejected_before_backend_call ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+--- BUILD_TAIL ---
+   Compiling prw-control-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-transport)
+   Compiling prw-desktop v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/apps/desktop)
+   Compiling prw-device-identity-provisioning v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-provisioning)
+   Compiling prw-enrollment v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-enrollment)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.22s
+STATUS=PASS
