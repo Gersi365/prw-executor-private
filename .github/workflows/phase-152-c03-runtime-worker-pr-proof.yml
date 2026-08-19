@@ -18,7 +18,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Materialize worker module and test ownership corrective
+      - name: Materialize worker child-module declaration
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -30,21 +30,6 @@ jobs:
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one worker module anchor, found {text.count(anchor)}')
           worker.write_text(text.replace(anchor, addition))
-
-          proof = Path('crates/prw-agent/src/linux_session_worker/management.rs')
-          text = proof.read_text()
-          replacements = [
-              ('        session: AuthenticatedLocalLinuxSession<UnixStream>,\n', '        session: Option<AuthenticatedLocalLinuxSession<UnixStream>>,\n'),
-              ('                session: AuthenticatedLocalLinuxSession::new(server),\n', '                session: Some(AuthenticatedLocalLinuxSession::new(server)),\n'),
-              ('            harness.session,\n', '            harness.session.take().expect("test session is present"),\n'),
-          ]
-          for old, new in replacements:
-              count = text.count(old)
-              expected = 2 if old == '            harness.session,\n' else 1
-              if count != expected:
-                  raise SystemExit(f'expected {expected} occurrences of {old!r}, found {count}')
-              text = text.replace(old, new)
-          proof.write_text(text)
           PY
           cargo fmt --all
 
@@ -53,7 +38,7 @@ jobs:
           export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-runtime-worker-target"
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           cargo fmt --all -- --check
-          cargo test --locked -p prw-agent linux_identity::worker::management::tests -- --nocapture
+          cargo test --locked -p prw-agent linux_identity::session_worker::management::tests -- --nocapture
 
       - name: Agent Clippy
         run: |
