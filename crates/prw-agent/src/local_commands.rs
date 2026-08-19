@@ -65,6 +65,12 @@ pub(crate) mod management_provider_backend_policy;
     reason = "C02c provider lifecycle ownership seam is intentionally not runtime-wired"
 )]
 pub(crate) mod management_provider_lifecycle;
+pub mod management_request;
+#[allow(
+    dead_code,
+    reason = "C02c deterministic management response semantics are intentionally not runtime-wired"
+)]
+pub(crate) mod management_response;
 #[allow(
     dead_code,
     reason = "C03 shared production runtime context is validated before worker wiring"
@@ -75,12 +81,6 @@ pub(crate) mod management_runtime;
     reason = "C03 lock-late runtime boundary is validated before worker wiring"
 )]
 pub(crate) mod management_runtime_boundary;
-pub mod management_request;
-#[allow(
-    dead_code,
-    reason = "C02c deterministic management response semantics are intentionally not runtime-wired"
-)]
-pub(crate) mod management_response;
 #[allow(
     dead_code,
     reason = "C02c typed provider dispatch seam is intentionally not response-encoded or runtime-wired"

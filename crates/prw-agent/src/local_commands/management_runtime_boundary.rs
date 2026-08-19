@@ -163,7 +163,9 @@ mod tests {
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::build_local_command_request_frame;
     use crate::local_commands::response_writer::LocalTerminalResponseWriteState;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -356,7 +358,9 @@ mod tests {
             &management_policy,
             &lifecycle,
         );
-        let bridge = BridgeCommand::AgentStatus.encode().expect("bridge command encodes");
+        let bridge = BridgeCommand::AgentStatus
+            .encode()
+            .expect("bridge command encodes");
         let frame = build_local_management_request_frame(id(77), &bridge)
             .expect("management request frame builds");
         let mut input = Vec::new();
