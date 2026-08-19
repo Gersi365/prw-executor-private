@@ -21,6 +21,7 @@ jobs:
       - name: Focused boundary tests
         run: |
           export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-lock-late-boundary-target"
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
           cargo fmt --all -- --check
           cargo test --locked -p prw-agent management_runtime::tests -- --nocapture
           cargo test --locked -p prw-agent management_runtime_boundary::tests -- --nocapture
