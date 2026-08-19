@@ -1,0 +1,51 @@
+name: Phase 152 C02f-W Async Authority Probe
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - crates/prw-control-plane/tests/c02f_w_etcd_future_send_probe.rs
+      - crates/prw-remote-bridge/tests/c02f_w_async_authority_port_probe.rs
+      - .github/workflows/phase-152-c02f-w-async-authority-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
+      - name: Record toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+          protoc --version
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy control-plane probe
+        run: cargo clippy --locked -p prw-control-plane --test c02f_w_etcd_future_send_probe -- -D warnings
+
+      - name: Clippy remote-bridge probe
+        run: cargo clippy --locked -p prw-remote-bridge --test c02f_w_async_authority_port_probe -- -D warnings
+
+      - name: Run control-plane probe
+        run: cargo test --locked -p prw-control-plane --test c02f_w_etcd_future_send_probe
+
+      - name: Run remote-bridge probe
+        run: cargo test --locked -p prw-remote-bridge --test c02f_w_async_authority_port_probe
