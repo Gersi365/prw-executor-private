@@ -56,7 +56,7 @@ impl ReachabilityLiveOwnerAuthority for PeerScopedReferenceAuthority {
         &mut self,
         grant: &ReachabilityLiveOwnerGrant,
     ) -> Result<ReachabilityLiveOwnerCurrentness, ReachabilityLiveOwnerAuthorityError> {
-        Ok(if self.current.iter().any(|current| current == grant) {
+        Ok(if self.current.contains(grant) {
             ReachabilityLiveOwnerCurrentness::Current
         } else {
             ReachabilityLiveOwnerCurrentness::Stale
