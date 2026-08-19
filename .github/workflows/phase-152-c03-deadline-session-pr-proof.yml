@@ -43,6 +43,14 @@ jobs:
           addition = match.group(0) + '\n    /// Borrows the authoritative component states for a crate-internal composed boundary.\n    pub(super) fn runtime_component_states_mut(\n        &mut self,\n    ) -> (&mut LocalInboundRequestState, &mut LocalTerminalResponseWriteState) {\n        (&mut self.inbound, &mut self.response_write)\n    }\n'
           state.write_text(text[:match.start()] + addition + text[match.end():])
 
+          proof = Path('crates/prw-agent/src/local_commands/management_runtime_server_connection.rs')
+          text = proof.read_text()
+          old = 'LocalTerminalResponseWriteError::Io'
+          new = 'LocalTerminalResponseWriteError::Write(\n                        crate::frame_object::writer::LocalIpcFrameWriteError::HeaderIo\n                    )'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one stale write-error test anchor, found {text.count(old)}')
+          proof.write_text(text.replace(old, new))
+
           session = Path('crates/prw-agent/src/linux_authenticated_session.rs')
           text = session.read_text()
           anchor = 'use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;\n'
