@@ -37,6 +37,11 @@ pub(crate) mod inbound_state;
 pub(crate) mod management_authority;
 #[allow(
     dead_code,
+    reason = "C03 management-capable boundary transaction is staged before runtime wiring"
+)]
+pub(crate) mod management_boundary_transaction;
+#[allow(
+    dead_code,
     reason = "C02a provider-neutral dispatch proof is intentionally not runtime-wired"
 )]
 pub(crate) mod management_dispatch;
@@ -45,6 +50,11 @@ pub(crate) mod management_dispatch;
     reason = "C02c complete typed management execution seam is intentionally not runtime-wired"
 )]
 pub(crate) mod management_execution;
+#[allow(
+    dead_code,
+    reason = "C03 concrete Linux provider adapters are not production-wired until runtime gate"
+)]
+pub(crate) mod management_linux_backends;
 #[allow(
     dead_code,
     reason = "C02d pure provider backend policy seam is intentionally not runtime-wired"
