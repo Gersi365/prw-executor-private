@@ -260,12 +260,15 @@ fn sessions_page(activity_log: gtk::Label) -> gtk::Box {
         .placeholder_text("Rows")
         .text("40")
         .build();
+    let profile = gtk::DropDown::from_strings(&["POSIX shell", "Bash shell"]);
+    profile.set_selected(1);
     let result = management_result_label();
     let validate = gtk::Button::with_label("Validate terminal open intent");
 
     let session_id_input = session_id.clone();
     let columns_input = columns.clone();
     let rows_input = rows.clone();
+    let profile_input = profile.clone();
     let result_output = result.clone();
     validate.connect_clicked(move |_| {
         let parsed = (
@@ -274,12 +277,14 @@ fn sessions_page(activity_log: gtk::Label) -> gtk::Box {
             rows_input.text().parse::<u16>(),
         );
         if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {
-            if let Ok(payload) = management::encode_terminal_open(
-                session_id,
-                TerminalProfile::BashShell,
-                columns,
-                rows,
-            ) {
+            let profile = if profile_input.selected() == 0 {
+                TerminalProfile::PosixShell
+            } else {
+                TerminalProfile::BashShell
+            };
+            if let Ok(payload) =
+                management::encode_terminal_open(session_id, profile, columns, rows)
+            {
                 let (envelope_summary, activity_entry) =
                     local_management_envelope_status(&payload, "terminal-open");
                 result_output.set_text(&format!(
@@ -308,6 +313,10 @@ fn sessions_page(activity_log: gtk::Label) -> gtk::Box {
     });
 
     page.append(&section_label("Terminal request"));
+    page.append(&detail_label(
+        "Launch profile is restricted to the two provider-named terminal profiles; arbitrary executable or command input is not accepted.",
+    ));
+    page.append(&profile);
     page.append(&session_id);
     page.append(&columns);
     page.append(&rows);
