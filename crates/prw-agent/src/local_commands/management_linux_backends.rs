@@ -34,10 +34,10 @@ const FORWARD_WRITE_SLEEP: Duration = Duration::from_millis(2);
 
 /// Concrete Linux PTY backend for the existing typed terminal broker.
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct LinuxLocalTerminalBackend;
+pub struct LinuxLocalTerminalBackend;
 
 /// Provider-owned PTY/process state for one terminal broker record.
-pub(crate) struct LinuxLocalTerminalHandle {
+pub struct LinuxLocalTerminalHandle {
     master: Box<dyn MasterPty + Send>,
     writer: Option<Box<dyn Write + Send>>,
     child: Option<Box<dyn Child + Send + Sync>>,
@@ -86,7 +86,7 @@ impl TerminalBackend for LinuxLocalTerminalBackend {
         drop(pair.slave);
 
         let (sender, output) = sync_channel::<Vec<u8>>(TERMINAL_READER_CHANNEL_CHUNKS);
-        let reader_thread = match thread::Builder::new()
+        let Ok(reader_thread) = thread::Builder::new()
             .name("prw-local-terminal-reader".into())
             .spawn(move || {
                 let mut reader = reader;
@@ -103,13 +103,11 @@ impl TerminalBackend for LinuxLocalTerminalBackend {
                         Err(_) => break,
                     }
                 }
-            }) {
-            Ok(thread) => thread,
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(TerminalError::Backend);
-            }
+            })
+        else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(TerminalError::Backend);
         };
 
         Ok(LinuxLocalTerminalHandle {
@@ -208,10 +206,10 @@ impl LinuxLocalTerminalHandle {
             }
         }
 
-        if let Some(reader_thread) = self.reader_thread.take() {
-            if reader_thread.join().is_err() {
-                success = false;
-            }
+        if let Some(reader_thread) = self.reader_thread.take()
+            && reader_thread.join().is_err()
+        {
+            success = false;
         }
         self.closed = true;
         success
@@ -271,14 +269,14 @@ fn drain_pending(pending: &mut VecDeque<u8>, output: &mut Vec<u8>, maximum_bytes
 
 /// Concrete bounded forwarding backend using the existing C02d exact-target policy.
 #[derive(Debug, Clone)]
-pub(crate) struct LinuxLocalForwardingBackend<P> {
+pub struct LinuxLocalForwardingBackend<P> {
     policy: P,
     aggregate_connections: Arc<AtomicUsize>,
 }
 
 impl<P> LinuxLocalForwardingBackend<P> {
     #[must_use]
-    pub(crate) fn new(policy: P) -> Self {
+    pub fn new(policy: P) -> Self {
         Self {
             policy,
             aggregate_connections: Arc::new(AtomicUsize::new(0)),
@@ -292,7 +290,7 @@ impl<P> LinuxLocalForwardingBackend<P> {
 }
 
 /// Provider-owned accept/pump thread state for one forwarding broker record.
-pub(crate) struct LinuxLocalForwardingHandle {
+pub struct LinuxLocalForwardingHandle {
     cancel: Arc<AtomicBool>,
     accept_thread: Option<JoinHandle<Result<(), ()>>>,
     closed: bool,
@@ -331,7 +329,7 @@ where
         let target = SocketAddr::new(spec.target().address(), spec.target().port());
         let accept_thread = thread::Builder::new()
             .name("prw-local-forward-accept".into())
-            .spawn(move || run_accept_loop(listener, target, cancel_for_thread, aggregate))
+            .spawn(move || run_accept_loop(&listener, target, &cancel_for_thread, &aggregate))
             .map_err(|_| ForwardingError::Backend)?;
 
         Ok(LinuxLocalForwardingHandle {
@@ -372,10 +370,10 @@ impl Drop for LinuxLocalForwardingHandle {
 }
 
 fn run_accept_loop(
-    listener: TcpListener,
+    listener: &TcpListener,
     target: SocketAddr,
-    cancel: Arc<AtomicBool>,
-    aggregate: Arc<AtomicUsize>,
+    cancel: &Arc<AtomicBool>,
+    aggregate: &Arc<AtomicUsize>,
 ) -> Result<(), ()> {
     let session_connections = Arc::new(AtomicUsize::new(0));
     let mut workers: Vec<JoinHandle<()>> = Vec::new();
@@ -396,20 +394,17 @@ fn run_accept_loop(
 
                 let lease = ForwardConnectionLease {
                     session: Arc::clone(&session_connections),
-                    aggregate: Arc::clone(&aggregate),
+                    aggregate: Arc::clone(aggregate),
                 };
-                let cancel_for_worker = Arc::clone(&cancel);
-                match thread::Builder::new()
+                let cancel_for_worker = Arc::clone(cancel);
+                if let Ok(worker) = thread::Builder::new()
                     .name("prw-local-forward-pump".into())
                     .spawn(move || {
                         let _lease = lease;
                         pump_forward(client, target, &cancel_for_worker);
-                    }) {
-                    Ok(worker) => workers.push(worker),
-                    Err(_) => {
-                        session_connections.fetch_sub(1, Ordering::AcqRel);
-                        aggregate.fetch_sub(1, Ordering::AcqRel);
-                    }
+                    })
+                {
+                    workers.push(worker);
                 }
             }
             Err(error) if error.kind() == ErrorKind::WouldBlock => {
@@ -586,7 +581,7 @@ fn write_nonblocking_all(
     Ok(())
 }
 
-fn loopback_socket(spec: TcpForwardSpec) -> SocketAddr {
+const fn loopback_socket(spec: TcpForwardSpec) -> SocketAddr {
     let bind = spec.bind();
     match bind.family() {
         LoopbackFamily::Ipv4 => SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), bind.port()),
