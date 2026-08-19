@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: prw-phase-152-c02e-tranche6-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
