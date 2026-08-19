@@ -9,49 +9,20 @@ permissions:
   contents: read
 
 jobs:
-  focused-worker:
+  validate-worker-source:
     if: github.head_ref == 'phase-152-c03-runtime-worker-proof'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Materialize worker module and bounded visibility
+      - name: Validate materialized worker source
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          worker = Path('crates/prw-agent/src/linux_session_worker.rs')
-          text = worker.read_text()
-          anchor = 'use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;\n'
-          addition = anchor + '\n#[path = "linux_session_worker/management.rs"]\nmod management;\n'
-          if text.count(anchor) != 1:
-              raise SystemExit(f'expected one worker module anchor, found {text.count(anchor)}')
-          worker.write_text(text.replace(anchor, addition))
-
-          proof = Path('crates/prw-agent/src/linux_session_worker/management.rs')
-          text = proof.read_text()
-          for old, new in [
-              ('pub(crate) enum LocalLinuxManagementSessionWorkerError', 'pub(super) enum LocalLinuxManagementSessionWorkerError'),
-              ('pub(crate) fn run_authenticated_session_worker_with_management', 'pub(super) fn run_authenticated_session_worker_with_management'),
-          ]:
-              if text.count(old) != 1:
-                  raise SystemExit(f'expected one visibility anchor {old!r}, found {text.count(old)}')
-              text = text.replace(old, new)
-          proof.write_text(text)
-          PY
-          cargo fmt --all
-
-      - name: Focused worker tests
-        run: |
-          export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-runtime-worker-target"
+          export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-runtime-worker-materialized-target"
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           cargo fmt --all -- --check
-          cargo test --locked -p prw-agent linux_identity::session_worker::management::tests -- --nocapture
-
-      - name: Agent Clippy
-        run: |
-          export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-runtime-worker-target"
+          cargo test --locked -p prw-agent --all-targets
           cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings
+          cargo build --locked -p prw-agent --all-targets --all-features
