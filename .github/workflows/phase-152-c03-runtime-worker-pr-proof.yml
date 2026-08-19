@@ -18,7 +18,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Materialize worker child-module declaration
+      - name: Materialize worker module and bounded visibility
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -30,6 +30,17 @@ jobs:
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one worker module anchor, found {text.count(anchor)}')
           worker.write_text(text.replace(anchor, addition))
+
+          proof = Path('crates/prw-agent/src/linux_session_worker/management.rs')
+          text = proof.read_text()
+          for old, new in [
+              ('pub(crate) enum LocalLinuxManagementSessionWorkerError', 'pub(super) enum LocalLinuxManagementSessionWorkerError'),
+              ('pub(crate) fn run_authenticated_session_worker_with_management', 'pub(super) fn run_authenticated_session_worker_with_management'),
+          ]:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one visibility anchor {old!r}, found {text.count(old)}')
+              text = text.replace(old, new)
+          proof.write_text(text)
           PY
           cargo fmt --all
 
