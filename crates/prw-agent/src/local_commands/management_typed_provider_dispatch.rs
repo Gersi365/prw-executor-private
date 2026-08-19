@@ -9,9 +9,9 @@ use std::ptr;
 
 use prw_file_service::{FileServiceError, RemoteDirectoryEntry, RemoteMetadata};
 use prw_file_transfer::{FileTransferError, download_chunk};
-use prw_forwarding::{ForwardingError, ForwardingPrincipal, PortForwardBackend};
+use prw_forwarding::{ForwardingError, ForwardingSessionPrincipal, PortForwardBackend};
 use prw_remote_bridge::BridgeCommand;
-use prw_terminal::{TerminalBackend, TerminalError, TerminalPrincipal};
+use prw_terminal::{TerminalBackend, TerminalError, TerminalSessionPrincipal};
 
 use super::management_authority::LocalManagementFamilyAuthority;
 use super::management_dispatch::LocalManagementAuthorityContext;
@@ -335,25 +335,23 @@ where
 
 fn terminal_principal(
     authority: LocalManagementFamilyAuthority<'_>,
-) -> Result<TerminalPrincipal, LocalManagementTypedProviderDispatchError> {
+) -> Result<TerminalSessionPrincipal, LocalManagementTypedProviderDispatchError> {
     authority
-        .remote_session()
-        .map(super::management_authority::LocalManagementRemoteSessionAuthority::terminal_principal)
+        .terminal_session_principal()
         .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)
 }
 
 fn forwarding_principal(
     authority: LocalManagementFamilyAuthority<'_>,
-) -> Result<ForwardingPrincipal, LocalManagementTypedProviderDispatchError> {
+) -> Result<ForwardingSessionPrincipal, LocalManagementTypedProviderDispatchError> {
     authority
-        .remote_session()
-        .map(super::management_authority::LocalManagementRemoteSessionAuthority::forwarding_principal)
+        .forwarding_session_principal()
         .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)
 }
 
 fn require_same_terminal_principal(
-    existing: &TerminalPrincipal,
-    current: &TerminalPrincipal,
+    existing: &TerminalSessionPrincipal,
+    current: &TerminalSessionPrincipal,
 ) -> Result<(), LocalManagementTypedProviderDispatchError> {
     if existing == current {
         Ok(())
@@ -365,7 +363,7 @@ fn require_same_terminal_principal(
 fn require_terminal_session_principal<T, F>(
     lifecycle: &LocalManagementProviderLifecycle<'_, T, F>,
     session_id: prw_terminal::TerminalSessionId,
-    current: &TerminalPrincipal,
+    current: &TerminalSessionPrincipal,
 ) -> Result<(), LocalManagementTypedProviderDispatchError>
 where
     T: TerminalBackend,
@@ -378,8 +376,8 @@ where
 }
 
 fn require_same_forwarding_principal(
-    existing: &ForwardingPrincipal,
-    current: &ForwardingPrincipal,
+    existing: &ForwardingSessionPrincipal,
+    current: &ForwardingSessionPrincipal,
 ) -> Result<(), LocalManagementTypedProviderDispatchError> {
     if existing == current {
         Ok(())
@@ -391,7 +389,7 @@ fn require_same_forwarding_principal(
 fn require_forwarding_session_principal<T, F>(
     lifecycle: &LocalManagementProviderLifecycle<'_, T, F>,
     forward_id: prw_forwarding::PortForwardId,
-    current: &ForwardingPrincipal,
+    current: &ForwardingSessionPrincipal,
 ) -> Result<(), LocalManagementTypedProviderDispatchError>
 where
     T: TerminalBackend,

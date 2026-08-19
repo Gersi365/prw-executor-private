@@ -136,6 +136,70 @@ impl TerminalPrincipal {
     }
 }
 
+/// Same-UID local Linux principal for one Agent-authenticated terminal session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LocalTerminalPrincipal {
+    uid: u32,
+}
+
+impl LocalTerminalPrincipal {
+    /// Captures the kernel-authenticated local UID selected by the Agent.
+    #[must_use]
+    pub const fn new(uid: u32) -> Self {
+        Self { uid }
+    }
+
+    /// Returns the authenticated local UID.
+    #[must_use]
+    pub const fn uid(self) -> u32 {
+        self.uid
+    }
+}
+
+/// Identity domain attached immutably to one terminal broker record.
+///
+/// Registry-derived remote identity and same-UID local identity are distinct variants
+/// and therefore can never compare equal accidentally.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TerminalSessionPrincipal {
+    /// Registry-current authenticated PRW session identity.
+    Registry(TerminalPrincipal),
+    /// Kernel-authenticated local same-UID identity.
+    LocalSameUid(LocalTerminalPrincipal),
+}
+
+impl From<TerminalPrincipal> for TerminalSessionPrincipal {
+    fn from(principal: TerminalPrincipal) -> Self {
+        Self::Registry(principal)
+    }
+}
+
+impl From<LocalTerminalPrincipal> for TerminalSessionPrincipal {
+    fn from(principal: LocalTerminalPrincipal) -> Self {
+        Self::LocalSameUid(principal)
+    }
+}
+
+impl TerminalSessionPrincipal {
+    /// Returns registry identity only for the registry-derived variant.
+    #[must_use]
+    pub const fn registry(&self) -> Option<&TerminalPrincipal> {
+        match self {
+            Self::Registry(principal) => Some(principal),
+            Self::LocalSameUid(_) => None,
+        }
+    }
+
+    /// Returns local same-UID identity only for the local variant.
+    #[must_use]
+    pub const fn local_same_uid(&self) -> Option<LocalTerminalPrincipal> {
+        match self {
+            Self::Registry(_) => None,
+            Self::LocalSameUid(principal) => Some(*principal),
+        }
+    }
+}
+
 /// Terminal lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalState {
@@ -212,7 +276,7 @@ pub trait TerminalBackend {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalSession {
     id: TerminalSessionId,
-    principal: TerminalPrincipal,
+    principal: TerminalSessionPrincipal,
     profile: TerminalProfile,
     geometry: TerminalGeometry,
     state: TerminalState,
@@ -221,7 +285,7 @@ pub struct TerminalSession {
 impl TerminalSession {
     const fn opening(
         id: TerminalSessionId,
-        principal: TerminalPrincipal,
+        principal: TerminalSessionPrincipal,
         profile: TerminalProfile,
         geometry: TerminalGeometry,
     ) -> Self {
@@ -248,7 +312,7 @@ impl TerminalSession {
 
     /// Returns the immutable identity snapshot.
     #[must_use]
-    pub const fn principal(&self) -> &TerminalPrincipal {
+    pub const fn principal(&self) -> &TerminalSessionPrincipal {
         &self.principal
     }
 
@@ -342,13 +406,14 @@ impl<B: TerminalBackend> TerminalBroker<B> {
     ///
     /// Rejects duplicate identifiers and broker capacity before a backend call. Backend
     /// open failure returns [`TerminalError::Backend`] and does not create a session.
-    pub fn open_session(
+    pub fn open_session<P: Into<TerminalSessionPrincipal>>(
         &mut self,
         id: TerminalSessionId,
-        principal: TerminalPrincipal,
+        principal: P,
         profile: TerminalProfile,
         geometry: TerminalGeometry,
     ) -> Result<&TerminalSession, TerminalError> {
+        let principal = principal.into();
         if self.sessions.contains_key(&id) {
             return Err(TerminalError::DuplicateSession);
         }
@@ -1005,13 +1070,28 @@ mod tests {
                 geometry(),
             )
             .expect("open");
-        assert_eq!(record.principal(), &expected);
-        assert_eq!(record.principal().workspace_id().as_str(), "workspace-1");
-        assert_eq!(record.principal().user_id().as_str(), "user-1");
-        assert_eq!(record.principal().device_id().as_str(), "device-1");
-        assert_eq!(
-            record.principal().authenticated_session_id().as_str(),
-            "session-1"
+        let registry = record.principal().registry().expect("registry principal");
+        assert_eq!(registry, &expected);
+        assert_eq!(registry.workspace_id().as_str(), "workspace-1");
+        assert_eq!(registry.user_id().as_str(), "user-1");
+        assert_eq!(registry.device_id().as_str(), "device-1");
+        assert_eq!(registry.authenticated_session_id().as_str(), "session-1");
+        assert!(record.principal().local_same_uid().is_none());
+    }
+
+    #[test]
+    fn local_same_uid_principal_is_distinct_from_registry_identity() {
+        let local = LocalTerminalPrincipal::new(1000);
+        let registry = principal();
+        assert_ne!(
+            TerminalSessionPrincipal::from(local),
+            TerminalSessionPrincipal::from(registry)
         );
+        let mut broker = TerminalBroker::new(SpyBackend::default());
+        let record = broker
+            .open_session(id(16), local, TerminalProfile::PosixShell, geometry())
+            .expect("local open");
+        assert_eq!(record.principal().local_same_uid(), Some(local));
+        assert!(record.principal().registry().is_none());
     }
 }
