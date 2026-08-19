@@ -24,56 +24,41 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Verify exact proof parent
-        run: test "$(git rev-parse HEAD^)" = "1eacdcd2c50da5da2ab1890e23609fbbdecb6b7e"
+      - name: Verify exact revalidation parent
+        run: test "$(git rev-parse HEAD^)" = "754556a92cd4edfbc985dbb58afec7d8346efd85"
 
-      - name: Materialize aggregate-state wiring
+      - name: Materialize PR-proven aggregate-state corrective
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           modules = Path('crates/prw-agent/src/local_commands.rs')
           text = modules.read_text()
-          anchor = '''#[allow(
-              dead_code,
-              reason = "C03 lock-late runtime boundary is validated before worker wiring"
-          )]
-          pub(crate) mod management_runtime_boundary;
-          '''
-          addition = anchor + '''#[allow(
-              dead_code,
-              reason = "C03 aggregate server-state runtime proof is validated before session wiring"
-          )]
-          pub(crate) mod management_runtime_server_connection;
-          '''
+          anchor = '#[allow(\n    dead_code,\n    reason = "C03 lock-late runtime boundary is validated before worker wiring"\n)]\npub(crate) mod management_runtime_boundary;\n'
+          addition = anchor + '#[allow(\n    dead_code,\n    reason = "C03 aggregate server-state runtime proof is validated before session wiring"\n)]\npub(crate) mod management_runtime_server_connection;\n'
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one runtime-boundary module anchor, found {text.count(anchor)}')
           modules.write_text(text.replace(anchor, addition))
 
           state = Path('crates/prw-agent/src/local_commands/server_connection_state.rs')
           text = state.read_text()
-          anchor = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
-              self.response_write
-          }
+          pattern = re.compile(r'(?m)^    pub const fn response_write\(self\) -> LocalTerminalResponseWriteState \{\n        self\.response_write\n    \}\n')
+          match = pattern.search(text)
+          if match is None:
+              raise SystemExit('expected response-write accessor body was not found')
+          if pattern.search(text, match.end()) is not None:
+              raise SystemExit('response-write accessor body is not unique')
+          addition = match.group(0) + '\n    /// Borrows the authoritative component states for a crate-internal composed boundary.\n    pub(super) const fn runtime_component_states_mut(\n        &mut self,\n    ) -> (&mut LocalInboundRequestState, &mut LocalTerminalResponseWriteState) {\n        (&mut self.inbound, &mut self.response_write)\n    }\n'
+          state.write_text(text[:match.start()] + addition + text[match.end():])
 
-          /// Returns whether this connection instance remains safe for another Request.
-          '''
-          addition = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
-              self.response_write
-          }
-
-          /// Borrows the authoritative component states for a crate-internal composed boundary.
-          pub(super) fn runtime_component_states_mut(
-              &mut self,
-          ) -> (&mut LocalInboundRequestState, &mut LocalTerminalResponseWriteState) {
-              (&mut self.inbound, &mut self.response_write)
-          }
-
-          /// Returns whether this connection instance remains safe for another Request.
-          '''
-          if text.count(anchor) != 1:
-              raise SystemExit(f'expected one aggregate-state accessor anchor, found {text.count(anchor)}')
-          state.write_text(text.replace(anchor, addition))
+          proof = Path('crates/prw-agent/src/local_commands/management_runtime_server_connection.rs')
+          text = proof.read_text()
+          old = 'LocalTerminalResponseWriteError::Io'
+          new = 'LocalTerminalResponseWriteError::Write(\n                        crate::frame_object::writer::LocalIpcFrameWriteError::HeaderIo\n                    )'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one stale write-error test anchor, found {text.count(old)}')
+          proof.write_text(text.replace(old, new))
           PY
           cargo fmt --all
 
@@ -105,9 +90,13 @@ jobs:
           {
             echo "BASE_HEAD=$BASE_HEAD"
             echo "SOURCE_PARENT=1eacdcd2c50da5da2ab1890e23609fbbdecb6b7e"
+            echo "REVALIDATION_PARENT=754556a92cd4edfbc985dbb58afec7d8346efd85"
+            echo "PR_PROOF_RUN=32236426911"
             echo "AGGREGATE_STATE_OWNER=LocalServerConnectionState"
             echo "PARALLEL_POISON_STATE=NO"
             echo "MANAGEMENT_LOCK_BEFORE_CLASSIFICATION=NO"
+            echo "ACCESSOR_CONST=YES"
+            echo "WRITE_FAILURE_EXPECTATION=Write(HeaderIo)"
             echo "METADATA_RC=$METADATA_RC"
             echo "FMT_RC=$FMT_RC"
             echo "CONTEXT_TEST_RC=$CONTEXT_TEST_RC"
