@@ -47,6 +47,11 @@ pub(crate) mod management_dispatch;
 pub(crate) mod management_execution;
 #[allow(
     dead_code,
+    reason = "C03 concrete Linux provider adapters are not production-wired until runtime gate"
+)]
+pub(crate) mod management_linux_backends;
+#[allow(
+    dead_code,
     reason = "C02d pure provider backend policy seam is intentionally not runtime-wired"
 )]
 pub(crate) mod management_provider_backend_policy;
