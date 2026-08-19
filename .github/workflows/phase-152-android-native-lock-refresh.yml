@@ -1,0 +1,56 @@
+name: Phase 152 Android Native Lock Refresh
+
+on:
+  pull_request:
+    branches:
+      - phase-152-android-native-lock-refresh-base
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'phase-152-android-native-lock-refresh'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-android-native-lock-refresh
+          fetch-depth: 0
+      - name: Verify source lineage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git merge-base --is-ancestor 8792bcb1fe5409a522449b120b00ab370fce1df1 HEAD
+          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse 8792bcb1fe5409a522449b120b00ab370fce1df1^{tree})"
+      - name: Refresh Android native lock only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo generate-lockfile
+          cd ../../..
+          git restore -- target || true
+      - name: Verify exact scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --name-only | sort > /tmp/changed.txt
+          cat /tmp/changed.txt
+          test "$(wc -l < /tmp/changed.txt)" -eq 1
+          grep -qx 'apps/android/native/Cargo.lock' /tmp/changed.txt
+      - name: Verify refreshed lock is accepted
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+      - name: Commit refreshed Android lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/android/native/Cargo.lock
+          git commit -m 'phase 152 android: refresh native dependency lock'
+          git push origin HEAD:phase-152-android-native-lock-refresh
