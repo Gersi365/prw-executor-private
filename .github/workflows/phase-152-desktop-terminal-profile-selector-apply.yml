@@ -1,0 +1,66 @@
+name: Phase 152 Desktop Terminal Profile Selector Apply
+
+on:
+  push:
+    branches:
+      - phase-152-desktop-terminal-profile-selector
+    paths:
+      - .github/workflows/phase-152-desktop-terminal-profile-selector-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-desktop-terminal-profile-selector
+          fetch-depth: 0
+      - name: Guard exact source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = "c0028d97144f3de1448babaf597d5f91ddd6aa99"
+          test "$(git hash-object apps/desktop/src/ui.rs)" = "ecf3aed50ab0c83e9083bf3c999910587ec1326a"
+      - name: Apply selector
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+          old = '''    let rows = gtk::Entry::builder()\n        .placeholder_text("Rows")\n        .text("40")\n        .build();\n    let result = management_result_label();'''
+          new = '''    let rows = gtk::Entry::builder()\n        .placeholder_text("Rows")\n        .text("40")\n        .build();\n    let profile = gtk::DropDown::from_strings(&["POSIX shell", "Bash shell"]);\n    profile.set_selected(1);\n    let result = management_result_label();'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''    let rows_input = rows.clone();\n    let result_output = result.clone();'''
+          new = '''    let rows_input = rows.clone();\n    let profile_input = profile.clone();\n    let result_output = result.clone();'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {\n            if let Ok(payload) = management::encode_terminal_open(\n                session_id,\n                TerminalProfile::BashShell,\n                columns,\n                rows,\n            ) {'''
+          new = '''        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {\n            let profile = if profile_input.selected() == 0 {\n                TerminalProfile::PosixShell\n            } else {\n                TerminalProfile::BashShell\n            };\n            if let Ok(payload) =\n                management::encode_terminal_open(session_id, profile, columns, rows)\n            {'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''    page.append(&section_label("Terminal request"));\n    page.append(&session_id);'''
+          new = '''    page.append(&section_label("Terminal request"));\n    page.append(&detail_label(\n        "Launch profile is restricted to the two provider-named terminal profiles; arbitrary executable or command input is not accepted.",\n    ));\n    page.append(&profile);\n    page.append(&session_id);'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+      - name: Format only
+        shell: bash
+        run: cargo fmt --all
+      - name: Verify scope and self-delete
+        shell: bash
+        run: |
+          git rm .github/workflows/phase-152-desktop-terminal-profile-selector-apply.yml
+          CHANGED=$(git status --short | awk '{print $2}' | sort)
+          EXPECTED=$(printf '%s\n' '.github/workflows/phase-152-desktop-terminal-profile-selector-apply.yml' 'apps/desktop/src/ui.rs' | sort)
+          test "$CHANGED" = "$EXPECTED"
+      - name: Commit selector source
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/desktop/src/ui.rs .github/workflows/phase-152-desktop-terminal-profile-selector-apply.yml
+          git commit -m "phase 152 desktop: add bounded terminal profile selector"
+          git push origin HEAD:phase-152-desktop-terminal-profile-selector
