@@ -1,0 +1,190 @@
+BASE_HEAD=a07c654db7020edde103c77452e0eebd9d6dd8c3
+SOURCE_PARENT=1eacdcd2c50da5da2ab1890e23609fbbdecb6b7e
+REVALIDATION_PARENT=754556a92cd4edfbc985dbb58afec7d8346efd85
+PR_PROOF_RUN=32236426911
+AGGREGATE_STATE_OWNER=LocalServerConnectionState
+PARALLEL_POISON_STATE=NO
+MANAGEMENT_LOCK_BEFORE_CLASSIFICATION=NO
+ACCESSOR_CONST=YES
+WRITE_FAILURE_EXPECTATION=Write(HeaderIo)
+METADATA_RC=0
+FMT_RC=0
+CONTEXT_TEST_RC=0
+BOUNDARY_TEST_RC=0
+SERVER_TEST_RC=0
+CLIPPY_RC=0
+--- SERVER_TEST_TAIL ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (/tmp/prw-c03-server-state-proof-target/debug/deps/prw_agent-03fca9c27284990c)
+
+running 3 tests
+
+thread 'local_commands::management_runtime_server_connection::tests::poisoned_management_lifecycle_legacy_request_keeps_same_aggregate_usable' (6544) panicked at crates/prw-agent/src/local_commands/management_runtime_server_connection.rs:202:13:
+intentional runtime-server-state poison
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test local_commands::management_runtime_server_connection::tests::malformed_legacy_frame_poisons_inbound_on_same_aggregate_state ... ok
+test local_commands::management_runtime_server_connection::tests::poisoned_management_lifecycle_legacy_request_keeps_same_aggregate_usable ... ok
+test local_commands::management_runtime_server_connection::tests::response_write_failure_poisons_write_on_same_aggregate_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 388 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/tmp/prw-c03-server-state-proof-target/debug/deps/prw_agent-ca75239d6be75f66)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase125_device_identity_bootstrap.rs (/tmp/prw-c03-server-state-proof-target/debug/deps/phase125_device_identity_bootstrap-56316be49e70d414)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/phase_102_binary_bootstrap.rs (/tmp/prw-c03-server-state-proof-target/debug/deps/phase_102_binary_bootstrap-627c1bfd9759ae69)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+--- CLIPPY_TAIL ---
+    Checking crypto-common v0.1.7
+    Checking stable_deref_trait v1.2.1
+    Checking untrusted v0.7.1
+    Checking yoke v0.8.3
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking aws-lc-rs v1.18.0
+    Checking zerovec v0.11.7
+    Checking prw-core v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-core)
+    Checking base64ct v1.8.3
+    Checking pem-rfc7468 v0.7.0
+    Checking rand_core v0.10.1
+    Checking der v0.7.10
+    Checking tinystr v0.8.4
+    Checking bitflags v2.13.1
+    Checking writeable v0.6.4
+    Checking litemap v0.8.3
+    Checking icu_locale_core v2.3.0
+    Checking spki v0.7.3
+    Checking zerotrie v0.2.5
+    Checking potential_utf v0.1.6
+    Checking hmac v0.12.1
+    Checking rustls-pki-types v1.15.1
+    Checking utf8_iter v1.0.4
+    Checking cpufeatures v0.2.17
+    Checking icu_collections v2.3.0
+    Checking icu_provider v2.3.0
+    Checking getrandom v0.4.3
+    Checking pkcs8 v0.10.2
+    Checking ff v0.13.1
+    Checking cpufeatures v0.3.0
+    Checking base16ct v0.2.0
+    Checking group v0.13.0
+    Checking sec1 v0.7.3
+    Checking chacha20 v0.10.1
+    Checking icu_normalizer_data v2.3.0
+    Checking icu_properties_data v2.3.0
+    Checking hkdf v0.12.4
+    Checking crypto-bigint v0.5.5
+    Checking inout v0.1.4
+    Checking bytes v1.12.1
+    Checking smallvec v1.15.2
+    Checking icu_normalizer v2.3.0
+    Checking cipher v0.4.4
+    Checking thiserror v2.0.20
+    Checking icu_properties v2.3.0
+    Checking elliptic-curve v0.13.8
+    Checking rand v0.10.2
+    Checking universal-hash v0.5.1
+    Checking powerfmt v0.2.0
+    Checking deranged v0.5.8
+    Checking time-core v0.1.9
+    Checking num-conv v0.2.2
+    Checking opaque-debug v0.3.1
+    Checking polyval v0.6.2
+    Checking idna_adapter v1.2.2
+    Checking rfc6979 v0.4.0
+    Checking prw-control-plane v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-control-plane)
+    Checking signature v2.2.0
+    Checking socket2 v0.6.5
+    Checking time v0.3.55
+    Checking once_cell v1.21.4
+    Checking percent-encoding v2.3.2
+    Checking base64 v0.22.1
+    Checking pem v3.0.6
+    Checking yasna v0.6.0
+    Checking form_urlencoded v1.2.2
+    Checking ecdsa v0.16.9
+    Checking memoffset v0.9.1
+    Checking idna v1.1.0
+    Checking ghash v0.5.1
+    Checking serde_core v1.0.229
+    Checking primeorder v0.13.6
+    Checking aes v0.8.4
+    Checking ctr v0.9.2
+    Checking sha2 v0.10.9
+    Checking aead v0.5.2
+    Checking pin-project-lite v0.2.17
+    Checking aes-gcm v0.10.3
+    Checking p256 v0.13.2
+    Checking url v2.5.8
+    Checking nix v0.31.3
+    Checking serde v1.0.229
+    Checking substring v1.4.5
+    Checking rcgen v0.14.8
+    Checking tracing-core v0.1.36
+    Checking prw-connectivity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-connectivity)
+    Checking untrusted v0.9.0
+    Checking rustls-webpki v0.103.14
+    Checking rtc-shared v0.20.2
+    Checking tracing v0.1.44
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking tinyvec_macros v0.1.1
+    Checking sansio v1.0.0
+    Checking crc-catalog v2.5.0
+    Checking linux-raw-sys v0.12.1
+    Checking log v0.4.33
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking crc v3.4.0
+    Checking tinyvec v1.12.0
+    Checking rustls v0.23.43
+    Checking rustix v1.1.4
+    Checking rand_pcg v0.10.2
+    Checking md-5 v0.10.6
+    Checking mio v1.2.2
+    Checking lru-slab v0.1.2
+    Checking slab v0.4.12
+    Checking lazy_static v1.5.0
+    Checking rustc-hash v2.1.3
+    Checking quinn-proto v0.11.16
+    Checking rtc-stun v0.20.2
+    Checking tokio v1.53.1
+    Checking quinn-udp v0.5.15
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking rtc-mdns v0.20.2
+    Checking uuid v1.24.1
+    Checking thiserror v1.0.69
+    Checking rtc-ice v0.20.2
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking nix v0.28.0
+    Checking quinn v0.11.11
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+    Checking filedescriptor v0.8.3
+    Checking anyhow v1.0.104
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking prw-policy v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-policy)
+    Checking serial2 v0.2.38
+    Checking downcast-rs v1.2.1
+    Checking shell-words v1.1.1
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking portable-pty v0.9.0
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-network v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-network)
+    Checking prw-files v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-files)
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.18s
+STATUS=PASS

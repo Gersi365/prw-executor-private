@@ -90,8 +90,8 @@ mod tests {
         process_one_runtime_management_at_boundary_on_server_connection,
     };
     use crate::LocalIpcRequestId;
-    use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::frame_object::writer::write_frame;
+    use crate::frame_object::{LocalIpcFrame, LocalIpcPayload};
     use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
     use crate::local_commands::LocalAgentCommand;
     use crate::local_commands::management_authority::LocalManagementFilesystemAuthority;
@@ -109,7 +109,9 @@ mod tests {
     use crate::local_commands::server_connection_state::{
         LocalServerConnectionState, LocalServerConnectionUnusableReason,
     };
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -203,8 +205,9 @@ mod tests {
     }
 
     fn encoded_legacy_request(request_id: u64) -> Vec<u8> {
-        let frame = build_local_command_request_frame(id(request_id), LocalAgentCommand::GetAgentStatus)
-            .expect("legacy request frame builds");
+        let frame =
+            build_local_command_request_frame(id(request_id), LocalAgentCommand::GetAgentStatus)
+                .expect("legacy request frame builds");
         let mut bytes = Vec::new();
         write_frame(&mut bytes, &frame).expect("legacy request writes to memory");
         bytes
@@ -306,7 +309,9 @@ mod tests {
             error,
             LocalManagementRuntimeServerConnectionError::Transaction(
                 crate::local_commands::management_runtime_boundary::LocalManagementRuntimeBoundaryError::ResponseWrite(
-                    LocalTerminalResponseWriteError::Io
+                    LocalTerminalResponseWriteError::Write(
+                        crate::frame_object::writer::LocalIpcFrameWriteError::HeaderIo
+                    )
                 )
             )
         ));
