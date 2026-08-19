@@ -31,6 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             pkg-config \
+            protobuf-compiler \
             libgtk-4-dev \
             libadwaita-1-dev
 
@@ -40,6 +41,7 @@ jobs:
           cargo --version
           rustfmt --version
           cargo clippy --version
+          protoc --version
           pkg-config --modversion gtk4
           pkg-config --modversion libadwaita-1
 
