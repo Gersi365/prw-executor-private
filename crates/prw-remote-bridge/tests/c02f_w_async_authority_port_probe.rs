@@ -28,9 +28,10 @@ trait AsyncReachabilityLiveOwnerAuthority {
     fn release<'a>(
         &'a mut self,
         grant: &'a ReachabilityLiveOwnerGrant,
-    ) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
-           + Send
-           + 'a;
+    ) -> impl Future<
+        Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>,
+    > + Send
+    + 'a;
 }
 
 struct ReferenceAuthority;
@@ -63,9 +64,10 @@ impl AsyncReachabilityLiveOwnerAuthority for ReferenceAuthority {
     fn release<'a>(
         &'a mut self,
         _grant: &'a ReachabilityLiveOwnerGrant,
-    ) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
-           + Send
-           + 'a {
+    ) -> impl Future<
+        Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>,
+    > + Send
+    + 'a {
         ready(Err(
             ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous,
         ))
