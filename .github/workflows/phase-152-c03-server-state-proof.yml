@@ -1,0 +1,154 @@
+name: Phase 152 C03 Runtime Server-State Proof
+
+on:
+  push:
+    branches:
+      - phase-152-c03-runtime-server-state-proof
+    paths:
+      - ".github/workflows/phase-152-c03-server-state-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-c03-server-state-proof
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify exact proof parent
+        run: test "$(git rev-parse HEAD^)" = "1eacdcd2c50da5da2ab1890e23609fbbdecb6b7e"
+
+      - name: Materialize aggregate-state wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          modules = Path('crates/prw-agent/src/local_commands.rs')
+          text = modules.read_text()
+          anchor = '''#[allow(
+              dead_code,
+              reason = "C03 lock-late runtime boundary is validated before worker wiring"
+          )]
+          pub(crate) mod management_runtime_boundary;
+          '''
+          addition = anchor + '''#[allow(
+              dead_code,
+              reason = "C03 aggregate server-state runtime proof is validated before session wiring"
+          )]
+          pub(crate) mod management_runtime_server_connection;
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one runtime-boundary module anchor, found {text.count(anchor)}')
+          modules.write_text(text.replace(anchor, addition))
+
+          state = Path('crates/prw-agent/src/local_commands/server_connection_state.rs')
+          text = state.read_text()
+          anchor = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
+              self.response_write
+          }
+
+          /// Returns whether this connection instance remains safe for another Request.
+          '''
+          addition = '''    pub const fn response_write(self) -> LocalTerminalResponseWriteState {
+              self.response_write
+          }
+
+          /// Borrows the authoritative component states for a crate-internal composed boundary.
+          pub(super) fn runtime_component_states_mut(
+              &mut self,
+          ) -> (&mut LocalInboundRequestState, &mut LocalTerminalResponseWriteState) {
+              (&mut self.inbound, &mut self.response_write)
+          }
+
+          /// Returns whether this connection instance remains safe for another Request.
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one aggregate-state accessor anchor, found {text.count(anchor)}')
+          state.write_text(text.replace(anchor, addition))
+          PY
+          cargo fmt --all
+
+      - name: Validate focused server-state composition
+        shell: bash
+        run: |
+          set +e
+          export CARGO_TARGET_DIR=/tmp/prw-c03-server-state-proof-target
+          rm -rf target "$CARGO_TARGET_DIR"
+          LOG_DIR=/tmp/prw-c03-server-state-proof-logs
+          mkdir -p "$LOG_DIR"
+
+          cargo metadata --locked --no-deps --format-version 1 >"$LOG_DIR/metadata.out" 2>&1
+          METADATA_RC=$?
+          cargo fmt --all -- --check >"$LOG_DIR/fmt.out" 2>&1
+          FMT_RC=$?
+          cargo test --locked -p prw-agent management_runtime::tests -- --nocapture >"$LOG_DIR/context-test.out" 2>&1
+          CONTEXT_TEST_RC=$?
+          cargo test --locked -p prw-agent management_runtime_boundary::tests -- --nocapture >"$LOG_DIR/boundary-test.out" 2>&1
+          BOUNDARY_TEST_RC=$?
+          cargo test --locked -p prw-agent management_runtime_server_connection::tests -- --nocapture >"$LOG_DIR/server-test.out" 2>&1
+          SERVER_TEST_RC=$?
+          cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings >"$LOG_DIR/clippy.out" 2>&1
+          CLIPPY_RC=$?
+
+          BASE_HEAD=$(git rev-parse HEAD)
+          REPORT="logs/audits/phase-152-c03-runtime-management-integration/C03_RUNTIME_SERVER_STATE_PROOF_${BASE_HEAD}.txt"
+          mkdir -p "$(dirname "$REPORT")"
+          {
+            echo "BASE_HEAD=$BASE_HEAD"
+            echo "SOURCE_PARENT=1eacdcd2c50da5da2ab1890e23609fbbdecb6b7e"
+            echo "AGGREGATE_STATE_OWNER=LocalServerConnectionState"
+            echo "PARALLEL_POISON_STATE=NO"
+            echo "MANAGEMENT_LOCK_BEFORE_CLASSIFICATION=NO"
+            echo "METADATA_RC=$METADATA_RC"
+            echo "FMT_RC=$FMT_RC"
+            echo "CONTEXT_TEST_RC=$CONTEXT_TEST_RC"
+            echo "BOUNDARY_TEST_RC=$BOUNDARY_TEST_RC"
+            echo "SERVER_TEST_RC=$SERVER_TEST_RC"
+            echo "CLIPPY_RC=$CLIPPY_RC"
+            echo "--- SERVER_TEST_TAIL ---"
+            tail -n 160 "$LOG_DIR/server-test.out"
+            echo "--- CLIPPY_TAIL ---"
+            tail -n 140 "$LOG_DIR/clippy.out"
+          } > "$REPORT"
+
+          if [ "$METADATA_RC" -eq 0 ] && [ "$FMT_RC" -eq 0 ] && [ "$CONTEXT_TEST_RC" -eq 0 ] && [ "$BOUNDARY_TEST_RC" -eq 0 ] && [ "$SERVER_TEST_RC" -eq 0 ] && [ "$CLIPPY_RC" -eq 0 ]; then
+            echo 'STATUS=PASS' >> "$REPORT"
+            echo 'VALIDATION_STATUS=PASS' >> "$GITHUB_ENV"
+          else
+            echo 'STATUS=FAIL' >> "$REPORT"
+            echo 'VALIDATION_STATUS=FAIL' >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit proof evidence
+        shell: bash
+        run: |
+          BASE_HEAD=$(git rev-parse HEAD)
+          REMOTE_HEAD=$(git ls-remote origin refs/heads/phase-152-c03-runtime-server-state-proof | cut -f1)
+          test "$REMOTE_HEAD" = "$BASE_HEAD"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-agent/src/local_commands.rs \
+            crates/prw-agent/src/local_commands/server_connection_state.rs \
+            crates/prw-agent/src/local_commands/management_runtime_server_connection.rs \
+            logs/audits/phase-152-c03-runtime-management-integration/
+          if [ "$VALIDATION_STATUS" = PASS ]; then
+            git rm .github/workflows/phase-152-c03-server-state-proof.yml
+            git commit -m "phase 152 c03: prove runtime server-state composition ${BASE_HEAD:0:12}"
+          else
+            git add .github/workflows/phase-152-c03-server-state-proof.yml
+            git commit -m "phase 152 c03: record runtime server-state proof failure ${BASE_HEAD:0:12}"
+          fi
+          git push origin HEAD:phase-152-c03-runtime-server-state-proof
+
+      - name: Fail on validation failure
+        if: env.VALIDATION_STATUS != 'PASS'
+        run: exit 1

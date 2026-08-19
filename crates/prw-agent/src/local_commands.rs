@@ -73,6 +73,16 @@ pub mod management_request;
 pub(crate) mod management_response;
 #[allow(
     dead_code,
+    reason = "C03 shared production runtime context is validated before worker wiring"
+)]
+pub(crate) mod management_runtime;
+#[allow(
+    dead_code,
+    reason = "C03 lock-late runtime boundary is validated before worker wiring"
+)]
+pub(crate) mod management_runtime_boundary;
+#[allow(
+    dead_code,
     reason = "C02c typed provider dispatch seam is intentionally not response-encoded or runtime-wired"
 )]
 pub(crate) mod management_typed_provider_dispatch;
