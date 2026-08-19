@@ -18,6 +18,9 @@ use crate::local_commands::boundary_request_response_transaction::LocalBoundaryR
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
+#[path = "linux_session_worker/management.rs"]
+mod management;
+
 /// Immutable finite-worker processing bounds supplied by the future runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalLinuxSessionWorkerConfig {
