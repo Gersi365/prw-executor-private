@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: prw-phase-152-c02e-tranche6-${{ github.ref }}
@@ -17,59 +17,158 @@ jobs:
   validate:
     name: Validate C02e Tranche 6 fencing seam
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout exact branch head
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install desktop native build prerequisites
+      - name: Validate, preserve evidence, and remove one-shot harness
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            pkg-config \
-            libgtk-4-dev \
-            libadwaita-1-dev
+          set -u
 
-      - name: Record exact environment and lock hash
-        run: |
-          set -euo pipefail
-          echo "VALIDATED_SHA=$(git rev-parse HEAD)"
-          rustc --version
-          cargo --version
-          rustfmt --version
-          cargo clippy --version
-          pkg-config --modversion gtk4
-          pkg-config --modversion libadwaita-1
-          sha256sum Cargo.lock
-          git status --short --untracked-files=all
+          VALIDATED_HEAD="$(git rev-parse HEAD)"
+          EXPECTED_LOCK_SHA256="becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a"
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE6_LIVE_OWNER_FENCING_VALIDATION_${VALIDATED_HEAD}.txt"
+          SUMMARY="$(mktemp)"
+          COMMAND_LOG="$(mktemp)"
+          FIRST_FAILURE="NONE"
 
-      - name: Verify locked dependency graph
-        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          record_gate() {
+            local label="$1"
+            shift
+            {
+              echo "===== ${label} ====="
+              printf 'COMMAND='; printf '%q ' "$@"; echo
+            } >> "${COMMAND_LOG}"
+            "$@" >> "${COMMAND_LOG}" 2>&1
+            local rc=$?
+            echo "${label}_RC=${rc}" >> "${SUMMARY}"
+            if [ "${rc}" -ne 0 ] && [ "${FIRST_FAILURE}" = "NONE" ]; then
+              FIRST_FAILURE="${label}"
+            fi
+            return 0
+          }
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+          LOCK_SHA256_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          if [ "${LOCK_SHA256_BEFORE}" = "${EXPECTED_LOCK_SHA256}" ]; then
+            LOCK_AUDIT_RC=0
+          else
+            LOCK_AUDIT_RC=1
+            FIRST_FAILURE="LOCK_AUDIT"
+          fi
 
-      - name: Run focused live-owner tests
-        run: cargo test --locked -p prw-remote-bridge reachability_live_owner -- --nocapture
+          record_gate NATIVE_PREREQUISITES bash -lc 'sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev'
 
-      - name: Run focused remote-bridge Clippy
-        run: cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+          RUSTC="$(rustc --version 2>&1 || true)"
+          CARGO="$(cargo --version 2>&1 || true)"
+          RUSTFMT="$(rustfmt --version 2>&1 || true)"
+          CLIPPY="$(cargo clippy --version 2>&1 || true)"
+          GTK4="$(pkg-config --modversion gtk4 2>&1 || true)"
+          LIBADWAITA="$(pkg-config --modversion libadwaita-1 2>&1 || true)"
 
-      - name: Run workspace Clippy
-        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          record_gate LOCKED_METADATA cargo metadata --locked --no-deps --format-version 1
+          record_gate FORMAT cargo fmt --all -- --check
+          record_gate FOCUSED_TEST cargo test --locked -p prw-remote-bridge reachability_live_owner -- --nocapture
+          record_gate FOCUSED_CLIPPY cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+          record_gate WORKSPACE_CLIPPY cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          record_gate WORKSPACE_TESTS cargo test --locked --workspace --all-targets
+          record_gate WORKSPACE_BUILD cargo build --locked --workspace --all-targets
 
-      - name: Run workspace tests
-        run: cargo test --locked --workspace --all-targets
+          if git diff --quiet; then
+            PRE_NORMALIZE_DRIFT_RC=0
+          else
+            PRE_NORMALIZE_DRIFT_RC=1
+          fi
+          PRE_NORMALIZE_TRACKED_DIFF="$(git diff --name-only | paste -sd, -)"
 
-      - name: Build workspace
-        run: cargo build --locked --workspace --all-targets
+          TARGET_RESTORE_RC=0
+          if git ls-files --error-unmatch target >/dev/null 2>&1 || git ls-files target | grep -q .; then
+            git restore --source=HEAD --staged --worktree -- target || TARGET_RESTORE_RC=$?
+          fi
 
-      - name: Verify lock stability and zero source drift
-        run: |
-          set -euo pipefail
-          sha256sum Cargo.lock
-          git diff --exit-code -- Cargo.lock
-          git diff --exit-code
-          test -z "$(git status --short --untracked-files=all)"
-          echo "STATUS=PASS"
+          LOCK_SHA256_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          if [ "${LOCK_SHA256_AFTER}" = "${EXPECTED_LOCK_SHA256}" ] && [ "${LOCK_SHA256_AFTER}" = "${LOCK_SHA256_BEFORE}" ]; then
+            HASH_DRIFT_RC=0
+          else
+            HASH_DRIFT_RC=1
+            if [ "${FIRST_FAILURE}" = "NONE" ]; then FIRST_FAILURE="HASH_DRIFT"; fi
+          fi
+
+          FINAL_TRACKED_DIFF="$(git diff --name-only | paste -sd, -)"
+          FINAL_STATUS="$(git status --short --untracked-files=all)"
+          if [ -z "${FINAL_TRACKED_DIFF}" ] && [ -z "${FINAL_STATUS}" ]; then
+            FINAL_DRIFT_RC=0
+          else
+            FINAL_DRIFT_RC=1
+            if [ "${FIRST_FAILURE}" = "NONE" ]; then FIRST_FAILURE="FINAL_DRIFT"; fi
+          fi
+
+          if [ "${LOCK_AUDIT_RC}" -ne 0 ] || [ "${TARGET_RESTORE_RC}" -ne 0 ]; then
+            if [ "${FIRST_FAILURE}" = "NONE" ]; then FIRST_FAILURE="LOCK_OR_TARGET_RESTORE"; fi
+          fi
+
+          GATE_FAILURE=0
+          while IFS= read -r line; do
+            case "${line}" in
+              *_RC=0) ;;
+              *_RC=*) GATE_FAILURE=1 ;;
+            esac
+          done < "${SUMMARY}"
+
+          if [ "${LOCK_AUDIT_RC}" -eq 0 ] \
+            && [ "${TARGET_RESTORE_RC}" -eq 0 ] \
+            && [ "${HASH_DRIFT_RC}" -eq 0 ] \
+            && [ "${FINAL_DRIFT_RC}" -eq 0 ] \
+            && [ "${GATE_FAILURE}" -eq 0 ]; then
+            STATUS="PASS"
+          else
+            STATUS="FAIL"
+          fi
+
+          {
+            echo "PHASE=152-C02e-Tranche6-LiveOwnerFencing"
+            echo "VALIDATED_HEAD=${VALIDATED_HEAD}"
+            echo "VALIDATOR_MODE=ONE_SHOT_EXACT_HEAD"
+            echo "RUSTC=${RUSTC}"
+            echo "CARGO=${CARGO}"
+            echo "RUSTFMT=${RUSTFMT}"
+            echo "CLIPPY=${CLIPPY}"
+            echo "GTK4=${GTK4}"
+            echo "LIBADWAITA=${LIBADWAITA}"
+            echo "LOCK_SHA256_EXPECTED=${EXPECTED_LOCK_SHA256}"
+            echo "LOCK_SHA256_BEFORE=${LOCK_SHA256_BEFORE}"
+            echo "LOCK_SHA256_AFTER=${LOCK_SHA256_AFTER}"
+            echo "LOCK_AUDIT_RC=${LOCK_AUDIT_RC}"
+            cat "${SUMMARY}"
+            echo "PRE_NORMALIZE_DRIFT_RC=${PRE_NORMALIZE_DRIFT_RC}"
+            echo "PRE_NORMALIZE_TRACKED_DIFF=${PRE_NORMALIZE_TRACKED_DIFF}"
+            echo "TARGET_RESTORE_RC=${TARGET_RESTORE_RC}"
+            echo "HASH_DRIFT_RC=${HASH_DRIFT_RC}"
+            echo "FINAL_DRIFT_RC=${FINAL_DRIFT_RC}"
+            echo "FINAL_TRACKED_DIFF=${FINAL_TRACKED_DIFF}"
+            echo "LIVE_OWNER_NAMESPACE=DEVICE_ID_PLUS_TRANSPORT_IDENTITY"
+            echo "ACCEPTED_STATE_CAS_IS_LIVE_OWNER_TENANCY=NO"
+            echo "PUBLICATION_FRESHNESS_IS_LIVE_OWNER_FENCE=NO"
+            echo "CONCRETE_LEASE_BACKEND_SELECTED=NO"
+            echo "NETWORK_RUNTIME_ACTIVATION=NO"
+            echo "AGENT_BOOTSTRAP_ACTIVATION=NO"
+            echo "FIRST_FAILURE=${FIRST_FAILURE}"
+            echo "STATUS=${STATUS}"
+            echo "===== COMMAND_OUTPUT ====="
+            cat "${COMMAND_LOG}"
+          } > "${REPORT}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${REPORT}"
+          git rm .github/workflows/phase-152-c02e-tranche6-validation.yml
+          git commit -m "phase 152 c02e: record tranche6 validation evidence"
+          git push origin HEAD:phase-152-c02e-dynamic-reachability-design
+
+          if [ "${STATUS}" != "PASS" ]; then
+            exit 1
+          fi
