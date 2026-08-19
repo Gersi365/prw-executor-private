@@ -20,7 +20,9 @@ use super::management_authority::LocalManagementFilesystemAuthority;
 use super::management_execution::process_authenticated_linux_management_with_local_authorities;
 use super::management_provider_lifecycle::LocalManagementProviderLifecycle;
 use super::management_request::LOCAL_MANAGEMENT_BRIDGE_COMMAND_CODE;
-use super::policy_response::{LocalPolicyResponseBuildError, build_policy_gated_read_only_response};
+use super::policy_response::{
+    LocalPolicyResponseBuildError, build_policy_gated_read_only_response,
+};
 use super::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use super::request_frame::{LocalAgentRequestFrameDecodeError, decode_local_command_request_frame};
 use super::response_writer::{
@@ -116,7 +118,9 @@ where
             Ok(request) => request,
             Err(error) => {
                 *inbound_state = LocalInboundRequestState::ReadPoisoned;
-                return Err(LocalManagementBoundaryTransactionError::ReadOnlyDecode(error));
+                return Err(LocalManagementBoundaryTransactionError::ReadOnlyDecode(
+                    error,
+                ));
             }
         };
         build_policy_gated_read_only_response(
@@ -177,7 +181,9 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
-    use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcPayload, LocalIpcProtocolVersion};
+    use crate::{
+        LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcPayload, LocalIpcProtocolVersion,
+    };
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -309,11 +315,8 @@ mod tests {
         let mut output = Vec::new();
         let mut inbound = LocalInboundRequestState::new();
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut lifecycle = LocalManagementProviderLifecycle::new(
-            &harness.filesystem,
-            NoopTerminal,
-            NoopForward,
-        );
+        let mut lifecycle =
+            LocalManagementProviderLifecycle::new(&harness.filesystem, NoopTerminal, NoopForward);
         let dns = dns();
 
         assert_eq!(
@@ -350,11 +353,8 @@ mod tests {
         let mut output = Vec::new();
         let mut inbound = LocalInboundRequestState::new();
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut lifecycle = LocalManagementProviderLifecycle::new(
-            &harness.filesystem,
-            NoopTerminal,
-            NoopForward,
-        );
+        let mut lifecycle =
+            LocalManagementProviderLifecycle::new(&harness.filesystem, NoopTerminal, NoopForward);
         let dns = dns();
 
         assert_eq!(
@@ -391,11 +391,8 @@ mod tests {
         let mut output = Vec::new();
         let mut inbound = LocalInboundRequestState::new();
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut lifecycle = LocalManagementProviderLifecycle::new(
-            &harness.filesystem,
-            NoopTerminal,
-            NoopForward,
-        );
+        let mut lifecycle =
+            LocalManagementProviderLifecycle::new(&harness.filesystem, NoopTerminal, NoopForward);
         let dns = dns();
 
         assert_eq!(
@@ -438,11 +435,8 @@ mod tests {
         let mut output = Vec::new();
         let mut inbound = LocalInboundRequestState::new();
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut lifecycle = LocalManagementProviderLifecycle::new(
-            &harness.filesystem,
-            NoopTerminal,
-            NoopForward,
-        );
+        let mut lifecycle =
+            LocalManagementProviderLifecycle::new(&harness.filesystem, NoopTerminal, NoopForward);
         let dns = dns();
 
         assert!(matches!(
@@ -476,11 +470,8 @@ mod tests {
         let mut output = Vec::new();
         let mut inbound = LocalInboundRequestState::new();
         let mut response = LocalTerminalResponseWriteState::new();
-        let mut lifecycle = LocalManagementProviderLifecycle::new(
-            &harness.filesystem,
-            NoopTerminal,
-            NoopForward,
-        );
+        let mut lifecycle =
+            LocalManagementProviderLifecycle::new(&harness.filesystem, NoopTerminal, NoopForward);
         let dns = dns();
 
         process_one_management_capable_at_boundary(
