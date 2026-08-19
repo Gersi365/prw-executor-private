@@ -67,66 +67,76 @@ jobs:
               raise SystemExit(f'expected one session module anchor, found {text.count(anchor)}')
           session.write_text(text.replace(anchor, addition))
 
-          # Runtime assembly crosses the local_commands sibling boundary but remains crate-private.
+          # Public items inside crate-private/private modules retain effective crate-only reachability.
           replace_one(
               'crates/prw-agent/src/local_commands/management_authority.rs',
               'pub(super) struct LocalManagementFilesystemAuthority',
-              'pub(crate) struct LocalManagementFilesystemAuthority',
+              'pub struct LocalManagementFilesystemAuthority',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_authority.rs',
               'pub(super) fn open_trusted_root(path: &Path)',
-              'pub(crate) fn open_trusted_root(path: &Path)',
+              'pub fn open_trusted_root(path: &Path)',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_provider_backend_policy.rs',
               'pub(super) enum ExactForwardingEgressPolicyError',
-              'pub(crate) enum ExactForwardingEgressPolicyError',
+              'pub enum ExactForwardingEgressPolicyError',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_provider_backend_policy.rs',
               'pub(super) struct ExactForwardingEgressPolicy',
-              'pub(crate) struct ExactForwardingEgressPolicy',
+              'pub struct ExactForwardingEgressPolicy',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_provider_backend_policy.rs',
               'pub(super) fn try_from_targets(',
-              'pub(crate) fn try_from_targets(',
+              'pub fn try_from_targets(',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_provider_lifecycle.rs',
               'pub(super) struct LocalManagementProviderLifecycle',
-              'pub(crate) struct LocalManagementProviderLifecycle',
+              'pub struct LocalManagementProviderLifecycle',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_provider_lifecycle.rs',
               '    pub(super) fn new(\n',
-              '    pub(crate) fn new(\n',
+              '    pub fn new(\n',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_runtime.rs',
               'pub(super) type LocalLinuxManagementProviderLifecycle',
-              'pub(crate) type LocalLinuxManagementProviderLifecycle',
+              'pub type LocalLinuxManagementProviderLifecycle',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_runtime.rs',
               'pub(super) struct LocalLinuxManagementRuntimeContext',
-              'pub(crate) struct LocalLinuxManagementRuntimeContext',
+              'pub struct LocalLinuxManagementRuntimeContext',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_runtime.rs',
               '    pub(super) const fn new(\n',
-              '    pub(crate) const fn new(\n',
+              '    pub const fn new(\n',
+          )
+          replace_one(
+              'crates/prw-agent/src/local_commands/management_runtime_boundary.rs',
+              'pub(super) enum LocalManagementRuntimeBoundaryError',
+              'pub enum LocalManagementRuntimeBoundaryError',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_runtime_server_connection.rs',
               'pub(super) enum LocalManagementRuntimeServerConnectionError',
-              'pub(crate) enum LocalManagementRuntimeServerConnectionError',
+              'pub enum LocalManagementRuntimeServerConnectionError',
           )
           replace_one(
               'crates/prw-agent/src/local_commands/management_runtime_server_connection.rs',
               'pub(super) fn process_one_runtime_management_at_boundary_on_server_connection',
-              'pub(crate) fn process_one_runtime_management_at_boundary_on_server_connection',
+              'pub fn process_one_runtime_management_at_boundary_on_server_connection',
+          )
+          replace_one(
+              'crates/prw-agent/src/linux_authenticated_session/management.rs',
+              'pub(crate) enum LocalLinuxManagementDeadlineSessionProcessError',
+              'pub enum LocalLinuxManagementDeadlineSessionProcessError',
           )
           replace_one(
               'crates/prw-agent/src/linux_authenticated_session/management.rs',
