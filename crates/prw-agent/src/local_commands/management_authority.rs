@@ -89,7 +89,7 @@ impl LocalManagementLocalPeerAuthority {
     /// Captures the authenticated local UID from an existing same-UID connection.
     #[cfg(target_os = "linux")]
     #[must_use]
-    pub(super) fn from_authenticated_connection<S>(
+    pub(super) const fn from_authenticated_connection<S>(
         connection: &AuthenticatedLocalLinuxConnection<S>,
     ) -> Self {
         Self {
