@@ -60,6 +60,10 @@ pub(super) enum LocalManagementBoundaryTransactionError {
 /// A syntactically framed command-3 request that is rejected by canonical C03 admission
 /// produces its existing correlated terminal error and does not poison framing state;
 /// malformed generic framing or malformed legacy command decoding does poison inbound.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "authority-bearing boundary inputs stay explicit rather than hidden in a context bag"
+)]
 pub(super) fn process_one_management_capable_at_boundary<R, W, RE, ME, T, F, S>(
     reader: &mut R,
     writer: &mut W,
