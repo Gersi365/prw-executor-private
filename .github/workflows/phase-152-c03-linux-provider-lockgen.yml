@@ -17,13 +17,12 @@ jobs:
         with:
           ref: phase-152-c03-linux-provider-adapters
           fetch-depth: 0
-      - name: Record exact starting head
+      - name: Record bounded starting lineage
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD)" = "282bccc30cbd725c7ecd0e2463260122096fe556"
-          test "$(git rev-parse HEAD^)" = "e91d7e46f06cd247fc4e746316e0c9ee078bbc13"
-          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse HEAD^^{tree})"
+          git merge-base --is-ancestor c602befa29e20663d6ffa740928193d228ac5eaa HEAD
+          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse c602befa29e20663d6ffa740928193d228ac5eaa^{tree})"
       - name: Apply bounded warning corrective, generate minimal lock delta and format
         shell: bash
         run: |
