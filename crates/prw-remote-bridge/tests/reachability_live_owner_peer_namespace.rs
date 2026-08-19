@@ -39,13 +39,15 @@ impl ReachabilityLiveOwnerAuthority for PeerScopedReferenceAuthority {
         let grant = ReachabilityLiveOwnerGrant::from_authority(peer.clone(), fence);
         self.last_issued = next;
 
-        if let Some(current) = self
-            .current
-            .iter_mut()
-            .find(|current| current.peer() == peer)
-        {
-            *current = grant.clone();
-        } else {
+        let mut replaced = false;
+        for current in &mut self.current {
+            if current.peer() == peer {
+                current.clone_from(&grant);
+                replaced = true;
+                break;
+            }
+        }
+        if !replaced {
             self.current.push(grant.clone());
         }
 
