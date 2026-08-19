@@ -168,6 +168,7 @@ mod tests {
         LocalManagementBoundaryTransactionError, process_one_management_capable_at_boundary,
     };
     use crate::LocalIpcRequestId;
+    use crate::frame_object::LocalIpcPayload;
     use crate::frame_object::reader::read_frame;
     use crate::frame_object::writer::write_frame;
     use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
@@ -185,9 +186,7 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
-    use crate::{
-        LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcPayload, LocalIpcProtocolVersion,
-    };
+    use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
