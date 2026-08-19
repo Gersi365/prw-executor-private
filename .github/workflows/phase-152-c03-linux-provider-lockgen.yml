@@ -21,8 +21,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD)" = "e91d7e46f06cd247fc4e746316e0c9ee078bbc13"
-          test "$(git rev-parse HEAD^)" = "da13e2facd88f2a243d83a7e5dcffbcf7c05d8bc"
+          test "$(git rev-parse HEAD)" = "282bccc30cbd725c7ecd0e2463260122096fe556"
+          test "$(git rev-parse HEAD^)" = "e91d7e46f06cd247fc4e746316e0c9ee078bbc13"
           test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse HEAD^^{tree})"
       - name: Apply bounded warning corrective, generate minimal lock delta and format
         shell: bash
