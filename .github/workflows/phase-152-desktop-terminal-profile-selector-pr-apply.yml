@@ -1,0 +1,58 @@
+name: Phase 152 Desktop Terminal Profile Selector PR Apply
+
+on:
+  pull_request:
+    branches:
+      - phase-152-desktop-terminal-profile-selector-apply-base
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply selector if absent
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("apps/desktop/src/ui.rs")
+          text = path.read_text()
+          if 'gtk::DropDown::from_strings(&["POSIX shell", "Bash shell"])' in text:
+              Path('/tmp/prw-noop').write_text('1')
+              raise SystemExit(0)
+          old = '''    let rows = gtk::Entry::builder()\n        .placeholder_text("Rows")\n        .text("40")\n        .build();\n    let result = management_result_label();'''
+          new = '''    let rows = gtk::Entry::builder()\n        .placeholder_text("Rows")\n        .text("40")\n        .build();\n    let profile = gtk::DropDown::from_strings(&["POSIX shell", "Bash shell"]);\n    profile.set_selected(1);\n    let result = management_result_label();'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''    let rows_input = rows.clone();\n    let result_output = result.clone();'''
+          new = '''    let rows_input = rows.clone();\n    let profile_input = profile.clone();\n    let result_output = result.clone();'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {\n            if let Ok(payload) = management::encode_terminal_open(\n                session_id,\n                TerminalProfile::BashShell,\n                columns,\n                rows,\n            ) {'''
+          new = '''        if let (Ok(session_id), Ok(columns), Ok(rows)) = parsed {\n            let profile = if profile_input.selected() == 0 {\n                TerminalProfile::PosixShell\n            } else {\n                TerminalProfile::BashShell\n            };\n            if let Ok(payload) =\n                management::encode_terminal_open(session_id, profile, columns, rows)\n            {'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''    page.append(&section_label("Terminal request"));\n    page.append(&session_id);'''
+          new = '''    page.append(&section_label("Terminal request"));\n    page.append(&detail_label(\n        "Launch profile is restricted to the two provider-named terminal profiles; arbitrary executable or command input is not accepted.",\n    ));\n    page.append(&profile);\n    page.append(&session_id);'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+      - name: Format
+        if: ${{ !hashFiles('/tmp/prw-noop') }}
+        run: cargo fmt --all
+      - name: Commit head-only source change
+        shell: bash
+        run: |
+          if test -f /tmp/prw-noop; then exit 0; fi
+          test "$(git diff --name-only | sort)" = "apps/desktop/src/ui.rs"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/desktop/src/ui.rs
+          git commit -m "phase 152 desktop: add bounded terminal profile selector"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
