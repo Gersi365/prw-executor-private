@@ -1,0 +1,254 @@
+BASE_HEAD=112e5816a5a81f3a16bf9831ff250747aa10d271
+CARGO_TARGET_DIR=/tmp/prw-c03-consolidated-target
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustfmt 1.9.0-stable (8bab26f4f6 2026-07-14)
+clippy 0.1.97 (8bab26f4f6 2026-07-14)
+METADATA_RC=0
+FMT_RC=0
+CLIPPY_RC=101
+TEST_RC=101
+BUILD_RC=0
+--- CLIPPY_TAIL ---
+   Compiling nix v0.31.3
+   Compiling serde v1.0.229
+    Checking percent-encoding v2.3.2
+    Checking form_urlencoded v1.2.2
+    Checking ecdsa v0.16.9
+    Checking idna v1.1.0
+    Checking ghash v0.5.1
+    Checking primeorder v0.13.6
+    Checking ctr v0.9.2
+    Checking aes v0.8.4
+    Checking sha2 v0.10.9
+    Checking aead v0.5.2
+   Compiling serde_derive v1.0.229
+    Checking aes-gcm v0.10.3
+    Checking p256 v0.13.2
+    Checking url v2.5.8
+    Checking tracing-core v0.1.36
+    Checking tracing v0.1.44
+   Compiling quinn-udp v0.5.15
+    Checking sansio v1.0.0
+    Checking tinyvec_macros v0.1.1
+    Checking crc-catalog v2.5.0
+    Checking log v0.4.33
+    Checking crc v3.4.0
+    Checking tinyvec v1.12.0
+    Checking rand_pcg v0.10.2
+    Checking md-5 v0.10.6
+   Compiling quinn v0.11.11
+   Compiling tokio-macros v2.7.2
+    Checking mio v1.2.2
+    Checking rustc-hash v2.1.3
+    Checking lazy_static v1.5.0
+    Checking lru-slab v0.1.2
+    Checking tokio v1.53.1
+    Checking uuid v1.24.1
+   Compiling glib-sys v0.22.8
+   Compiling gobject-sys v0.22.6
+    Checking prw-policy v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-policy)
+   Compiling gio-sys v0.22.8
+    Checking futures-core v0.3.34
+   Compiling futures-macro v0.3.34
+    Checking futures-task v0.3.34
+    Checking futures-util v0.3.34
+   Compiling cairo-sys-rs v0.22.0
+   Compiling pango-sys v0.22.0
+   Compiling gdk-pixbuf-sys v0.22.0
+    Checking futures-executor v0.3.34
+    Checking futures-channel v0.3.34
+   Compiling glib-macros v0.22.6
+    Checking memchr v2.8.3
+   Compiling thiserror v1.0.69
+   Compiling cfg_aliases v0.1.1
+   Compiling nix v0.28.0
+    Checking glib v0.22.8
+   Compiling gdk4-sys v0.11.4
+   Compiling graphene-sys v0.22.8
+   Compiling thiserror-impl v1.0.69
+   Compiling anyhow v1.0.104
+    Checking filedescriptor v0.8.3
+   Compiling gsk4-sys v0.11.4
+    Checking serial2 v0.2.38
+    Checking downcast-rs v1.2.1
+    Checking futures-io v0.3.34
+    Checking shell-words v1.1.1
+    Checking portable-pty v0.9.0
+    Checking gio v0.22.8
+   Compiling gtk4-sys v0.11.4
+    Checking prw-files v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-files)
+    Checking prw-network v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-network)
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling semver v1.0.28
+   Compiling rustc_version v0.4.1
+   Compiling indexmap v2.14.0
+   Compiling toml_edit v0.25.13+spec-1.1.0
+   Compiling field-offset v0.3.6
+    Checking gdk-pixbuf v0.22.0
+    Checking pango v0.22.8
+    Checking cairo-rs v0.22.0
+    Checking gdk4 v0.11.4
+   Compiling proc-macro-crate v3.5.0
+    Checking graphene-rs v0.22.8
+   Compiling libadwaita-sys v0.9.2
+    Checking gsk4 v0.11.4
+   Compiling gtk4-macros v0.11.4
+    Checking gtk4 v0.11.3
+    Checking prw-device-identity v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity)
+    Checking rustls-webpki v0.103.14
+    Checking rcgen v0.14.8
+    Checking prw-device-identity-signer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-signer)
+    Checking rtc-shared v0.20.2
+    Checking prw-session v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-session)
+    Checking prw-registry v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-registry)
+    Checking rtc-mdns v0.20.2
+    Checking rtc-stun v0.20.2
+    Checking quinn-proto v0.11.16
+    Checking rtc-ice v0.20.2
+    Checking prw-file-service v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-service)
+    Checking prw-nat-traversal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-nat-traversal)
+    Checking prw-remote-transport v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-transport)
+    Checking prw-file-transfer v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-file-transfer)
+    Checking prw-forwarding v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-forwarding)
+    Checking prw-terminal v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-terminal)
+    Checking prw-device-identity-custody v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-device-identity-custody)
+    Checking prw-remote-bridge v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-remote-bridge)
+    Checking prw-relay v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-relay)
+    Checking libadwaita v0.9.2
+    Checking prw-agent v0.1.0 (/home/runner/work/prw-executor-private/prw-executor-private/crates/prw-agent)
+error: this expression creates a reference which is immediately dereferenced by the compiler
+   --> crates/prw-agent/src/local_commands/management_linux_backends.rs:389:41
+    |
+389 |                 if !try_acquire_counter(&aggregate, MAX_FORWARD_CONNECTIONS_AGGREGATE) {
+    |                                         ^^^^^^^^^^ help: change this to: `aggregate`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_borrow
+    = note: `-D clippy::needless-borrow` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_borrow)]`
+
+error: could not compile `prw-agent` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+--- TEST_TAIL ---
+test local_commands::request_frame::transaction::tests::duplicate_registration_prevents_all_io ... ok
+test local_commands::request_frame::transaction::tests::header_write_failure_retains_registration ... ok
+test local_commands::request_frame::transaction::tests::payload_write_failure_retains_registration ... ok
+test local_commands::request_frame::transaction::tests::successful_write_leaves_request_outstanding ... ok
+test local_commands::request_processor::tests::truncated_request_is_rejected_before_policy_evaluation ... ok
+test local_commands::request_processor::tests::unknown_command_is_rejected_before_policy_evaluation ... ok
+test local_commands::request_processor::tests::valid_allowed_request_reads_then_builds_success_response ... ok
+test local_commands::request_processor::tests::valid_denied_request_reads_then_builds_unauthorized_response ... ok
+test local_commands::request_response_transaction::tests::allowed_request_writes_correlated_success_response ... ok
+test local_commands::request_response_transaction::tests::already_poisoned_response_state_rejects_before_read_policy_or_write ... ok
+test local_commands::request_response_transaction::tests::denied_request_writes_correlated_unauthorized_response ... ok
+test local_commands::request_response_transaction::tests::invalid_command_stops_before_policy_and_response_write ... ok
+test local_commands::request_response_transaction::tests::response_write_failure_poisons_state_after_valid_policy_processing ... ok
+test local_commands::request_tracker::tests::abandon_all_on_empty_tracker_is_stable ... ok
+test local_commands::request_tracker::tests::abandon_all_returns_registration_order_and_empties_tracker ... ok
+test local_commands::request_tracker::tests::duplicate_outstanding_request_id_is_rejected ... ok
+test local_commands::request_tracker::tests::outstanding_request_count_is_bounded ... ok
+test local_commands::request_tracker::tests::terminal_response_removes_request_id_for_reuse ... ok
+test local_commands::request_tracker::tests::tracker_starts_empty_and_tracks_registration ... ok
+test local_commands::request_tracker::tests::unknown_terminal_response_is_rejected ... ok
+test local_commands::responder::tests::admitted_private_dns_request_uses_existing_builder_and_preserves_correlation ... ok
+test local_commands::responder::tests::admitted_status_request_uses_existing_builder_and_preserves_correlation ... ok
+test local_commands::response_codec::tests::all_current_statuses_round_trip ... ok
+test local_commands::response_codec::tests::decoder_preserves_body_bytes_unchanged ... ok
+test local_commands::response_codec::tests::missing_status_prefix_is_rejected ... ok
+test local_commands::response_codec::tests::response_status_codes_encode_big_endian ... ok
+test local_commands::response_codec::tests::response_status_prefix_length_is_locked ... ok
+test local_commands::response_codec::tests::unknown_status_code_is_rejected ... ok
+test local_commands::response_writer::tests::header_write_failure_poisons_response_state ... ok
+test local_commands::response_writer::tests::invalid_terminal_frame_is_rejected_before_io_without_poisoning ... ok
+test local_commands::response_writer::tests::payload_write_failure_poisons_response_state ... ok
+test local_commands::response_writer::tests::poisoned_state_rejects_later_write_before_io ... ok
+test local_commands::response_writer::tests::valid_response_write_succeeds_and_state_remains_healthy ... ok
+test local_commands::server_connection_loop::tests::budget_exhaustion_does_not_probe_following_frame_and_can_resume ... ok
+test local_commands::server_connection_loop::tests::empty_stream_stops_cleanly_without_policy_or_output ... ok
+test local_commands::server_connection_loop::tests::loop_processes_multiple_requests_then_clean_eof ... ok
+test local_commands::server_connection_loop::tests::truncation_after_one_success_stops_with_inbound_unusable_state ... ok
+test local_commands::server_connection_loop::tests::write_failure_stops_with_response_unusable_state ... ok
+test local_commands::server_connection_state::tests::boundary_clean_eof_keeps_aggregate_state_usable ... ok
+test local_commands::server_connection_state::tests::boundary_repeated_calls_process_frames_then_clean_eof ... ok
+test local_commands::server_connection_state::tests::boundary_response_write_failure_marks_aggregate_write_unusable ... ok
+test local_commands::server_connection_state::tests::boundary_truncation_marks_aggregate_inbound_unusable ... ok
+test local_commands::server_connection_state::tests::boundary_unusable_state_rejects_before_any_io ... ok
+test local_commands::server_connection_state::tests::invalid_command_makes_aggregate_state_unusable_for_inbound_reason ... ok
+test local_commands::server_connection_state::tests::new_aggregate_state_is_usable ... ok
+test local_commands::server_connection_state::tests::response_write_failure_makes_aggregate_state_unusable_for_write_reason ... ok
+test local_commands::server_connection_state::tests::successful_request_keeps_aggregate_state_usable ... ok
+test local_commands::server_connection_state::tests::unusable_aggregate_state_rejects_later_request_before_any_io ... ok
+test local_commands::status_snapshot::codec::tests::all_runtime_states_round_trip ... ok
+test local_commands::status_snapshot::codec::tests::body_length_is_locked_to_five_bytes ... ok
+test local_commands::status_snapshot::codec::tests::non_exact_lengths_are_rejected ... ok
+test local_commands::status_snapshot::codec::tests::ready_status_has_stable_current_wire_bytes ... ok
+test local_commands::status_snapshot::codec::tests::unknown_runtime_state_is_rejected ... ok
+test local_commands::status_snapshot::codec::tests::unsupported_protocol_versions_are_rejected ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::every_runtime_state_round_trips_through_generic_stream_io ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::reader_consumes_exactly_one_frame_and_leaves_trailing_bytes ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::status_response_wire_length_is_exactly_thirty_one_bytes ... ok
+test local_commands::status_snapshot::response_frame::stream::tests::truncated_header_and_payload_preserve_generic_read_errors ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::fully_decoded_unknown_id_leaves_other_tracker_state_untouched ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::fully_valid_known_status_response_completes_exactly_its_request ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::malformed_command_body_does_not_consume_request_state ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::replay_after_successful_completion_is_rejected ... ok
+test local_commands::status_snapshot::response_frame::stream_completion::tests::truncated_stream_does_not_consume_request_state ... ok
+test local_commands::status_snapshot::response_frame::tests::all_runtime_states_round_trip_through_complete_frame ... ok
+test local_commands::status_snapshot::response_frame::tests::builder_matches_phase_019_payload_and_response_kind ... ok
+test local_commands::status_snapshot::response_frame::tests::malformed_status_body_is_rejected_after_terminal_validation ... ok
+test local_commands::status_snapshot::response_frame::tests::valid_terminal_error_is_not_a_success_status_frame ... ok
+test local_commands::status_snapshot::response_payload::tests::all_runtime_states_round_trip_through_success_payload ... ok
+test local_commands::status_snapshot::response_payload::tests::known_non_success_status_is_rejected ... ok
+test local_commands::status_snapshot::response_payload::tests::missing_and_unknown_status_prefixes_are_rejected ... ok
+test local_commands::status_snapshot::response_payload::tests::ready_status_has_stable_current_success_bytes ... ok
+test local_commands::status_snapshot::response_payload::tests::status_body_failures_remain_fail_closed ... ok
+test local_commands::status_snapshot::response_payload::tests::successful_status_payload_length_is_locked_to_seven_bytes ... ok
+test local_commands::status_snapshot::tests::only_ready_state_reports_normal_readiness ... ok
+test local_commands::status_snapshot::tests::runtime_state_codes_are_stable_and_invertible ... ok
+test local_commands::status_snapshot::tests::snapshot_uses_current_protocol_version ... ok
+test local_commands::terminal_completion::tests::duplicate_terminal_response_is_rejected_after_first_completion ... ok
+test local_commands::terminal_completion::tests::invalid_terminal_frame_does_not_consume_request_state ... ok
+test local_commands::terminal_completion::tests::unknown_request_id_does_not_consume_other_state ... ok
+test local_commands::terminal_completion::tests::valid_error_completes_known_request ... ok
+test local_commands::terminal_completion::tests::valid_success_completes_exactly_one_known_request ... ok
+test local_commands::terminal_response::builder::tests::above_maximum_command_body_is_rejected_before_frame_construction ... ok
+test local_commands::terminal_response::builder::tests::maximum_command_body_produces_maximum_valid_payload ... ok
+test local_commands::terminal_response::builder::tests::non_success_builder_uses_error_kind ... ok
+test local_commands::terminal_response::builder::tests::success_builder_uses_response_kind_and_prepends_ok_status ... ok
+test local_commands::terminal_response::builder::tests::terminal_body_bound_reserves_exact_status_prefix_space ... ok
+test local_commands::terminal_response::tests::error_with_each_non_success_status_is_valid ... ok
+test local_commands::terminal_response::tests::error_with_ok_is_rejected ... ok
+test local_commands::terminal_response::tests::expected_kind_mapping_is_stable ... ok
+test local_commands::terminal_response::tests::missing_and_unknown_status_prefixes_are_rejected ... ok
+test local_commands::terminal_response::tests::request_kind_is_rejected_before_payload_interpretation ... ok
+test local_commands::terminal_response::tests::response_with_non_success_status_is_rejected ... ok
+test local_commands::terminal_response::tests::response_with_ok_is_valid_and_preserves_request_id ... ok
+test local_commands::tests::read_only_command_codes_are_stable ... ok
+test local_commands::tests::response_preserves_request_correlation ... ok
+test local_commands::tests::response_status_codes_are_stable ... ok
+test tests::baseline_contract_is_same_user_unix_socket ... ok
+test tests::payload_length_is_bounded ... ok
+test tests::protocol_constants_are_locked ... ok
+test tests::request_id_zero_is_rejected ... ok
+test tests::socket_path_is_beneath_xdg_runtime_dir ... ok
+test tests::unsupported_protocol_version_is_rejected ... ok
+test local_commands::management_linux_backends::tests::posix_terminal_uses_real_pty_io_resize_and_close ... FAILED
+
+failures:
+
+---- local_commands::management_linux_backends::tests::posix_terminal_uses_real_pty_io_resize_and_close stdout ----
+
+thread 'local_commands::management_linux_backends::tests::posix_terminal_uses_real_pty_io_resize_and_close' (13446) panicked at crates/prw-agent/src/local_commands/management_linux_backends.rs:634:9:
+expected PTY marker in output: printf 'PRW_C03_PTY_OK\n'
+$ PRW_C03_PTY_OK
+$ 
+
+
+failures:
+    local_commands::management_linux_backends::tests::posix_terminal_uses_real_pty_io_resize_and_close
+
+test result: FAILED. 381 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+error: test failed, to rerun pass `-p prw-agent --lib`
+STATUS=FAIL
