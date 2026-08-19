@@ -54,7 +54,7 @@ jobs:
           session = Path('crates/prw-agent/src/linux_authenticated_session.rs')
           text = session.read_text()
           anchor = 'use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;\n'
-          addition = anchor + '\nmod management;\n'
+          addition = anchor + '\n#[path = "linux_authenticated_session/management.rs"]\nmod management;\n'
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one session module anchor, found {text.count(anchor)}')
           session.write_text(text.replace(anchor, addition))
