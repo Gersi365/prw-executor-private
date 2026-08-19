@@ -1,0 +1,52 @@
+name: Phase 152 C03 Management Transaction Format
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-management-transaction-format-base
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'phase-152-c03-management-transaction'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03-management-transaction
+          fetch-depth: 0
+      - name: Verify bounded lineage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git merge-base --is-ancestor 8792bcb1fe5409a522449b120b00ab370fce1df1 HEAD
+      - name: Apply rustfmt only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all
+          git restore -- target || true
+      - name: Verify format scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --name-only | sort > /tmp/changed.txt
+          cat /tmp/changed.txt
+          test -s /tmp/changed.txt
+          while IFS= read -r path; do
+            case "$path" in
+              crates/prw-agent/src/local_commands/management_boundary_transaction.rs) ;;
+              *) echo "unexpected rustfmt path: $path" >&2; exit 1 ;;
+            esac
+          done < /tmp/changed.txt
+      - name: Commit formatting
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-agent/src/local_commands/management_boundary_transaction.rs
+          git commit -m 'phase 152 c03: format management boundary transaction'
+          git push origin HEAD:phase-152-c03-management-transaction
