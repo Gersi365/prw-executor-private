@@ -1,0 +1,66 @@
+name: Phase 152 C03 Local Principal PR Apply v2
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-principal-apply-base
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Execute corrected v1 source patch
+        shell: python
+        run: |
+          import subprocess
+          raw = subprocess.check_output([
+              "git", "show",
+              "origin/phase-152-c03-principal-apply-base:.github/workflows/phase-152-c03-principal-pr-apply.yml",
+          ], text=True)
+          start_marker = "      - name: Apply local/registry provider-principal separation\n        shell: python\n        run: |\n"
+          start = raw.index(start_marker) + len(start_marker)
+          end = raw.index("      - name: Format\n", start)
+          block = raw[start:end]
+          lines = []
+          for line in block.splitlines():
+              if line.startswith("          "):
+                  line = line[10:]
+              lines.append(line)
+          code = "\n".join(lines) + "\n"
+          code = code.replace(
+              '"    fn opening(\\n        id: TerminalSessionId,\\n        principal: TerminalPrincipal,"',
+              '"    const fn opening(\\n        id: TerminalSessionId,\\n        principal: TerminalPrincipal,"',
+          ).replace(
+              '"    fn opening(\\n        id: TerminalSessionId,\\n        principal: TerminalSessionPrincipal,"',
+              '"    const fn opening(\\n        id: TerminalSessionId,\\n        principal: TerminalSessionPrincipal,"',
+          )
+          exec(compile(code, "c03-principal-v1-corrected", "exec"), {"__name__": "__main__"})
+      - name: Format
+        run: cargo fmt --all
+      - name: Verify source scope
+        shell: bash
+        run: |
+          git diff --name-only | sort > /tmp/actual
+          printf '%s\n' \
+            crates/prw-agent/src/local_commands/management_authority.rs \
+            crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs \
+            crates/prw-forwarding/src/lib.rs \
+            crates/prw-terminal/src/lib.rs | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/actual
+      - name: Commit head source
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-agent/src/local_commands/management_authority.rs crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs crates/prw-forwarding/src/lib.rs crates/prw-terminal/src/lib.rs
+          git commit -m "phase 152 c03: separate local and registry provider principals"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
