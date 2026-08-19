@@ -20,8 +20,10 @@ jobs:
 
       - name: Verify exact proof ancestry
         run: |
-          test "$(git rev-parse HEAD^)" = "d73f7412048fd51368bdd176bb646d2b82050ecf"
+          test "$(git rev-parse HEAD^)" = "8f0d07771de90ddda55bd320d61ca25d19bb65d9"
+          test "$(git rev-parse HEAD^^)" = "d73f7412048fd51368bdd176bb646d2b82050ecf"
           test "$(git rev-parse HEAD^^^)" = "d3abca54726ffeea139599d4cdbd87fc778adb2e"
+          test "$(git rev-parse HEAD^^^^)" = "d9cdd5a3e69ad98d51b3b603e7ba7a50243a07d9"
 
       - name: Materialize proof module declaration
         run: |
