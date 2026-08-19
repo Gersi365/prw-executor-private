@@ -1,0 +1,88 @@
+name: Phase 152 C03 Local Authority Routing PR Apply
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-authority-routing-apply-base
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply local authority routing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def once(text, old, new, label):
+              if old not in text:
+                  raise AssertionError(f"missing anchor: {label}")
+              return text.replace(old, new, 1)
+
+          # Reuse the exact family classifier already used by authority-context validation.
+          path = Path("crates/prw-agent/src/local_commands/management_dispatch.rs")
+          text = path.read_text()
+          text = once(
+              text,
+              "const fn required_authority_family(command: &BridgeCommand) -> LocalManagementAuthorityFamily {",
+              "pub(super) const fn required_authority_family(command: &BridgeCommand) -> LocalManagementAuthorityFamily {",
+              "family classifier visibility",
+          )
+          path.write_text(text)
+
+          # Agent-owned local authority set: filesystem root comes from trusted bootstrap;
+          # terminal/forwarding identity comes only from authenticated local peer authority.
+          path = Path("crates/prw-agent/src/local_commands/management_authority.rs")
+          text = path.read_text()
+          text = once(
+              text,
+              "use super::management_dispatch::LocalManagementAuthorityFamily;",
+              "use super::management_dispatch::{LocalManagementAuthorityFamily, required_authority_family};\nuse prw_remote_bridge::BridgeCommand;",
+              "authority family import",
+          )
+          marker = "/// Opaque family-specific authority evidence retained outside request decoding.\n"
+          addition = '''/// Complete Agent-owned authority set for one authenticated local management connection.\n///\n/// The filesystem descriptor authority is selected outside request decoding. The local\n/// peer authority is derived from the already-authenticated same-UID connection.\n#[derive(Debug, Clone, Copy)]\npub(super) struct LocalManagementLocalAuthoritySet<'authority> {\n    filesystem: &'authority LocalManagementFilesystemAuthority,\n    local_peer: &'authority LocalManagementLocalPeerAuthority,\n}\n\nimpl<'authority> LocalManagementLocalAuthoritySet<'authority> {\n    #[must_use]\n    pub(super) const fn new(\n        filesystem: &'authority LocalManagementFilesystemAuthority,\n        local_peer: &'authority LocalManagementLocalPeerAuthority,\n    ) -> Self {\n        Self {\n            filesystem,\n            local_peer,\n        }\n    }\n\n    /// Resolves family evidence only after the canonical command has been admitted.\n    ///\n    /// The same classifier used later by `LocalManagementAuthorityContext` is reused\n    /// here, so there is no second family mapping for local runtime activation.\n    #[must_use]\n    pub(super) const fn resolve(\n        self,\n        command: &BridgeCommand,\n    ) -> LocalManagementFamilyAuthority<'authority> {\n        match required_authority_family(command) {\n            LocalManagementAuthorityFamily::Agent => LocalManagementFamilyAuthority::agent(),\n            LocalManagementAuthorityFamily::File => {\n                LocalManagementFamilyAuthority::file(self.filesystem)\n            }\n            LocalManagementAuthorityFamily::Transfer => {\n                LocalManagementFamilyAuthority::transfer(self.filesystem)\n            }\n            LocalManagementAuthorityFamily::Terminal => {\n                LocalManagementFamilyAuthority::terminal_local(self.local_peer)\n            }\n            LocalManagementAuthorityFamily::Forwarding => {\n                LocalManagementFamilyAuthority::forwarding_local(self.local_peer)\n            }\n        }\n    }\n}\n\n'''
+          text = once(text, marker, addition + marker, "local authority set insertion")
+          path.write_text(text)
+
+          # Add a complete local execution entrypoint without altering the existing remote/C02c seam.
+          path = Path("crates/prw-agent/src/local_commands/management_execution.rs")
+          text = path.read_text()
+          text = once(
+              text,
+              "use super::management_authority::LocalManagementFamilyAuthority;",
+              "use super::management_authority::{\n    LocalManagementFamilyAuthority, LocalManagementFilesystemAuthority,\n    LocalManagementLocalAuthoritySet, LocalManagementLocalPeerAuthority,\n};",
+              "execution authority imports",
+          )
+          marker = '''#[cfg(target_os = "linux")]\nconst fn admission_error_status(error: LocalManagementAdmissionError) -> LocalAgentResponseStatus {'''
+          addition = '''/// Executes one authenticated same-UID local management request through the complete\n/// C03 authority path. The filesystem root and provider lifecycle are caller-owned and\n/// already exist before request decoding; local terminal/forwarding identity is derived\n/// only from the authenticated connection.\n///\n/// Ordering remains admission -> local authority resolution -> typed provider dispatch ->\n/// correlated response. A policy denial returns before any provider-family authority is\n/// used for mutation.\n#[cfg(target_os = "linux")]\npub(super) fn process_authenticated_linux_management_with_local_authorities<E, T, F, S>(\n    frame: &LocalIpcFrame,\n    connection: &AuthenticatedLocalLinuxConnection<S>,\n    evaluator: &E,\n    filesystem: &LocalManagementFilesystemAuthority,\n    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,\n    agent_status: LocalAgentStatusSnapshot,\n) -> Result<LocalIpcFrame, LocalTerminalResponseBuildError>\nwhere\n    E: PolicyEvaluator + ?Sized,\n    T: TerminalBackend,\n    F: PortForwardBackend,\n{\n    let request_id = frame.header().request_id();\n    let admission = match admit_authenticated_linux_management_request(frame, connection, evaluator)\n    {\n        Ok(admission) => admission,\n        Err(error) => {\n            return build_terminal_response_frame(request_id, admission_error_status(error), &[]);\n        }\n    };\n\n    let local_peer = LocalManagementLocalPeerAuthority::from_authenticated_connection(connection);\n    let authorities = LocalManagementLocalAuthoritySet::new(filesystem, &local_peer);\n    let authority = authorities.resolve(admission.command());\n    let result =\n        dispatch_admitted_management_command(&admission, authority, lifecycle, agent_status);\n    build_management_provider_response(request_id, result)\n}\n\n'''
+          text = once(text, marker, addition + marker, "local execution entrypoint")
+          path.write_text(text)
+      - name: Format
+        run: cargo fmt --all
+      - name: Verify source scope
+        shell: bash
+        run: |
+          git diff --name-only | sort > /tmp/actual
+          printf '%s\n' \
+            crates/prw-agent/src/local_commands/management_authority.rs \
+            crates/prw-agent/src/local_commands/management_dispatch.rs \
+            crates/prw-agent/src/local_commands/management_execution.rs | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/actual
+      - name: Commit head source
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-agent/src/local_commands/management_authority.rs crates/prw-agent/src/local_commands/management_dispatch.rs crates/prw-agent/src/local_commands/management_execution.rs
+          git commit -m "phase 152 c03: route authenticated local management authority"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
