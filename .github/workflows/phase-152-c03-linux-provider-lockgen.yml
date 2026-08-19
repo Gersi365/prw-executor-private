@@ -1,0 +1,52 @@
+name: Phase 152 C03 Linux Provider Lockgen
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-linux-provider-lockgen-base
+
+permissions:
+  contents: write
+
+jobs:
+  lockgen:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'phase-152-c03-linux-provider-adapters'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03-linux-provider-adapters
+          fetch-depth: 0
+      - name: Record exact starting head
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "c602befa29e20663d6ffa740928193d228ac5eaa"
+      - name: Generate minimal lock delta and format
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo check -p prw-agent
+          cargo fmt --all
+      - name: Verify bounded source scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --name-only | sort > /tmp/changed.txt
+          cat /tmp/changed.txt
+          while IFS= read -r path; do
+            case "$path" in
+              Cargo.lock|crates/prw-agent/Cargo.toml|crates/prw-agent/src/local_commands.rs|crates/prw-agent/src/local_commands/management_linux_backends.rs) ;;
+              *) echo "unexpected lockgen/format path: $path" >&2; exit 1 ;;
+            esac
+          done < /tmp/changed.txt
+          grep -qx 'Cargo.lock' /tmp/changed.txt
+      - name: Commit generated lock and formatting
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock crates/prw-agent/Cargo.toml crates/prw-agent/src/local_commands.rs crates/prw-agent/src/local_commands/management_linux_backends.rs
+          git commit -m 'phase 152 c03: lock and format linux provider adapters'
+          git push origin HEAD:phase-152-c03-linux-provider-adapters
