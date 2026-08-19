@@ -15,7 +15,10 @@ use prw_terminal::TerminalBackend;
 #[cfg(target_os = "linux")]
 use super::LocalAgentResponseStatus;
 #[cfg(target_os = "linux")]
-use super::management_authority::LocalManagementFamilyAuthority;
+use super::management_authority::{
+    LocalManagementFamilyAuthority, LocalManagementFilesystemAuthority,
+    LocalManagementLocalAuthoritySet, LocalManagementLocalPeerAuthority,
+};
 #[cfg(target_os = "linux")]
 use super::management_provider_lifecycle::LocalManagementProviderLifecycle;
 #[cfg(target_os = "linux")]
@@ -82,6 +85,45 @@ where
         return build_terminal_response_frame(request_id, LocalAgentResponseStatus::Conflict, &[]);
     };
 
+    let result =
+        dispatch_admitted_management_command(&admission, authority, lifecycle, agent_status);
+    build_management_provider_response(request_id, result)
+}
+
+/// Executes one authenticated same-UID local management request through the complete
+/// C03 authority path. The filesystem root and provider lifecycle are caller-owned and
+/// already exist before request decoding; local terminal/forwarding identity is derived
+/// only from the authenticated connection.
+///
+/// Ordering remains admission -> local authority resolution -> typed provider dispatch ->
+/// correlated response. A policy denial returns before any provider-family authority is
+/// used for mutation.
+#[cfg(target_os = "linux")]
+pub(super) fn process_authenticated_linux_management_with_local_authorities<E, T, F, S>(
+    frame: &LocalIpcFrame,
+    connection: &AuthenticatedLocalLinuxConnection<S>,
+    evaluator: &E,
+    filesystem: &LocalManagementFilesystemAuthority,
+    lifecycle: &mut LocalManagementProviderLifecycle<'_, T, F>,
+    agent_status: LocalAgentStatusSnapshot,
+) -> Result<LocalIpcFrame, LocalTerminalResponseBuildError>
+where
+    E: PolicyEvaluator + ?Sized,
+    T: TerminalBackend,
+    F: PortForwardBackend,
+{
+    let request_id = frame.header().request_id();
+    let admission = match admit_authenticated_linux_management_request(frame, connection, evaluator)
+    {
+        Ok(admission) => admission,
+        Err(error) => {
+            return build_terminal_response_frame(request_id, admission_error_status(error), &[]);
+        }
+    };
+
+    let local_peer = LocalManagementLocalPeerAuthority::from_authenticated_connection(connection);
+    let authorities = LocalManagementLocalAuthoritySet::new(filesystem, &local_peer);
+    let authority = authorities.resolve(admission.command());
     let result =
         dispatch_admitted_management_command(&admission, authority, lifecycle, agent_status);
     build_management_provider_response(request_id, result)

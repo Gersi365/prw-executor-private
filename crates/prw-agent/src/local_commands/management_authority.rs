@@ -17,7 +17,8 @@ use prw_terminal::{LocalTerminalPrincipal, TerminalPrincipal, TerminalSessionPri
 #[cfg(target_os = "linux")]
 use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 
-use super::management_dispatch::LocalManagementAuthorityFamily;
+use super::management_dispatch::{LocalManagementAuthorityFamily, required_authority_family};
+use prw_remote_bridge::BridgeCommand;
 
 /// Registry-current authenticated PRW-session authority retained by the Agent.
 ///
@@ -140,6 +141,55 @@ impl LocalManagementFilesystemAuthority {
     #[must_use]
     pub(super) const fn root(&self) -> &AnchoredFileRoot {
         &self.root
+    }
+}
+
+/// Complete Agent-owned authority set for one authenticated local management connection.
+///
+/// The filesystem descriptor authority is selected outside request decoding. The local
+/// peer authority is derived from the already-authenticated same-UID connection.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct LocalManagementLocalAuthoritySet<'authority> {
+    filesystem: &'authority LocalManagementFilesystemAuthority,
+    local_peer: &'authority LocalManagementLocalPeerAuthority,
+}
+
+impl<'authority> LocalManagementLocalAuthoritySet<'authority> {
+    #[must_use]
+    pub(super) const fn new(
+        filesystem: &'authority LocalManagementFilesystemAuthority,
+        local_peer: &'authority LocalManagementLocalPeerAuthority,
+    ) -> Self {
+        Self {
+            filesystem,
+            local_peer,
+        }
+    }
+
+    /// Resolves family evidence only after the canonical command has been admitted.
+    ///
+    /// The same classifier used later by `LocalManagementAuthorityContext` is reused
+    /// here, so there is no second family mapping for local runtime activation.
+    #[must_use]
+    pub(super) const fn resolve(
+        self,
+        command: &BridgeCommand,
+    ) -> LocalManagementFamilyAuthority<'authority> {
+        match required_authority_family(command) {
+            LocalManagementAuthorityFamily::Agent => LocalManagementFamilyAuthority::agent(),
+            LocalManagementAuthorityFamily::File => {
+                LocalManagementFamilyAuthority::file(self.filesystem)
+            }
+            LocalManagementAuthorityFamily::Transfer => {
+                LocalManagementFamilyAuthority::transfer(self.filesystem)
+            }
+            LocalManagementAuthorityFamily::Terminal => {
+                LocalManagementFamilyAuthority::terminal_local(self.local_peer)
+            }
+            LocalManagementAuthorityFamily::Forwarding => {
+                LocalManagementFamilyAuthority::forwarding_local(self.local_peer)
+            }
+        }
     }
 }
 
