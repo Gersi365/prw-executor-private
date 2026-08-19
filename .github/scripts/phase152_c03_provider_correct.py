@@ -1,0 +1,126 @@
+from pathlib import Path
+
+path = Path("crates/prw-agent/src/local_commands/management_linux_backends.rs")
+text = path.read_text()
+
+replacements = [
+    ("pub(crate) struct LinuxLocalTerminalBackend;", "pub struct LinuxLocalTerminalBackend;"),
+    ("pub(crate) struct LinuxLocalTerminalHandle {", "pub struct LinuxLocalTerminalHandle {"),
+    ("pub(crate) struct LinuxLocalForwardingBackend<P> {", "pub struct LinuxLocalForwardingBackend<P> {"),
+    ("pub(crate) struct LinuxLocalForwardingHandle {", "pub struct LinuxLocalForwardingHandle {"),
+    ("    pub(crate) fn new(policy: P) -> Self {", "    pub fn new(policy: P) -> Self {"),
+    (
+        '''        let reader_thread = match thread::Builder::new()
+            .name("prw-local-terminal-reader".into())
+            .spawn(move || {
+                let mut reader = reader;
+                let mut buffer = [0_u8; TERMINAL_READER_CHUNK_BYTES];
+                loop {
+                    match reader.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(count) => {
+                            if sender.send(buffer[..count].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                        Err(_) => break,
+                    }
+                }
+            }) {
+            Ok(thread) => thread,
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(TerminalError::Backend);
+            }
+        };''',
+        '''        let Ok(reader_thread) = thread::Builder::new()
+            .name("prw-local-terminal-reader".into())
+            .spawn(move || {
+                let mut reader = reader;
+                let mut buffer = [0_u8; TERMINAL_READER_CHUNK_BYTES];
+                loop {
+                    match reader.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(count) => {
+                            if sender.send(buffer[..count].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                        Err(_) => break,
+                    }
+                }
+            })
+        else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(TerminalError::Backend);
+        };''',
+    ),
+    (
+        '''        if let Some(reader_thread) = self.reader_thread.take() {
+            if reader_thread.join().is_err() {
+                success = false;
+            }
+        }''',
+        '''        if let Some(reader_thread) = self.reader_thread.take()
+            && reader_thread.join().is_err()
+        {
+            success = false;
+        }''',
+    ),
+    (
+        '            .spawn(move || run_accept_loop(listener, target, cancel_for_thread, aggregate))',
+        '            .spawn(move || run_accept_loop(&listener, target, &cancel_for_thread, &aggregate))',
+    ),
+    (
+        '''fn run_accept_loop(
+    listener: TcpListener,
+    target: SocketAddr,
+    cancel: Arc<AtomicBool>,
+    aggregate: Arc<AtomicUsize>,
+) -> Result<(), ()> {''',
+        '''fn run_accept_loop(
+    listener: &TcpListener,
+    target: SocketAddr,
+    cancel: &Arc<AtomicBool>,
+    aggregate: &Arc<AtomicUsize>,
+) -> Result<(), ()> {''',
+    ),
+    ("let cancel_for_worker = Arc::clone(&cancel);", "let cancel_for_worker = Arc::clone(cancel);"),
+    ("aggregate: Arc::clone(&aggregate),", "aggregate: Arc::clone(aggregate),"),
+    (
+        '''                match thread::Builder::new()
+                    .name("prw-local-forward-pump".into())
+                    .spawn(move || {
+                        let _lease = lease;
+                        pump_forward(client, target, &cancel_for_worker);
+                    }) {
+                    Ok(worker) => workers.push(worker),
+                    Err(_) => {
+                        session_connections.fetch_sub(1, Ordering::AcqRel);
+                        aggregate.fetch_sub(1, Ordering::AcqRel);
+                    }
+                }''',
+        '''                if let Ok(worker) = thread::Builder::new()
+                    .name("prw-local-forward-pump".into())
+                    .spawn(move || {
+                        let _lease = lease;
+                        pump_forward(client, target, &cancel_for_worker);
+                    })
+                {
+                    workers.push(worker);
+                }''',
+    ),
+    ("fn loopback_socket(spec: TcpForwardSpec) -> SocketAddr {", "const fn loopback_socket(spec: TcpForwardSpec) -> SocketAddr {"),
+]
+
+for old, new in replacements:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"unexpected corrective anchor count {count}: {old[:100]!r}")
+    text = text.replace(old, new, 1)
+
+path.write_text(text)
