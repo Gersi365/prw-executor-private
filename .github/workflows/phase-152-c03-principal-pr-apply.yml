@@ -1,0 +1,211 @@
+name: Phase 152 C03 Local Principal PR Apply
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-principal-apply-base
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply local/registry provider-principal separation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise AssertionError(f"missing replacement anchor: {label}")
+              return text.replace(old, new, 1)
+
+          # prw-terminal: preserve the registry-only principal type, add an explicit
+          # local-same-UID type, and let broker records retain the variant identity.
+          path = Path("crates/prw-terminal/src/lib.rs")
+          text = path.read_text()
+          if "pub enum TerminalSessionPrincipal" not in text:
+              marker = "/// Terminal lifecycle.\n"
+              addition = '''/// Same-UID local Linux principal for one Agent-authenticated terminal session.\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]\npub struct LocalTerminalPrincipal {\n    uid: u32,\n}\n\nimpl LocalTerminalPrincipal {\n    /// Captures the kernel-authenticated local UID selected by the Agent.\n    #[must_use]\n    pub const fn new(uid: u32) -> Self {\n        Self { uid }\n    }\n\n    /// Returns the authenticated local UID.\n    #[must_use]\n    pub const fn uid(self) -> u32 {\n        self.uid\n    }\n}\n\n/// Identity domain attached immutably to one terminal broker record.\n///\n/// Registry-derived remote identity and same-UID local identity are distinct variants\n/// and therefore can never compare equal accidentally.\n#[derive(Debug, Clone, PartialEq, Eq)]\npub enum TerminalSessionPrincipal {\n    /// Registry-current authenticated PRW session identity.\n    Registry(TerminalPrincipal),\n    /// Kernel-authenticated local same-UID identity.\n    LocalSameUid(LocalTerminalPrincipal),\n}\n\nimpl From<TerminalPrincipal> for TerminalSessionPrincipal {\n    fn from(principal: TerminalPrincipal) -> Self {\n        Self::Registry(principal)\n    }\n}\n\nimpl From<LocalTerminalPrincipal> for TerminalSessionPrincipal {\n    fn from(principal: LocalTerminalPrincipal) -> Self {\n        Self::LocalSameUid(principal)\n    }\n}\n\nimpl TerminalSessionPrincipal {\n    /// Returns registry identity only for the registry-derived variant.\n    #[must_use]\n    pub const fn registry(&self) -> Option<&TerminalPrincipal> {\n        match self {\n            Self::Registry(principal) => Some(principal),\n            Self::LocalSameUid(_) => None,\n        }\n    }\n\n    /// Returns local same-UID identity only for the local variant.\n    #[must_use]\n    pub const fn local_same_uid(&self) -> Option<LocalTerminalPrincipal> {\n        match self {\n            Self::Registry(_) => None,\n            Self::LocalSameUid(principal) => Some(*principal),\n        }\n    }\n}\n\n'''
+              text = replace_once(text, marker, addition + marker, "terminal principal insertion")
+              text = replace_once(
+                  text,
+                  "pub struct TerminalSession {\n    id: TerminalSessionId,\n    principal: TerminalPrincipal,",
+                  "pub struct TerminalSession {\n    id: TerminalSessionId,\n    principal: TerminalSessionPrincipal,",
+                  "terminal record principal",
+              )
+              text = replace_once(
+                  text,
+                  "    fn opening(\n        id: TerminalSessionId,\n        principal: TerminalPrincipal,",
+                  "    fn opening(\n        id: TerminalSessionId,\n        principal: TerminalSessionPrincipal,",
+                  "terminal opening principal",
+              )
+              text = replace_once(
+                  text,
+                  "    pub const fn principal(&self) -> &TerminalPrincipal {\n        &self.principal\n    }",
+                  "    pub const fn principal(&self) -> &TerminalSessionPrincipal {\n        &self.principal\n    }",
+                  "terminal principal getter",
+              )
+              text = replace_once(
+                  text,
+                  "    pub fn open_session(\n        &mut self,\n        id: TerminalSessionId,\n        principal: TerminalPrincipal,\n        profile: TerminalProfile,\n        geometry: TerminalGeometry,\n    ) -> Result<&TerminalSession, TerminalError> {\n        if self.sessions.contains_key(&id) {",
+                  "    pub fn open_session<P: Into<TerminalSessionPrincipal>>(\n        &mut self,\n        id: TerminalSessionId,\n        principal: P,\n        profile: TerminalProfile,\n        geometry: TerminalGeometry,\n    ) -> Result<&TerminalSession, TerminalError> {\n        let principal = principal.into();\n        if self.sessions.contains_key(&id) {",
+                  "terminal generic open",
+              )
+              old_test = '''    #[test]\n    fn identity_binding_is_immutable_in_session_record() {\n        let expected = principal();\n        let mut broker = TerminalBroker::new(SpyBackend::default());\n        let record = broker\n            .open_session(\n                id(11),\n                expected.clone(),\n                TerminalProfile::PosixShell,\n                geometry(),\n            )\n            .expect("open");\n        assert_eq!(record.principal(), &expected);\n        assert_eq!(record.principal().workspace_id().as_str(), "workspace-1");\n        assert_eq!(record.principal().user_id().as_str(), "user-1");\n        assert_eq!(record.principal().device_id().as_str(), "device-1");\n        assert_eq!(\n            record.principal().authenticated_session_id().as_str(),\n            "session-1"\n        );\n    }\n'''
+              new_test = '''    #[test]\n    fn identity_binding_is_immutable_in_session_record() {\n        let expected = principal();\n        let mut broker = TerminalBroker::new(SpyBackend::default());\n        let record = broker\n            .open_session(\n                id(11),\n                expected.clone(),\n                TerminalProfile::PosixShell,\n                geometry(),\n            )\n            .expect("open");\n        let registry = record.principal().registry().expect("registry principal");\n        assert_eq!(registry, &expected);\n        assert_eq!(registry.workspace_id().as_str(), "workspace-1");\n        assert_eq!(registry.user_id().as_str(), "user-1");\n        assert_eq!(registry.device_id().as_str(), "device-1");\n        assert_eq!(registry.authenticated_session_id().as_str(), "session-1");\n        assert!(record.principal().local_same_uid().is_none());\n    }\n\n    #[test]\n    fn local_same_uid_principal_is_distinct_from_registry_identity() {\n        let local = LocalTerminalPrincipal::new(1000);\n        let registry = principal();\n        assert_ne!(\n            TerminalSessionPrincipal::from(local),\n            TerminalSessionPrincipal::from(registry)\n        );\n        let mut broker = TerminalBroker::new(SpyBackend::default());\n        let record = broker\n            .open_session(id(16), local, TerminalProfile::PosixShell, geometry())\n            .expect("local open");\n        assert_eq!(record.principal().local_same_uid(), Some(local));\n        assert!(record.principal().registry().is_none());\n    }\n'''
+              text = replace_once(text, old_test, new_test, "terminal identity tests")
+              path.write_text(text)
+
+          # prw-forwarding: same identity split, preserving existing registry API.
+          path = Path("crates/prw-forwarding/src/lib.rs")
+          text = path.read_text()
+          if "pub enum ForwardingSessionPrincipal" not in text:
+              marker = "/// Port-forward lifecycle.\n"
+              addition = '''/// Same-UID local Linux principal for one Agent-authenticated forwarding session.\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]\npub struct LocalForwardingPrincipal {\n    uid: u32,\n}\n\nimpl LocalForwardingPrincipal {\n    /// Captures the kernel-authenticated local UID selected by the Agent.\n    #[must_use]\n    pub const fn new(uid: u32) -> Self {\n        Self { uid }\n    }\n\n    /// Returns the authenticated local UID.\n    #[must_use]\n    pub const fn uid(self) -> u32 {\n        self.uid\n    }\n}\n\n/// Identity domain attached immutably to one forwarding broker record.\n#[derive(Debug, Clone, PartialEq, Eq)]\npub enum ForwardingSessionPrincipal {\n    /// Registry-current authenticated PRW session identity.\n    Registry(ForwardingPrincipal),\n    /// Kernel-authenticated local same-UID identity.\n    LocalSameUid(LocalForwardingPrincipal),\n}\n\nimpl From<ForwardingPrincipal> for ForwardingSessionPrincipal {\n    fn from(principal: ForwardingPrincipal) -> Self {\n        Self::Registry(principal)\n    }\n}\n\nimpl From<LocalForwardingPrincipal> for ForwardingSessionPrincipal {\n    fn from(principal: LocalForwardingPrincipal) -> Self {\n        Self::LocalSameUid(principal)\n    }\n}\n\nimpl ForwardingSessionPrincipal {\n    /// Returns registry identity only for the registry-derived variant.\n    #[must_use]\n    pub const fn registry(&self) -> Option<&ForwardingPrincipal> {\n        match self {\n            Self::Registry(principal) => Some(principal),\n            Self::LocalSameUid(_) => None,\n        }\n    }\n\n    /// Returns local same-UID identity only for the local variant.\n    #[must_use]\n    pub const fn local_same_uid(&self) -> Option<LocalForwardingPrincipal> {\n        match self {\n            Self::Registry(_) => None,\n            Self::LocalSameUid(principal) => Some(*principal),\n        }\n    }\n}\n\n'''
+              text = replace_once(text, marker, addition + marker, "forward principal insertion")
+              text = replace_once(
+                  text,
+                  "pub struct PortForwardSession {\n    id: PortForwardId,\n    principal: ForwardingPrincipal,",
+                  "pub struct PortForwardSession {\n    id: PortForwardId,\n    principal: ForwardingSessionPrincipal,",
+                  "forward record principal",
+              )
+              text = replace_once(
+                  text,
+                  "    const fn opening(\n        id: PortForwardId,\n        principal: ForwardingPrincipal,",
+                  "    const fn opening(\n        id: PortForwardId,\n        principal: ForwardingSessionPrincipal,",
+                  "forward opening principal",
+              )
+              text = replace_once(
+                  text,
+                  "    pub const fn principal(&self) -> &ForwardingPrincipal {\n        &self.principal\n    }",
+                  "    pub const fn principal(&self) -> &ForwardingSessionPrincipal {\n        &self.principal\n    }",
+                  "forward principal getter",
+              )
+              text = replace_once(
+                  text,
+                  "    pub fn open_session(\n        &mut self,\n        id: PortForwardId,\n        principal: ForwardingPrincipal,\n        spec: TcpForwardSpec,\n    ) -> Result<&PortForwardSession, ForwardingError> {\n        let at_capacity = self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS;",
+                  "    pub fn open_session<P: Into<ForwardingSessionPrincipal>>(\n        &mut self,\n        id: PortForwardId,\n        principal: P,\n        spec: TcpForwardSpec,\n    ) -> Result<&PortForwardSession, ForwardingError> {\n        let principal = principal.into();\n        let at_capacity = self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS;",
+                  "forward generic open",
+              )
+              old_test = '''        assert_eq!(session.principal().workspace_id().as_str(), "workspace-1");\n        assert_eq!(session.principal().user_id().as_str(), "user-1");\n        assert_eq!(session.principal().device_id().as_str(), "device-1");\n        assert_eq!(\n            session.principal().authenticated_session_id().as_str(),\n            "session-1"\n        );'''
+              new_test = '''        let registry = session.principal().registry().expect("registry principal");\n        assert_eq!(registry.workspace_id().as_str(), "workspace-1");\n        assert_eq!(registry.user_id().as_str(), "user-1");\n        assert_eq!(registry.device_id().as_str(), "device-1");\n        assert_eq!(registry.authenticated_session_id().as_str(), "session-1");\n        assert!(session.principal().local_same_uid().is_none());'''
+              text = replace_once(text, old_test, new_test, "forward identity test")
+              anchor = '''    #[test]\n    fn duplicate_identifier_fails_before_backend_call() {'''
+              local_test = '''    #[test]\n    fn local_same_uid_principal_is_distinct_from_registry_identity() {\n        let local = LocalForwardingPrincipal::new(1000);\n        assert_ne!(\n            ForwardingSessionPrincipal::from(local),\n            ForwardingSessionPrincipal::from(principal())\n        );\n        let mut broker = PortForwardBroker::new(SpyBackend::default());\n        let session = broker\n            .open_session(id(99), local, spec(2299))\n            .expect("local open");\n        assert_eq!(session.principal().local_same_uid(), Some(local));\n        assert!(session.principal().registry().is_none());\n    }\n\n'''
+              text = replace_once(text, anchor, local_test + anchor, "forward local test")
+              path.write_text(text)
+
+          # Agent authority: local same-UID authority is constructible only from an
+          # already-authenticated local Linux connection. Remote authority is unchanged.
+          path = Path("crates/prw-agent/src/local_commands/management_authority.rs")
+          text = path.read_text()
+          if "LocalManagementLocalPeerAuthority" not in text:
+              text = replace_once(
+                  text,
+                  "use prw_forwarding::ForwardingPrincipal;",
+                  "use prw_forwarding::{ForwardingPrincipal, ForwardingSessionPrincipal, LocalForwardingPrincipal};",
+                  "authority forward imports",
+              )
+              text = replace_once(
+                  text,
+                  "use prw_terminal::TerminalPrincipal;",
+                  "use prw_terminal::{LocalTerminalPrincipal, TerminalPrincipal, TerminalSessionPrincipal};\n\n#[cfg(target_os = \"linux\")]\nuse crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;",
+                  "authority terminal imports",
+              )
+              marker = "/// Agent-owned descriptor-anchored filesystem authority.\n"
+              addition = '''/// Agent-owned authority for one kernel-authenticated same-UID local peer.\n///\n/// This is intentionally not a registry principal. On Linux it can be constructed only\n/// from the already-authenticated local connection object, so request bytes cannot\n/// choose or override the UID retained for provider-session binding.\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub(super) struct LocalManagementLocalPeerAuthority {\n    uid: u32,\n}\n\nimpl LocalManagementLocalPeerAuthority {\n    /// Captures the authenticated local UID from an existing same-UID connection.\n    #[cfg(target_os = "linux")]\n    #[must_use]\n    pub(super) fn from_authenticated_connection<S>(\n        connection: &AuthenticatedLocalLinuxConnection<S>,\n    ) -> Self {\n        Self {\n            uid: connection.peer_credentials().uid(),\n        }\n    }\n\n    /// Returns the kernel-authenticated local UID.\n    #[must_use]\n    pub(super) const fn uid(self) -> u32 {\n        self.uid\n    }\n\n    #[must_use]\n    pub(super) const fn terminal_principal(self) -> LocalTerminalPrincipal {\n        LocalTerminalPrincipal::new(self.uid)\n    }\n\n    #[must_use]\n    pub(super) const fn forwarding_principal(self) -> LocalForwardingPrincipal {\n        LocalForwardingPrincipal::new(self.uid)\n    }\n}\n\n'''
+              text = replace_once(text, marker, addition + marker, "local peer authority insertion")
+              text = replace_once(
+                  text,
+                  "    Terminal(&'authority LocalManagementRemoteSessionAuthority),\n    Forwarding(&'authority LocalManagementRemoteSessionAuthority),",
+                  "    TerminalRemote(&'authority LocalManagementRemoteSessionAuthority),\n    TerminalLocal(&'authority LocalManagementLocalPeerAuthority),\n    ForwardingRemote(&'authority LocalManagementRemoteSessionAuthority),\n    ForwardingLocal(&'authority LocalManagementLocalPeerAuthority),",
+                  "family authority variants",
+              )
+              text = replace_once(
+                  text,
+                  "            inner: LocalManagementFamilyAuthorityKind::Terminal(authority),",
+                  "            inner: LocalManagementFamilyAuthorityKind::TerminalRemote(authority),",
+                  "remote terminal constructor",
+              )
+              terminal_anchor = '''    /// Creates forwarding-family evidence from a registry-revalidated PRW session.\n'''
+              terminal_local = '''    /// Creates terminal-family evidence from a kernel-authenticated same-UID local peer.\n    #[must_use]\n    pub(super) const fn terminal_local(\n        authority: &'authority LocalManagementLocalPeerAuthority,\n    ) -> Self {\n        Self {\n            inner: LocalManagementFamilyAuthorityKind::TerminalLocal(authority),\n        }\n    }\n\n'''
+              text = replace_once(text, terminal_anchor, terminal_local + terminal_anchor, "terminal local constructor")
+              text = replace_once(
+                  text,
+                  "            inner: LocalManagementFamilyAuthorityKind::Forwarding(authority),",
+                  "            inner: LocalManagementFamilyAuthorityKind::ForwardingRemote(authority),",
+                  "remote forwarding constructor",
+              )
+              family_anchor = '''    /// Returns the exact provider family proven by this authority object.\n'''
+              forwarding_local = '''    /// Creates forwarding-family evidence from a kernel-authenticated same-UID local peer.\n    #[must_use]\n    pub(super) const fn forwarding_local(\n        authority: &'authority LocalManagementLocalPeerAuthority,\n    ) -> Self {\n        Self {\n            inner: LocalManagementFamilyAuthorityKind::ForwardingLocal(authority),\n        }\n    }\n\n'''
+              text = replace_once(text, family_anchor, forwarding_local + family_anchor, "forwarding local constructor")
+              text = text.replace(
+                  "LocalManagementFamilyAuthorityKind::Terminal(_) => {\n                LocalManagementAuthorityFamily::Terminal\n            }",
+                  "LocalManagementFamilyAuthorityKind::TerminalRemote(_)\n            | LocalManagementFamilyAuthorityKind::TerminalLocal(_) => {\n                LocalManagementAuthorityFamily::Terminal\n            }",
+              )
+              text = text.replace(
+                  "LocalManagementFamilyAuthorityKind::Forwarding(_) => {\n                LocalManagementAuthorityFamily::Forwarding\n            }",
+                  "LocalManagementFamilyAuthorityKind::ForwardingRemote(_)\n            | LocalManagementFamilyAuthorityKind::ForwardingLocal(_) => {\n                LocalManagementAuthorityFamily::Forwarding\n            }",
+              )
+              text = text.replace(
+                  "LocalManagementFamilyAuthorityKind::Terminal(_)\n            | LocalManagementFamilyAuthorityKind::Forwarding(_) => None,",
+                  "LocalManagementFamilyAuthorityKind::TerminalRemote(_)\n            | LocalManagementFamilyAuthorityKind::TerminalLocal(_)\n            | LocalManagementFamilyAuthorityKind::ForwardingRemote(_)\n            | LocalManagementFamilyAuthorityKind::ForwardingLocal(_) => None,",
+              )
+              old_remote = '''        match self.inner {\n            LocalManagementFamilyAuthorityKind::Terminal(authority)\n            | LocalManagementFamilyAuthorityKind::Forwarding(authority) => Some(authority),\n            LocalManagementFamilyAuthorityKind::Agent\n            | LocalManagementFamilyAuthorityKind::File(_)\n            | LocalManagementFamilyAuthorityKind::Transfer(_) => None,\n        }\n    }\n}'''
+              new_remote = '''        match self.inner {\n            LocalManagementFamilyAuthorityKind::TerminalRemote(authority)\n            | LocalManagementFamilyAuthorityKind::ForwardingRemote(authority) => Some(authority),\n            LocalManagementFamilyAuthorityKind::Agent\n            | LocalManagementFamilyAuthorityKind::File(_)\n            | LocalManagementFamilyAuthorityKind::Transfer(_)\n            | LocalManagementFamilyAuthorityKind::TerminalLocal(_)\n            | LocalManagementFamilyAuthorityKind::ForwardingLocal(_) => None,\n        }\n    }\n\n    /// Returns local peer authority only for locally authenticated terminal/forwarding families.\n    #[must_use]\n    pub(super) const fn local_peer(\n        self,\n    ) -> Option<&'authority LocalManagementLocalPeerAuthority> {\n        match self.inner {\n            LocalManagementFamilyAuthorityKind::TerminalLocal(authority)\n            | LocalManagementFamilyAuthorityKind::ForwardingLocal(authority) => Some(authority),\n            LocalManagementFamilyAuthorityKind::Agent\n            | LocalManagementFamilyAuthorityKind::File(_)\n            | LocalManagementFamilyAuthorityKind::Transfer(_)\n            | LocalManagementFamilyAuthorityKind::TerminalRemote(_)\n            | LocalManagementFamilyAuthorityKind::ForwardingRemote(_) => None,\n        }\n    }\n\n    /// Derives the exact terminal session-principal variant carried by this family authority.\n    #[must_use]\n    pub(super) fn terminal_session_principal(self) -> Option<TerminalSessionPrincipal> {\n        match self.inner {\n            LocalManagementFamilyAuthorityKind::TerminalRemote(authority) => {\n                Some(authority.terminal_principal().into())\n            }\n            LocalManagementFamilyAuthorityKind::TerminalLocal(authority) => {\n                Some(authority.terminal_principal().into())\n            }\n            _ => None,\n        }\n    }\n\n    /// Derives the exact forwarding session-principal variant carried by this authority.\n    #[must_use]\n    pub(super) fn forwarding_session_principal(self) -> Option<ForwardingSessionPrincipal> {\n        match self.inner {\n            LocalManagementFamilyAuthorityKind::ForwardingRemote(authority) => {\n                Some(authority.forwarding_principal().into())\n            }\n            LocalManagementFamilyAuthorityKind::ForwardingLocal(authority) => {\n                Some(authority.forwarding_principal().into())\n            }\n            _ => None,\n        }\n    }\n}'''
+              text = replace_once(text, old_remote, new_remote, "authority tail")
+              path.write_text(text)
+
+          # Typed dispatch consumes the new variant-sensitive session principals.
+          path = Path("crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs")
+          text = path.read_text()
+          if "ForwardingSessionPrincipal" not in text:
+              text = replace_once(
+                  text,
+                  "use prw_forwarding::{ForwardingError, ForwardingPrincipal, PortForwardBackend};",
+                  "use prw_forwarding::{ForwardingError, ForwardingSessionPrincipal, PortForwardBackend};",
+                  "typed dispatch forward imports",
+              )
+              text = replace_once(
+                  text,
+                  "use prw_terminal::{TerminalBackend, TerminalError, TerminalPrincipal};",
+                  "use prw_terminal::{TerminalBackend, TerminalError, TerminalSessionPrincipal};",
+                  "typed dispatch terminal imports",
+              )
+              old_helpers = '''fn terminal_principal(\n    authority: LocalManagementFamilyAuthority<'_>,\n) -> Result<TerminalPrincipal, LocalManagementTypedProviderDispatchError> {\n    authority\n        .remote_session()\n        .map(super::management_authority::LocalManagementRemoteSessionAuthority::terminal_principal)\n        .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)\n}\n\nfn forwarding_principal(\n    authority: LocalManagementFamilyAuthority<'_>,\n) -> Result<ForwardingPrincipal, LocalManagementTypedProviderDispatchError> {\n    authority\n        .remote_session()\n        .map(super::management_authority::LocalManagementRemoteSessionAuthority::forwarding_principal)\n        .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)\n}\n\nfn require_same_terminal_principal(\n    existing: &TerminalPrincipal,\n    current: &TerminalPrincipal,\n) -> Result<(), LocalManagementTypedProviderDispatchError> {'''
+              new_helpers = '''fn terminal_principal(\n    authority: LocalManagementFamilyAuthority<'_>,\n) -> Result<TerminalSessionPrincipal, LocalManagementTypedProviderDispatchError> {\n    authority\n        .terminal_session_principal()\n        .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)\n}\n\nfn forwarding_principal(\n    authority: LocalManagementFamilyAuthority<'_>,\n) -> Result<ForwardingSessionPrincipal, LocalManagementTypedProviderDispatchError> {\n    authority\n        .forwarding_session_principal()\n        .ok_or(LocalManagementTypedProviderDispatchError::AuthorityFamilyMismatch)\n}\n\nfn require_same_terminal_principal(\n    existing: &TerminalSessionPrincipal,\n    current: &TerminalSessionPrincipal,\n) -> Result<(), LocalManagementTypedProviderDispatchError> {'''
+              text = replace_once(text, old_helpers, new_helpers, "typed principal helpers")
+              text = text.replace("    current: &TerminalPrincipal,", "    current: &TerminalSessionPrincipal,")
+              text = text.replace("    existing: &ForwardingPrincipal,", "    existing: &ForwardingSessionPrincipal,")
+              text = text.replace("    current: &ForwardingPrincipal,", "    current: &ForwardingSessionPrincipal,")
+              path.write_text(text)
+
+      - name: Format
+        run: cargo fmt --all
+      - name: Verify source scope
+        shell: bash
+        run: |
+          git diff --name-only | sort > /tmp/actual
+          printf '%s\n' \
+            crates/prw-agent/src/local_commands/management_authority.rs \
+            crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs \
+            crates/prw-forwarding/src/lib.rs \
+            crates/prw-terminal/src/lib.rs | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/actual
+      - name: Commit head source
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-agent/src/local_commands/management_authority.rs crates/prw-agent/src/local_commands/management_typed_provider_dispatch.rs crates/prw-forwarding/src/lib.rs crates/prw-terminal/src/lib.rs
+          git commit -m "phase 152 c03: separate local and registry provider principals"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
