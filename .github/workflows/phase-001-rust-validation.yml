@@ -21,10 +21,17 @@ jobs:
     name: Validate Rust workspace
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CARGO_TARGET_DIR: ${{ runner.temp }}/prw-cargo-target
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Isolate build artifacts from tracked target
+        run: |
+          rm -rf target
+          rm -rf "$CARGO_TARGET_DIR"
 
       - name: Install desktop native build prerequisites
         run: |
