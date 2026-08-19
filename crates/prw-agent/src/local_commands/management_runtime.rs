@@ -34,20 +34,23 @@ pub(super) type LocalLinuxManagementProviderLifecycle<'authority> =
     >;
 
 /// Borrow-only runtime context shared by scoped authenticated local workers.
+///
+/// The provider lifecycle may retain the longer-lived filesystem authority while each
+/// worker only borrows the policy and serialized lifecycle for its own scoped lifetime.
 #[derive(Clone, Copy)]
-pub(super) struct LocalLinuxManagementRuntimeContext<'authority> {
+pub(super) struct LocalLinuxManagementRuntimeContext<'context, 'authority> {
     filesystem: &'authority LocalManagementFilesystemAuthority,
-    policy: &'authority BoundedLocalManagementPolicy,
-    lifecycle: &'authority Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,
+    policy: &'context BoundedLocalManagementPolicy,
+    lifecycle: &'context Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,
 }
 
-impl<'authority> LocalLinuxManagementRuntimeContext<'authority> {
+impl<'context, 'authority> LocalLinuxManagementRuntimeContext<'context, 'authority> {
     /// Couples already-existing Agent-owned C03 authority and provider state.
     #[must_use]
     pub(super) const fn new(
         filesystem: &'authority LocalManagementFilesystemAuthority,
-        policy: &'authority BoundedLocalManagementPolicy,
-        lifecycle: &'authority Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,
+        policy: &'context BoundedLocalManagementPolicy,
+        lifecycle: &'context Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,
     ) -> Self {
         Self {
             filesystem,
@@ -223,39 +226,43 @@ mod tests {
         let harness = Harness::new("reconnect");
         let management_policy = policy();
         let lifecycle = Mutex::new(lifecycle(&harness.filesystem));
-        let context = LocalLinuxManagementRuntimeContext::new(
-            &harness.filesystem,
-            &management_policy,
-            &lifecycle,
-        );
         let session_id = terminal_id(152_031);
 
-        let (first_connection, first_client) = connection();
-        let open = management_frame(
-            1,
-            &BridgeCommand::TerminalOpen {
-                session_id,
-                profile: TerminalProfile::PosixShell,
-                geometry: TerminalGeometry::new(80, 24).expect("bounded geometry"),
-            },
-        );
-        let open_response = context
-            .process_management_frame(&open, &first_connection, status())
-            .expect("terminal-open response builds");
-        assert_eq!(response_status(&open_response), LocalAgentResponseStatus::Ok);
-        drop(first_connection);
-        drop(first_client);
+        {
+            let context = LocalLinuxManagementRuntimeContext::new(
+                &harness.filesystem,
+                &management_policy,
+                &lifecycle,
+            );
+            let (first_connection, first_client) = connection();
+            let open = management_frame(
+                1,
+                &BridgeCommand::TerminalOpen {
+                    session_id,
+                    profile: TerminalProfile::PosixShell,
+                    geometry: TerminalGeometry::new(80, 24).expect("bounded geometry"),
+                },
+            );
+            let open_response = context
+                .process_management_frame(&open, &first_connection, status())
+                .expect("terminal-open response builds");
+            assert_eq!(response_status(&open_response), LocalAgentResponseStatus::Ok);
+            drop(first_connection);
+            drop(first_client);
 
-        let (second_connection, second_client) = connection();
-        let close = management_frame(2, &BridgeCommand::TerminalClose(session_id));
-        let close_response = context
-            .process_management_frame(&close, &second_connection, status())
-            .expect("terminal-close response builds");
-        assert_eq!(response_status(&close_response), LocalAgentResponseStatus::Ok);
-        drop(second_connection);
-        drop(second_client);
+            let (second_connection, second_client) = connection();
+            let close = management_frame(2, &BridgeCommand::TerminalClose(session_id));
+            let close_response = context
+                .process_management_frame(&close, &second_connection, status())
+                .expect("terminal-close response builds");
+            assert_eq!(response_status(&close_response), LocalAgentResponseStatus::Ok);
+            drop(second_connection);
+            drop(second_client);
+        }
 
-        let lifecycle = lifecycle.into_inner().expect("runtime lifecycle lock remains healthy");
+        let lifecycle = lifecycle
+            .into_inner()
+            .expect("runtime lifecycle lock remains healthy");
         assert!(
             lifecycle.try_finish().is_ok(),
             "terminal close leaves provider lifecycle quiescent"
