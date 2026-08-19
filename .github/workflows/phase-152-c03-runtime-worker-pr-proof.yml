@@ -1,0 +1,28 @@
+name: Phase 152 C03 Runtime Worker PR Proof
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c03-runtime-deadline-clean-integration
+
+permissions:
+  contents: read
+
+jobs:
+  validate-worker-source:
+    if: github.head_ref == 'phase-152-c03-runtime-worker-proof'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate materialized worker source
+        run: |
+          export CARGO_TARGET_DIR="${RUNNER_TEMP}/prw-c03-runtime-worker-materialized-target"
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo fmt --all -- --check
+          cargo test --locked -p prw-agent --all-targets
+          cargo clippy --locked -p prw-agent --all-targets --all-features -- -D warnings
+          cargo build --locked -p prw-agent --all-targets --all-features
