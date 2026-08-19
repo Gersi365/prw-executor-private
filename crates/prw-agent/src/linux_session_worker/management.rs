@@ -33,6 +33,11 @@ pub(crate) enum LocalLinuxManagementSessionWorkerError {
 /// fresh read and deferred response-write budgets as the legacy finite worker. Shared provider
 /// state remains lock-late because the delegated session seam classifies command 3 before
 /// acquiring the management lifecycle mutex.
+///
+/// # Errors
+///
+/// Returns [`LocalLinuxManagementSessionWorkerError::Processing`] on the first failed
+/// management-capable Request, preserving the number of prior terminal responses.
 pub(crate) fn run_authenticated_session_worker_with_management<RE: PolicyEvaluator + ?Sized>(
     mut session: AuthenticatedLocalLinuxSession<UnixStream>,
     _permit: LocalLinuxWorkerPermit,
@@ -86,7 +91,10 @@ mod tests {
     };
     use prw_remote_bridge::BridgeCommand;
 
-    use super::run_authenticated_session_worker_with_management;
+    use super::{
+        LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerStop,
+        run_authenticated_session_worker_with_management,
+    };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
     use crate::frame_object::writer::write_frame;
@@ -94,7 +102,6 @@ mod tests {
     use crate::linux_identity::authenticated_session::AuthenticatedLocalLinuxSession;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
-    use crate::linux_identity::worker::LocalLinuxSessionWorkerConfig;
     use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::local_commands::management_authority::LocalManagementFilesystemAuthority;
     use crate::local_commands::management_linux_backends::{
@@ -119,7 +126,7 @@ mod tests {
     struct Harness {
         root_path: PathBuf,
         filesystem: LocalManagementFilesystemAuthority,
-        session: AuthenticatedLocalLinuxSession<UnixStream>,
+        session: Option<AuthenticatedLocalLinuxSession<UnixStream>>,
         client: UnixStream,
     }
 
@@ -139,7 +146,7 @@ mod tests {
             Self {
                 root_path,
                 filesystem,
-                session: AuthenticatedLocalLinuxSession::new(server),
+                session: Some(AuthenticatedLocalLinuxSession::new(server)),
                 client,
             }
         }
@@ -231,7 +238,7 @@ mod tests {
         write_frame(&mut harness.client, &frame).expect("management request writes");
 
         let stop = run_authenticated_session_worker_with_management(
-            harness.session,
+            harness.session.take().expect("test session is present"),
             permit,
             &BoundedLocalReadPolicy::deny_all(),
             context(&harness.filesystem, &management_policy, &lifecycle),
@@ -242,7 +249,7 @@ mod tests {
         .expect("management worker succeeds");
         assert_eq!(
             stop,
-            super::LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
+            LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
                 responses_written: 1
             }
         );
@@ -270,7 +277,7 @@ mod tests {
         write_frame(&mut harness.client, &frame).expect("legacy request writes");
 
         run_authenticated_session_worker_with_management(
-            harness.session,
+            harness.session.take().expect("test session is present"),
             permit,
             &BoundedLocalReadPolicy::allow_local_reads(),
             context(&harness.filesystem, &management_policy, &lifecycle),
