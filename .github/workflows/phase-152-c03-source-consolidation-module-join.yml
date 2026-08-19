@@ -1,0 +1,59 @@
+name: Phase 152 C03 Source Consolidation Module Join
+
+on:
+  push:
+    branches:
+      - phase-152-c03-source-consolidation-staging
+    paths:
+      - '.github/workflows/phase-152-c03-source-consolidation-module-join.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  join:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03-source-consolidation-staging
+          fetch-depth: 0
+      - name: Verify exact staging tree
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^)" = d4e1f6df442bfefa653e498eabf68afcce919a62
+          test -f crates/prw-agent/src/local_commands/management_boundary_transaction.rs
+          test -f crates/prw-agent/src/local_commands/management_linux_backends.rs
+      - name: Join module declarations
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-agent/src/local_commands.rs')
+          text = path.read_text()
+          if 'pub(crate) mod management_boundary_transaction;' in text:
+              raise SystemExit('transaction module declaration already present')
+          anchor = '''pub(crate) mod management_authority;\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit('unexpected management_authority declaration count')
+          insertion = '''pub(crate) mod management_authority;\n#[allow(\n    dead_code,\n    reason = "C03 management-capable boundary transaction is staged before runtime wiring"\n)]\npub(crate) mod management_boundary_transaction;\n'''
+          text = text.replace(anchor, insertion, 1)
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          git restore -- target || true
+      - name: Verify one-file join scope
+        run: |
+          set -Eeuo pipefail
+          git diff --name-only | sort > /tmp/changed.txt
+          test "$(wc -l < /tmp/changed.txt)" -eq 1
+          grep -qx 'crates/prw-agent/src/local_commands.rs' /tmp/changed.txt
+      - name: Commit and remove applicator
+        run: |
+          set -Eeuo pipefail
+          rm .github/workflows/phase-152-c03-source-consolidation-module-join.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-agent/src/local_commands.rs .github/workflows/phase-152-c03-source-consolidation-module-join.yml
+          git commit -m 'phase 152 c03: join transaction and provider modules'
+          git push origin HEAD:phase-152-c03-source-consolidation-staging
