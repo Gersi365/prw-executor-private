@@ -1,0 +1,208 @@
+name: PRW Phase 152 C02e Tranche6 Live Owner Validation
+
+on:
+  push:
+    branches:
+      - phase-152-c02e-dynamic-reachability-design
+    paths:
+      - .github/workflows/phase-152-c02e-tranche6-live-owner-validation.yml
+      - crates/prw-remote-bridge/src/root.rs
+      - crates/prw-remote-bridge/src/reachability_live_owner.rs
+      - crates/prw-remote-bridge/tests/reachability_live_owner_peer_namespace.rs
+      - contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02E_TRANCHE6_LIVE_OWNER_FENCING_AUTHORITY_LOCK.md
+      - contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02E_TRANCHE6_LIVE_OWNER_FENCE_U128_REPRESENTATION_CHECKPOINT.md
+      - logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE6_STATIC_CLIPPY_PREFLIGHT_CORRECTIVE_AUDIT.md
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-c02e-tranche6-live-owner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate exact-head live-owner fencing seam
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate and materialize authoritative evidence
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          BRANCH=phase-152-c02e-dynamic-reachability-design
+          SELF=.github/workflows/phase-152-c02e-tranche6-live-owner-validation.yml
+          VALIDATED_HEAD="$(git rev-parse HEAD)"
+          EXPECTED_LOCK_SHA256=becbd46de66354591afd3a4d755a9b4ba06f9c9c15045069b85e04a99525423a
+          REPORT="logs/audits/phase-152-c02e-dynamic-reachability-design/C02E_TRANCHE6_LIVE_OWNER_FENCING_VALIDATION_${VALIDATED_HEAD}.txt"
+          SUMMARY="$(mktemp)"
+          COMMAND_LOG="$(mktemp)"
+          FIRST_FAILURE=NONE
+
+          fail_once() {
+            if [[ "${FIRST_FAILURE}" == NONE ]]; then
+              FIRST_FAILURE="$1"
+            fi
+          }
+
+          gate() {
+            local name="$1"
+            shift
+            {
+              echo "===== ${name} ====="
+              printf 'COMMAND='; printf '%q ' "$@"; echo
+            } >> "${COMMAND_LOG}"
+            set +e
+            "$@" >> "${COMMAND_LOG}" 2>&1
+            local rc=$?
+            set -e
+            echo "${name}_RC=${rc}" >> "${SUMMARY}"
+            if [[ ${rc} -ne 0 ]]; then
+              fail_once "${name}"
+            fi
+          }
+
+          LOCK_SHA256_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
+          ROOT_MANIFEST_BEFORE="$(sha256sum Cargo.toml | awk '{print $1}')"
+          BRIDGE_MANIFEST_BEFORE="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          ROOT_SOURCE_BEFORE="$(sha256sum crates/prw-remote-bridge/src/root.rs | awk '{print $1}')"
+          OWNER_SOURCE_BEFORE="$(sha256sum crates/prw-remote-bridge/src/reachability_live_owner.rs | awk '{print $1}')"
+          PEER_TEST_BEFORE="$(sha256sum crates/prw-remote-bridge/tests/reachability_live_owner_peer_namespace.rs | awk '{print $1}')"
+
+          LOCK_AUDIT_RC=0
+          if [[ "${LOCK_SHA256_BEFORE}" != "${EXPECTED_LOCK_SHA256}" ]]; then
+            LOCK_AUDIT_RC=90
+            fail_once LOCK_AUDIT
+          fi
+
+          gate NATIVE_PREREQUISITES bash -lc 'sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libgtk-4-dev libadwaita-1-dev'
+
+          RUSTC="$(rustc --version 2>&1 || true)"
+          CARGO="$(cargo --version 2>&1 || true)"
+          RUSTFMT="$(rustfmt --version 2>&1 || true)"
+          CLIPPY="$(cargo clippy --version 2>&1 || true)"
+          GTK4="$(pkg-config --modversion gtk4 2>/dev/null || true)"
+          LIBADWAITA="$(pkg-config --modversion libadwaita-1 2>/dev/null || true)"
+
+          gate LOCKED_METADATA cargo metadata --locked --no-deps --format-version 1
+          gate FORMAT cargo fmt --all -- --check
+          gate FOCUSED_INLINE_TEST cargo test --locked -p prw-remote-bridge reachability_live_owner -- --nocapture
+          gate FOCUSED_PEER_NAMESPACE_TEST cargo test --locked -p prw-remote-bridge --test reachability_live_owner_peer_namespace -- --nocapture
+          gate FOCUSED_CLIPPY cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+          gate WORKSPACE_CLIPPY cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          gate WORKSPACE_TESTS cargo test --locked --workspace --all-targets
+          gate WORKSPACE_BUILD cargo build --locked --workspace --all-targets
+
+          mapfile -t PRE_DIFF < <(git diff --name-only)
+          PRE_NORMALIZE_DRIFT_RC=0
+          if [[ ${#PRE_DIFF[@]} -ne 0 ]]; then
+            PRE_NORMALIZE_DRIFT_RC=91
+            fail_once PRE_NORMALIZE_DRIFT
+          fi
+          PRE_NORMALIZE_TRACKED_DIFF="$(printf '%s,' "${PRE_DIFF[@]}" | sed 's/,$//')"
+
+          LOCK_SHA256_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
+          ROOT_MANIFEST_AFTER="$(sha256sum Cargo.toml | awk '{print $1}')"
+          BRIDGE_MANIFEST_AFTER="$(sha256sum crates/prw-remote-bridge/Cargo.toml | awk '{print $1}')"
+          ROOT_SOURCE_AFTER="$(sha256sum crates/prw-remote-bridge/src/root.rs | awk '{print $1}')"
+          OWNER_SOURCE_AFTER="$(sha256sum crates/prw-remote-bridge/src/reachability_live_owner.rs | awk '{print $1}')"
+          PEER_TEST_AFTER="$(sha256sum crates/prw-remote-bridge/tests/reachability_live_owner_peer_namespace.rs | awk '{print $1}')"
+
+          HASH_DRIFT_RC=0
+          if [[ "${LOCK_SHA256_BEFORE}" != "${LOCK_SHA256_AFTER}" \
+             || "${LOCK_SHA256_AFTER}" != "${EXPECTED_LOCK_SHA256}" \
+             || "${ROOT_MANIFEST_BEFORE}" != "${ROOT_MANIFEST_AFTER}" \
+             || "${BRIDGE_MANIFEST_BEFORE}" != "${BRIDGE_MANIFEST_AFTER}" \
+             || "${ROOT_SOURCE_BEFORE}" != "${ROOT_SOURCE_AFTER}" \
+             || "${OWNER_SOURCE_BEFORE}" != "${OWNER_SOURCE_AFTER}" \
+             || "${PEER_TEST_BEFORE}" != "${PEER_TEST_AFTER}" ]]; then
+            HASH_DRIFT_RC=92
+            fail_once HASH_DRIFT
+          fi
+
+          mapfile -t FINAL_DIFF < <(git diff --name-only)
+          FINAL_DRIFT_RC=0
+          if [[ ${#FINAL_DIFF[@]} -ne 0 ]]; then
+            FINAL_DRIFT_RC=93
+            fail_once FINAL_DRIFT
+          fi
+          FINAL_TRACKED_DIFF="$(printf '%s,' "${FINAL_DIFF[@]}" | sed 's/,$//')"
+
+          GATE_FAILURE=0
+          while IFS= read -r line; do
+            case "${line}" in
+              *_RC=0) ;;
+              *_RC=*) GATE_FAILURE=1 ;;
+            esac
+          done < "${SUMMARY}"
+
+          if [[ "${LOCK_AUDIT_RC}" -eq 0 \
+             && "${PRE_NORMALIZE_DRIFT_RC}" -eq 0 \
+             && "${HASH_DRIFT_RC}" -eq 0 \
+             && "${FINAL_DRIFT_RC}" -eq 0 \
+             && "${GATE_FAILURE}" -eq 0 ]]; then
+            STATUS=PASS
+          else
+            STATUS=FAIL
+          fi
+
+          mkdir -p "$(dirname "${REPORT}")"
+          {
+            echo PHASE=152-C02e-Tranche6-LiveOwnerFencing
+            echo "VALIDATED_HEAD=${VALIDATED_HEAD}"
+            echo VALIDATOR_MODE=ONE_SHOT_EXACT_HEAD_SELF_EVIDENCING
+            echo "RUSTC=${RUSTC}"
+            echo "CARGO=${CARGO}"
+            echo "RUSTFMT=${RUSTFMT}"
+            echo "CLIPPY=${CLIPPY}"
+            echo "GTK4=${GTK4}"
+            echo "LIBADWAITA=${LIBADWAITA}"
+            echo "LOCK_SHA256_EXPECTED=${EXPECTED_LOCK_SHA256}"
+            echo "LOCK_SHA256_BEFORE=${LOCK_SHA256_BEFORE}"
+            echo "LOCK_SHA256_AFTER=${LOCK_SHA256_AFTER}"
+            echo "LOCK_AUDIT_RC=${LOCK_AUDIT_RC}"
+            cat "${SUMMARY}"
+            echo "PRE_NORMALIZE_DRIFT_RC=${PRE_NORMALIZE_DRIFT_RC}"
+            echo "PRE_NORMALIZE_TRACKED_DIFF=${PRE_NORMALIZE_TRACKED_DIFF}"
+            echo "HASH_DRIFT_RC=${HASH_DRIFT_RC}"
+            echo "FINAL_DRIFT_RC=${FINAL_DRIFT_RC}"
+            echo "FINAL_TRACKED_DIFF=${FINAL_TRACKED_DIFF}"
+            echo LIVE_OWNER_NAMESPACE=DEVICE_ID_PLUS_TRANSPORT_IDENTITY
+            echo FENCE_REPRESENTATION=NONZERO_U128_LOGICAL_IN_MEMORY
+            echo ACCEPTED_STATE_CAS_IS_LIVE_OWNER_TENANCY=NO
+            echo PUBLICATION_FRESHNESS_IS_LIVE_OWNER_FENCE=NO
+            echo PERSISTENCE_ENCODING_SELECTED=NO
+            echo WIRE_ENCODING_SELECTED=NO
+            echo CONCRETE_LIVE_OWNER_BACKEND_SELECTED=NO
+            echo NETWORK_RUNTIME_ACTIVATION=NO
+            echo AGENT_BOOTSTRAP_ACTIVATION=NO
+            echo "FIRST_FAILURE=${FIRST_FAILURE}"
+            echo "STATUS=${STATUS}"
+            echo "===== COMMAND_OUTPUT ====="
+            cat "${COMMAND_LOG}"
+          } > "${REPORT}"
+
+          REMOTE="$(git ls-remote origin "refs/heads/${BRANCH}" | awk '{print $1}')"
+          if [[ "${REMOTE}" != "${VALIDATED_HEAD}" ]]; then
+            echo "branch advanced during validation: remote=${REMOTE} validated=${VALIDATED_HEAD}" >&2
+            exit 97
+          fi
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "${REPORT}"
+          git rm "${SELF}"
+          if [[ "${STATUS}" == PASS ]]; then
+            git commit -m "phase 152 c02e: validate tranche6 live-owner fencing ${VALIDATED_HEAD:0:12}"
+          else
+            git commit -m "phase 152 c02e: record tranche6 live-owner validation failure ${VALIDATED_HEAD:0:12}"
+          fi
+          git push origin "HEAD:${BRANCH}"
+          test "${STATUS}" = PASS
