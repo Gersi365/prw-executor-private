@@ -83,7 +83,7 @@ impl ForwardingEgressPolicy for DenyAllForwardingEgressPolicy {
 
 /// Failure while assembling a bounded exact-target forwarding policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ExactForwardingEgressPolicyError {
+pub enum ExactForwardingEgressPolicyError {
     /// More exact target entries were supplied than the locked policy bound.
     TooManyTargets,
 }
@@ -95,7 +95,7 @@ pub(super) enum ExactForwardingEgressPolicyError {
 /// request text. Assembly is crate-internal and therefore remains outside request
 /// decoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ExactForwardingEgressPolicy {
+pub struct ExactForwardingEgressPolicy {
     allowed_targets: Box<[ForwardTarget]>,
 }
 
@@ -106,7 +106,7 @@ impl ExactForwardingEgressPolicy {
     ///
     /// Returns [`ExactForwardingEgressPolicyError::TooManyTargets`] when the
     /// caller supplies more than [`MAX_FORWARD_EGRESS_TARGETS`] entries.
-    pub(super) fn try_from_targets(
+    pub fn try_from_targets(
         targets: &[ForwardTarget],
     ) -> Result<Self, ExactForwardingEgressPolicyError> {
         if targets.len() > MAX_FORWARD_EGRESS_TARGETS {

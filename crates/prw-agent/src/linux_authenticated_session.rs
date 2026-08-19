@@ -27,6 +27,9 @@ use crate::local_commands::server_connection_state::{
 };
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
+#[path = "linux_authenticated_session/management.rs"]
+mod management;
+
 /// One already-authenticated Linux connection with its application protocol state.
 #[derive(Debug)]
 pub struct AuthenticatedLocalLinuxSession<S> {

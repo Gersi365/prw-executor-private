@@ -24,7 +24,7 @@ use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConn
 
 /// One C03 runtime server-connection failure over the existing aggregate state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum LocalManagementRuntimeServerConnectionError {
+pub enum LocalManagementRuntimeServerConnectionError {
     /// The aggregate state was already unusable before any I/O.
     ConnectionUnusable(LocalServerConnectionUnusableReason),
     /// The lock-late boundary failed after applying its authoritative state transition.
@@ -36,7 +36,7 @@ pub(super) enum LocalManagementRuntimeServerConnectionError {
     clippy::too_many_arguments,
     reason = "authenticated peer, read policy, runtime authority, and protocol snapshots remain explicit"
 )]
-pub(super) fn process_one_runtime_management_at_boundary_on_server_connection<R, W, RE, S>(
+pub fn process_one_runtime_management_at_boundary_on_server_connection<R, W, RE, S>(
     reader: &mut R,
     writer: &mut W,
     state: &mut LocalServerConnectionState,
@@ -109,7 +109,9 @@ mod tests {
     use crate::local_commands::server_connection_state::{
         LocalServerConnectionState, LocalServerConnectionUnusableReason,
     };
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::{LocalIpcFrameHeader, LocalIpcMessageKind, LocalIpcProtocolVersion};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -307,7 +309,9 @@ mod tests {
             error,
             LocalManagementRuntimeServerConnectionError::Transaction(
                 crate::local_commands::management_runtime_boundary::LocalManagementRuntimeBoundaryError::ResponseWrite(
-                    LocalTerminalResponseWriteError::Io
+                    LocalTerminalResponseWriteError::Write(
+                        crate::frame_object::writer::LocalIpcFrameWriteError::HeaderIo
+                    )
                 )
             )
         ));

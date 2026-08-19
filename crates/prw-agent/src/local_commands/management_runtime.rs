@@ -26,19 +26,18 @@ use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConn
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
 
 /// Concrete C03 Linux provider lifecycle used by the local production runtime.
-pub(super) type LocalLinuxManagementProviderLifecycle<'authority> =
-    LocalManagementProviderLifecycle<
-        'authority,
-        LinuxLocalTerminalBackend,
-        LinuxLocalForwardingBackend<ExactForwardingEgressPolicy>,
-    >;
+pub type LocalLinuxManagementProviderLifecycle<'authority> = LocalManagementProviderLifecycle<
+    'authority,
+    LinuxLocalTerminalBackend,
+    LinuxLocalForwardingBackend<ExactForwardingEgressPolicy>,
+>;
 
 /// Borrow-only runtime context shared by scoped authenticated local workers.
 ///
 /// The provider lifecycle may retain the longer-lived filesystem authority while each
 /// worker only borrows the policy and serialized lifecycle for its own scoped lifetime.
 #[derive(Clone, Copy)]
-pub(super) struct LocalLinuxManagementRuntimeContext<'context, 'authority> {
+pub struct LocalLinuxManagementRuntimeContext<'context, 'authority> {
     filesystem: &'authority LocalManagementFilesystemAuthority,
     policy: &'context BoundedLocalManagementPolicy,
     lifecycle: &'context Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,
@@ -47,7 +46,7 @@ pub(super) struct LocalLinuxManagementRuntimeContext<'context, 'authority> {
 impl<'context, 'authority> LocalLinuxManagementRuntimeContext<'context, 'authority> {
     /// Couples already-existing Agent-owned C03 authority and provider state.
     #[must_use]
-    pub(super) const fn new(
+    pub const fn new(
         filesystem: &'authority LocalManagementFilesystemAuthority,
         policy: &'context BoundedLocalManagementPolicy,
         lifecycle: &'context Mutex<LocalLinuxManagementProviderLifecycle<'authority>>,

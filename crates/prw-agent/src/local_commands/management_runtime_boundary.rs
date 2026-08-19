@@ -32,7 +32,7 @@ use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConn
 
 /// One lock-late C03 runtime boundary failure after exact connection-state transitions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum LocalManagementRuntimeBoundaryError {
+pub enum LocalManagementRuntimeBoundaryError {
     /// Generic frame acquisition failed and poisoned the inbound direction.
     FrameRead(LocalIpcFrameReadError),
     /// A non-management frame failed the exact legacy commands-1/2 decoder and poisoned inbound.

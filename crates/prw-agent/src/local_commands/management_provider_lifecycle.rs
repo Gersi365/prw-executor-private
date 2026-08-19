@@ -21,7 +21,7 @@ use super::management_authority::LocalManagementFilesystemAuthority;
 /// No `Drop` implementation claims provider cleanup. Callers must explicitly close or
 /// abort tracked resources through the typed provider APIs before `try_finish` can
 /// report clean completion.
-pub(super) struct LocalManagementProviderLifecycle<'authority, T, F>
+pub struct LocalManagementProviderLifecycle<'authority, T, F>
 where
     T: TerminalBackend,
     F: PortForwardBackend,
@@ -42,7 +42,7 @@ where
     /// This constructor performs no provider operation. In particular it does not
     /// open a terminal, create a transfer, bind a forward, or mutate the filesystem.
     #[must_use]
-    pub(super) fn new(
+    pub fn new(
         filesystem: &'authority LocalManagementFilesystemAuthority,
         terminal_backend: T,
         forwarding_backend: F,

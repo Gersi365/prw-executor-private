@@ -66,7 +66,7 @@ impl AuthenticatedLocalLinuxSession<UnixStream> {
 
 /// Crate-internal C03 deadline-session failure without changing the legacy public enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalLinuxManagementDeadlineSessionProcessError {
+pub enum LocalLinuxManagementDeadlineSessionProcessError {
     /// The absolute Request-read deadline could not be constructed.
     ReadDeadlineStart(LocalLinuxDeadlineStartError),
     /// The management-capable aggregate Request pipeline failed.
@@ -76,7 +76,6 @@ pub(crate) enum LocalLinuxManagementDeadlineSessionProcessError {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::io::Write;
     use std::os::unix::net::UnixStream;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -111,7 +110,9 @@ mod tests {
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::build_local_command_request_frame;
     use crate::local_commands::status_snapshot::response_frame::decode_success_status_frame;
-    use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+    use crate::local_commands::status_snapshot::{
+        LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+    };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -213,7 +214,9 @@ mod tests {
         let mut harness = Harness::new("management");
         let policy = management_policy(Decision::Allow);
         let lifecycle = Mutex::new(lifecycle(&harness.filesystem));
-        let bridge = BridgeCommand::AgentStatus.encode().expect("bridge command encodes");
+        let bridge = BridgeCommand::AgentStatus
+            .encode()
+            .expect("bridge command encodes");
         let frame = build_local_management_request_frame(id(91), &bridge)
             .expect("management request frame builds");
         write_frame(&mut harness.client, &frame).expect("management request writes");
@@ -231,8 +234,8 @@ mod tests {
             .expect("management deadline request succeeds");
 
         let response = read_frame(&mut harness.client).expect("management response reads");
-        let terminal = validate_terminal_response_frame(&response)
-            .expect("management response validates");
+        let terminal =
+            validate_terminal_response_frame(&response).expect("management response validates");
         assert_eq!(terminal.request_id(), id(91));
         assert_eq!(terminal.status(), LocalAgentResponseStatus::Ok);
         assert!(harness.session.state().is_usable());
@@ -261,7 +264,8 @@ mod tests {
             .expect("legacy request succeeds through management deadline path");
 
         let response = read_frame(&mut harness.client).expect("legacy response reads");
-        let decoded = decode_success_status_frame(&response).expect("legacy status response decodes");
+        let decoded =
+            decode_success_status_frame(&response).expect("legacy status response decodes");
         assert_eq!(decoded.request_id(), id(92));
         assert!(harness.session.state().is_usable());
         assert!(lifecycle.is_poisoned());

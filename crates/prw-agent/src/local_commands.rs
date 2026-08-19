@@ -83,6 +83,11 @@ pub(crate) mod management_runtime;
 pub(crate) mod management_runtime_boundary;
 #[allow(
     dead_code,
+    reason = "C03 aggregate server-state runtime proof is validated before session wiring"
+)]
+pub(crate) mod management_runtime_server_connection;
+#[allow(
+    dead_code,
     reason = "C02c typed provider dispatch seam is intentionally not response-encoded or runtime-wired"
 )]
 pub(crate) mod management_typed_provider_dispatch;

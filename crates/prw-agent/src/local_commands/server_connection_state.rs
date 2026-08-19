@@ -48,6 +48,16 @@ impl LocalServerConnectionState {
         self.response_write
     }
 
+    /// Borrows the authoritative component states for a crate-internal composed boundary.
+    pub(super) const fn runtime_component_states_mut(
+        &mut self,
+    ) -> (
+        &mut LocalInboundRequestState,
+        &mut LocalTerminalResponseWriteState,
+    ) {
+        (&mut self.inbound, &mut self.response_write)
+    }
+
     /// Returns whether this connection instance remains safe for another Request.
     #[must_use]
     pub const fn is_usable(self) -> bool {
