@@ -319,3 +319,6 @@ mod tests {
         let _transaction = build_etcd_transaction(&plan);
     }
 }
+
+/// Bounded C02f-AE indeterminate-mutation reconciliation orchestration.
+pub mod reconciliation;
