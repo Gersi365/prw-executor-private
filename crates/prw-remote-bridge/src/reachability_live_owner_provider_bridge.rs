@@ -456,7 +456,7 @@ mod tests {
         let successor =
             ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(51), attempt(6));
         let plan = plan_acquisition(&before, successor).expect("plan acquisition");
-        let outcome = classify_definitive_mutation(&plan, false, Some(before.clone()))
+        let outcome = classify_definitive_mutation(&plan, false, Some(before))
             .expect("definitive compare failure");
         let mut provider = ScriptedProvider::new();
         provider.acquisitions.push_back(Ok(mutation(plan, outcome)));
@@ -534,7 +534,7 @@ mod tests {
             ReachabilityLiveOwnerFence::new(80).expect("semantic fence"),
         );
 
-        let newer = observation(peer.clone(), LiveOwnerLifecycle::Current, 81, 15, 31);
+        let newer = observation(peer, LiveOwnerLifecycle::Current, 81, 15, 31);
         let stale_outcome = classify_definitive_mutation(&plan, false, Some(newer))
             .expect("definitive compare failure");
         let mut stale_provider = ScriptedProvider::new();
