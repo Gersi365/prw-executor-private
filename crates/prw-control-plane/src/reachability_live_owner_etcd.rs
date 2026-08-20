@@ -134,10 +134,16 @@ impl fmt::Display for ReachabilityLiveOwnerEtcdError {
             Self::Codec(error) => write!(formatter, "{error}"),
             Self::Transaction(error) => write!(formatter, "{error}"),
             Self::ReadUnavailable(error) => {
-                write!(formatter, "live-owner etcd linearizable read unavailable: {error}")
+                write!(
+                    formatter,
+                    "live-owner etcd linearizable read unavailable: {error}"
+                )
             }
             Self::MutationIndeterminate(error) => {
-                write!(formatter, "live-owner etcd mutation outcome is indeterminate: {error}")
+                write!(
+                    formatter,
+                    "live-owner etcd mutation outcome is indeterminate: {error}"
+                )
             }
             Self::UnexpectedGetCardinality { actual } => write!(
                 formatter,
@@ -178,11 +184,7 @@ impl From<LiveOwnerTxnError> for ReachabilityLiveOwnerEtcdError {
 }
 
 fn build_etcd_transaction(plan: &LiveOwnerTxnPlan) -> Txn {
-    let compares = plan
-        .compares()
-        .iter()
-        .map(etcd_compare)
-        .collect::<Vec<_>>();
+    let compares = plan.compares().iter().map(etcd_compare).collect::<Vec<_>>();
 
     let LiveOwnerTxnOperation::Put { key, value } = plan.success() else {
         unreachable!("canonical live-owner success branch is always Put")
@@ -230,8 +232,8 @@ fn classify_etcd_transaction_response(
     let LiveOwnerTxnOperation::LinearizableGet { key } = plan.failure() else {
         unreachable!("canonical live-owner failure branch is always linearizable Get")
     };
-    let observation = decode_exact_get(key, get_response)?
-        .ok_or(LiveOwnerTxnError::MissingEstablishedState)?;
+    let observation =
+        decode_exact_get(key, get_response)?.ok_or(LiveOwnerTxnError::MissingEstablishedState)?;
     classify_definitive_mutation(plan, false, Some(observation))
         .map_err(ReachabilityLiveOwnerEtcdError::from)
 }
@@ -252,9 +254,7 @@ fn decode_exact_get(
                 kv.mod_revision(),
             )?))
         }
-        kvs => Err(ReachabilityLiveOwnerEtcdError::UnexpectedGetCardinality {
-            actual: kvs.len(),
-        }),
+        kvs => Err(ReachabilityLiveOwnerEtcdError::UnexpectedGetCardinality { actual: kvs.len() }),
     }
 }
 
@@ -313,8 +313,7 @@ mod tests {
     fn canonical_plan_materializes_real_etcd_transaction_without_endpoint() {
         let peer = peer("etcd-txn-shape", 1);
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 10, 2, 20);
-        let successor =
-            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(11), attempt(3));
+        let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(11), attempt(3));
         let plan = plan_acquisition(&before, successor).expect("plan acquisition");
 
         let _transaction = build_etcd_transaction(&plan);
