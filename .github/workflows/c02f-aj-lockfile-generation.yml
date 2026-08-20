@@ -8,6 +8,11 @@ on:
       - 'crates/prw-control-plane/Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/c02f-aj-lockfile-generation.yml'
+  pull_request:
+    paths:
+      - 'crates/prw-control-plane/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/c02f-aj-lockfile-generation.yml'
   workflow_dispatch:
 
 permissions:
