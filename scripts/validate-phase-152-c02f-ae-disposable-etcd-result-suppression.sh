@@ -168,12 +168,21 @@ include_needle = (
     'include!("../../crates/prw-control-plane/src/'
     'reachability_live_owner_etcd/reconciliation.rs");'
 )
+malformed_error_needle = (
+    "ValidationIoError::Etcd(ReachabilityLiveOwnerEtcdError::Codec(_))"
+)
+malformed_error_replacement = (
+    "ValidationIoError::Etcd(ReachabilityLiveOwnerEtcdError::Transaction("
+    "LiveOwnerTxnError::Codec(_)))"
+)
 if harness.count(include_needle) != 1:
     raise SystemExit("expected one exact reconciliation include in validation harness")
 if harness.count("fn peer(") != 1:
     raise SystemExit("expected one validation peer helper")
 if harness.count('peer("c02f-ae-') != 12:
     raise SystemExit("expected twelve C02f-AE peer fixture calls")
+if harness.count(malformed_error_needle) != 1:
+    raise SystemExit("expected one malformed-observation error assertion")
 
 harness = harness.replace(
     include_needle,
@@ -181,6 +190,7 @@ harness = harness.replace(
 )
 harness = harness.replace("fn peer(", "fn make_peer(")
 harness = harness.replace('peer("c02f-ae-', 'make_peer("c02f-ae-')
+harness = harness.replace(malformed_error_needle, malformed_error_replacement)
 harness_compile_source.write_text(harness, encoding="utf-8")
 PY
 
