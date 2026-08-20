@@ -19,7 +19,9 @@ use google_cloud_spanner::{
     client::DatabaseClient,
     result::Row,
     statement::Statement,
-    transaction::{BasicTransactionRetryPolicy, BeginTransactionOption, TimestampBound},
+    transaction::{
+        BasicTransactionRetryPolicy, BeginTransactionOption, ReadWriteTransaction, TimestampBound,
+    },
 };
 
 use crate::recovery_epoch::{
@@ -75,7 +77,7 @@ impl SpannerRecoveryEpochLedger {
     ///
     /// This constructor does not perform network I/O or credential lookup.
     #[must_use]
-    pub fn new(client: DatabaseClient) -> Self {
+    pub const fn new(client: DatabaseClient) -> Self {
         Self { client }
     }
 
@@ -91,7 +93,7 @@ impl SpannerRecoveryEpochLedger {
             .add_param("ledger_id", PRW_RECOVERY_EPOCH_LEDGER_ID.to_string())
             .with_retry_policy(NeverRetry)
             .build();
-        let mut result = transaction.execute_query(statement).await?;
+        let mut result = Box::pin(transaction.execute_query(statement)).await?;
         let row = next_required_row(&mut result, "recovery epoch head").await?;
         let head = decode_head_row(&row, "EpochBe", "LastAttemptId")?;
         ensure_result_exhausted(&mut result, "recovery epoch head").await?;
@@ -115,7 +117,7 @@ impl SpannerRecoveryEpochLedger {
             .add_param("proposed_epoch", encode_issued_epoch(proposed).to_vec())
             .with_retry_policy(NeverRetry)
             .build();
-        let mut result = transaction.execute_query(statement).await?;
+        let mut result = Box::pin(transaction.execute_query(statement)).await?;
         let row = next_required_row(&mut result, "recovery epoch re-observation").await?;
         let head = decode_head_row(&row, "HeadEpochBe", "HeadLastAttemptId")?;
         let history = decode_optional_history_row(&row)?;
@@ -127,9 +129,8 @@ impl SpannerRecoveryEpochLedger {
         &self,
         plan: RecoveryEpochIssuancePlan,
     ) -> Result<RecoveryEpochSubmissionOutcome, SpannerRecoveryEpochLedgerError> {
-        let stage = Arc::new(AtomicU8::new(SUBMIT_STAGE_PRE_COMMIT));
-        let logical_failure = Arc::new(Mutex::new(None));
-
+        let state = SubmitState::new();
+        let state_for_work = state.clone();
         let runner = self
             .client
             .read_write_transaction()
@@ -140,104 +141,23 @@ impl SpannerRecoveryEpochLedger {
             .build()
             .await?;
 
-        let previous_epoch_be = encode_recovery_epoch(plan.previous_epoch());
-        let proposed_epoch_be = encode_issued_epoch(plan.proposed_epoch());
-        let attempt_id = *plan.attempt_id().as_bytes();
-        let stage_for_work = Arc::clone(&stage);
-        let logical_failure_for_work = Arc::clone(&logical_failure);
-
-        let result = runner
-            .run(async move |transaction| {
-                let head_statement = Statement::builder(READ_HEAD_SQL)
-                    .add_param("ledger_id", PRW_RECOVERY_EPOCH_LEDGER_ID.to_string())
-                    .with_retry_policy(NeverRetry)
-                    .build();
-                let mut head_result = transaction.execute_query(head_statement).await?;
-                let Some(head_row) = head_result.next().await else {
-                    return Err(record_logical_failure(
-                        &logical_failure_for_work,
-                        SubmitLogicalFailure::MissingHead,
-                    ));
-                };
-                let head_row = head_row?;
-                let head_epoch_be: Vec<u8> = head_row.try_get("EpochBe")?;
-                let head_attempt_id: Vec<u8> = head_row.try_get("LastAttemptId")?;
-                let head =
-                    match RecoveryEpochHeadRecord::decode_columns(&head_epoch_be, &head_attempt_id)
-                    {
-                        Ok(head) => head,
-                        Err(error) => {
-                            return Err(record_logical_failure(
-                                &logical_failure_for_work,
-                                SubmitLogicalFailure::Domain(error),
-                            ));
-                        }
-                    };
-                if let Some(extra) = head_result.next().await {
-                    extra?;
-                    return Err(record_logical_failure(
-                        &logical_failure_for_work,
-                        SubmitLogicalFailure::MultipleHeadRows,
-                    ));
-                }
-                if head.epoch() != plan.previous_epoch() {
-                    return Err(record_logical_failure(
-                        &logical_failure_for_work,
-                        SubmitLogicalFailure::PredecessorMismatch {
-                            expected: plan.previous_epoch(),
-                            observed: head.epoch(),
-                        },
-                    ));
-                }
-
-                let history_insert = Statement::builder(INSERT_HISTORY_SQL)
-                    .add_param("proposed_epoch", proposed_epoch_be.to_vec())
-                    .add_param("previous_epoch", previous_epoch_be.to_vec())
-                    .add_param("attempt_id", attempt_id.to_vec())
-                    .with_retry_policy(NeverRetry)
-                    .build();
-                let inserted = transaction.execute_update(history_insert).await?;
-                if inserted != 1 {
-                    return Err(record_logical_failure(
-                        &logical_failure_for_work,
-                        SubmitLogicalFailure::UnexpectedAffectedRows {
-                            operation: "history insert",
-                            actual: inserted,
-                        },
-                    ));
-                }
-
-                let head_update = Statement::builder(UPDATE_HEAD_SQL)
-                    .add_param("ledger_id", PRW_RECOVERY_EPOCH_LEDGER_ID.to_string())
-                    .add_param("proposed_epoch", proposed_epoch_be.to_vec())
-                    .add_param("previous_epoch", previous_epoch_be.to_vec())
-                    .add_param("attempt_id", attempt_id.to_vec())
-                    .set_last_statement(true)
-                    .with_retry_policy(NeverRetry)
-                    .build();
-                let updated = transaction.execute_update(head_update).await?;
-                if updated != 1 {
-                    return Err(record_logical_failure(
-                        &logical_failure_for_work,
-                        SubmitLogicalFailure::UnexpectedAffectedRows {
-                            operation: "head update",
-                            actual: updated,
-                        },
-                    ));
-                }
-
-                stage_for_work.store(SUBMIT_STAGE_READY_TO_COMMIT, Ordering::Release);
-                Ok(())
-            })
-            .await;
+        let result = Box::pin(runner.run(async move |transaction| {
+            Box::pin(execute_issuance_transaction(
+                transaction,
+                plan,
+                state_for_work.clone(),
+            ))
+            .await
+        }))
+        .await;
 
         match result {
             Ok(_) => Ok(RecoveryEpochSubmissionOutcome::CommittedCurrent),
             Err(error) => {
-                if let Some(logical) = take_logical_failure(&logical_failure)? {
+                if let Some(logical) = state.take_logical_failure()? {
                     return Err(logical.into());
                 }
-                classify_submit_error(stage.load(Ordering::Acquire), error)
+                classify_submit_error(state.stage(), error)
             }
         }
     }
@@ -249,14 +169,14 @@ impl RecoveryEpochLedgerAuthority for SpannerRecoveryEpochLedger {
     fn strong_head(
         &mut self,
     ) -> impl Future<Output = Result<RecoveryEpochHeadRecord, Self::Error>> + Send {
-        async move { self.strong_head_impl().await }
+        self.strong_head_impl()
     }
 
     fn submit_issuance(
         &mut self,
         plan: RecoveryEpochIssuancePlan,
     ) -> impl Future<Output = Result<RecoveryEpochSubmissionOutcome, Self::Error>> + Send {
-        async move { self.submit_issuance_impl(plan).await }
+        self.submit_issuance_impl(plan)
     }
 
     fn strong_reobserve(
@@ -268,11 +188,158 @@ impl RecoveryEpochLedgerAuthority for SpannerRecoveryEpochLedger {
             Self::Error,
         >,
     > + Send {
-        async move { self.strong_reobserve_impl(proposed).await }
+        self.strong_reobserve_impl(proposed)
     }
 }
 
-fn encode_issued_epoch(epoch: RecoveryEpoch) -> [u8; 8] {
+#[derive(Clone, Debug)]
+struct SubmitState {
+    stage: Arc<AtomicU8>,
+    logical_failure: Arc<Mutex<Option<SubmitLogicalFailure>>>,
+}
+
+impl SubmitState {
+    fn new() -> Self {
+        Self {
+            stage: Arc::new(AtomicU8::new(SUBMIT_STAGE_PRE_COMMIT)),
+            logical_failure: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn stage(&self) -> u8 {
+        self.stage.load(Ordering::Acquire)
+    }
+
+    fn mark_ready_to_commit(&self) {
+        self.stage
+            .store(SUBMIT_STAGE_READY_TO_COMMIT, Ordering::Release);
+    }
+
+    fn record_logical_failure(&self, failure: SubmitLogicalFailure) -> google_cloud_spanner::Error {
+        if let Ok(mut guard) = self.logical_failure.lock() {
+            *guard = Some(failure);
+        }
+        google_cloud_spanner::Error::deser(std::io::Error::other(
+            "PRW recovery-epoch transaction guard rejected provider state",
+        ))
+    }
+
+    fn take_logical_failure(
+        &self,
+    ) -> Result<Option<SubmitLogicalFailure>, SpannerRecoveryEpochLedgerError> {
+        let mut guard = self
+            .logical_failure
+            .lock()
+            .map_err(|_| SpannerRecoveryEpochLedgerError::LogicalFailureStatePoisoned)?;
+        Ok(guard.take())
+    }
+}
+
+async fn execute_issuance_transaction(
+    transaction: ReadWriteTransaction,
+    plan: RecoveryEpochIssuancePlan,
+    state: SubmitState,
+) -> google_cloud_spanner::Result<()> {
+    read_and_validate_predecessor(&transaction, plan, &state).await?;
+    insert_exact_history(&transaction, plan, &state).await?;
+    update_exact_head(&transaction, plan, &state).await?;
+    state.mark_ready_to_commit();
+    Ok(())
+}
+
+async fn read_and_validate_predecessor(
+    transaction: &ReadWriteTransaction,
+    plan: RecoveryEpochIssuancePlan,
+    state: &SubmitState,
+) -> google_cloud_spanner::Result<()> {
+    let statement = Statement::builder(READ_HEAD_SQL)
+        .add_param("ledger_id", PRW_RECOVERY_EPOCH_LEDGER_ID.to_string())
+        .with_retry_policy(NeverRetry)
+        .build();
+    let mut result = Box::pin(transaction.execute_query(statement)).await?;
+    let Some(row) = result.next().await else {
+        return Err(state.record_logical_failure(SubmitLogicalFailure::MissingHead));
+    };
+    let row = row?;
+    let epoch_be: Vec<u8> = row.try_get("EpochBe")?;
+    let attempt_id: Vec<u8> = row.try_get("LastAttemptId")?;
+    let head = RecoveryEpochHeadRecord::decode_columns(&epoch_be, &attempt_id)
+        .map_err(|error| state.record_logical_failure(SubmitLogicalFailure::Domain(error)))?;
+
+    if let Some(extra) = result.next().await {
+        extra?;
+        return Err(state.record_logical_failure(SubmitLogicalFailure::MultipleHeadRows));
+    }
+    if head.epoch() != plan.previous_epoch() {
+        return Err(
+            state.record_logical_failure(SubmitLogicalFailure::PredecessorMismatch {
+                expected: plan.previous_epoch(),
+                observed: head.epoch(),
+            }),
+        );
+    }
+    Ok(())
+}
+
+async fn insert_exact_history(
+    transaction: &ReadWriteTransaction,
+    plan: RecoveryEpochIssuancePlan,
+    state: &SubmitState,
+) -> google_cloud_spanner::Result<()> {
+    let statement = Statement::builder(INSERT_HISTORY_SQL)
+        .add_param(
+            "proposed_epoch",
+            encode_issued_epoch(plan.proposed_epoch()).to_vec(),
+        )
+        .add_param(
+            "previous_epoch",
+            encode_recovery_epoch(plan.previous_epoch()).to_vec(),
+        )
+        .add_param("attempt_id", plan.attempt_id().as_bytes().to_vec())
+        .with_retry_policy(NeverRetry)
+        .build();
+    let actual = Box::pin(transaction.execute_update(statement)).await?;
+    require_one_affected_row(actual, "history insert", state)
+}
+
+async fn update_exact_head(
+    transaction: &ReadWriteTransaction,
+    plan: RecoveryEpochIssuancePlan,
+    state: &SubmitState,
+) -> google_cloud_spanner::Result<()> {
+    let statement = Statement::builder(UPDATE_HEAD_SQL)
+        .add_param("ledger_id", PRW_RECOVERY_EPOCH_LEDGER_ID.to_string())
+        .add_param(
+            "proposed_epoch",
+            encode_issued_epoch(plan.proposed_epoch()).to_vec(),
+        )
+        .add_param(
+            "previous_epoch",
+            encode_recovery_epoch(plan.previous_epoch()).to_vec(),
+        )
+        .add_param("attempt_id", plan.attempt_id().as_bytes().to_vec())
+        .set_last_statement(true)
+        .with_retry_policy(NeverRetry)
+        .build();
+    let actual = Box::pin(transaction.execute_update(statement)).await?;
+    require_one_affected_row(actual, "head update", state)
+}
+
+fn require_one_affected_row(
+    actual: i64,
+    operation: &'static str,
+    state: &SubmitState,
+) -> google_cloud_spanner::Result<()> {
+    if actual == 1 {
+        return Ok(());
+    }
+    Err(state.record_logical_failure(SubmitLogicalFailure::UnexpectedAffectedRows {
+        operation,
+        actual,
+    }))
+}
+
+const fn encode_issued_epoch(epoch: RecoveryEpoch) -> [u8; 8] {
     encode_recovery_epoch(RecoveryEpochValue::Issued(epoch))
 }
 
@@ -368,27 +435,6 @@ enum SubmitLogicalFailure {
         operation: &'static str,
         actual: i64,
     },
-}
-
-fn record_logical_failure(
-    slot: &Mutex<Option<SubmitLogicalFailure>>,
-    failure: SubmitLogicalFailure,
-) -> google_cloud_spanner::Error {
-    if let Ok(mut guard) = slot.lock() {
-        *guard = Some(failure);
-    }
-    google_cloud_spanner::Error::deser(std::io::Error::other(
-        "PRW recovery-epoch transaction guard rejected provider state",
-    ))
-}
-
-fn take_logical_failure(
-    slot: &Mutex<Option<SubmitLogicalFailure>>,
-) -> Result<Option<SubmitLogicalFailure>, SpannerRecoveryEpochLedgerError> {
-    let mut guard = slot
-        .lock()
-        .map_err(|_| SpannerRecoveryEpochLedgerError::LogicalFailureStatePoisoned)?;
-    Ok(guard.take())
 }
 
 impl From<SubmitLogicalFailure> for SpannerRecoveryEpochLedgerError {
