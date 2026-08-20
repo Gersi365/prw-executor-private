@@ -80,9 +80,10 @@ pub trait ReachabilityLiveOwnerAsyncAuthority {
     fn release<'a>(
         &'a mut self,
         grant: &'a ReachabilityLiveOwnerGrant,
-    ) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
-           + Send
-           + 'a;
+    ) -> impl Future<
+        Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>,
+    > + Send
+    + 'a;
 }
 
 #[cfg(test)]
