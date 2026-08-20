@@ -11,6 +11,7 @@
 
 pub mod enrollment_pop;
 pub mod reachability_live_owner_codec;
+pub mod reachability_live_owner_etcd;
 pub mod reachability_live_owner_txn;
 pub mod session_auth;
 
