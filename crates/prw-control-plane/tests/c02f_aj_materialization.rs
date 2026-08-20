@@ -4,10 +4,10 @@
 //! public library exposure or provider I/O wiring is selected. This test performs no network I/O,
 //! credential lookup, runtime activation, recovery execution, epoch issuance or sequence allocation.
 
-#[path = "../src/recovery_epoch.rs"]
-mod recovery_epoch;
 #[path = "../src/fence_sequence.rs"]
-mod fence_sequence;
+pub mod fence_sequence;
+#[path = "../src/recovery_epoch.rs"]
+pub mod recovery_epoch;
 
 #[test]
 fn c02f_aj_provider_neutral_modules_are_linked_into_validation() {

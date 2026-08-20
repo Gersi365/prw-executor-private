@@ -1,28 +1,25 @@
 # Phase 152 C02f-AJ — Provider / Client Source Materialization Staging Contract
 
-Status: `SOURCE_MATERIALIZATION_STAGED / AI_EXACT_HEAD_96AD285E / P1_CONTROL_PLANE_PLACEMENT_SELECTED / GOOGLE_CLOUD_SPANNER_0_34_4_PREVIEW_EXACT_PIN_MATERIALIZED / GOOGLE_CLOUD_GAX_1_13_0_EXACT_PIN_MATERIALIZED / DEFAULT_FEATURES_DISABLED / PRWF_PRWR_U16_BE_VERSION_SELECTED / BOOTSTRAP_ZERO_NON_ATTEMPT_MARKER_SELECTED / PROVIDER_NEUTRAL_RECOVERY_EPOCH_SOURCE_MATERIALIZED / PROVIDER_NEUTRAL_SEQUENCE_ALLOCATOR_SOURCE_MATERIALIZED / GITHUB_BRANCH_CREATED / CARGO_LOCK_GENERATION_PENDING_CANONICAL_TOOLCHAIN / COMPILE_VALIDATION_PENDING / NO_PROVIDER_IO / NO_RUNTIME_ACTIVATION`
+Status: `SOURCE_MATERIALIZATION_STAGED / AI_EXACT_HEAD_96AD285E / P1_CONTROL_PLANE_PLACEMENT_SELECTED / GOOGLE_CLOUD_SPANNER_0_34_4_PREVIEW_EXACT_PIN_MATERIALIZED / GOOGLE_CLOUD_GAX_1_13_0_EXACT_PIN_MATERIALIZED / DEFAULT_FEATURES_DISABLED / LOCKED_DEPENDENCY_GRAPH_PASS_NO_LOCKFILE_DELTA / PRWF_PRWR_U16_BE_VERSION_SELECTED / BOOTSTRAP_ZERO_NON_ATTEMPT_MARKER_SELECTED / PROVIDER_NEUTRAL_RECOVERY_EPOCH_SOURCE_MATERIALIZED / PROVIDER_NEUTRAL_SEQUENCE_ALLOCATOR_SOURCE_MATERIALIZED / FORMAT_CORRECTION_STAGED / COMPILE_CLIPPY_TEST_BUILD_PENDING / NO_PROVIDER_IO / NO_RUNTIME_ACTIVATION`
 
 Date: 2026-08-20
 Repository: `powercode365-dotcom/prw-executor-private`
 Repository ID: `1334911207`
 Authoritative AI predecessor: `96ad285ebbc51de0f62d667ec019f0f49b3e5cde`
-AI PR: `#54` (`open / draft / unmerged / mergeable`)
-Branch: `phase-152-c02f-aj-provider-client-source-materialization-staging`
-Contract path: `contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02F_AJ_PROVIDER_CLIENT_SOURCE_MATERIALIZATION_STAGING.md`
+AI PR: `#54` (`open / draft / unmerged`)
+AJ branch: `phase-152-c02f-aj-provider-client-source-materialization-staging`
+AJ draft PR: `#55`
+Initial AJ source commit: `7f7cf25a60d1d7fb59979e06ff01e3c592418d95`
 
-## Authorized gate interpretation
+## Gate scope
 
-The user explicitly authorized C02f-AJ branch creation, commit, push and draft PR publication for this bounded source/dependency materialization gate. The gate materializes exact dependency pins plus provider-neutral recovery epoch and sequence allocator source while keeping cloud resources, provider I/O, credentials, runtime activation, recovery execution and merge outside scope.
+This bounded source/dependency tranche materializes exact provider-client dependency pins plus provider-neutral recovery epoch and sequence allocator source. It does not create a cloud resource, contact Spanner or etcd for the new recovery operations, create credentials, execute recovery, activate runtime authority, implement R1-R4, merge, or deploy.
 
-## Source placement selected
+## Source placement
 
 `P1 / prw-control-plane ownership` is selected.
 
-Rationale:
-- preserves symmetry with the existing `reachability_live_owner_etcd` adapter ownership;
-- avoids adding a workspace crate solely to isolate one preview SDK;
-- provider-neutral domain/codec/plan modules remain free of Google SDK types;
-- only the future provider-I/O adapter needs `google-cloud-spanner` / `google-cloud-gax` imports.
+Provider-neutral domain, codec and plan types remain free of Google SDK types. A later provider-I/O adapter may use the selected SDK inside `prw-control-plane`, symmetric with the existing etcd live-owner adapter and without adding a workspace crate.
 
 ## Exact dependency selection
 
@@ -33,83 +30,91 @@ google-cloud-gax = "=1.13.0"
 google-cloud-spanner = { version = "=0.34.4-preview", default-features = false }
 ```
 
-The exact pins are selected because the Spanner crate is preview. Default features remain disabled so this gate does not silently select a rustls crypto provider. Concrete crypto-provider installation remains a runtime/security gate.
+The Spanner dependency is exact-pinned because the selected first-party crate is preview. Default features remain disabled so this tranche does not silently select a rustls crypto provider. Concrete TLS/crypto-provider/runtime construction remains separately gated.
 
-MSRV evidence: `google-cloud-rust release-20260730` declares `rust-version = "1.88.0"`; canonical PRW CI is Rust `1.97.1`, so the selected release train is not blocked by declared MSRV. This is compatibility evidence only, not a compile PASS.
+The inspected Google release train declares Rust `1.88.0`; canonical PRW validation uses Rust `1.97.1`.
 
-## Retry constraints retained
+## Canonical locked dependency result
 
-Any later Spanner issuance adapter must prove:
-- transaction-level `BasicTransactionRetryPolicy::new().with_max_attempts(1)`;
+Canonical `PRW Rust Validation #762` on initial AJ head `7f7cf25a60d1d7fb59979e06ff01e3c592418d95` executed:
+
+`cargo metadata --locked --no-deps --format-version 1`
+
+and it **passed**.
+
+Therefore the previously anticipated Cargo.lock blocker did not materialize. The existing Cargo.lock already resolves the exact selected dependency graph sufficiently for the locked metadata gate, and AJ requires **no hand-authored or generated lockfile delta at this checkpoint**.
+
+The same run then failed only at `cargo fmt --all -- --check`; Clippy, tests and build were skipped. The current corrective commit is limited to formatting/test-module visibility plus this factual contract correction. No compile PASS is claimed until the follow-up canonical run completes.
+
+## Retry semantics retained for the later Spanner adapter
+
+Any later provider-I/O adapter must explicitly preserve the AI contract:
+
+- full transaction attempt count bounded to one so `ABORTED` returns to PRW orchestration;
 - Commit RPC `NeverRetry`;
-- initial authority-changing DML also `NeverRetry` for reviewable one-submit semantics;
-- `ABORTED` returns to PRW orchestration for fresh authoritative read/replan;
-- transport/UNKNOWN/commit-time deadline ambiguity returns `MutationIndeterminate` and requires strong head+history re-observation before one bounded exact reissue.
+- initial authority-changing DML `NeverRetry` preferred for one-submit auditability;
+- transport/`UNKNOWN`/commit-time deadline ambiguity -> `MutationIndeterminate`;
+- fresh strong head+history re-observation before one bounded exact reissue;
+- no third submit.
 
-No provider I/O adapter is materialized by this tranche.
+No Spanner provider-I/O adapter is part of AJ source materialization.
 
-## Exact source-level encoding selections
+## Recovery epoch source
 
-### Spanner bootstrap head marker
+`crates/prw-control-plane/src/recovery_epoch.rs` materializes provider-neutral:
 
-C02f-AI specified `LastAttemptId BYTES(32)` and a bootstrap epoch-zero head, while production `RecoveryEpochAttemptId` must never be all zero.
-
-AJ selects:
-- `EpochBe == 0` bootstrap head -> `LastAttemptId == [0; 32]` exactly;
-- this byte pattern is a bootstrap-only **non-attempt marker**, not a `RecoveryEpochAttemptId`;
-- every issued epoch `>=1` requires a non-zero exact 32-byte `RecoveryEpochAttemptId`.
-
-### `PRWF` / `PRWR` version field
-
-C02f-AI selected logical `version 1` without an exact byte width.
-
-AJ selects one unsigned big-endian `u16` version field with value `1` for both records.
-
-Therefore:
-- `PRWF` = 4-byte magic + 2-byte version + 8-byte epoch + 8-byte high-water = 22 bytes;
-- `PRWR` = 4-byte magic + 2-byte version + 8-byte epoch + 8-byte sequence + 32-byte attempt ID = 54 bytes.
-
-No reserved flags or implicit host-endian fields are introduced.
-
-## Source materialization
-
-New provider-neutral source files:
-- `crates/prw-control-plane/src/recovery_epoch.rs`
-- `crates/prw-control-plane/src/fence_sequence.rs`
-
-The source files remain isolated from runtime/provider wiring in this staging tranche. A validation integration-test harness may compile them directly before public library exposure is finalized.
-
-Materialized logic includes:
-- full unsigned u64 recovery epoch domain with explicit bootstrap sentinel;
-- provider-neutral `RecoveryEpochLedgerAuthority` async port using `impl Future + Send`, static dispatch and no Google SDK types;
-- exact `BYTES(8)` encoding/decoding;
-- non-zero exact 32-byte recovery attempt ID;
-- bootstrap head marker validation;
-- exact issuance plan `(H,N,A)` and append-only issuance row validation;
+- full unsigned u64 recovery epoch domain with explicit epoch-zero bootstrap sentinel;
+- exact 8-byte unsigned big-endian epoch codec;
+- exact 32-byte non-zero `RecoveryEpochAttemptId`;
+- deterministic retained issuance plan `(H, N, A)` with checked increment;
+- canonical head/history logical records;
+- provider-neutral `RecoveryEpochLedgerAuthority` port using `impl Future + Send` and static dispatch;
 - strong head+history re-observation classification;
-- one bounded exact reissue budget / no third submit;
-- exact fixed sequence head/reservation namespace;
-- exact PRWF/PRWR v1 codecs;
-- non-zero exact 32-byte sequence allocation attempt ID;
-- deterministic reservation key: epoch BE8 || sequence BE8;
-- exact head observation with positive `mod_revision`;
-- exact three compares: head revision + exact head bytes + reservation version zero;
-- exactly two success Puts and two compare-failure linearizable Gets;
-- reservation key/value binding validation;
-- committed/superseded/proven-not-committed classification;
-- ABA same bytes at new revision fails closed;
+- one bounded reissue budget / no third submit.
+
+### Bootstrap head marker
+
+AI specifies an epoch-zero bootstrap head while production attempt IDs must be non-zero. AJ selects exactly 32 zero bytes as the bootstrap-only `LastAttemptId` **non-attempt marker**. It is never a valid `RecoveryEpochAttemptId`; every issued epoch requires a non-zero 32-byte attempt ID.
+
+## Within-epoch sequence source
+
+`crates/prw-control-plane/src/fence_sequence.rs` materializes provider-neutral:
+
+- fixed head key `/prw/reachability/fence-sequence/v1/head`;
+- fixed reservation prefix `/prw/reachability/fence-sequence/v1/reservation/`;
+- deterministic reservation suffix `epoch_be8 || sequence_be8`;
+- exact `PRWF` head codec;
+- exact `PRWR` immutable reservation codec;
+- exact 32-byte non-zero `SequenceAllocationAttemptId`;
+- exact positive predecessor `mod_revision` plus predecessor bytes;
+- deterministic three-compare / two-put / two-get transaction plan;
+- committed/superseded/proven-not-committed re-observation classification;
+- ABA-like same bytes at a new revision fails closed;
 - one bounded exact reissue / no third submit.
 
-## Validation boundary
+## Exact PRWF / PRWR version width
 
-The local execution environment has no `cargo` or `rustc` binary, so this commit cannot pre-generate or honestly claim a Cargo-authored lockfile, rustfmt, Clippy, compile or workspace-test PASS before GitHub CI.
+AI selected logical record version `1` but did not materialize its byte width. AJ selects an unsigned big-endian `u16` version field, exact value `1`.
 
-Local patch transport validation against exact AI context: **PASS**. This proves patch serialization/context integrity only.
+Therefore:
 
-Because the direct dependency graph changes, canonical `cargo metadata --locked` is expected to require a Cargo-generated `Cargo.lock` update. The lockfile must not be hand-authored. If canonical CI stops at the locked-graph gate, that is a materialization blocker to resolve under a Cargo-capable validation environment; it is not evidence against the selected provider-neutral source semantics.
+- `PRWF` = 4 magic + 2 version + 8 epoch + 8 high-water = **22 bytes**;
+- `PRWR` = 4 magic + 2 version + 8 epoch + 8 sequence + 32 attempt ID = **54 bytes**.
 
-No compile claim is made until canonical CI executes successfully on the exact branch head.
+No host-endian, variable-width or implicit version representation is permitted.
+
+## Validation harness
+
+`crates/prw-control-plane/tests/c02f_aj_materialization.rs` includes the two provider-neutral modules as public validation modules so their unit tests and selected byte-width constants participate in the AJ test target before any provider I/O or runtime wiring exists.
+
+Canonical follow-up validation must still prove:
+
+1. locked metadata;
+2. rustfmt;
+3. Clippy with `-D warnings` under workspace `all + pedantic + nursery` lints;
+4. full workspace tests;
+5. full workspace build.
 
 ## Non-claims
 
-No cloud resource/schema/DDL, credential, IAM/FGAC binding, endpoint contact, Spanner request, etcd RBAC mutation, recovery execution, epoch issuance, sequence allocation, TLS runtime selection, R1-R4 fencing, merge, retarget, deployment or production activation is authorized or performed here.
+AJ does not authorize or perform Spanner schema/DDL, project/instance/database creation, ADC or credentials, IAM/FGAC binding, endpoint contact, provider I/O, etcd allocator RBAC mutation, recovery execution, epoch issuance, sequence allocation, TLS/crypto runtime selection, R1-R4 stale-side-effect fencing, merge, retargeting, deployment or production activation.

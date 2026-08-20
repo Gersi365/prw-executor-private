@@ -2,11 +2,12 @@
 //!
 //! No etcd RPC, endpoint, TLS, credential, task, or production authority activation occurs here.
 
-use std::{fmt, num::NonZeroU64};
 use crate::recovery_epoch::RecoveryEpoch;
+use std::{fmt, num::NonZeroU64};
 
 pub const FENCE_SEQUENCE_HEAD_KEY: &[u8] = b"/prw/reachability/fence-sequence/v1/head";
-pub const FENCE_SEQUENCE_RESERVATION_PREFIX: &[u8] = b"/prw/reachability/fence-sequence/v1/reservation/";
+pub const FENCE_SEQUENCE_RESERVATION_PREFIX: &[u8] =
+    b"/prw/reachability/fence-sequence/v1/reservation/";
 pub const FENCE_SEQUENCE_VERSION: u16 = 1;
 pub const FENCE_SEQUENCE_HEAD_MAGIC: [u8; 4] = *b"PRWF";
 pub const FENCE_SEQUENCE_RESERVATION_MAGIC: [u8; 4] = *b"PRWR";
@@ -15,16 +16,27 @@ pub const FENCE_SEQUENCE_RESERVATION_RECORD_BYTES: usize = 54;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SequenceAllocationAttemptId([u8; 32]);
+
 impl SequenceAllocationAttemptId {
     pub fn new(bytes: [u8; 32]) -> Result<Self, FenceSequenceError> {
-        if bytes == [0; 32] { return Err(FenceSequenceError::ZeroAttemptId); }
+        if bytes == [0; 32] {
+            return Err(FenceSequenceError::ZeroAttemptId);
+        }
         Ok(Self(bytes))
     }
-    #[must_use] pub const fn as_bytes(&self) -> &[u8; 32] { &self.0 }
+
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FenceSequenceHead { pub epoch: RecoveryEpoch, pub high_water: u64 }
+pub struct FenceSequenceHead {
+    pub epoch: RecoveryEpoch,
+    pub high_water: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FenceSequenceReservation {
     pub epoch: RecoveryEpoch,
@@ -41,18 +53,30 @@ pub fn encode_head(head: FenceSequenceHead) -> [u8; FENCE_SEQUENCE_HEAD_RECORD_B
     out[14..22].copy_from_slice(&head.high_water.to_be_bytes());
     out
 }
+
 pub fn decode_head(encoded: &[u8]) -> Result<FenceSequenceHead, FenceSequenceError> {
-    if encoded.len() != FENCE_SEQUENCE_HEAD_RECORD_BYTES { return Err(FenceSequenceError::InvalidHeadLength); }
-    if encoded[0..4] != FENCE_SEQUENCE_HEAD_MAGIC { return Err(FenceSequenceError::InvalidMagic); }
-    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION { return Err(FenceSequenceError::UnsupportedVersion); }
+    if encoded.len() != FENCE_SEQUENCE_HEAD_RECORD_BYTES {
+        return Err(FenceSequenceError::InvalidHeadLength);
+    }
+    if encoded[0..4] != FENCE_SEQUENCE_HEAD_MAGIC {
+        return Err(FenceSequenceError::InvalidMagic);
+    }
+    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION {
+        return Err(FenceSequenceError::UnsupportedVersion);
+    }
     Ok(FenceSequenceHead {
-        epoch: RecoveryEpoch::new(u64::from_be_bytes(encoded[6..14].try_into().expect("fixed"))).map_err(|_| FenceSequenceError::ZeroEpoch)?,
+        epoch: RecoveryEpoch::new(u64::from_be_bytes(
+            encoded[6..14].try_into().expect("fixed"),
+        ))
+        .map_err(|_| FenceSequenceError::ZeroEpoch)?,
         high_water: u64::from_be_bytes(encoded[14..22].try_into().expect("fixed")),
     })
 }
 
 #[must_use]
-pub fn encode_reservation(record: FenceSequenceReservation) -> [u8; FENCE_SEQUENCE_RESERVATION_RECORD_BYTES] {
+pub fn encode_reservation(
+    record: FenceSequenceReservation,
+) -> [u8; FENCE_SEQUENCE_RESERVATION_RECORD_BYTES] {
     let mut out = [0; FENCE_SEQUENCE_RESERVATION_RECORD_BYTES];
     out[0..4].copy_from_slice(&FENCE_SEQUENCE_RESERVATION_MAGIC);
     out[4..6].copy_from_slice(&FENCE_SEQUENCE_VERSION.to_be_bytes());
@@ -61,14 +85,31 @@ pub fn encode_reservation(record: FenceSequenceReservation) -> [u8; FENCE_SEQUEN
     out[22..54].copy_from_slice(record.attempt_id.as_bytes());
     out
 }
-pub fn decode_reservation(encoded: &[u8]) -> Result<FenceSequenceReservation, FenceSequenceError> {
-    if encoded.len() != FENCE_SEQUENCE_RESERVATION_RECORD_BYTES { return Err(FenceSequenceError::InvalidReservationLength); }
-    if encoded[0..4] != FENCE_SEQUENCE_RESERVATION_MAGIC { return Err(FenceSequenceError::InvalidMagic); }
-    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION { return Err(FenceSequenceError::UnsupportedVersion); }
+
+pub fn decode_reservation(
+    encoded: &[u8],
+) -> Result<FenceSequenceReservation, FenceSequenceError> {
+    if encoded.len() != FENCE_SEQUENCE_RESERVATION_RECORD_BYTES {
+        return Err(FenceSequenceError::InvalidReservationLength);
+    }
+    if encoded[0..4] != FENCE_SEQUENCE_RESERVATION_MAGIC {
+        return Err(FenceSequenceError::InvalidMagic);
+    }
+    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION {
+        return Err(FenceSequenceError::UnsupportedVersion);
+    }
     Ok(FenceSequenceReservation {
-        epoch: RecoveryEpoch::new(u64::from_be_bytes(encoded[6..14].try_into().expect("fixed"))).map_err(|_| FenceSequenceError::ZeroEpoch)?,
-        sequence: NonZeroU64::new(u64::from_be_bytes(encoded[14..22].try_into().expect("fixed"))).ok_or(FenceSequenceError::ZeroSequence)?,
-        attempt_id: SequenceAllocationAttemptId::new(encoded[22..54].try_into().expect("fixed"))?,
+        epoch: RecoveryEpoch::new(u64::from_be_bytes(
+            encoded[6..14].try_into().expect("fixed"),
+        ))
+        .map_err(|_| FenceSequenceError::ZeroEpoch)?,
+        sequence: NonZeroU64::new(u64::from_be_bytes(
+            encoded[14..22].try_into().expect("fixed"),
+        ))
+        .ok_or(FenceSequenceError::ZeroSequence)?,
+        attempt_id: SequenceAllocationAttemptId::new(
+            encoded[22..54].try_into().expect("fixed"),
+        )?,
     })
 }
 
@@ -87,20 +128,33 @@ pub struct FenceSequenceHeadObservation {
     pub mod_revision: i64,
     pub head: FenceSequenceHead,
 }
+
 impl FenceSequenceHeadObservation {
     pub fn new(value: Vec<u8>, mod_revision: i64) -> Result<Self, FenceSequenceError> {
-        if mod_revision <= 0 { return Err(FenceSequenceError::InvalidRevision); }
+        if mod_revision <= 0 {
+            return Err(FenceSequenceError::InvalidRevision);
+        }
         let head = decode_head(&value)?;
-        Ok(Self { value, mod_revision, head })
+        Ok(Self {
+            value,
+            mod_revision,
+            head,
+        })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FenceSequenceTxnCompare {
-    HeadModRevision(i64), HeadExactValue(Vec<u8>), ReservationVersionZero(Vec<u8>),
+    HeadModRevision(i64),
+    HeadExactValue(Vec<u8>),
+    ReservationVersionZero(Vec<u8>),
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FenceSequenceTxnOperation { Put(Vec<u8>, Vec<u8>), Get(Vec<u8>) }
+pub enum FenceSequenceTxnOperation {
+    Put(Vec<u8>, Vec<u8>),
+    Get(Vec<u8>),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FenceSequenceAllocationPlan {
@@ -117,11 +171,25 @@ pub fn plan_allocation(
     predecessor: FenceSequenceHeadObservation,
     attempt_id: SequenceAllocationAttemptId,
 ) -> Result<FenceSequenceAllocationPlan, FenceSequenceError> {
-    let next = predecessor.head.high_water.checked_add(1).ok_or(FenceSequenceError::SequenceOverflow)?;
+    let next = predecessor
+        .head
+        .high_water
+        .checked_add(1)
+        .ok_or(FenceSequenceError::SequenceOverflow)?;
     let sequence = NonZeroU64::new(next).ok_or(FenceSequenceError::ZeroSequence)?;
     let key = reservation_key(predecessor.head.epoch, sequence);
-    let successor = encode_head(FenceSequenceHead { epoch: predecessor.head.epoch, high_water: next }).to_vec();
-    let reservation = encode_reservation(FenceSequenceReservation { epoch: predecessor.head.epoch, sequence, attempt_id }).to_vec();
+    let successor = encode_head(FenceSequenceHead {
+        epoch: predecessor.head.epoch,
+        high_water: next,
+    })
+    .to_vec();
+    let reservation = encode_reservation(FenceSequenceReservation {
+        epoch: predecessor.head.epoch,
+        sequence,
+        attempt_id,
+    })
+    .to_vec();
+
     Ok(FenceSequenceAllocationPlan {
         compares: [
             FenceSequenceTxnCompare::HeadModRevision(predecessor.mod_revision),
@@ -144,7 +212,11 @@ pub fn plan_allocation(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FenceSequenceReobservation { Committed, Superseded, ProvenNotCommitted }
+pub enum FenceSequenceReobservation {
+    Committed,
+    Superseded,
+    ProvenNotCommitted,
+}
 
 pub fn classify_reobservation(
     plan: &FenceSequenceAllocationPlan,
@@ -152,61 +224,134 @@ pub fn classify_reobservation(
     reservation: Option<FenceSequenceReservation>,
 ) -> Result<FenceSequenceReobservation, FenceSequenceError> {
     if let Some(record) = reservation {
-        if record.epoch != plan.predecessor.head.epoch || record.sequence != plan.sequence { return Err(FenceSequenceError::ContradictoryState); }
-        if record.attempt_id != plan.attempt_id { return Ok(FenceSequenceReobservation::Superseded); }
-        if head.head.epoch == record.epoch && head.head.high_water >= record.sequence.get() { return Ok(FenceSequenceReobservation::Committed); }
+        if record.epoch != plan.predecessor.head.epoch || record.sequence != plan.sequence {
+            return Err(FenceSequenceError::ContradictoryState);
+        }
+        if record.attempt_id != plan.attempt_id {
+            return Ok(FenceSequenceReobservation::Superseded);
+        }
+        if head.head.epoch == record.epoch && head.head.high_water >= record.sequence.get() {
+            return Ok(FenceSequenceReobservation::Committed);
+        }
         return Err(FenceSequenceError::ContradictoryState);
     }
+
     if head.mod_revision == plan.predecessor.mod_revision && head.value == plan.predecessor.value {
         return Ok(FenceSequenceReobservation::ProvenNotCommitted);
     }
+
     Err(FenceSequenceError::ContradictoryState)
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct FenceSequenceReissueBudget(bool);
+
 impl FenceSequenceReissueBudget {
-    pub fn consume(&mut self, observed: FenceSequenceReobservation) -> Result<(), FenceSequenceError> {
-        if observed != FenceSequenceReobservation::ProvenNotCommitted { return Err(FenceSequenceError::ReissueNotProvenSafe); }
-        if self.0 { return Err(FenceSequenceError::ReissueLimitReached); }
-        self.0 = true; Ok(())
+    pub fn consume(
+        &mut self,
+        observed: FenceSequenceReobservation,
+    ) -> Result<(), FenceSequenceError> {
+        if observed != FenceSequenceReobservation::ProvenNotCommitted {
+            return Err(FenceSequenceError::ReissueNotProvenSafe);
+        }
+        if self.0 {
+            return Err(FenceSequenceError::ReissueLimitReached);
+        }
+        self.0 = true;
+        Ok(())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FenceSequenceError {
-    InvalidHeadLength, InvalidReservationLength, InvalidMagic, UnsupportedVersion, ZeroEpoch,
-    ZeroSequence, ZeroAttemptId, InvalidRevision, SequenceOverflow, ContradictoryState,
-    ReissueNotProvenSafe, ReissueLimitReached,
+    InvalidHeadLength,
+    InvalidReservationLength,
+    InvalidMagic,
+    UnsupportedVersion,
+    ZeroEpoch,
+    ZeroSequence,
+    ZeroAttemptId,
+    InvalidRevision,
+    SequenceOverflow,
+    ContradictoryState,
+    ReissueNotProvenSafe,
+    ReissueLimitReached,
 }
+
 impl fmt::Display for FenceSequenceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{self:?}") }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
+
 impl std::error::Error for FenceSequenceError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn epoch() -> RecoveryEpoch { RecoveryEpoch::new(9).expect("epoch") }
-    fn attempt(b: u8) -> SequenceAllocationAttemptId { SequenceAllocationAttemptId::new([b; 32]).expect("attempt") }
+
+    fn epoch() -> RecoveryEpoch {
+        RecoveryEpoch::new(9).expect("epoch")
+    }
+
+    fn attempt(byte: u8) -> SequenceAllocationAttemptId {
+        SequenceAllocationAttemptId::new([byte; 32]).expect("attempt")
+    }
+
     #[test]
     fn exact_record_sizes_and_round_trip() {
-        let head = FenceSequenceHead { epoch: epoch(), high_water: 41 };
+        let head = FenceSequenceHead {
+            epoch: epoch(),
+            high_water: 41,
+        };
         assert_eq!(decode_head(&encode_head(head)), Ok(head));
-        let reservation = FenceSequenceReservation { epoch: epoch(), sequence: NonZeroU64::new(42).expect("sequence"), attempt_id: attempt(7) };
-        assert_eq!(decode_reservation(&encode_reservation(reservation)), Ok(reservation));
+
+        let reservation = FenceSequenceReservation {
+            epoch: epoch(),
+            sequence: NonZeroU64::new(42).expect("sequence"),
+            attempt_id: attempt(7),
+        };
+        assert_eq!(
+            decode_reservation(&encode_reservation(reservation)),
+            Ok(reservation)
+        );
     }
+
     #[test]
     fn plan_is_three_compare_two_put_two_get() {
-        let value = encode_head(FenceSequenceHead { epoch: epoch(), high_water: 41 }).to_vec();
-        let plan = plan_allocation(FenceSequenceHeadObservation::new(value, 17).expect("observation"), attempt(4)).expect("plan");
-        assert_eq!(plan.compares.len(), 3); assert_eq!(plan.success.len(), 2); assert_eq!(plan.failure.len(), 2); assert_eq!(plan.sequence.get(), 42);
+        let value = encode_head(FenceSequenceHead {
+            epoch: epoch(),
+            high_water: 41,
+        })
+        .to_vec();
+        let plan = plan_allocation(
+            FenceSequenceHeadObservation::new(value, 17).expect("observation"),
+            attempt(4),
+        )
+        .expect("plan");
+        assert_eq!(plan.compares.len(), 3);
+        assert_eq!(plan.success.len(), 2);
+        assert_eq!(plan.failure.len(), 2);
+        assert_eq!(plan.sequence.get(), 42);
     }
+
     #[test]
     fn aba_without_reservation_fails_closed() {
-        let value = encode_head(FenceSequenceHead { epoch: epoch(), high_water: 41 }).to_vec();
-        let plan = plan_allocation(FenceSequenceHeadObservation::new(value.clone(), 17).expect("observation"), attempt(4)).expect("plan");
-        let same_bytes_new_revision = FenceSequenceHeadObservation::new(value, 18).expect("observation");
-        assert_eq!(classify_reobservation(&plan, &same_bytes_new_revision, None), Err(FenceSequenceError::ContradictoryState));
+        let value = encode_head(FenceSequenceHead {
+            epoch: epoch(),
+            high_water: 41,
+        })
+        .to_vec();
+        let plan = plan_allocation(
+            FenceSequenceHeadObservation::new(value.clone(), 17).expect("observation"),
+            attempt(4),
+        )
+        .expect("plan");
+        let same_bytes_new_revision =
+            FenceSequenceHeadObservation::new(value, 18).expect("observation");
+        assert_eq!(
+            classify_reobservation(&plan, &same_bytes_new_revision, None),
+            Err(FenceSequenceError::ContradictoryState)
+        );
     }
 }
