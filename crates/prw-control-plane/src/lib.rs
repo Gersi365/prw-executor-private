@@ -10,6 +10,7 @@
 //! challenge, replay, and canonical-message semantics without granting capabilities.
 
 pub mod enrollment_pop;
+pub mod reachability_live_owner_codec;
 pub mod session_auth;
 
 use std::fmt;

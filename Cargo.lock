@@ -1761,6 +1761,7 @@ name = "prw-control-plane"
 version = "0.1.0"
 dependencies = [
  "etcd-client",
+ "prw-connectivity",
  "prw-core",
 ]
 
