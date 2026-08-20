@@ -8,24 +8,21 @@ on:
       - 'crates/prw-control-plane/Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/c02f-aj-lockfile-generation.yml'
-  pull_request:
-    paths:
-      - 'crates/prw-control-plane/Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/c02f-aj-lockfile-generation.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-lockfile:
-    name: Generate Cargo lockfile
+    name: Generate and commit Cargo lockfile
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Record toolchain
         run: |
@@ -44,10 +41,15 @@ jobs:
           grep -F 'name = "google-cloud-gax"' Cargo.lock
           grep -F 'version = "1.13.0"' Cargo.lock
 
-      - name: Upload Cargo.lock artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: c02f-aj-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit Cargo-generated lockfile to AJ branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_EVENT_NAME" = "push"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- Cargo.lock
+          test "$(git diff --cached --name-only)" = "Cargo.lock"
+          git diff --cached --check
+          git commit -m 'phase 152 c02f-aj: materialize Cargo-generated lockfile'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
