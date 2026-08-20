@@ -16,6 +16,8 @@ readonly selected_sum_path="${work_dir}/selected.sha256"
 readonly etcd_dir="${work_dir}/etcd"
 readonly etcd_log="${work_dir}/etcd.log"
 readonly harness_binary="${work_dir}/c02f-ad-disposable-etcd"
+readonly cargo_metadata_path="${work_dir}/cargo-metadata.json"
+readonly cargo_messages_path="${work_dir}/cargo-build-messages.jsonl"
 etcd_pid=""
 
 cleanup() {
@@ -46,26 +48,88 @@ for command_name in awk cargo curl find grep python3 rustc rustfmt seq sha256sum
 done
 require_command protoc
 
-echo "Building the locked source boundary and the workspace Tokio runtime provider..."
-cargo build --locked -p prw-control-plane -p prw-remote-transport
+echo "Resolving the locked dependency graph and building the source boundary..."
+cargo metadata --locked --format-version 1 > "${cargo_metadata_path}"
+cargo build \
+  --locked \
+  -p prw-control-plane \
+  -p prw-remote-transport \
+  --message-format=json-render-diagnostics \
+  > "${cargo_messages_path}"
 
 target_dir="$(
-  cargo metadata --locked --no-deps --format-version 1 |
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])'
+  python3 -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["target_directory"])' \
+    "${cargo_metadata_path}"
 )"
 deps_dir="${target_dir}/debug/deps"
 
-single_rlib() {
-  local crate_name=$1
-  mapfile -t matches < <(
-    find "${deps_dir}" -maxdepth 1 -type f -name "lib${crate_name}-*.rlib" -print | sort
-  )
-  if [[ ${#matches[@]} -ne 1 ]]; then
-    echo "expected exactly one ${crate_name} rlib, found ${#matches[@]}" >&2
-    printf '  %s\n' "${matches[@]}" >&2
-    exit 1
-  fi
-  printf '%s\n' "${matches[0]}"
+cargo_rlib() {
+  local package_name=$1
+  local crate_name=$2
+  python3 - "${cargo_metadata_path}" "${cargo_messages_path}" "${package_name}" "${crate_name}" <<'PY'
+import json
+import os
+import sys
+
+metadata_path, messages_path, package_name, crate_name = sys.argv[1:]
+with open(metadata_path, encoding="utf-8") as handle:
+    metadata = json.load(handle)
+
+package_ids = [
+    package["id"]
+    for package in metadata["packages"]
+    if package["name"] == package_name
+]
+if len(package_ids) != 1:
+    print(
+        f"expected exactly one locked package named {package_name}, found {len(package_ids)}",
+        file=sys.stderr,
+    )
+    for package_id in package_ids:
+        print(f"  {package_id}", file=sys.stderr)
+    raise SystemExit(1)
+
+package_id = package_ids[0]
+candidates = []
+with open(messages_path, encoding="utf-8") as handle:
+    for raw_line in handle:
+        line = raw_line.strip()
+        if not line.startswith("{"):
+            continue
+        message = json.loads(line)
+        if message.get("reason") != "compiler-artifact":
+            continue
+        if message.get("package_id") != package_id:
+            continue
+        target = message.get("target", {})
+        if target.get("name") != crate_name:
+            continue
+        if "lib" not in target.get("kind", []):
+            continue
+        if message.get("profile", {}).get("test"):
+            continue
+        for filename in message.get("filenames", []):
+            if filename.endswith(".rlib"):
+                candidates.append(filename)
+
+candidates = list(dict.fromkeys(candidates))
+if len(candidates) != 1:
+    print(
+        f"expected exactly one current Cargo rlib artifact for {package_name}/{crate_name}, "
+        f"found {len(candidates)}",
+        file=sys.stderr,
+    )
+    for candidate in candidates:
+        print(f"  {candidate}", file=sys.stderr)
+    raise SystemExit(1)
+
+artifact = candidates[0]
+if not os.path.isfile(artifact):
+    print(f"Cargo-reported rlib does not exist: {artifact}", file=sys.stderr)
+    raise SystemExit(1)
+print(artifact)
+PY
 }
 
 echo "Checking and compiling the isolated integration harness..."
@@ -75,11 +139,11 @@ rustc \
   --edition=2024 \
   -D warnings \
   -L "dependency=${deps_dir}" \
-  --extern "etcd_client=$(single_rlib etcd_client)" \
-  --extern "prw_connectivity=$(single_rlib prw_connectivity)" \
-  --extern "prw_control_plane=$(single_rlib prw_control_plane)" \
-  --extern "prw_core=$(single_rlib prw_core)" \
-  --extern "tokio=$(single_rlib tokio)" \
+  --extern "etcd_client=$(cargo_rlib etcd-client etcd_client)" \
+  --extern "prw_connectivity=$(cargo_rlib prw-connectivity prw_connectivity)" \
+  --extern "prw_control_plane=$(cargo_rlib prw-control-plane prw_control_plane)" \
+  --extern "prw_core=$(cargo_rlib prw-core prw_core)" \
+  --extern "tokio=$(cargo_rlib tokio tokio)" \
   "${harness_source}" \
   -o "${harness_binary}"
 
