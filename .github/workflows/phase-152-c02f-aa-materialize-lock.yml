@@ -1,0 +1,75 @@
+name: Phase 152 C02f-AA Materialize Lock
+
+on:
+  push:
+    branches:
+      - phase-152-c02f-aa-codec-staging
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-c02f-aa-materialize-lock
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-152-c02f-aa-codec-staging
+
+      - name: Expose codec module
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/prw-control-plane/src/lib.rs")
+          text = path.read_text()
+          old = "pub mod enrollment_pop;\npub mod session_auth;"
+          new = "pub mod enrollment_pop;\npub mod reachability_live_owner_codec;\npub mod session_auth;"
+          if old in text:
+              text = text.replace(old, new, 1)
+              path.write_text(text)
+          elif new not in text:
+              raise SystemExit("unexpected prw-control-plane module declarations")
+          PY
+
+      - name: Materialize lockfile and formatting
+        run: |
+          cargo metadata --no-deps --format-version 1 > /dev/null
+          cargo fmt --all
+          git diff --check
+
+      - name: Verify mutation scope
+        run: |
+          python3 - <<'PY'
+          import subprocess
+
+          allowed = {
+              "Cargo.lock",
+              "crates/prw-control-plane/src/lib.rs",
+              "crates/prw-control-plane/src/reachability_live_owner_codec.rs",
+          }
+          changed = set(
+              subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          )
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected materializer changes: {sorted(unexpected)}")
+          PY
+
+      - name: Commit Cargo-authored materialization if needed
+        run: |
+          if git diff --quiet; then
+            echo "No materialization changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Cargo.lock crates/prw-control-plane/src/lib.rs crates/prw-control-plane/src/reachability_live_owner_codec.rs
+          git commit -m "phase 152 c02f-aa: materialize lock and formatting"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
