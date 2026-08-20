@@ -1,9 +1,7 @@
 name: Phase 152 C02f-AJ Android Native Lockfile Generation
 
 on:
-  push:
-    branches:
-      - phase-152-c02f-aj-provider-client-source-materialization-staging
+  pull_request:
     paths:
       - 'apps/android/native/Cargo.toml'
       - 'apps/android/native/Cargo.lock'
@@ -12,18 +10,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   generate-lockfile:
-    name: Generate and commit Android native Cargo lockfile
+    name: Generate Android native Cargo lockfile artifact
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Record canonical Rust toolchain
         run: |
@@ -46,15 +42,10 @@ jobs:
           grep -F 'name = "google-cloud-gax"' apps/android/native/Cargo.lock
           grep -F 'version = "1.13.0"' apps/android/native/Cargo.lock
 
-      - name: Commit Cargo-generated Android native lockfile
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          test "$GITHUB_EVENT_NAME" = "push"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- apps/android/native/Cargo.lock
-          test "$(git diff --cached --name-only)" = "apps/android/native/Cargo.lock"
-          git diff --cached --check
-          git commit -m 'phase 152 c02f-aj: materialize Android native Cargo lockfile'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - name: Upload Android native Cargo.lock artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: c02f-aj-android-native-cargo-lock
+          path: apps/android/native/Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
