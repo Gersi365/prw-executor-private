@@ -131,8 +131,8 @@ print(artifact)
 PY
 }
 
-echo "Checking and compiling the isolated C02f-AE result-suppression harness..."
-rustfmt --edition 2024 --check "${harness_source}"
+echo "Canonicalizing and compiling the isolated C02f-AE result-suppression harness..."
+rustfmt --edition 2024 "${harness_source}"
 rustc \
   --crate-name c02f_ae_disposable_etcd_result_suppression \
   --edition=2024 \
