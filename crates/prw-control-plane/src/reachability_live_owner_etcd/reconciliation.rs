@@ -67,7 +67,7 @@ pub enum ReachabilityLiveOwnerResolvedRelease {
     /// The supplied exact peer/fence was already not current, so no mutation was attempted.
     NotCurrent,
     /// A release mutation was attempted and reached a terminal provider-owned result.
-    Mutation(ReachabilityLiveOwnerResolvedMutation),
+    Mutation(Box<ReachabilityLiveOwnerResolvedMutation>),
 }
 
 /// Fail-closed C02f-AE real-provider orchestration error.
@@ -162,7 +162,7 @@ impl ReachabilityLiveOwnerEtcdStore {
         let mut io = EtcdMutationIo { store: self };
         resolve_pending_mutation(&mut io, pending)
             .await
-            .map(ReachabilityLiveOwnerResolvedRelease::Mutation)
+            .map(|mutation| ReachabilityLiveOwnerResolvedRelease::Mutation(Box::new(mutation)))
             .map_err(map_etcd_orchestration_error)
     }
 }
@@ -202,7 +202,7 @@ impl LiveOwnerPendingMutation {
         }
     }
 
-    fn peer(&self) -> &PeerConnectivityIdentity {
+    const fn peer(&self) -> &PeerConnectivityIdentity {
         self.before.record().peer()
     }
 
@@ -260,18 +260,16 @@ struct EtcdMutationIo<'a> {
 impl LiveOwnerMutationIo for EtcdMutationIo<'_> {
     type Error = ReachabilityLiveOwnerEtcdError;
 
-    fn execute<'a>(
+    async fn execute<'a>(
         &'a mut self,
         plan: &'a LiveOwnerTxnPlan,
-    ) -> impl Future<Output = Result<LiveOwnerMutationIoExecution, Self::Error>> + 'a {
-        async move {
-            match self.store.execute(plan).await {
-                Ok(outcome) => Ok(LiveOwnerMutationIoExecution::Definitive(outcome)),
-                Err(ReachabilityLiveOwnerEtcdError::MutationIndeterminate(_)) => {
-                    Ok(LiveOwnerMutationIoExecution::Indeterminate)
-                }
-                Err(error) => Err(error),
+    ) -> Result<LiveOwnerMutationIoExecution, Self::Error> {
+        match self.store.execute(plan).await {
+            Ok(outcome) => Ok(LiveOwnerMutationIoExecution::Definitive(outcome)),
+            Err(ReachabilityLiveOwnerEtcdError::MutationIndeterminate(_)) => {
+                Ok(LiveOwnerMutationIoExecution::Indeterminate)
             }
+            Err(error) => Err(error),
         }
     }
 
