@@ -30,12 +30,13 @@ jobs:
           cargo +1.97.1 --version
           rustfmt +1.97.1 --version
 
-      - name: Generate Android native lockfile with canonical Cargo
+      - name: Verify Android native lockfile is Cargo-stable
         shell: bash
         run: |
           set -Eeuo pipefail
           cd apps/android/native
           cargo +1.97.1 generate-lockfile
+          git diff --exit-code -- Cargo.lock
 
       - name: Apply exact AJ Clippy corrections
         shell: bash
@@ -93,7 +94,6 @@ jobs:
           git diff --check
           mapfile -t changed < <(git diff --name-only | sort)
           expected=(
-            apps/android/native/Cargo.lock
             crates/prw-control-plane/src/fence_sequence.rs
             crates/prw-control-plane/src/recovery_epoch.rs
           )
@@ -106,7 +106,6 @@ jobs:
         with:
           name: c02f-aj-bounded-corrective
           path: |
-            apps/android/native/Cargo.lock
             crates/prw-control-plane/src/fence_sequence.rs
             crates/prw-control-plane/src/recovery_epoch.rs
           if-no-files-found: error
