@@ -222,8 +222,8 @@ pub fn encode_live_owner_key(
     peer: &PeerConnectivityIdentity,
 ) -> Result<Vec<u8>, ReachabilityLiveOwnerCodecError> {
     let device_bytes = peer.device_id().as_str().as_bytes();
-    let device_len =
-        u64::try_from(device_bytes.len()).map_err(|_| ReachabilityLiveOwnerCodecError::LengthOverflow)?;
+    let device_len = u64::try_from(device_bytes.len())
+        .map_err(|_| ReachabilityLiveOwnerCodecError::LengthOverflow)?;
     let capacity = LIVE_OWNER_KEY_PREFIX
         .len()
         .checked_add(KEY_VERSION_BYTES + DEVICE_ID_LENGTH_BYTES)
@@ -287,8 +287,8 @@ pub fn decode_live_owner_key(
     let device_end = cursor + device_len;
     let device_bytes = &encoded[cursor..device_end];
     cursor = device_end;
-    let device_text =
-        str::from_utf8(device_bytes).map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
+    let device_text = str::from_utf8(device_bytes)
+        .map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
     let device_id = DeviceId::new(device_text.to_owned())
         .map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
 
@@ -331,8 +331,8 @@ pub fn encode_live_owner_record(
     record: &ReachabilityLiveOwnerAuthorityRecord,
 ) -> Result<Vec<u8>, ReachabilityLiveOwnerCodecError> {
     let device_bytes = record.peer.device_id().as_str().as_bytes();
-    let device_len =
-        u64::try_from(device_bytes.len()).map_err(|_| ReachabilityLiveOwnerCodecError::LengthOverflow)?;
+    let device_len = u64::try_from(device_bytes.len())
+        .map_err(|_| ReachabilityLiveOwnerCodecError::LengthOverflow)?;
     let capacity = LIVE_OWNER_RECORD_FIXED_BYTES
         .checked_add(device_bytes.len())
         .ok_or(ReachabilityLiveOwnerCodecError::LengthOverflow)?;
@@ -415,8 +415,8 @@ pub fn decode_live_owner_record(
     let device_end = cursor + device_len;
     let device_bytes = &encoded[cursor..device_end];
     cursor = device_end;
-    let device_text =
-        str::from_utf8(device_bytes).map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
+    let device_text = str::from_utf8(device_bytes)
+        .map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
     let device_id = DeviceId::new(device_text.to_owned())
         .map_err(|_| ReachabilityLiveOwnerCodecError::InvalidDeviceId)?;
 
@@ -583,7 +583,10 @@ mod tests {
             let encoded = encode_live_owner_record(&source).expect("encode record");
             let decoded = decode_live_owner_record(&encoded).expect("decode record");
             assert_eq!(decoded, source);
-            assert_eq!(encoded.len(), LIVE_OWNER_RECORD_FIXED_BYTES + source.peer().device_id().as_str().len());
+            assert_eq!(
+                encoded.len(),
+                LIVE_OWNER_RECORD_FIXED_BYTES + source.peer().device_id().as_str().len()
+            );
         }
     }
 
