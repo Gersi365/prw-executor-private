@@ -14,10 +14,7 @@ use std::{
     },
 };
 
-use google_cloud_gax::{
-    error::rpc::Code,
-    retry_policy::NeverRetry,
-};
+use google_cloud_gax::{error::rpc::Code, retry_policy::NeverRetry};
 use google_cloud_spanner::{
     client::DatabaseClient,
     result::Row,
@@ -165,18 +162,17 @@ impl SpannerRecoveryEpochLedger {
                 let head_row = head_row?;
                 let head_epoch_be: Vec<u8> = head_row.try_get("EpochBe")?;
                 let head_attempt_id: Vec<u8> = head_row.try_get("LastAttemptId")?;
-                let head = match RecoveryEpochHeadRecord::decode_columns(
-                    &head_epoch_be,
-                    &head_attempt_id,
-                ) {
-                    Ok(head) => head,
-                    Err(error) => {
-                        return Err(record_logical_failure(
-                            &logical_failure_for_work,
-                            SubmitLogicalFailure::Domain(error),
-                        ));
-                    }
-                };
+                let head =
+                    match RecoveryEpochHeadRecord::decode_columns(&head_epoch_be, &head_attempt_id)
+                    {
+                        Ok(head) => head,
+                        Err(error) => {
+                            return Err(record_logical_failure(
+                                &logical_failure_for_work,
+                                SubmitLogicalFailure::Domain(error),
+                            ));
+                        }
+                    };
                 if let Some(extra) = head_result.next().await {
                     extra?;
                     return Err(record_logical_failure(
@@ -455,10 +451,16 @@ impl From<RecoveryEpochError> for SpannerRecoveryEpochLedgerError {
 impl fmt::Display for SpannerRecoveryEpochLedgerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Spanner(error) => write!(formatter, "Spanner recovery-epoch adapter error: {error}"),
+            Self::Spanner(error) => {
+                write!(formatter, "Spanner recovery-epoch adapter error: {error}")
+            }
             Self::Domain(error) => write!(formatter, "recovery-epoch domain error: {error}"),
-            Self::MissingRequiredRow(context) => write!(formatter, "missing required {context} row"),
-            Self::MultipleRows(context) => write!(formatter, "multiple rows returned for singleton {context}"),
+            Self::MissingRequiredRow(context) => {
+                write!(formatter, "missing required {context} row")
+            }
+            Self::MultipleRows(context) => {
+                write!(formatter, "multiple rows returned for singleton {context}")
+            }
             Self::PredecessorMismatch { expected, observed } => write!(
                 formatter,
                 "recovery-epoch predecessor mismatch: expected {}, observed {}",
@@ -469,9 +471,15 @@ impl fmt::Display for SpannerRecoveryEpochLedgerError {
                 formatter,
                 "recovery-epoch {operation} affected {actual} rows; expected exactly 1"
             ),
-            Self::PartialHistoryRow => formatter.write_str("partial/non-canonical recovery-epoch history row"),
-            Self::HistoryEpochIsBootstrap => formatter.write_str("recovery-epoch history contains reserved bootstrap epoch"),
-            Self::LogicalFailureStatePoisoned => formatter.write_str("recovery-epoch logical-failure state mutex poisoned"),
+            Self::PartialHistoryRow => {
+                formatter.write_str("partial/non-canonical recovery-epoch history row")
+            }
+            Self::HistoryEpochIsBootstrap => {
+                formatter.write_str("recovery-epoch history contains reserved bootstrap epoch")
+            }
+            Self::LogicalFailureStatePoisoned => {
+                formatter.write_str("recovery-epoch logical-failure state mutex poisoned")
+            }
         }
     }
 }
@@ -525,10 +533,7 @@ mod tests {
     #[test]
     fn commit_boundary_errors_are_indeterminate() {
         for code in [Code::Unknown, Code::DeadlineExceeded, Code::Unavailable] {
-            let outcome = classify_submit_error(
-                SUBMIT_STAGE_READY_TO_COMMIT,
-                service_error(code),
-            );
+            let outcome = classify_submit_error(SUBMIT_STAGE_READY_TO_COMMIT, service_error(code));
             assert!(matches!(
                 outcome,
                 Ok(RecoveryEpochSubmissionOutcome::MutationIndeterminate)
@@ -546,10 +551,11 @@ mod tests {
 
     #[test]
     fn pre_commit_transport_failure_is_not_promoted_to_authority_outcome() {
-        let outcome = classify_submit_error(
-            SUBMIT_STAGE_PRE_COMMIT,
-            service_error(Code::Unavailable),
-        );
-        assert!(matches!(outcome, Err(SpannerRecoveryEpochLedgerError::Spanner(_))));
+        let outcome =
+            classify_submit_error(SUBMIT_STAGE_PRE_COMMIT, service_error(Code::Unavailable));
+        assert!(matches!(
+            outcome,
+            Err(SpannerRecoveryEpochLedgerError::Spanner(_))
+        ));
     }
 }
