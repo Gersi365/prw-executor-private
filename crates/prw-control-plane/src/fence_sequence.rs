@@ -86,9 +86,7 @@ pub fn encode_reservation(
     out
 }
 
-pub fn decode_reservation(
-    encoded: &[u8],
-) -> Result<FenceSequenceReservation, FenceSequenceError> {
+pub fn decode_reservation(encoded: &[u8]) -> Result<FenceSequenceReservation, FenceSequenceError> {
     if encoded.len() != FENCE_SEQUENCE_RESERVATION_RECORD_BYTES {
         return Err(FenceSequenceError::InvalidReservationLength);
     }
@@ -107,9 +105,7 @@ pub fn decode_reservation(
             encoded[14..22].try_into().expect("fixed"),
         ))
         .ok_or(FenceSequenceError::ZeroSequence)?,
-        attempt_id: SequenceAllocationAttemptId::new(
-            encoded[22..54].try_into().expect("fixed"),
-        )?,
+        attempt_id: SequenceAllocationAttemptId::new(encoded[22..54].try_into().expect("fixed"))?,
     })
 }
 

@@ -59,9 +59,7 @@ impl From<RecoveryEpoch> for RecoveryEpochValue {
 pub struct RecoveryEpochAttemptId([u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES]);
 
 impl RecoveryEpochAttemptId {
-    pub fn new(
-        bytes: [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES],
-    ) -> Result<Self, RecoveryEpochError> {
+    pub fn new(bytes: [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES]) -> Result<Self, RecoveryEpochError> {
         if bytes == [0; RECOVERY_EPOCH_ATTEMPT_ID_BYTES] {
             return Err(RecoveryEpochError::ZeroAttemptId);
         }
@@ -95,7 +93,10 @@ impl RecoveryEpochHeadRecord {
     #[must_use]
     pub fn encode_columns(
         self,
-    ) -> ([u8; RECOVERY_EPOCH_BYTES], [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES]) {
+    ) -> (
+        [u8; RECOVERY_EPOCH_BYTES],
+        [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES],
+    ) {
         match self {
             Self::Bootstrap => (
                 [0; RECOVERY_EPOCH_BYTES],
@@ -115,9 +116,7 @@ impl RecoveryEpochHeadRecord {
             .map_err(|_| RecoveryEpochError::InvalidAttemptIdLength)?;
 
         match epoch {
-            RecoveryEpochValue::Bootstrap
-                if attempt == [0; RECOVERY_EPOCH_ATTEMPT_ID_BYTES] =>
-            {
+            RecoveryEpochValue::Bootstrap if attempt == [0; RECOVERY_EPOCH_ATTEMPT_ID_BYTES] => {
                 Ok(Self::Bootstrap)
             }
             RecoveryEpochValue::Bootstrap => {
@@ -237,8 +236,8 @@ pub fn classify_reobservation(
         return Err(RecoveryEpochError::ContradictoryState);
     }
 
-    let exact = history.previous_epoch == plan.previous_epoch()
-        && history.attempt_id == plan.attempt_id();
+    let exact =
+        history.previous_epoch == plan.previous_epoch() && history.attempt_id == plan.attempt_id();
     if !exact {
         return Ok(RecoveryEpochReobservation::Superseded);
     }
