@@ -10,9 +10,8 @@ use std::{fmt, num::NonZeroU128};
 use prw_connectivity::PeerConnectivityIdentity;
 
 use crate::reachability_live_owner_codec::{
-    LiveOwnerLifecycle, ReachabilityLiveOwnerAuthorityRecord,
-    ReachabilityLiveOwnerCodecError, decode_bound_live_owner_record, encode_live_owner_key,
-    encode_live_owner_record,
+    LiveOwnerLifecycle, ReachabilityLiveOwnerAuthorityRecord, ReachabilityLiveOwnerCodecError,
+    decode_bound_live_owner_record, encode_live_owner_key, encode_live_owner_record,
 };
 
 /// One validated exact-key authority observation from a linearizable provider read.
@@ -376,8 +375,7 @@ pub fn classify_definitive_mutation(
         return Ok(LiveOwnerDefinitiveMutation::Committed);
     }
 
-    let observed =
-        failure_observation.ok_or(LiveOwnerTxnError::MissingFailureObservation)?;
+    let observed = failure_observation.ok_or(LiveOwnerTxnError::MissingFailureObservation)?;
     if observed.key() != plan.key() {
         return Err(LiveOwnerTxnError::FailureObservationKeyMismatch);
     }
@@ -585,8 +583,7 @@ mod tests {
     fn acquisition_plan_is_exact_dual_cas_with_put_and_failure_get() {
         let peer = peer("txn-plan", 7);
         let observed = observation(peer.clone(), LiveOwnerLifecycle::Released, 40, 8, 12);
-        let successor =
-            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(41), attempt(9));
+        let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(41), attempt(9));
         let plan = plan_acquisition(&observed, successor.clone()).expect("plan acquisition");
 
         assert_eq!(
@@ -641,8 +638,7 @@ mod tests {
     fn compare_failure_never_maps_to_committed_and_performs_no_write() {
         let peer = peer("txn-failure", 15);
         let observed = observation(peer.clone(), LiveOwnerLifecycle::Current, 5, 16, 30);
-        let successor =
-            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(6), attempt(17));
+        let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(6), attempt(17));
         let plan = plan_acquisition(&observed, successor).expect("plan acquisition");
         let mut kv = ScriptedKv::new(observed.clone());
         kv.push_compare_result(false);
@@ -659,8 +655,7 @@ mod tests {
     fn successful_scripted_transaction_commits_canonical_successor() {
         let peer = peer("txn-success", 19);
         let observed = observation(peer.clone(), LiveOwnerLifecycle::Released, 7, 20, 40);
-        let successor =
-            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(8), attempt(21));
+        let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(8), attempt(21));
         let plan = plan_acquisition(&observed, successor.clone()).expect("plan acquisition");
         let mut kv = ScriptedKv::new(observed);
         kv.push_compare_result(true);
@@ -749,8 +744,7 @@ mod tests {
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 200, 40, 90);
         let intended =
             ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(201), attempt(41));
-        let released =
-            observation(peer, LiveOwnerLifecycle::Released, 201, 41, 92);
+        let released = observation(peer, LiveOwnerLifecycle::Released, 201, 41, 92);
 
         assert_eq!(
             reconcile_indeterminate_acquisition(&before, &intended, Some(&released)),
@@ -785,15 +779,10 @@ mod tests {
         let before = observation(peer.clone(), LiveOwnerLifecycle::Current, 400, 48, 110);
         let intended =
             ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(401), attempt(49));
-        let same_bytes_new_revision =
-            observation(peer, LiveOwnerLifecycle::Current, 400, 48, 112);
+        let same_bytes_new_revision = observation(peer, LiveOwnerLifecycle::Current, 400, 48, 112);
 
         assert_eq!(
-            reconcile_indeterminate_acquisition(
-                &before,
-                &intended,
-                Some(&same_bytes_new_revision)
-            ),
+            reconcile_indeterminate_acquisition(&before, &intended, Some(&same_bytes_new_revision)),
             Err(LiveOwnerTxnError::ImpossibleReobservedState)
         );
     }
