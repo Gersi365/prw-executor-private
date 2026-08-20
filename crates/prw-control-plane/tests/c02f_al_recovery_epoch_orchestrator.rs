@@ -139,14 +139,14 @@ fn plan(previous: u64, marker: u8) -> RecoveryEpochIssuancePlan {
     RecoveryEpochIssuancePlan::new(previous, attempt(marker)).expect("plan")
 }
 
-fn current(plan: RecoveryEpochIssuancePlan) -> RecoveryEpochHeadRecord {
+const fn current(plan: RecoveryEpochIssuancePlan) -> RecoveryEpochHeadRecord {
     RecoveryEpochHeadRecord::Issued {
         epoch: plan.proposed_epoch(),
         last_attempt_id: plan.attempt_id(),
     }
 }
 
-fn history(plan: RecoveryEpochIssuancePlan) -> RecoveryEpochIssuanceRecord {
+const fn history(plan: RecoveryEpochIssuancePlan) -> RecoveryEpochIssuanceRecord {
     RecoveryEpochIssuanceRecord {
         epoch: plan.proposed_epoch(),
         previous_epoch: plan.previous_epoch(),
