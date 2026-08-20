@@ -14,7 +14,9 @@ use prw_control_plane::{
         AuthorityAttemptId, ReachabilityLiveOwnerAuthorityRecord, encode_live_owner_key,
         encode_live_owner_record,
     },
-    reachability_live_owner_etcd::{ReachabilityLiveOwnerEtcdError, ReachabilityLiveOwnerEtcdStore},
+    reachability_live_owner_etcd::{
+        ReachabilityLiveOwnerEtcdError, ReachabilityLiveOwnerEtcdStore,
+    },
     reachability_live_owner_txn::{
         LiveOwnerDefinitiveMutation, LiveOwnerProviderCurrentness, LiveOwnerTxnError,
         plan_acquisition, plan_release,
@@ -122,11 +124,7 @@ async fn validate_real_get_txn_and_release(
     let current_13 =
         ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(13), attempt(0x34));
     fixture_kv
-        .put(
-            key.clone(),
-            encode_live_owner_record(&current_13)?,
-            None,
-        )
+        .put(key.clone(), encode_live_owner_record(&current_13)?, None)
         .await?;
 
     match store.execute(&stale_acquisition_12).await? {
@@ -158,11 +156,7 @@ async fn validate_real_get_txn_and_release(
     let current_14 =
         ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(14), attempt(0x35));
     fixture_kv
-        .put(
-            key.clone(),
-            encode_live_owner_record(&current_14)?,
-            None,
-        )
+        .put(key.clone(), encode_live_owner_record(&current_14)?, None)
         .await?;
 
     match store.execute(&stale_release_13).await? {
