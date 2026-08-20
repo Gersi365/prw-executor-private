@@ -333,10 +333,8 @@ fn require_one_affected_row(
     if actual == 1 {
         return Ok(());
     }
-    Err(state.record_logical_failure(SubmitLogicalFailure::UnexpectedAffectedRows {
-        operation,
-        actual,
-    }))
+    Err(state
+        .record_logical_failure(SubmitLogicalFailure::UnexpectedAffectedRows { operation, actual }))
 }
 
 const fn encode_issued_epoch(epoch: RecoveryEpoch) -> [u8; 8] {
