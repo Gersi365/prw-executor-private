@@ -76,7 +76,8 @@ impl ReachabilityLiveOwnerEtcdStore {
         fence: NonZeroU128,
     ) -> Result<LiveOwnerProviderCurrentness, ReachabilityLiveOwnerEtcdError> {
         let observation = self.linearizable_observation(peer).await?;
-        Ok(classify_currentness(peer, fence, observation.as_ref())?)
+        classify_currentness(peer, fence, observation.as_ref())
+            .map_err(ReachabilityLiveOwnerEtcdError::from)
     }
 
     /// Executes one canonical C02f-AB dual-CAS mutation through a real etcd Txn.
@@ -219,7 +220,8 @@ fn classify_etcd_transaction_response(
         if !matches!(responses.as_slice(), [TxnOpResponse::Put(_)]) {
             return Err(ReachabilityLiveOwnerEtcdError::UnexpectedTxnResponseShape);
         }
-        return Ok(classify_definitive_mutation(plan, true, None)?);
+        return classify_definitive_mutation(plan, true, None)
+            .map_err(ReachabilityLiveOwnerEtcdError::from);
     }
 
     let [TxnOpResponse::Get(get_response)] = responses.as_slice() else {
@@ -230,11 +232,8 @@ fn classify_etcd_transaction_response(
     };
     let observation = decode_exact_get(key, get_response)?
         .ok_or(LiveOwnerTxnError::MissingEstablishedState)?;
-    Ok(classify_definitive_mutation(
-        plan,
-        false,
-        Some(observation),
-    )?)
+    classify_definitive_mutation(plan, false, Some(observation))
+        .map_err(ReachabilityLiveOwnerEtcdError::from)
 }
 
 fn decode_exact_get(
