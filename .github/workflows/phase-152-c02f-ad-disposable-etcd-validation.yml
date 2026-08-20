@@ -1,0 +1,45 @@
+name: Phase 152 C02f-AD Disposable etcd Validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prw-c02f-ad-disposable-etcd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate disposable etcd Get/Txn semantics
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.head_ref == 'phase-152-c02f-ad-disposable-etcd-integration-staging'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install integration build prerequisite
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
+      - name: Record validation toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustfmt --version
+          protoc --version
+          curl --version | sed -n '1p'
+          sha256sum --version | sed -n '1p'
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Run disposable etcd integration validation
+        run: bash scripts/validate-phase-152-c02f-ad-disposable-etcd.sh
