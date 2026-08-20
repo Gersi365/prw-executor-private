@@ -32,7 +32,7 @@ pub struct ReachabilityLiveOwnerEtcdStore {
 impl ReachabilityLiveOwnerEtcdStore {
     /// Wraps an already-created etcd KV client without contacting an endpoint.
     #[must_use]
-    pub fn new(kv: KvClient) -> Self {
+    pub const fn new(kv: KvClient) -> Self {
         Self { kv }
     }
 
