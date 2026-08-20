@@ -121,7 +121,10 @@ pub trait ReachabilityLiveOwnerDefinitiveProviderPort {
         peer: &'a PeerConnectivityIdentity,
         fence: NonZeroU128,
     ) -> impl Future<
-        Output = Result<ReachabilityLiveOwnerDefinitiveRelease, ReachabilityLiveOwnerProviderFailure>,
+        Output = Result<
+            ReachabilityLiveOwnerDefinitiveRelease,
+            ReachabilityLiveOwnerProviderFailure,
+        >,
     > + Send
     + 'a;
 }
@@ -184,9 +187,7 @@ where
                 LiveOwnerProviderCurrentness::Current => {
                     Ok(ReachabilityLiveOwnerCurrentness::Current)
                 }
-                LiveOwnerProviderCurrentness::Stale => {
-                    Ok(ReachabilityLiveOwnerCurrentness::Stale)
-                }
+                LiveOwnerProviderCurrentness::Stale => Ok(ReachabilityLiveOwnerCurrentness::Stale),
             }
         }
     }
