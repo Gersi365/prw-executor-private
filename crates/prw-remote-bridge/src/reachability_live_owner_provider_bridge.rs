@@ -82,6 +82,10 @@ pub enum ReachabilityLiveOwnerDefinitiveRelease {
 /// semantic authority.
 pub trait ReachabilityLiveOwnerDefinitiveProviderPort {
     /// Returns one definitive acquisition/replacement transaction result for `peer`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed provider failure when a definitive authority outcome cannot be proven.
     fn acquire<'a>(
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
@@ -94,6 +98,10 @@ pub trait ReachabilityLiveOwnerDefinitiveProviderPort {
     + 'a;
 
     /// Returns one definitive linearizable currentness classification for `peer + fence`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed provider failure when currentness cannot be proven authoritatively.
     fn currentness<'a>(
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
@@ -104,6 +112,10 @@ pub trait ReachabilityLiveOwnerDefinitiveProviderPort {
     + 'a;
 
     /// Returns one definitive release pre-read/mutation result for `peer + fence`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed provider failure when release status cannot be proven definitively.
     fn release<'a>(
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
@@ -135,7 +147,7 @@ impl<P> ReachabilityLiveOwnerProviderBridge<P> {
 
 impl<P> ReachabilityLiveOwnerAsyncAuthority for ReachabilityLiveOwnerProviderBridge<P>
 where
-    P: ReachabilityLiveOwnerDefinitiveProviderPort,
+    P: ReachabilityLiveOwnerDefinitiveProviderPort + Send,
 {
     fn acquire<'a>(
         &'a mut self,
@@ -169,8 +181,12 @@ where
                 .await
                 .map_err(map_provider_failure)?
             {
-                LiveOwnerProviderCurrentness::Current => Ok(ReachabilityLiveOwnerCurrentness::Current),
-                LiveOwnerProviderCurrentness::Stale => Ok(ReachabilityLiveOwnerCurrentness::Stale),
+                LiveOwnerProviderCurrentness::Current => {
+                    Ok(ReachabilityLiveOwnerCurrentness::Current)
+                }
+                LiveOwnerProviderCurrentness::Stale => {
+                    Ok(ReachabilityLiveOwnerCurrentness::Stale)
+                }
             }
         }
     }
@@ -178,9 +194,10 @@ where
     fn release<'a>(
         &'a mut self,
         grant: &'a ReachabilityLiveOwnerGrant,
-    ) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
-           + Send
-           + 'a {
+    ) -> impl Future<
+        Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>,
+    > + Send
+    + 'a {
         async move {
             let raw_fence = raw_fence(grant)?;
             let definitive = self
