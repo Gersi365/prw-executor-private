@@ -40,7 +40,7 @@ jobs:
 
       - name: Materialize lockfile and formatting
         run: |
-          cargo metadata --no-deps --format-version 1 > /dev/null
+          cargo metadata --format-version 1 > /dev/null
           cargo fmt --all
           git diff --check
 
@@ -71,5 +71,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Cargo.lock crates/prw-control-plane/src/lib.rs crates/prw-control-plane/src/reachability_live_owner_codec.rs
-          git commit -m "phase 152 c02f-aa: materialize lock and formatting"
+          git commit -m "phase 152 c02f-aa: materialize full lock"
           git push origin HEAD:"${GITHUB_REF_NAME}"
