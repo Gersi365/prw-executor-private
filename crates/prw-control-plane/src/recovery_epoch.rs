@@ -13,6 +13,11 @@ pub const RECOVERY_EPOCH_BOOTSTRAP_LAST_ATTEMPT_MARKER: [u8; 32] = [0; 32];
 pub struct RecoveryEpoch(NonZeroU64);
 
 impl RecoveryEpoch {
+    /// Constructs a non-zero issued recovery epoch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RecoveryEpochError::ZeroIssuedEpoch`] when `value` is zero.
     pub fn new(value: u64) -> Result<Self, RecoveryEpochError> {
         NonZeroU64::new(value)
             .map(Self)
@@ -40,6 +45,11 @@ impl RecoveryEpochValue {
         }
     }
 
+    /// Returns the next strictly greater recovery epoch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RecoveryEpochError::EpochOverflow`] when the current epoch is `u64::MAX`.
     pub fn checked_successor(self) -> Result<RecoveryEpoch, RecoveryEpochError> {
         RecoveryEpoch::new(
             self.get()
@@ -59,6 +69,11 @@ impl From<RecoveryEpoch> for RecoveryEpochValue {
 pub struct RecoveryEpochAttemptId([u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES]);
 
 impl RecoveryEpochAttemptId {
+    /// Constructs a non-zero recovery-epoch issuance attempt identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RecoveryEpochError::ZeroAttemptId`] when `bytes` is the all-zero bootstrap marker.
     pub fn new(bytes: [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES]) -> Result<Self, RecoveryEpochError> {
         if bytes == [0; RECOVERY_EPOCH_ATTEMPT_ID_BYTES] {
             return Err(RecoveryEpochError::ZeroAttemptId);
@@ -91,7 +106,7 @@ impl RecoveryEpochHeadRecord {
     }
 
     #[must_use]
-    pub fn encode_columns(
+    pub const fn encode_columns(
         self,
     ) -> (
         [u8; RECOVERY_EPOCH_BYTES],
@@ -109,6 +124,11 @@ impl RecoveryEpochHeadRecord {
         }
     }
 
+    /// Decodes the canonical Spanner head-row epoch and attempt-ID columns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid byte lengths, a non-canonical bootstrap marker, or a zero issued attempt ID.
     pub fn decode_columns(epoch_be: &[u8], attempt: &[u8]) -> Result<Self, RecoveryEpochError> {
         let epoch = decode_recovery_epoch(epoch_be)?;
         let attempt: [u8; RECOVERY_EPOCH_ATTEMPT_ID_BYTES] = attempt
@@ -138,6 +158,11 @@ pub struct RecoveryEpochIssuancePlan {
 }
 
 impl RecoveryEpochIssuancePlan {
+    /// Builds the exact retained `(H, N, A)` issuance plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RecoveryEpochError::EpochOverflow`] when `previous_epoch` has no successor.
     pub fn new(
         previous_epoch: RecoveryEpochValue,
         attempt_id: RecoveryEpochAttemptId,
@@ -210,6 +235,12 @@ pub enum RecoveryEpochReobservation {
     ProvenNotCommitted,
 }
 
+/// Classifies one strong head-plus-history re-observation against an exact issuance plan.
+///
+/// # Errors
+///
+/// Returns [`RecoveryEpochError::ContradictoryState`] when the observed durable state cannot be
+/// reconciled with the retained `(H, N, A)` plan.
 pub fn classify_reobservation(
     plan: RecoveryEpochIssuancePlan,
     head: RecoveryEpochHeadRecord,
@@ -265,6 +296,11 @@ pub fn classify_reobservation(
 pub struct RecoveryEpochReissueBudget(bool);
 
 impl RecoveryEpochReissueBudget {
+    /// Consumes the single deliberate epoch-issuance reissue allowance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless non-commit was proven or when the one-reissue budget was already consumed.
     pub fn consume(
         &mut self,
         observed: RecoveryEpochReobservation,
@@ -306,15 +342,21 @@ pub const fn encode_recovery_epoch(value: RecoveryEpochValue) -> [u8; RECOVERY_E
     value.get().to_be_bytes()
 }
 
+/// Decodes the canonical unsigned big-endian recovery-epoch bytes.
+///
+/// # Errors
+///
+/// Returns [`RecoveryEpochError::InvalidEpochLength`] unless `encoded` is exactly eight bytes.
 pub fn decode_recovery_epoch(encoded: &[u8]) -> Result<RecoveryEpochValue, RecoveryEpochError> {
     let bytes: [u8; RECOVERY_EPOCH_BYTES] = encoded
         .try_into()
         .map_err(|_| RecoveryEpochError::InvalidEpochLength)?;
     let value = u64::from_be_bytes(bytes);
-    Ok(match NonZeroU64::new(value) {
-        Some(value) => RecoveryEpochValue::Issued(RecoveryEpoch(value)),
-        None => RecoveryEpochValue::Bootstrap,
-    })
+    Ok(
+        NonZeroU64::new(value).map_or(RecoveryEpochValue::Bootstrap, |value| {
+            RecoveryEpochValue::Issued(RecoveryEpoch(value))
+        }),
+    )
 }
 
 #[cfg(test)]

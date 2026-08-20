@@ -18,6 +18,11 @@ pub const FENCE_SEQUENCE_RESERVATION_RECORD_BYTES: usize = 54;
 pub struct SequenceAllocationAttemptId([u8; 32]);
 
 impl SequenceAllocationAttemptId {
+    /// Constructs a non-zero sequence-allocation attempt identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FenceSequenceError::ZeroAttemptId`] when `bytes` is all zero.
     pub fn new(bytes: [u8; 32]) -> Result<Self, FenceSequenceError> {
         if bytes == [0; 32] {
             return Err(FenceSequenceError::ZeroAttemptId);
@@ -54,6 +59,11 @@ pub fn encode_head(head: FenceSequenceHead) -> [u8; FENCE_SEQUENCE_HEAD_RECORD_B
     out
 }
 
+/// Decodes one canonical `PRWF` head record.
+///
+/// # Errors
+///
+/// Returns an error for a non-canonical record length, magic, version, or zero epoch.
 pub fn decode_head(encoded: &[u8]) -> Result<FenceSequenceHead, FenceSequenceError> {
     if encoded.len() != FENCE_SEQUENCE_HEAD_RECORD_BYTES {
         return Err(FenceSequenceError::InvalidHeadLength);
@@ -61,15 +71,19 @@ pub fn decode_head(encoded: &[u8]) -> Result<FenceSequenceHead, FenceSequenceErr
     if encoded[0..4] != FENCE_SEQUENCE_HEAD_MAGIC {
         return Err(FenceSequenceError::InvalidMagic);
     }
-    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION {
+    let mut version_bytes = [0_u8; 2];
+    version_bytes.copy_from_slice(&encoded[4..6]);
+    if u16::from_be_bytes(version_bytes) != FENCE_SEQUENCE_VERSION {
         return Err(FenceSequenceError::UnsupportedVersion);
     }
+    let mut epoch_bytes = [0_u8; 8];
+    epoch_bytes.copy_from_slice(&encoded[6..14]);
+    let mut high_water_bytes = [0_u8; 8];
+    high_water_bytes.copy_from_slice(&encoded[14..22]);
     Ok(FenceSequenceHead {
-        epoch: RecoveryEpoch::new(u64::from_be_bytes(
-            encoded[6..14].try_into().expect("fixed"),
-        ))
-        .map_err(|_| FenceSequenceError::ZeroEpoch)?,
-        high_water: u64::from_be_bytes(encoded[14..22].try_into().expect("fixed")),
+        epoch: RecoveryEpoch::new(u64::from_be_bytes(epoch_bytes))
+            .map_err(|_| FenceSequenceError::ZeroEpoch)?,
+        high_water: u64::from_be_bytes(high_water_bytes),
     })
 }
 
@@ -86,6 +100,11 @@ pub fn encode_reservation(
     out
 }
 
+/// Decodes one canonical `PRWR` reservation record.
+///
+/// # Errors
+///
+/// Returns an error for a non-canonical record length, magic, version, epoch, sequence, or attempt ID.
 pub fn decode_reservation(encoded: &[u8]) -> Result<FenceSequenceReservation, FenceSequenceError> {
     if encoded.len() != FENCE_SEQUENCE_RESERVATION_RECORD_BYTES {
         return Err(FenceSequenceError::InvalidReservationLength);
@@ -93,19 +112,23 @@ pub fn decode_reservation(encoded: &[u8]) -> Result<FenceSequenceReservation, Fe
     if encoded[0..4] != FENCE_SEQUENCE_RESERVATION_MAGIC {
         return Err(FenceSequenceError::InvalidMagic);
     }
-    if u16::from_be_bytes(encoded[4..6].try_into().expect("fixed")) != FENCE_SEQUENCE_VERSION {
+    let mut version_bytes = [0_u8; 2];
+    version_bytes.copy_from_slice(&encoded[4..6]);
+    if u16::from_be_bytes(version_bytes) != FENCE_SEQUENCE_VERSION {
         return Err(FenceSequenceError::UnsupportedVersion);
     }
+    let mut epoch_bytes = [0_u8; 8];
+    epoch_bytes.copy_from_slice(&encoded[6..14]);
+    let mut sequence_bytes = [0_u8; 8];
+    sequence_bytes.copy_from_slice(&encoded[14..22]);
+    let mut attempt_bytes = [0_u8; 32];
+    attempt_bytes.copy_from_slice(&encoded[22..54]);
     Ok(FenceSequenceReservation {
-        epoch: RecoveryEpoch::new(u64::from_be_bytes(
-            encoded[6..14].try_into().expect("fixed"),
-        ))
-        .map_err(|_| FenceSequenceError::ZeroEpoch)?,
-        sequence: NonZeroU64::new(u64::from_be_bytes(
-            encoded[14..22].try_into().expect("fixed"),
-        ))
-        .ok_or(FenceSequenceError::ZeroSequence)?,
-        attempt_id: SequenceAllocationAttemptId::new(encoded[22..54].try_into().expect("fixed"))?,
+        epoch: RecoveryEpoch::new(u64::from_be_bytes(epoch_bytes))
+            .map_err(|_| FenceSequenceError::ZeroEpoch)?,
+        sequence: NonZeroU64::new(u64::from_be_bytes(sequence_bytes))
+            .ok_or(FenceSequenceError::ZeroSequence)?,
+        attempt_id: SequenceAllocationAttemptId::new(attempt_bytes)?,
     })
 }
 
@@ -126,6 +149,11 @@ pub struct FenceSequenceHeadObservation {
 }
 
 impl FenceSequenceHeadObservation {
+    /// Builds a validated observation of the authoritative head key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the revision is non-positive or `value` is not a canonical head record.
     pub fn new(value: Vec<u8>, mod_revision: i64) -> Result<Self, FenceSequenceError> {
         if mod_revision <= 0 {
             return Err(FenceSequenceError::InvalidRevision);
@@ -163,6 +191,11 @@ pub struct FenceSequenceAllocationPlan {
     pub failure: [FenceSequenceTxnOperation; 2],
 }
 
+/// Builds the deterministic compare-and-swap plan for one sequence allocation.
+///
+/// # Errors
+///
+/// Returns an error when the predecessor high-water mark cannot advance to a non-zero `u64`.
 pub fn plan_allocation(
     predecessor: FenceSequenceHeadObservation,
     attempt_id: SequenceAllocationAttemptId,
@@ -214,6 +247,12 @@ pub enum FenceSequenceReobservation {
     ProvenNotCommitted,
 }
 
+/// Classifies a strong head-plus-reservation re-observation after an indeterminate mutation.
+///
+/// # Errors
+///
+/// Returns [`FenceSequenceError::ContradictoryState`] when the observations cannot be reconciled
+/// with the retained exact allocation plan.
 pub fn classify_reobservation(
     plan: &FenceSequenceAllocationPlan,
     head: &FenceSequenceHeadObservation,
@@ -243,6 +282,11 @@ pub fn classify_reobservation(
 pub struct FenceSequenceReissueBudget(bool);
 
 impl FenceSequenceReissueBudget {
+    /// Consumes the single deliberate reissue allowance after proof of non-commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless non-commit was proven or when the one-reissue budget was already consumed.
     pub fn consume(
         &mut self,
         observed: FenceSequenceReobservation,
