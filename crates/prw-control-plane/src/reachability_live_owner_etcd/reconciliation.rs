@@ -126,7 +126,8 @@ impl ReachabilityLiveOwnerEtcdStore {
         &mut self,
         before: LiveOwnerObservation,
         successor: ReachabilityLiveOwnerAuthorityRecord,
-    ) -> Result<ReachabilityLiveOwnerResolvedMutation, ReachabilityLiveOwnerReconciliationError> {
+    ) -> Result<ReachabilityLiveOwnerResolvedMutation, ReachabilityLiveOwnerReconciliationError>
+    {
         let pending = LiveOwnerPendingMutation::acquisition(before, successor)?;
         let mut io = EtcdMutationIo { store: self };
         resolve_pending_mutation(&mut io, pending)
@@ -150,7 +151,8 @@ impl ReachabilityLiveOwnerEtcdStore {
         peer: &PeerConnectivityIdentity,
         fence: NonZeroU128,
         observation: Option<LiveOwnerObservation>,
-    ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError> {
+    ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError>
+    {
         let before = observation.ok_or(LiveOwnerTxnError::MissingEstablishedState)?;
         let release = plan_release(peer, fence, Some(&before))?;
         let Some(plan) = release.into_transaction() else {

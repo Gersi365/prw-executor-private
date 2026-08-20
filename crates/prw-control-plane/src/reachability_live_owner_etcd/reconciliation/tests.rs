@@ -11,8 +11,7 @@ use prw_core::DeviceId;
 use super::*;
 use crate::{
     reachability_live_owner_codec::{
-        AuthorityAttemptId, LiveOwnerLifecycle, encode_live_owner_key,
-        encode_live_owner_record,
+        AuthorityAttemptId, LiveOwnerLifecycle, encode_live_owner_key, encode_live_owner_record,
     },
     reachability_live_owner_txn::classify_definitive_mutation,
 };
@@ -148,8 +147,7 @@ fn indeterminate_commit_is_reobserved_without_reissue() {
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 10, 2, 20);
     let successor =
         ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(11), attempt(3));
-    let committed_observation =
-        observation(peer, LiveOwnerLifecycle::Current, 11, 3, 21);
+    let committed_observation = observation(peer, LiveOwnerLifecycle::Current, 11, 3, 21);
     let pending =
         LiveOwnerPendingMutation::acquisition(before, successor).expect("pending acquisition");
     let mut io = ScriptedIo::new(
@@ -169,10 +167,7 @@ fn indeterminate_commit_is_reobserved_without_reissue() {
     assert_eq!(io.actual_submissions, 1);
     assert_eq!(
         io.events,
-        [
-            ScriptedEvent::Execute,
-            ScriptedEvent::LinearizableObserve,
-        ]
+        [ScriptedEvent::Execute, ScriptedEvent::LinearizableObserve,]
     );
 }
 
@@ -180,8 +175,7 @@ fn indeterminate_commit_is_reobserved_without_reissue() {
 fn proven_not_committed_allows_exactly_one_exact_plan_reissue() {
     let peer = peer("ae-reissue", 4);
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 30, 5, 40);
-    let successor =
-        ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(31), attempt(6));
+    let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(31), attempt(6));
     let pending = LiveOwnerPendingMutation::acquisition(before.clone(), successor)
         .expect("pending acquisition");
     let expected_plan = pending.plan.clone();
@@ -247,8 +241,7 @@ fn superseded_indeterminate_acquisition_never_reissues() {
 fn second_indeterminate_is_reobserved_but_never_submitted_a_third_time() {
     let peer = peer("ae-bound", 11);
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 70, 12, 80);
-    let successor =
-        ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(71), attempt(13));
+    let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(71), attempt(13));
     let pending =
         LiveOwnerPendingMutation::acquisition(before.clone(), successor).expect("pending");
     let mut io = ScriptedIo::new(
@@ -290,8 +283,7 @@ fn same_bytes_at_new_revision_fail_closed_without_reissue() {
     let before = observation(peer.clone(), LiveOwnerLifecycle::Current, 90, 16, 100);
     let successor =
         ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(91), attempt(17));
-    let same_bytes_new_revision =
-        observation(peer, LiveOwnerLifecycle::Current, 90, 16, 102);
+    let same_bytes_new_revision = observation(peer, LiveOwnerLifecycle::Current, 90, 16, 102);
     let pending =
         LiveOwnerPendingMutation::acquisition(before, successor).expect("pending acquisition");
     let mut io = ScriptedIo::new(
@@ -299,7 +291,9 @@ fn same_bytes_at_new_revision_fail_closed_without_reissue() {
             outcome: Ok(LiveOwnerMutationIoExecution::Indeterminate),
             actual_submission: true,
         }],
-        [ScriptedObservation::Ready(Ok(Some(same_bytes_new_revision)))],
+        [ScriptedObservation::Ready(Ok(Some(
+            same_bytes_new_revision,
+        )))],
     );
 
     assert_eq!(
@@ -329,8 +323,8 @@ fn indeterminate_release_commit_is_reobserved_without_second_release() {
         [ScriptedObservation::Ready(Ok(Some(released)))],
     );
 
-    let resolved = futures_poll_ready(resolve_pending_mutation(&mut io, pending))
-        .expect("resolved release");
+    let resolved =
+        futures_poll_ready(resolve_pending_mutation(&mut io, pending)).expect("resolved release");
     assert_eq!(
         resolved.outcome(),
         &ReachabilityLiveOwnerResolvedMutationOutcome::Committed
@@ -342,8 +336,7 @@ fn indeterminate_release_commit_is_reobserved_without_second_release() {
 fn unavailable_reobservation_fails_closed_without_reissue() {
     let peer = peer("ae-unavailable", 23);
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 130, 24, 140);
-    let successor =
-        ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(131), attempt(25));
+    let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(131), attempt(25));
     let pending =
         LiveOwnerPendingMutation::acquisition(before, successor).expect("pending acquisition");
     let mut io = ScriptedIo::new(
@@ -356,9 +349,7 @@ fn unavailable_reobservation_fails_closed_without_reissue() {
 
     assert_eq!(
         futures_poll_ready(resolve_pending_mutation(&mut io, pending)),
-        Err(LiveOwnerOrchestrationError::Provider(
-            ScriptedProviderError
-        ))
+        Err(LiveOwnerOrchestrationError::Provider(ScriptedProviderError))
     );
     assert_eq!(io.executed_plans.len(), 1);
 }
@@ -367,8 +358,7 @@ fn unavailable_reobservation_fails_closed_without_reissue() {
 fn dropping_pending_reconciliation_does_not_spawn_detached_reissue() {
     let peer = peer("ae-cancel", 27);
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 150, 28, 160);
-    let successor =
-        ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(151), attempt(29));
+    let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(151), attempt(29));
     let pending =
         LiveOwnerPendingMutation::acquisition(before, successor).expect("pending acquisition");
     let mut io = ScriptedIo::new(
@@ -391,10 +381,7 @@ fn dropping_pending_reconciliation_does_not_spawn_detached_reissue() {
     assert_eq!(io.actual_submissions, 1);
     assert_eq!(
         io.events,
-        [
-            ScriptedEvent::Execute,
-            ScriptedEvent::LinearizableObserve,
-        ]
+        [ScriptedEvent::Execute, ScriptedEvent::LinearizableObserve,]
     );
 }
 
