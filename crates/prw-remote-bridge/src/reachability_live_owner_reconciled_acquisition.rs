@@ -143,11 +143,8 @@ mod tests {
     fn committed_exact_plan_maps_to_exact_semantic_grant() {
         let peer = peer("av-committed", 1);
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 100, 2, 10);
-        let successor = ReachabilityLiveOwnerAuthorityRecord::current(
-            peer.clone(),
-            fence(101),
-            attempt(3),
-        );
+        let successor =
+            ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(101), attempt(3));
         let plan = plan_acquisition(&before, successor).expect("plan acquisition");
 
         let result = map_reconciled_acquisition_parts(
@@ -169,11 +166,8 @@ mod tests {
     fn compare_failed_maps_to_contention_without_grant() {
         let peer = peer("av-compare-failed", 4);
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 200, 5, 20);
-        let successor = ReachabilityLiveOwnerAuthorityRecord::current(
-            peer.clone(),
-            fence(201),
-            attempt(6),
-        );
+        let successor =
+            ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(201), attempt(6));
         let plan = plan_acquisition(&before, successor).expect("plan acquisition");
         let outcome = ReachabilityLiveOwnerResolvedMutationOutcome::CompareFailed(before);
 
@@ -187,11 +181,8 @@ mod tests {
     fn superseded_maps_to_contention_without_grant() {
         let peer = peer("av-superseded", 7);
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 300, 8, 30);
-        let successor = ReachabilityLiveOwnerAuthorityRecord::current(
-            peer.clone(),
-            fence(301),
-            attempt(9),
-        );
+        let successor =
+            ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(301), attempt(9));
         let plan = plan_acquisition(&before, successor).expect("plan acquisition");
 
         assert_eq!(
@@ -211,20 +202,12 @@ mod tests {
         let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 400, 11, 40);
         let retained = plan_acquisition(
             &before,
-            ReachabilityLiveOwnerAuthorityRecord::current(
-                peer.clone(),
-                fence(401),
-                attempt(12),
-            ),
+            ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(401), attempt(12)),
         )
         .expect("retained plan");
         let different = plan_acquisition(
             &before,
-            ReachabilityLiveOwnerAuthorityRecord::current(
-                peer.clone(),
-                fence(402),
-                attempt(13),
-            ),
+            ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence(402), attempt(13)),
         )
         .expect("different plan");
 
@@ -246,11 +229,7 @@ mod tests {
         let before = observation(peer_a.clone(), LiveOwnerLifecycle::Released, 500, 16, 50);
         let plan = plan_acquisition(
             &before,
-            ReachabilityLiveOwnerAuthorityRecord::current(
-                peer_a,
-                fence(501),
-                attempt(17),
-            ),
+            ReachabilityLiveOwnerAuthorityRecord::current(peer_a, fence(501), attempt(17)),
         )
         .expect("plan acquisition");
 
@@ -292,11 +271,7 @@ mod tests {
         let before = observation(peer_a.clone(), LiveOwnerLifecycle::Released, 700, 22, 70);
         let plan = plan_acquisition(
             &before,
-            ReachabilityLiveOwnerAuthorityRecord::current(
-                peer_a.clone(),
-                fence(701),
-                attempt(23),
-            ),
+            ReachabilityLiveOwnerAuthorityRecord::current(peer_a.clone(), fence(701), attempt(23)),
         )
         .expect("plan acquisition");
         let contradictory = observation(peer_b, LiveOwnerLifecycle::Current, 800, 24, 80);
