@@ -21,8 +21,14 @@ fn acquisition_evidence_chain_is_externally_nameable_without_provider_activation
         let failure: &[FenceSequenceTxnOperation; 2] = &plan.failure;
 
         let _ = (
-            outcome, epoch, attempt_id, compares, success, failure,
-            acquisition.transaction(), handoff.observation(),
+            outcome,
+            epoch,
+            attempt_id,
+            compares,
+            success,
+            failure,
+            acquisition.transaction(),
+            handoff.observation(),
         );
     }
 
