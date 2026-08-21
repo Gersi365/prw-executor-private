@@ -40,7 +40,8 @@ fn observation(epoch_value: u64, high_water: u64, revision: i64) -> FenceSequenc
 
 #[test]
 fn absent_head_plan_materializes_real_etcd_transaction_without_endpoint() {
-    let FenceSequenceInitializationPlan::Mutation(plan) = plan_initialization(epoch(9), None) else {
+    let FenceSequenceInitializationPlan::Mutation(plan) = plan_initialization(epoch(9), None)
+    else {
         panic!("absent head must produce a mutation plan");
     };
 
@@ -61,8 +62,7 @@ fn older_epoch_plan_materializes_real_etcd_transaction_without_endpoint() {
 
 #[test]
 fn unexpected_success_branch_shape_fails_before_provider_io() {
-    let FenceSequenceInitializationPlan::Mutation(mut plan) =
-        plan_initialization(epoch(9), None)
+    let FenceSequenceInitializationPlan::Mutation(mut plan) = plan_initialization(epoch(9), None)
     else {
         panic!("absent head must produce a mutation plan");
     };
@@ -78,8 +78,7 @@ fn unexpected_success_branch_shape_fails_before_provider_io() {
 
 #[test]
 fn unexpected_failure_branch_shape_fails_before_provider_io() {
-    let FenceSequenceInitializationPlan::Mutation(mut plan) =
-        plan_initialization(epoch(9), None)
+    let FenceSequenceInitializationPlan::Mutation(mut plan) = plan_initialization(epoch(9), None)
     else {
         panic!("absent head must produce a mutation plan");
     };
