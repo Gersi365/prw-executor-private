@@ -57,6 +57,17 @@ Only `reachability_acquisition_evidence` is the selected new public module bound
 
 Private declaration of `fence_sequence_allocation_etcd` is compile-support for the retained AQ module only; it does not make the etcd store externally nameable.
 
+### Retained-private lint scope
+
+These modules were previously validated in isolated harnesses rather than compiled as normal library modules. Once privately declared by AU, their intentionally dormant non-facade APIs become visible to the library dead-code lint even though AU deliberately refuses to export or activate them.
+
+AU therefore permits only module-scoped lint relaxation on the six retained private declarations in `lib.rs`:
+
+- `dead_code` may be allowed on each retained private support module so dormant predecessor APIs do not have to be made public merely to satisfy library reachability analysis;
+- the private AP support module may additionally allow Clippy `redundant_pub_crate` for its already-existing `pub(crate)` transaction-builder helper.
+
+No crate-wide lint relaxation is permitted. No lint attribute is added to a predecessor implementation file. The purpose is specifically to preserve the narrower public API instead of widening provider/runtime surfaces to silence lints.
+
 ## Explicitly not public through AU
 
 C02f-AU does not expose through the facade:
@@ -114,7 +125,7 @@ C02f-AU does not:
 
 C02f-AU is bounded to:
 
-1. `crates/prw-control-plane/src/lib.rs` — private retained-module declarations plus one public facade declaration;
+1. `crates/prw-control-plane/src/lib.rs` — private retained-module declarations, module-scoped retained-private lint handling, plus one public facade declaration;
 2. `crates/prw-control-plane/src/reachability_acquisition_evidence.rs` — facade re-exports only;
 3. `crates/prw-control-plane/tests/c02f_au_control_plane_acquisition_evidence_public_surface.rs` — external nameability harness;
 4. this contract.
