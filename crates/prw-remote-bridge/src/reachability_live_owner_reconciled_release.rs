@@ -49,9 +49,7 @@ pub fn map_reconciled_live_owner_release(
     resolved: &ReachabilityLiveOwnerResolvedRelease,
 ) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
     match resolved {
-        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => {
-            Err(top_level_not_current_error())
-        }
+        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => Err(top_level_not_current_error()),
         ReachabilityLiveOwnerResolvedRelease::Mutation(mutation) => {
             map_reconciled_release_parts(grant, mutation.plan(), mutation.outcome())
         }
