@@ -130,7 +130,7 @@ fn resolved_allocation(
 }
 
 fn live_owner_observation(
-    peer: PeerConnectivityIdentity,
+    peer: &PeerConnectivityIdentity,
     fence: NonZeroU128,
     attempt_marker: u8,
     revision: i64,
@@ -140,7 +140,7 @@ fn live_owner_observation(
         fence,
         live_owner_attempt(attempt_marker),
     );
-    let key = encode_live_owner_key(&peer).expect("canonical live-owner key");
+    let key = encode_live_owner_key(peer).expect("canonical live-owner key");
     let value = encode_live_owner_record(&record).expect("canonical live-owner record");
     LiveOwnerObservation::decode(key, value, revision).expect("live-owner observation")
 }
@@ -161,7 +161,7 @@ fn committed_allocation_composes_exact_locked_64_64_fence() {
 #[test]
 fn committed_allocation_builds_exact_current_successor_and_retains_evidence() {
     let peer = peer("ar-committed", 1);
-    let observed = live_owner_observation(peer.clone(), raw_fence(9, 41), 3, 91);
+    let observed = live_owner_observation(&peer, raw_fence(9, 41), 3, 91);
     let allocation = resolved_allocation(FenceSequenceReobservation::Committed, 9, 41, 7);
     let expected_allocation = allocation.clone();
     let next_attempt = live_owner_attempt(4);
@@ -186,7 +186,7 @@ fn committed_allocation_builds_exact_current_successor_and_retains_evidence() {
 #[test]
 fn superseded_allocation_never_authorizes_live_owner_fence_or_plan() {
     let peer = peer("ar-superseded", 2);
-    let observed = live_owner_observation(peer.clone(), raw_fence(9, 41), 3, 92);
+    let observed = live_owner_observation(&peer, raw_fence(9, 41), 3, 92);
     let allocation = resolved_allocation(FenceSequenceReobservation::Superseded, 9, 41, 7);
 
     assert_eq!(
@@ -211,7 +211,7 @@ fn superseded_allocation_never_authorizes_live_owner_fence_or_plan() {
 #[test]
 fn older_epoch_allocation_cannot_bypass_live_owner_fence_monotonicity() {
     let peer = peer("ar-monotonic", 3);
-    let observed = live_owner_observation(peer.clone(), raw_fence(10, 1), 3, 93);
+    let observed = live_owner_observation(&peer, raw_fence(10, 1), 3, 93);
     let allocation = resolved_allocation(FenceSequenceReobservation::Committed, 9, 41, 7);
 
     assert_eq!(
@@ -231,7 +231,7 @@ fn older_epoch_allocation_cannot_bypass_live_owner_fence_monotonicity() {
 fn exact_peer_binding_is_still_enforced_by_existing_live_owner_planner() {
     let observed_peer = peer("ar-peer-a", 4);
     let requested_peer = peer("ar-peer-b", 5);
-    let observed = live_owner_observation(observed_peer, raw_fence(9, 41), 3, 94);
+    let observed = live_owner_observation(&observed_peer, raw_fence(9, 41), 3, 94);
     let allocation = resolved_allocation(FenceSequenceReobservation::Committed, 9, 41, 7);
 
     assert_eq!(
@@ -250,7 +250,7 @@ fn exact_peer_binding_is_still_enforced_by_existing_live_owner_planner() {
 #[test]
 fn live_owner_attempt_id_must_remain_fresh_independently_of_sequence_attempt_id() {
     let peer = peer("ar-attempt", 6);
-    let observed = live_owner_observation(peer.clone(), raw_fence(9, 41), 4, 95);
+    let observed = live_owner_observation(&peer, raw_fence(9, 41), 4, 95);
     let allocation = resolved_allocation(FenceSequenceReobservation::Committed, 9, 41, 7);
 
     assert_eq!(
