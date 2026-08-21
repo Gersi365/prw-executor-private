@@ -2,7 +2,7 @@
 
 ## Purpose
 
-C02f-AY materializes the provider-neutral pure release mapper selected by C02f-AX.
+C02f-AY materializes the provider-neutral pure release mapper selected by C02f-AX, with one bounded fail-closed safety correction discovered during manual evidence-binding review before AY validation.
 
 The mapper consumes one exact semantic `ReachabilityLiveOwnerGrant` plus one terminal C02f-AE `ReachabilityLiveOwnerResolvedRelease` and translates only already-resolved evidence into existing `ReachabilityLiveOwnerRelease` semantics.
 
@@ -14,7 +14,27 @@ C02f-AY starts from canonical C02f-AX:
 
 `3cd105f76e949a0f73655d7248b00e60dd3aaf41`
 
-C02f-AX remains frozen as the mapping-selection checkpoint.
+C02f-AX remains frozen as the prior mapping-selection checkpoint.
+
+## Newly discovered AX contradiction
+
+C02f-AX selected top-level C02f-AE `ReachabilityLiveOwnerResolvedRelease::NotCurrent` to map directly to semantic `ReachabilityLiveOwnerRelease::NotCurrent`.
+
+Manual review before AY validation found a concrete evidence-continuity defect in that selected mapping:
+
+- the existing C02f-AE `NotCurrent` variant is a unit variant;
+- it retains no peer identity;
+- it retains no fence generation;
+- therefore, once detached from the provider call that produced it, AY cannot prove that the `NotCurrent` result belongs to the semantic grant supplied to the mapper;
+- a terminal `NotCurrent` produced for one peer/fence could otherwise be rebound to another grant.
+
+This is a new concrete contradiction, not a reopening of closed reconciliation work.
+
+C02f-AY therefore supersedes only that one unsafe AX mapping rule and fails the unbound top-level `NotCurrent` variant closed as:
+
+`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`
+
+No C02f-AE predecessor source is changed in AY. A later separately selected evidence-binding tranche may retain exact peer/fence context in release terminal evidence and restore a safely provable semantic `NotCurrent` mapping.
 
 ## Materialized source
 
@@ -43,11 +63,17 @@ No independent peer, fence, successor, observation, transaction plan, provider s
 
 ## Exact semantic mapping
 
-`ReachabilityLiveOwnerResolvedRelease::NotCurrent` maps directly to:
+### Unbound top-level NotCurrent
 
-`ReachabilityLiveOwnerRelease::NotCurrent`
+`ReachabilityLiveOwnerResolvedRelease::NotCurrent` has no retained exact peer/fence evidence in the current C02f-AE type.
 
-without constructing or inferring a mutation.
+AY therefore maps it to:
+
+`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`
+
+It does not manufacture semantic `NotCurrent` from unbound evidence.
+
+### Resolved mutation
 
 For `ReachabilityLiveOwnerResolvedRelease::Mutation(resolved)`, the mapper validates the retained transaction successor before interpreting the terminal outcome.
 
@@ -89,7 +115,7 @@ No fence is allocated, incremented, replaced or accepted from request-controlled
 
 C02f-AY includes pure in-memory unit coverage for:
 
-1. top-level `NotCurrent` -> semantic `NotCurrent`;
+1. unbound top-level `NotCurrent` -> fail closed;
 2. exact release plan + `Committed` -> `Released`;
 3. exact release plan + `Superseded` -> `NotCurrent`;
 4. compare failure with stale observation -> `NotCurrent`;
@@ -111,14 +137,32 @@ C02f-AY does not replace or duplicate provider orchestration.
 - C02f-AV remains the reconciled-acquisition pure mapper.
 - C02f-AY is only the sibling reconciled-release pure mapper.
 
-The materialized release chain is:
+The safe materialized release chain is:
 
-`exact semantic grant + AE terminal release evidence -> AY pure release semantic result`
+`exact semantic grant + AE terminal mutation evidence -> AY pure release semantic result`
+
+The current unbound AE top-level `NotCurrent` path is intentionally excluded from semantic success until exact release-result binding is materialized separately.
+
+## CI infrastructure status
+
+C02f-AY validation is currently blocked by repository/account-specific GitHub Actions execution failure before the first job step.
+
+Recorded current-head zero-step failures include:
+
+- Rust #821 / run `32480142567`;
+- Android #373 / run `32480142572`.
+
+Their rerun attempt 2 again returned jobs with `steps=null` before checkout or any validation command executed.
+
+GitHub public Actions status is operational, and the repository workflows use GitHub-hosted Ubuntu runners. The observed pattern is therefore an execution/account/quota/budget-class infrastructure blocker rather than a source diagnostic. This contract does not claim a precise billing cause without account billing evidence.
+
+No validation gate is claimed until canonical CI actually executes and passes on the exact final AY head.
 
 ## Explicit non-goals / non-activation boundary
 
 C02f-AY does not:
 
+- change C02f-AE predecessor source;
 - call `ReachabilityLiveOwnerEtcdStore::execute_release_with_reconciliation`;
 - call `ReachabilityLiveOwnerEtcdStore::execute`;
 - perform etcd Get/Txn/re-observation;
@@ -142,8 +186,8 @@ C02f-AY does not:
 
 C02f-AY is valid only if canonical repository validation is green on the exact final AY head and a fresh AX -> AY compare proves the bounded source/module/contract scope.
 
-Expected gate:
+Expected gate, explicitly not yet claimed:
 
 `C02F_AY_RECONCILED_RELEASE_SEMANTIC_MAPPER_VALIDATED`
 
-Provider-execution composition remains a separate activation boundary after C02f-AY.
+Provider-execution composition and exact release-`NotCurrent` evidence binding both remain separate later boundaries.
