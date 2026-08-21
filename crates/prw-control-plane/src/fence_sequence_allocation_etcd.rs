@@ -239,10 +239,7 @@ pub(crate) fn build_etcd_transaction(
         TxnOp::get(reservation_key.clone(), None),
     ];
 
-    Ok(Txn::new()
-        .when(compares)
-        .and_then(success)
-        .or_else(failure))
+    Ok(Txn::new().when(compares).and_then(success).or_else(failure))
 }
 
 fn validate_plan_shape(
@@ -341,8 +338,10 @@ fn classify_etcd_transaction_response(
         return Ok(FenceSequenceAllocationDefinitiveMutation::Applied);
     }
 
-    let [TxnOpResponse::Get(head_response), TxnOpResponse::Get(reservation_response)] =
-        responses.as_slice()
+    let [
+        TxnOpResponse::Get(head_response),
+        TxnOpResponse::Get(reservation_response),
+    ] = responses.as_slice()
     else {
         return Err(FenceSequenceAllocationEtcdError::UnexpectedTxnResponseShape);
     };
@@ -371,9 +370,9 @@ fn decode_exact_head_get(
                 kv.mod_revision(),
             )?))
         }
-        kvs => Err(FenceSequenceAllocationEtcdError::UnexpectedGetCardinality {
-            actual: kvs.len(),
-        }),
+        kvs => {
+            Err(FenceSequenceAllocationEtcdError::UnexpectedGetCardinality { actual: kvs.len() })
+        }
     }
 }
 
@@ -392,8 +391,8 @@ fn decode_exact_reservation_get(
             }
             Ok(Some(decode_reservation(kv.value())?))
         }
-        kvs => Err(FenceSequenceAllocationEtcdError::UnexpectedGetCardinality {
-            actual: kvs.len(),
-        }),
+        kvs => {
+            Err(FenceSequenceAllocationEtcdError::UnexpectedGetCardinality { actual: kvs.len() })
+        }
     }
 }
