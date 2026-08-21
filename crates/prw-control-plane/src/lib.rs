@@ -240,7 +240,7 @@ pub struct EnrollmentRequest {
     pub user_id: UserId,
     /// Device requesting enrollment.
     pub device_id: DeviceId,
-    /// Public device-identity material.
+    /// Public device-identity material only.
     pub public_identity: PublicIdentityMaterial,
 }
 
@@ -254,7 +254,7 @@ pub enum EnrollmentDecision {
 }
 
 /// Lifecycle of an enrollment request.
-#[derive(Debug, Clone, Copy,PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnrollmentState {
     /// No terminal decision has been recorded.
     Pending,
