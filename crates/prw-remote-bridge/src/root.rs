@@ -22,4 +22,5 @@ pub mod reachability_live_owner_async;
 pub mod reachability_live_owner_provider_bridge;
 pub mod reachability_live_owner_reconciled_acquisition;
 pub mod reachability_live_owner_reconciled_release;
+pub mod reachability_live_owner_reconciled_release_execution;
 pub mod reachability_owner;
