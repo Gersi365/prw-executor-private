@@ -56,7 +56,7 @@ pub fn map_reconciled_live_owner_release(
     }
 }
 
-fn top_level_not_current_error() -> ReachabilityLiveOwnerAuthorityError {
+const fn top_level_not_current_error() -> ReachabilityLiveOwnerAuthorityError {
     ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
 }
 
