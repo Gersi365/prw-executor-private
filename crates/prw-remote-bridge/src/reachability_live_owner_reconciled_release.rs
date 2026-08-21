@@ -229,9 +229,9 @@ mod tests {
 
     #[test]
     fn committed_exact_release_plan_maps_to_released() {
-        let peer = peer("ay-committed", 5);
+        let peer = peer("ay-committed", 2);
         let grant = semantic_grant(peer.clone(), 200);
-        let plan = release_plan(&peer, 200, 6, 20);
+        let plan = release_plan(&peer, 200, 3, 20);
 
         assert_eq!(
             map_reconciled_release_parts(
@@ -245,9 +245,9 @@ mod tests {
 
     #[test]
     fn superseded_exact_release_plan_maps_to_not_current() {
-        let peer = peer("ay-superseded", 7);
+        let peer = peer("ay-superseded", 4);
         let grant = semantic_grant(peer.clone(), 300);
-        let plan = release_plan(&peer, 300, 8, 30);
+        let plan = release_plan(&peer, 300, 5, 30);
 
         assert_eq!(
             map_reconciled_release_parts(
@@ -261,10 +261,10 @@ mod tests {
 
     #[test]
     fn compare_failed_stale_observation_maps_to_not_current() {
-        let peer = peer("ay-compare-stale", 9);
+        let peer = peer("ay-compare-stale", 6);
         let grant = semantic_grant(peer.clone(), 400);
-        let plan = release_plan(&peer, 400, 10, 40);
-        let stale = observation(peer, LiveOwnerLifecycle::Released, 400, 10, 41);
+        let plan = release_plan(&peer, 400, 7, 40);
+        let stale = observation(peer, LiveOwnerLifecycle::Released, 400, 7, 41);
         let outcome = ReachabilityLiveOwnerResolvedMutationOutcome::CompareFailed(stale);
 
         assert_eq!(
@@ -275,10 +275,10 @@ mod tests {
 
     #[test]
     fn compare_failed_current_observation_fails_closed() {
-        let peer = peer("ay-compare-current", 11);
+        let peer = peer("ay-compare-current", 8);
         let grant = semantic_grant(peer.clone(), 500);
-        let plan = release_plan(&peer, 500, 12, 50);
-        let current = observation(peer, LiveOwnerLifecycle::Current, 500, 12, 51);
+        let plan = release_plan(&peer, 500, 9, 50);
+        let current = observation(peer, LiveOwnerLifecycle::Current, 500, 9, 51);
         let outcome = ReachabilityLiveOwnerResolvedMutationOutcome::CompareFailed(current);
 
         assert_eq!(
@@ -289,10 +289,10 @@ mod tests {
 
     #[test]
     fn cross_peer_release_plan_fails_closed() {
-        let peer_a = peer("ay-cross-peer-a", 13);
-        let peer_b = peer("ay-cross-peer-b", 14);
+        let peer_a = peer("ay-cross-peer-a", 10);
+        let peer_b = peer("ay-cross-peer-b", 11);
         let grant = semantic_grant(peer_a, 600);
-        let plan = release_plan(&peer_b, 600, 15, 60);
+        let plan = release_plan(&peer_b, 600, 12, 60);
 
         assert_eq!(
             map_reconciled_release_parts(
@@ -306,9 +306,9 @@ mod tests {
 
     #[test]
     fn different_fence_release_plan_fails_closed() {
-        let peer = peer("ay-fence-mismatch", 16);
+        let peer = peer("ay-fence-mismatch", 13);
         let grant = semantic_grant(peer.clone(), 700);
-        let plan = release_plan(&peer, 701, 17, 70);
+        let plan = release_plan(&peer, 701, 14, 70);
 
         assert_eq!(
             map_reconciled_release_parts(
@@ -322,11 +322,11 @@ mod tests {
 
     #[test]
     fn non_released_successor_fails_closed() {
-        let peer = peer("ay-current-successor", 18);
+        let peer = peer("ay-current-successor", 15);
         let grant = semantic_grant(peer.clone(), 801);
-        let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 800, 19, 80);
+        let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 800, 16, 80);
         let current_successor =
-            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(801), attempt(20));
+            ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(801), attempt(17));
         let plan = plan_acquisition(&before, current_successor).expect("acquisition plan");
 
         assert_eq!(
@@ -341,11 +341,11 @@ mod tests {
 
     #[test]
     fn compare_failure_observation_for_another_peer_fails_closed() {
-        let peer_a = peer("ay-compare-peer-a", 21);
-        let peer_b = peer("ay-compare-peer-b", 22);
+        let peer_a = peer("ay-compare-peer-a", 18);
+        let peer_b = peer("ay-compare-peer-b", 19);
         let grant = semantic_grant(peer_a.clone(), 900);
-        let plan = release_plan(&peer_a, 900, 23, 90);
-        let contradictory = observation(peer_b, LiveOwnerLifecycle::Released, 900, 24, 91);
+        let plan = release_plan(&peer_a, 900, 20, 90);
+        let contradictory = observation(peer_b, LiveOwnerLifecycle::Released, 900, 21, 91);
         let outcome = ReachabilityLiveOwnerResolvedMutationOutcome::CompareFailed(contradictory);
 
         assert_eq!(
