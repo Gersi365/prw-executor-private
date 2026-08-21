@@ -329,7 +329,9 @@ fn dropping_pending_reobservation_spawns_no_detached_reissue() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceAllocationSubmissionOutcome::MutationIndeterminate)],
+        [Ok(
+            FenceSequenceAllocationSubmissionOutcome::MutationIndeterminate,
+        )],
         [Reobserve::Pending],
     );
 
