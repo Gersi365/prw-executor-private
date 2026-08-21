@@ -9,7 +9,21 @@
 //! Phase 128 adds provider-neutral enrolled-device session authentication
 //! challenge, replay, and canonical-message semantics without granting capabilities.
 
+#[allow(dead_code)]
+mod fence_sequence;
+#[allow(dead_code, clippy::redundant_pub_crate)]
+mod fence_sequence_allocation_etcd;
+#[allow(dead_code)]
+mod fence_sequence_allocation_orchestrator;
+#[allow(dead_code)]
+mod fence_sequence_live_owner_bridge;
+#[allow(dead_code)]
+mod fence_sequence_live_owner_handoff;
+#[allow(dead_code)]
+mod recovery_epoch;
+
 pub mod enrollment_pop;
+pub mod reachability_acquisition_evidence;
 pub mod reachability_live_owner_codec;
 pub mod reachability_live_owner_etcd;
 pub mod reachability_live_owner_txn;
