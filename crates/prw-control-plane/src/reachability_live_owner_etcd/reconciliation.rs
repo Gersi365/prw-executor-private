@@ -61,13 +61,65 @@ impl ReachabilityLiveOwnerResolvedMutation {
     }
 }
 
+/// Provider-owned proof that one exact requested release was already not current.
+///
+/// The binding is intentionally minimal: only the exact logical peer and requested non-zero fence
+/// survive the deterministic no-mutation classification. Construction is private to this module so
+/// downstream consumers can observe, but cannot arbitrarily mint, provider-owned terminal evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReachabilityLiveOwnerResolvedNotCurrent {
+    peer: PeerConnectivityIdentity,
+    fence: NonZeroU128,
+}
+
+impl ReachabilityLiveOwnerResolvedNotCurrent {
+    const fn new(peer: PeerConnectivityIdentity, fence: NonZeroU128) -> Self {
+        Self { peer, fence }
+    }
+
+    /// Returns the exact logical peer supplied to the validated release classification.
+    #[must_use]
+    pub const fn peer(&self) -> &PeerConnectivityIdentity {
+        &self.peer
+    }
+
+    /// Returns the exact non-zero fence supplied to the validated release classification.
+    #[must_use]
+    pub const fn fence(&self) -> NonZeroU128 {
+        self.fence
+    }
+}
+
 /// Terminal release result after pre-read classification and any bounded mutation reconciliation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReachabilityLiveOwnerResolvedRelease {
     /// The supplied exact peer/fence was already not current, so no mutation was attempted.
-    NotCurrent,
+    NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent),
     /// A release mutation was attempted and reached a terminal provider-owned result.
     Mutation(Box<ReachabilityLiveOwnerResolvedMutation>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LiveOwnerPlannedRelease {
+    NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent),
+    Mutation(Box<LiveOwnerTxnPlan>),
+}
+
+fn plan_resolved_release(
+    peer: &PeerConnectivityIdentity,
+    fence: NonZeroU128,
+    before: &LiveOwnerObservation,
+) -> Result<LiveOwnerPlannedRelease, LiveOwnerTxnError> {
+    let release = plan_release(peer, fence, Some(before))?;
+    Ok(release.into_transaction().map_or_else(
+        || {
+            LiveOwnerPlannedRelease::NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent::new(
+                peer.clone(),
+                fence,
+            ))
+        },
+        |plan| LiveOwnerPlannedRelease::Mutation(Box::new(plan)),
+    ))
 }
 
 /// Fail-closed C02f-AE real-provider orchestration error.
@@ -137,10 +189,10 @@ impl ReachabilityLiveOwnerEtcdStore {
 
     /// Executes one release with bounded C02f-AE reconciliation when the supplied owner is current.
     ///
-    /// A stale/already-released peer/fence returns `NotCurrent` without a mutation. An indeterminate
-    /// release follows the same mandatory linearizable re-observation and one-reissue bound as
-    /// acquisition, preserving the exact fence and authority-attempt ID in the canonical Released
-    /// successor.
+    /// A stale/already-released peer/fence returns bound `NotCurrent` evidence without a mutation.
+    /// An indeterminate release follows the same mandatory linearizable re-observation and one-reissue
+    /// bound as acquisition, preserving the exact fence and authority-attempt ID in the canonical
+    /// Released successor.
     ///
     /// # Errors
     ///
@@ -154,9 +206,11 @@ impl ReachabilityLiveOwnerEtcdStore {
     ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError>
     {
         let before = observation.ok_or(LiveOwnerTxnError::MissingEstablishedState)?;
-        let release = plan_release(peer, fence, Some(&before))?;
-        let Some(plan) = release.into_transaction() else {
-            return Ok(ReachabilityLiveOwnerResolvedRelease::NotCurrent);
+        let plan = match plan_resolved_release(peer, fence, &before)? {
+            LiveOwnerPlannedRelease::NotCurrent(evidence) => {
+                return Ok(ReachabilityLiveOwnerResolvedRelease::NotCurrent(evidence));
+            }
+            LiveOwnerPlannedRelease::Mutation(plan) => *plan,
         };
         let pending = LiveOwnerPendingMutation::release(before, plan);
         let mut io = EtcdMutationIo { store: self };

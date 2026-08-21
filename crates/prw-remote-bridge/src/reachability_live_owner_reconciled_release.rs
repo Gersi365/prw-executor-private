@@ -5,9 +5,9 @@
 //! It performs no provider I/O, transaction execution, re-observation, endpoint/client construction,
 //! runtime ownership, retry/reissue, authority activation, R1-R4 effect fencing or deployment.
 //!
-//! A later manual evidence-binding review found one concrete correction to the AX selection: the
-//! existing C02f-AE top-level `NotCurrent` variant carries no peer/fence context. AY therefore fails
-//! that unbound variant closed instead of allowing it to be rebound to an arbitrary semantic grant.
+//! C02f-BA adds provider-owned peer/fence evidence to the top-level `NotCurrent` variant. This file
+//! changes only enough to remain compile-compatible with that payload shape: the payload is not
+//! inspected or trusted for semantic success in BA, so the branch continues to fail closed.
 
 use std::num::NonZeroU128;
 
@@ -27,19 +27,21 @@ use crate::reachability_live_owner::{
 
 /// Maps one exact semantic grant plus one terminal C02f-AE release result into release semantics.
 ///
-/// The existing C02f-AE top-level `NotCurrent` variant carries no peer/fence binding, so AY rejects
-/// it fail-closed rather than allowing a terminal result from one grant to be rebound to another.
-/// For a resolved mutation, the retained successor must preserve the exact grant peer/fence and must
-/// be `Released` before its terminal outcome is interpreted. `Committed` maps to `Released`,
+/// C02f-BA binds the top-level `NotCurrent` result to provider-owned peer/fence evidence, but this
+/// compatibility checkpoint deliberately does not consume that payload yet. The branch therefore
+/// remains fail-closed until a later semantic checkpoint proves exact equality with the supplied
+/// grant. For a resolved mutation, the retained successor must preserve the exact grant peer/fence
+/// and must be `Released` before its terminal outcome is interpreted. `Committed` maps to `Released`,
 /// `Superseded` maps to `NotCurrent`, and `CompareFailed` maps to `NotCurrent` only when the
 /// authoritative failure observation deterministically proves the supplied grant stale.
 /// Contradictory context fails closed.
 ///
 /// # Errors
 ///
-/// Returns [`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`] for an unbound top-level
-/// `NotCurrent`, successor-context mismatch, a compare failure that still classifies the supplied
-/// grant as current, or deterministic classifier rejection. Returns
+/// Returns [`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`] for a bound top-level
+/// `NotCurrent` that has not yet crossed the later semantic evidence-matching gate,
+/// successor-context mismatch, a compare failure that still classifies the supplied grant as
+/// current, or deterministic classifier rejection. Returns
 /// [`ReachabilityLiveOwnerAuthorityError::FenceExhausted`] if the semantic fence cannot be
 /// represented as the non-zero provider fence required for classification.
 pub fn map_reconciled_live_owner_release(
@@ -47,13 +49,15 @@ pub fn map_reconciled_live_owner_release(
     resolved: &ReachabilityLiveOwnerResolvedRelease,
 ) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
     match resolved {
-        ReachabilityLiveOwnerResolvedRelease::NotCurrent => {
-            Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
-        }
+        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => Err(top_level_not_current_error()),
         ReachabilityLiveOwnerResolvedRelease::Mutation(mutation) => {
             map_reconciled_release_parts(grant, mutation.plan(), mutation.outcome())
         }
     }
+}
+
+const fn top_level_not_current_error() -> ReachabilityLiveOwnerAuthorityError {
+    ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
 }
 
 fn map_reconciled_release_parts(
@@ -102,9 +106,7 @@ mod tests {
             AuthorityAttemptId, LiveOwnerLifecycle, ReachabilityLiveOwnerAuthorityRecord,
             encode_live_owner_key, encode_live_owner_record,
         },
-        reachability_live_owner_etcd::reconciliation::{
-            ReachabilityLiveOwnerResolvedMutationOutcome, ReachabilityLiveOwnerResolvedRelease,
-        },
+        reachability_live_owner_etcd::reconciliation::ReachabilityLiveOwnerResolvedMutationOutcome,
         reachability_live_owner_txn::{LiveOwnerObservation, plan_acquisition, plan_release},
     };
     use prw_core::DeviceId;
@@ -179,15 +181,10 @@ mod tests {
     }
 
     #[test]
-    fn unbound_top_level_not_current_fails_closed() {
-        let grant = semantic_grant(peer("ay-not-current", 1), 100);
-
+    fn bound_top_level_not_current_compatibility_remains_fail_closed() {
         assert_eq!(
-            map_reconciled_live_owner_release(
-                &grant,
-                &ReachabilityLiveOwnerResolvedRelease::NotCurrent,
-            ),
-            Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
+            top_level_not_current_error(),
+            ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
         );
     }
 
