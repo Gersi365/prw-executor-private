@@ -49,35 +49,31 @@ pub trait FenceSequenceInitializationAuthority {
 impl FenceSequenceInitializationAuthority for FenceSequenceInitializationEtcdStore {
     type Error = FenceSequenceInitializationEtcdError;
 
-    fn submit_initialization(
+    async fn submit_initialization(
         &mut self,
         plan: FenceSequenceInitializationTxnPlan,
-    ) -> impl Future<Output = Result<FenceSequenceInitializationSubmissionOutcome, Self::Error>> + Send
-    {
-        async move {
-            match self.execute(&plan).await {
-                Ok(FenceSequenceInitializationDefinitiveMutation::Applied) => {
-                    Ok(FenceSequenceInitializationSubmissionOutcome::Applied)
-                }
-                Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(
-                    classification,
-                )) => Ok(FenceSequenceInitializationSubmissionOutcome::CompareFailed(
-                    classification,
-                )),
-                Err(FenceSequenceInitializationEtcdError::MutationIndeterminate(_)) => {
-                    Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)
-                }
-                Err(error) => Err(error),
+    ) -> Result<FenceSequenceInitializationSubmissionOutcome, Self::Error> {
+        match self.execute(&plan).await {
+            Ok(FenceSequenceInitializationDefinitiveMutation::Applied) => {
+                Ok(FenceSequenceInitializationSubmissionOutcome::Applied)
             }
+            Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(
+                classification,
+            )) => Ok(FenceSequenceInitializationSubmissionOutcome::CompareFailed(
+                classification,
+            )),
+            Err(FenceSequenceInitializationEtcdError::MutationIndeterminate(_)) => {
+                Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)
+            }
+            Err(error) => Err(error),
         }
     }
 
-    fn fresh_reobserve(
+    async fn fresh_reobserve(
         &mut self,
         plan: FenceSequenceInitializationTxnPlan,
-    ) -> impl Future<Output = Result<FenceSequenceInitializationReobservation, Self::Error>> + Send
-    {
-        async move { self.reobserve(&plan).await }
+    ) -> Result<FenceSequenceInitializationReobservation, Self::Error> {
+        self.reobserve(&plan).await
     }
 }
 
