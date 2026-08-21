@@ -49,16 +49,17 @@ pub fn map_reconciled_live_owner_release(
     resolved: &ReachabilityLiveOwnerResolvedRelease,
 ) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
     match resolved {
-        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => fail_closed_top_level_not_current(),
+        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => {
+            Err(top_level_not_current_error())
+        }
         ReachabilityLiveOwnerResolvedRelease::Mutation(mutation) => {
             map_reconciled_release_parts(grant, mutation.plan(), mutation.outcome())
         }
     }
 }
 
-fn fail_closed_top_level_not_current(
-) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
-    Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
+fn top_level_not_current_error() -> ReachabilityLiveOwnerAuthorityError {
+    ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
 }
 
 fn map_reconciled_release_parts(
@@ -184,8 +185,8 @@ mod tests {
     #[test]
     fn bound_top_level_not_current_compatibility_remains_fail_closed() {
         assert_eq!(
-            fail_closed_top_level_not_current(),
-            Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
+            top_level_not_current_error(),
+            ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
         );
     }
 
