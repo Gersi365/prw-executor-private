@@ -84,7 +84,7 @@ pub fn plan_initialization(
                     },
                     FenceSequenceInitializationCompare::HeadExactValueEquals {
                         key: key.clone(),
-                        expected: current.value.clone(),
+                        expected: current.value,
                     },
                 ],
                 success: [FenceSequenceInitializationOperation::Put {
