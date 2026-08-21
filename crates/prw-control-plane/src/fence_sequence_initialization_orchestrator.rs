@@ -230,7 +230,9 @@ where
     }
 
     match submit(authority, plan.clone()).await? {
-        FenceSequenceInitializationSubmissionOutcome::Applied => confirm_applied(authority, plan).await,
+        FenceSequenceInitializationSubmissionOutcome::Applied => {
+            confirm_applied(authority, plan).await
+        }
         FenceSequenceInitializationSubmissionOutcome::CompareFailed(
             FenceSequenceInitializationReobservation::Current,
         ) => Ok(resolved(
@@ -315,11 +317,11 @@ where
             plan,
             FenceSequenceInitializationResolvedOutcome::Superseded,
         )),
-        FenceSequenceInitializationReobservation::ProvenNotCommitted => Err(
-            FenceSequenceInitializationOrchestrationError::Domain(
+        FenceSequenceInitializationReobservation::ProvenNotCommitted => {
+            Err(FenceSequenceInitializationOrchestrationError::Domain(
                 FenceSequenceInitializationError::ContradictoryState,
-            ),
-        ),
+            ))
+        }
     }
 }
 
