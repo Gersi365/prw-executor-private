@@ -240,7 +240,7 @@ pub struct EnrollmentRequest {
     pub user_id: UserId,
     /// Device requesting enrollment.
     pub device_id: DeviceId,
-    /// Public device-identity material only.
+    /// Public device-identity material.
     pub public_identity: PublicIdentityMaterial,
 }
 
