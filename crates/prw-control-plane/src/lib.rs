@@ -9,7 +9,15 @@
 //! Phase 128 adds provider-neutral enrolled-device session authentication
 //! challenge, replay, and canonical-message semantics without granting capabilities.
 
+mod fence_sequence;
+mod fence_sequence_allocation_etcd;
+mod fence_sequence_allocation_orchestrator;
+mod fence_sequence_live_owner_bridge;
+mod fence_sequence_live_owner_handoff;
+mod recovery_epoch;
+
 pub mod enrollment_pop;
+pub mod reachability_acquisition_evidence;
 pub mod reachability_live_owner_codec;
 pub mod reachability_live_owner_etcd;
 pub mod reachability_live_owner_txn;
