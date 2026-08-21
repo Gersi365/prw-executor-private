@@ -147,12 +147,17 @@ The current unbound AE top-level `NotCurrent` path is intentionally excluded fro
 
 C02f-AY validation is currently blocked by repository/account-specific GitHub Actions execution failure before the first job step.
 
-Recorded current-head zero-step failures include:
+On corrected AY head `a108c07237ca293d8f36f3b5b1ecdb64b8948bf8`, canonical zero-step failures were:
 
-- Rust #821 / run `32480142567`;
-- Android #373 / run `32480142572`.
+- Rust #823 / run `32484718387` / attempt 1 job `96778551783`;
+- Android #376 / run `32484718430` / attempt 1 job `96778551911`.
 
-Their rerun attempt 2 again returned jobs with `steps=null` before checkout or any validation command executed.
+Canonical rerun attempt 2 on that same corrected head reproduced the same pre-step failure pattern:
+
+- Rust #823 / run `32484718387` / attempt 2 job `96786548995`: `failure`, `steps=null`, logs URL `null`;
+- Android #376 / run `32484718430` / attempt 2 job `96786565715`: `failure`, `steps=null`, logs URL `null`.
+
+Neither workflow reached checkout or any repository validation command. Direct job-log retrieval for both attempt-2 jobs returned `404 BlobNotFound`, consistent with no job log artifact having been materialized.
 
 GitHub public Actions status is operational, and the repository workflows use GitHub-hosted Ubuntu runners. The observed pattern is therefore an execution/account/quota/budget-class infrastructure blocker rather than a source diagnostic. This contract does not claim a precise billing cause without account billing evidence.
 
