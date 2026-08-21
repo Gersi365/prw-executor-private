@@ -5,12 +5,14 @@
 //! It performs no provider I/O, transaction execution, re-observation, endpoint/client construction,
 //! runtime ownership, retry/reissue, authority activation, R1-R4 effect fencing or deployment.
 //!
-//! C02f-BA adds provider-owned peer/fence evidence to the top-level `NotCurrent` variant. This file
-//! changes only enough to remain compile-compatible with that payload shape: the payload is not
-//! inspected or trusted for semantic success in BA, so the branch continues to fail closed.
+//! C02f-BA added provider-owned peer/fence evidence to the top-level `NotCurrent` variant while
+//! deliberately preserving fail-closed semantic behavior. C02f-BB consumes that evidence only when
+//! its exact peer and non-zero fence equal the supplied semantic grant; cross-grant or cross-fence
+//! evidence remains fail-closed.
 
 use std::num::NonZeroU128;
 
+use prw_connectivity::PeerConnectivityIdentity;
 use prw_control_plane::{
     reachability_live_owner_codec::LiveOwnerLifecycle,
     reachability_live_owner_etcd::reconciliation::{
@@ -27,37 +29,48 @@ use crate::reachability_live_owner::{
 
 /// Maps one exact semantic grant plus one terminal C02f-AE release result into release semantics.
 ///
-/// C02f-BA binds the top-level `NotCurrent` result to provider-owned peer/fence evidence, but this
-/// compatibility checkpoint deliberately does not consume that payload yet. The branch therefore
-/// remains fail-closed until a later semantic checkpoint proves exact equality with the supplied
-/// grant. For a resolved mutation, the retained successor must preserve the exact grant peer/fence
-/// and must be `Released` before its terminal outcome is interpreted. `Committed` maps to `Released`,
-/// `Superseded` maps to `NotCurrent`, and `CompareFailed` maps to `NotCurrent` only when the
-/// authoritative failure observation deterministically proves the supplied grant stale.
-/// Contradictory context fails closed.
+/// A provider-owned top-level `NotCurrent` result maps to semantic `NotCurrent` only when its bound
+/// peer/fence exactly match the supplied grant. Contradictory binding fails closed. For a resolved
+/// mutation, the retained successor must preserve the exact grant peer/fence and must be `Released`
+/// before its terminal outcome is interpreted. `Committed` maps to `Released`, `Superseded` maps to
+/// `NotCurrent`, and `CompareFailed` maps to `NotCurrent` only when the authoritative failure
+/// observation deterministically proves the supplied grant stale. Contradictory context fails
+/// closed.
 ///
 /// # Errors
 ///
-/// Returns [`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`] for a bound top-level
-/// `NotCurrent` that has not yet crossed the later semantic evidence-matching gate,
-/// successor-context mismatch, a compare failure that still classifies the supplied grant as
-/// current, or deterministic classifier rejection. Returns
-/// [`ReachabilityLiveOwnerAuthorityError::FenceExhausted`] if the semantic fence cannot be
-/// represented as the non-zero provider fence required for classification.
+/// Returns [`ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous`] for top-level evidence
+/// whose peer/fence do not exactly match the supplied grant, successor-context mismatch, a compare
+/// failure that still classifies the supplied grant as current, or deterministic classifier
+/// rejection. Returns [`ReachabilityLiveOwnerAuthorityError::FenceExhausted`] if the semantic fence
+/// cannot be represented as the non-zero provider fence required for classification.
 pub fn map_reconciled_live_owner_release(
     grant: &ReachabilityLiveOwnerGrant,
     resolved: &ReachabilityLiveOwnerResolvedRelease,
 ) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
     match resolved {
-        ReachabilityLiveOwnerResolvedRelease::NotCurrent(_) => Err(top_level_not_current_error()),
+        ReachabilityLiveOwnerResolvedRelease::NotCurrent(evidence) => {
+            map_bound_not_current_parts(grant, evidence.peer(), evidence.fence())
+        }
         ReachabilityLiveOwnerResolvedRelease::Mutation(mutation) => {
             map_reconciled_release_parts(grant, mutation.plan(), mutation.outcome())
         }
     }
 }
 
-const fn top_level_not_current_error() -> ReachabilityLiveOwnerAuthorityError {
-    ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
+fn map_bound_not_current_parts(
+    grant: &ReachabilityLiveOwnerGrant,
+    evidence_peer: &PeerConnectivityIdentity,
+    evidence_fence: NonZeroU128,
+) -> Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError> {
+    let grant_fence = NonZeroU128::new(grant.fence().get())
+        .ok_or(ReachabilityLiveOwnerAuthorityError::FenceExhausted)?;
+
+    if evidence_peer == grant.peer() && evidence_fence == grant_fence {
+        Ok(ReachabilityLiveOwnerRelease::NotCurrent)
+    } else {
+        Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
+    }
 }
 
 fn map_reconciled_release_parts(
@@ -181,10 +194,36 @@ mod tests {
     }
 
     #[test]
-    fn bound_top_level_not_current_compatibility_remains_fail_closed() {
+    fn bound_top_level_not_current_exact_binding_maps_to_not_current() {
+        let peer = peer("bb-bound-exact", 1);
+        let grant = semantic_grant(peer.clone(), 100);
+
         assert_eq!(
-            top_level_not_current_error(),
-            ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous
+            map_bound_not_current_parts(&grant, &peer, fence(100)),
+            Ok(ReachabilityLiveOwnerRelease::NotCurrent)
+        );
+    }
+
+    #[test]
+    fn bound_top_level_not_current_cross_peer_fails_closed() {
+        let peer_a = peer("bb-bound-peer-a", 2);
+        let peer_b = peer("bb-bound-peer-b", 3);
+        let grant = semantic_grant(peer_a, 101);
+
+        assert_eq!(
+            map_bound_not_current_parts(&grant, &peer_b, fence(101)),
+            Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
+        );
+    }
+
+    #[test]
+    fn bound_top_level_not_current_different_fence_fails_closed() {
+        let peer = peer("bb-bound-fence", 4);
+        let grant = semantic_grant(peer.clone(), 102);
+
+        assert_eq!(
+            map_bound_not_current_parts(&grant, &peer, fence(103)),
+            Err(ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous)
         );
     }
 
