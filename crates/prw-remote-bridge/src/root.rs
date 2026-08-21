@@ -21,4 +21,5 @@ pub mod reachability_live_owner_async;
 #[allow(clippy::manual_async_fn)]
 pub mod reachability_live_owner_provider_bridge;
 pub mod reachability_live_owner_reconciled_acquisition;
+pub mod reachability_live_owner_reconciled_release;
 pub mod reachability_owner;
