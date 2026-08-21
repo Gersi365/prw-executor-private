@@ -57,11 +57,9 @@ impl FenceSequenceInitializationAuthority for FenceSequenceInitializationEtcdSto
             Ok(FenceSequenceInitializationDefinitiveMutation::Applied) => {
                 Ok(FenceSequenceInitializationSubmissionOutcome::Applied)
             }
-            Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(
-                classification,
-            )) => Ok(FenceSequenceInitializationSubmissionOutcome::CompareFailed(
-                classification,
-            )),
+            Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(classification)) => Ok(
+                FenceSequenceInitializationSubmissionOutcome::CompareFailed(classification),
+            ),
             Err(FenceSequenceInitializationEtcdError::MutationIndeterminate(_)) => {
                 Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)
             }
