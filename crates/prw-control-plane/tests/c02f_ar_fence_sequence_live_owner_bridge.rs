@@ -3,7 +3,13 @@
 //! Production source modules are included directly so the bridge can be compiled, linted and tested
 //! without public `lib.rs` export, provider I/O, runtime/client construction or live-owner activation.
 
-use std::{convert::Infallible, future::Future, num::NonZeroU128, pin::pin, task::{Context, Poll, Waker}};
+use std::{
+    convert::Infallible,
+    future::Future,
+    num::NonZeroU128,
+    pin::pin,
+    task::{Context, Poll, Waker},
+};
 
 use prw_connectivity::{PeerConnectivityIdentity, TransportIdentity};
 use prw_core::DeviceId;
@@ -91,7 +97,11 @@ fn raw_fence(epoch: u64, sequence: u64) -> NonZeroU128 {
         .expect("non-zero canonical fence")
 }
 
-fn allocation_plan(epoch_value: u64, high_water: u64, attempt_marker: u8) -> FenceSequenceAllocationPlan {
+fn allocation_plan(
+    epoch_value: u64,
+    high_water: u64,
+    attempt_marker: u8,
+) -> FenceSequenceAllocationPlan {
     let predecessor = FenceSequenceHeadObservation::new(
         encode_head(FenceSequenceHead {
             epoch: epoch(epoch_value),
@@ -138,7 +148,10 @@ fn live_owner_observation(
 #[test]
 fn committed_allocation_composes_exact_locked_64_64_fence() {
     let allocation = resolved_allocation(FenceSequenceReobservation::Committed, 9, 41, 7);
-    assert_eq!(allocation.outcome(), FenceSequenceAllocationResolvedOutcome::Committed);
+    assert_eq!(
+        allocation.outcome(),
+        FenceSequenceAllocationResolvedOutcome::Committed
+    );
     assert_eq!(
         canonical_live_owner_fence(&allocation),
         Ok(raw_fence(9, 42))
@@ -153,13 +166,9 @@ fn committed_allocation_builds_exact_current_successor_and_retains_evidence() {
     let expected_allocation = allocation.clone();
     let next_attempt = live_owner_attempt(4);
 
-    let bridged = plan_live_owner_acquisition_from_allocation(
-        &observed,
-        &peer,
-        allocation,
-        next_attempt,
-    )
-    .expect("committed allocation plans live-owner acquisition");
+    let bridged =
+        plan_live_owner_acquisition_from_allocation(&observed, &peer, allocation, next_attempt)
+            .expect("committed allocation plans live-owner acquisition");
 
     assert_eq!(bridged.allocation(), &expected_allocation);
     let successor = bridged.transaction().successor();
@@ -180,7 +189,10 @@ fn superseded_allocation_never_authorizes_live_owner_fence_or_plan() {
     let observed = live_owner_observation(peer.clone(), raw_fence(9, 41), 3, 92);
     let allocation = resolved_allocation(FenceSequenceReobservation::Superseded, 9, 41, 7);
 
-    assert_eq!(allocation.outcome(), FenceSequenceAllocationResolvedOutcome::Superseded);
+    assert_eq!(
+        allocation.outcome(),
+        FenceSequenceAllocationResolvedOutcome::Superseded
+    );
     assert_eq!(
         canonical_live_owner_fence(&allocation),
         Err(FenceSequenceLiveOwnerBridgeError::AllocationNotCommitted)
