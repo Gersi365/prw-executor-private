@@ -17,7 +17,8 @@ use prw_control_plane::reachability_live_owner_etcd::ReachabilityLiveOwnerEtcdSt
 
 use crate::{
     reachability_live_owner::{
-        ReachabilityLiveOwnerAuthorityError, ReachabilityLiveOwnerGrant, ReachabilityLiveOwnerRelease,
+        ReachabilityLiveOwnerAuthorityError, ReachabilityLiveOwnerGrant,
+        ReachabilityLiveOwnerRelease,
     },
     reachability_live_owner_reconciled_release::map_reconciled_live_owner_release,
 };
@@ -42,9 +43,8 @@ use crate::{
 pub fn execute_reconciled_live_owner_release<'a>(
     store: &'a mut ReachabilityLiveOwnerEtcdStore,
     grant: &'a ReachabilityLiveOwnerGrant,
-) -> impl Future<
-    Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>,
-> + Send
+) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
++ Send
 + 'a {
     async move {
         let raw_fence = NonZeroU128::new(grant.fence().get())
