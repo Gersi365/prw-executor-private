@@ -84,10 +84,8 @@ impl FenceSequenceInitializationEtcdStore {
     pub async fn execute(
         &mut self,
         plan: &FenceSequenceInitializationTxnPlan,
-    ) -> Result<
-        FenceSequenceInitializationDefinitiveMutation,
-        FenceSequenceInitializationEtcdError,
-    > {
+    ) -> Result<FenceSequenceInitializationDefinitiveMutation, FenceSequenceInitializationEtcdError>
+    {
         let transaction = build_etcd_transaction(plan)?;
         let response = self
             .kv
@@ -235,10 +233,7 @@ fn etcd_compare(compare: &FenceSequenceInitializationCompare) -> Compare {
 fn classify_etcd_transaction_response(
     plan: &FenceSequenceInitializationTxnPlan,
     response: &etcd_client::TxnResponse,
-) -> Result<
-    FenceSequenceInitializationDefinitiveMutation,
-    FenceSequenceInitializationEtcdError,
-> {
+) -> Result<FenceSequenceInitializationDefinitiveMutation, FenceSequenceInitializationEtcdError> {
     let responses = response.op_responses();
     if response.succeeded() {
         if !matches!(responses.as_slice(), [TxnOpResponse::Put(_)]) {
@@ -255,9 +250,7 @@ fn classify_etcd_transaction_response(
     };
     let observed = decode_exact_head_get(key, get_response)?;
     let classification = classify_initialization_reobservation(plan, observed.as_ref())?;
-    Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(
-        classification,
-    ))
+    Ok(FenceSequenceInitializationDefinitiveMutation::CompareFailed(classification))
 }
 
 fn decode_exact_head_get(
