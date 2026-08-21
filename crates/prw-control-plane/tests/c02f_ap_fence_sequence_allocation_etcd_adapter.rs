@@ -16,9 +16,7 @@ use fence_sequence::{
     FenceSequenceHeadObservation, FenceSequenceTxnCompare, FenceSequenceTxnOperation,
     SequenceAllocationAttemptId, encode_head, plan_allocation,
 };
-use fence_sequence_allocation_etcd::{
-    FenceSequenceAllocationEtcdError, build_etcd_transaction,
-};
+use fence_sequence_allocation_etcd::{FenceSequenceAllocationEtcdError, build_etcd_transaction};
 use recovery_epoch::RecoveryEpoch;
 
 fn epoch(value: u64) -> RecoveryEpoch {
