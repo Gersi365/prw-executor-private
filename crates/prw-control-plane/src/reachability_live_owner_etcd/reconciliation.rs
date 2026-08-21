@@ -73,7 +73,7 @@ pub struct ReachabilityLiveOwnerResolvedNotCurrent {
 }
 
 impl ReachabilityLiveOwnerResolvedNotCurrent {
-    fn new(peer: PeerConnectivityIdentity, fence: NonZeroU128) -> Self {
+    const fn new(peer: PeerConnectivityIdentity, fence: NonZeroU128) -> Self {
         Self { peer, fence }
     }
 
@@ -102,7 +102,7 @@ pub enum ReachabilityLiveOwnerResolvedRelease {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LiveOwnerPlannedRelease {
     NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent),
-    Mutation(LiveOwnerTxnPlan),
+    Mutation(Box<LiveOwnerTxnPlan>),
 }
 
 fn plan_resolved_release(
@@ -111,12 +111,15 @@ fn plan_resolved_release(
     before: &LiveOwnerObservation,
 ) -> Result<LiveOwnerPlannedRelease, LiveOwnerTxnError> {
     let release = plan_release(peer, fence, Some(before))?;
-    match release.into_transaction() {
-        Some(plan) => Ok(LiveOwnerPlannedRelease::Mutation(plan)),
-        None => Ok(LiveOwnerPlannedRelease::NotCurrent(
-            ReachabilityLiveOwnerResolvedNotCurrent::new(peer.clone(), fence),
-        )),
-    }
+    Ok(release.into_transaction().map_or_else(
+        || {
+            LiveOwnerPlannedRelease::NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent::new(
+                peer.clone(),
+                fence,
+            ))
+        },
+        |plan| LiveOwnerPlannedRelease::Mutation(Box::new(plan)),
+    ))
 }
 
 /// Fail-closed C02f-AE real-provider orchestration error.
@@ -207,7 +210,7 @@ impl ReachabilityLiveOwnerEtcdStore {
             LiveOwnerPlannedRelease::NotCurrent(evidence) => {
                 return Ok(ReachabilityLiveOwnerResolvedRelease::NotCurrent(evidence));
             }
-            LiveOwnerPlannedRelease::Mutation(plan) => plan,
+            LiveOwnerPlannedRelease::Mutation(plan) => *plan,
         };
         let pending = LiveOwnerPendingMutation::release(before, plan);
         let mut io = EtcdMutationIo { store: self };
