@@ -85,7 +85,7 @@ Retaining the full observation would broaden the public terminal evidence surfac
 
 ## Future semantic mapper rule
 
-After the provider-owned evidence binding is materialized, the release semantic mapper may restore a safe top-level `NotCurrent` success mapping only when both retained values match the supplied semantic grant exactly.
+After the provider-owned evidence binding is materialized, a later semantic-mapping checkpoint may restore a safe top-level `NotCurrent` success mapping only when both retained values match the supplied semantic grant exactly.
 
 Selected future rule:
 
@@ -96,7 +96,35 @@ Selected future rule:
 
 Any peer mismatch, fence mismatch, impossible fence representation, or otherwise contradictory evidence must fail closed. A mismatched evidence capsule must never be rebound to the supplied grant.
 
-C02f-AZ does not modify the C02f-AY mapper itself. That is a later separately validated source boundary.
+C02f-AZ does not modify the C02f-AY mapper itself. Semantic success consumption of the new evidence remains a later separately validated source boundary.
+
+## Compile-coupling constraint discovered during AZ preflight
+
+A source-materialization preflight found one concrete compatibility constraint that must be preserved explicitly.
+
+Changing the public enum shape from the current unit variant:
+
+```text
+ReachabilityLiveOwnerResolvedRelease::NotCurrent
+```
+
+to a payload variant:
+
+```text
+ReachabilityLiveOwnerResolvedRelease::NotCurrent(ReachabilityLiveOwnerResolvedNotCurrent)
+```
+
+is a compile-time API change for every exhaustive consumer. The existing C02f-AY bridge mapper currently matches the unit variant directly, so a control-plane-only enum mutation would make the workspace fail to compile before semantic behavior could be validated.
+
+Therefore the evidence-binding source checkpoint must include the minimum mechanical consumer adaptation required to preserve compilation:
+
+- update the C02f-AY mapper pattern from the unit form to the payload form;
+- continue to return `ReachabilityLiveOwnerAuthorityError::UnavailableOrAmbiguous` for that branch;
+- do not inspect or semantically trust the new payload in that compatibility checkpoint except as required by the type pattern;
+- do not restore semantic `ReachabilityLiveOwnerRelease::NotCurrent` yet;
+- preserve all mutation-backed mapping behavior unchanged.
+
+This mechanical fail-closed adaptation is not the later semantic-consumption checkpoint. It exists only because the public enum signature and its existing exhaustive consumer cannot be changed independently while keeping the workspace buildable.
 
 ## Existing mutation-backed release semantics remain unchanged
 
@@ -124,25 +152,31 @@ No Cargo dependency or lockfile change is selected.
 
 ## Future source-materialization scope
 
-A later source tranche may change only the minimum surfaces required to bind the no-mutation terminal result, expected to include:
+A later evidence-binding source checkpoint may change only the minimum surfaces required to bind the no-mutation terminal result while keeping the workspace compilable, expected to include:
 
-1. `crates/prw-control-plane/src/reachability_live_owner_etcd/reconciliation.rs` for the new evidence type, accessors, enum payload, construction, and focused tests;
-2. only if required by existing module visibility conventions, a bounded existing public facade/export surface in `prw-control-plane`.
+1. `crates/prw-control-plane/src/reachability_live_owner_etcd/reconciliation.rs` for the new evidence type, read-only accessors, enum payload, and provider-owned construction;
+2. `crates/prw-control-plane/src/reachability_live_owner_etcd/reconciliation/tests.rs` for focused control-plane evidence tests;
+3. `crates/prw-remote-bridge/src/reachability_live_owner_reconciled_release.rs` only for the mechanically required payload-pattern compatibility change and any directly coupled test adjustment, while preserving top-level bound `NotCurrent` as fail-closed;
+4. only if required by existing module visibility conventions, a bounded existing public facade/export surface in `prw-control-plane`.
 
-The later evidence-binding source tranche must not simultaneously rewrite the C02f-AY mapper, activate provider-execution composition, or broaden runtime ownership. Updating the semantic mapper to consume the newly bound evidence should remain a separate checkpoint so each dependency direction and fail-closed rule is independently auditable.
+The source checkpoint must not activate provider-execution composition, broaden runtime ownership, or restore semantic success for top-level `NotCurrent`. The subsequent semantic mapper checkpoint will separately inspect exact evidence peer/fence and may map it to semantic `NotCurrent` only after exact grant binding is proven.
 
 ## Required future tests for evidence materialization
 
-The later evidence-binding source tranche should include deterministic in-memory/provider-orchestration unit coverage proving at least:
+The evidence-binding source checkpoint should include deterministic coverage proving at least:
 
-1. a release classification for an already stale fence returns bound `NotCurrent` evidence with the exact requested peer and fence;
-2. a release classification for an already `Released` exact fence returns bound `NotCurrent` evidence with the exact requested peer and fence;
+1. a release classification for an already stale fence creates bound `NotCurrent` evidence with the exact requested peer and fence;
+2. a release classification for an already `Released` exact fence creates bound `NotCurrent` evidence with the exact requested peer and fence;
 3. a peer mismatch still fails in deterministic planning and never mints `NotCurrent` evidence;
 4. an exact-current owner still produces the existing release mutation path rather than top-level `NotCurrent` evidence;
-5. mutation-backed reconciliation behavior remains byte/semantic stable outside the enum signature change;
-6. the evidence type exposes no public arbitrary constructor capable of minting a different peer/fence binding.
+5. mutation-backed reconciliation behavior remains semantically stable outside the enum signature change;
+6. the evidence type exposes no public arbitrary constructor capable of minting a different peer/fence binding;
+7. the bridge remains buildable against the payload enum while still failing the top-level bound `NotCurrent` branch closed;
+8. existing mutation-backed C02f-AY mapper tests remain unchanged in meaning.
 
-No network I/O is required to test the evidence data model itself beyond any already-existing bounded provider harness used by the selected source tranche.
+Because a deliberately non-forgeable evidence capsule cannot be arbitrarily constructed from another crate, the compatibility checkpoint is not required to manufacture fake provider-owned evidence merely to execute the bridge fail-closed arm. Control-plane tests own evidence construction coverage; the workspace build owns cross-crate signature compatibility. Exact semantic evidence matching is tested later when semantic consumption is selected.
+
+No new network I/O is required to test the evidence data model itself beyond any already-existing bounded provider harness used by the selected source checkpoint.
 
 ## Deliberately unselected neighboring work
 
@@ -151,6 +185,7 @@ C02f-AZ does not select or implement:
 - C02f-AE provider reconciliation redesign;
 - another linearizable read for semantic mapping;
 - another release transaction or blind retry;
+- semantic success consumption of bound top-level `NotCurrent` in this selection tranche;
 - release provider-execution composition;
 - currentness provider-execution composition;
 - complete `ReachabilityLiveOwnerAsyncAuthority` implementation;
@@ -203,4 +238,4 @@ Expected gate after executable canonical validation:
 
 `C02F_AZ_RELEASE_NOT_CURRENT_EVIDENCE_BINDING_SELECTED`
 
-A later source tranche may materialize only the selected provider-owned peer/fence evidence capsule. Semantic mapper consumption remains separately gated.
+A later source checkpoint may materialize the selected provider-owned peer/fence evidence capsule plus only the mechanically required fail-closed bridge compatibility adaptation. Semantic success consumption remains separately gated.
