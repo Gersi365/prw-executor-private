@@ -60,9 +60,7 @@ enum Reobserve {
 
 #[derive(Debug)]
 struct Authority {
-    submits: VecDeque<
-        Result<FenceSequenceInitializationSubmissionOutcome, ScriptedAuthorityError>,
-    >,
+    submits: VecDeque<Result<FenceSequenceInitializationSubmissionOutcome, ScriptedAuthorityError>>,
     reobserves: VecDeque<Reobserve>,
     submitted: Vec<FenceSequenceInitializationTxnPlan>,
     events: Vec<Event>,
@@ -119,7 +117,8 @@ fn epoch(value: u64) -> RecoveryEpoch {
 }
 
 fn retained_plan() -> FenceSequenceInitializationTxnPlan {
-    let FenceSequenceInitializationPlan::Mutation(plan) = plan_initialization(epoch(9), None) else {
+    let FenceSequenceInitializationPlan::Mutation(plan) = plan_initialization(epoch(9), None)
+    else {
         panic!("absent head must produce a mutation plan");
     };
     plan
@@ -156,9 +155,11 @@ fn definitive_compare_failure_current_never_reissues() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceInitializationSubmissionOutcome::CompareFailed(
-            FenceSequenceInitializationReobservation::Current,
-        ))],
+        [Ok(
+            FenceSequenceInitializationSubmissionOutcome::CompareFailed(
+                FenceSequenceInitializationReobservation::Current,
+            ),
+        )],
         [],
     );
 
@@ -168,7 +169,10 @@ fn definitive_compare_failure_current_never_reissues() {
     ))
     .expect("current");
 
-    assert_eq!(resolved.outcome(), FenceSequenceInitializationResolvedOutcome::Current);
+    assert_eq!(
+        resolved.outcome(),
+        FenceSequenceInitializationResolvedOutcome::Current
+    );
     assert_eq!(authority.submitted, [expected]);
     assert_eq!(authority.events, [Event::Submit]);
 }
@@ -178,9 +182,11 @@ fn definitive_compare_failure_superseded_never_reissues() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceInitializationSubmissionOutcome::CompareFailed(
-            FenceSequenceInitializationReobservation::Superseded,
-        ))],
+        [Ok(
+            FenceSequenceInitializationSubmissionOutcome::CompareFailed(
+                FenceSequenceInitializationReobservation::Superseded,
+            ),
+        )],
         [],
     );
 
@@ -202,7 +208,9 @@ fn indeterminate_current_is_reobserved_without_reissue() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)],
+        [Ok(
+            FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate,
+        )],
         [Reobserve::Ready(Ok(
             FenceSequenceInitializationReobservation::Current,
         ))],
@@ -214,7 +222,10 @@ fn indeterminate_current_is_reobserved_without_reissue() {
     ))
     .expect("reobserved current");
 
-    assert_eq!(resolved.outcome(), FenceSequenceInitializationResolvedOutcome::Current);
+    assert_eq!(
+        resolved.outcome(),
+        FenceSequenceInitializationResolvedOutcome::Current
+    );
     assert_eq!(authority.submitted, [expected]);
     assert_eq!(authority.events, [Event::Submit, Event::Reobserve]);
 }
@@ -242,11 +253,19 @@ fn indeterminate_proven_not_committed_allows_one_exact_reissue() {
     ))
     .expect("exact reissue");
 
-    assert_eq!(resolved.outcome(), FenceSequenceInitializationResolvedOutcome::Current);
+    assert_eq!(
+        resolved.outcome(),
+        FenceSequenceInitializationResolvedOutcome::Current
+    );
     assert_eq!(authority.submitted, [expected.clone(), expected]);
     assert_eq!(
         authority.events,
-        [Event::Submit, Event::Reobserve, Event::Submit, Event::Reobserve]
+        [
+            Event::Submit,
+            Event::Reobserve,
+            Event::Submit,
+            Event::Reobserve
+        ]
     );
 }
 
@@ -272,7 +291,10 @@ fn definitive_non_commit_allows_one_exact_reissue() {
     ))
     .expect("exact reissue");
 
-    assert_eq!(resolved.outcome(), FenceSequenceInitializationResolvedOutcome::Current);
+    assert_eq!(
+        resolved.outcome(),
+        FenceSequenceInitializationResolvedOutcome::Current
+    );
     assert_eq!(authority.submitted, [expected.clone(), expected]);
     assert_eq!(authority.events, [Event::Submit, Event::Submit]);
 }
@@ -378,7 +400,9 @@ fn failed_fresh_reobservation_never_reissues() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)],
+        [Ok(
+            FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate,
+        )],
         [Reobserve::Ready(Err(ScriptedAuthorityError))],
     );
 
@@ -399,12 +423,15 @@ fn dropping_pending_reobservation_spawns_no_detached_reissue() {
     let plan = retained_plan();
     let expected = plan.clone();
     let mut authority = Authority::new(
-        [Ok(FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate)],
+        [Ok(
+            FenceSequenceInitializationSubmissionOutcome::MutationIndeterminate,
+        )],
         [Reobserve::Pending],
     );
 
     {
-        let future = resolve_fence_sequence_initialization_with_reconciliation(&mut authority, plan);
+        let future =
+            resolve_fence_sequence_initialization_with_reconciliation(&mut authority, plan);
         let mut future = pin!(future);
         let waker = Waker::noop();
         let mut context = Context::from_waker(waker);
