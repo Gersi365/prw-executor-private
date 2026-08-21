@@ -58,11 +58,9 @@ impl FenceSequenceAllocationAuthority for FenceSequenceAllocationEtcdStore {
             Ok(FenceSequenceAllocationDefinitiveMutation::Applied) => {
                 Ok(FenceSequenceAllocationSubmissionOutcome::Applied)
             }
-            Ok(FenceSequenceAllocationDefinitiveMutation::CompareFailed(classification)) => {
-                Ok(FenceSequenceAllocationSubmissionOutcome::CompareFailed(
-                    classification,
-                ))
-            }
+            Ok(FenceSequenceAllocationDefinitiveMutation::CompareFailed(classification)) => Ok(
+                FenceSequenceAllocationSubmissionOutcome::CompareFailed(classification),
+            ),
             Err(FenceSequenceAllocationEtcdError::MutationIndeterminate(_)) => {
                 Ok(FenceSequenceAllocationSubmissionOutcome::MutationIndeterminate)
             }
@@ -270,7 +268,10 @@ where
 async fn submit<A>(
     authority: &mut A,
     plan: FenceSequenceAllocationPlan,
-) -> Result<FenceSequenceAllocationSubmissionOutcome, FenceSequenceAllocationOrchestrationError<A::Error>>
+) -> Result<
+    FenceSequenceAllocationSubmissionOutcome,
+    FenceSequenceAllocationOrchestrationError<A::Error>,
+>
 where
     A: FenceSequenceAllocationAuthority,
 {
@@ -305,8 +306,7 @@ where
             plan,
             FenceSequenceAllocationResolvedOutcome::Committed,
         )),
-        FenceSequenceReobservation::Superseded
-        | FenceSequenceReobservation::ProvenNotCommitted => {
+        FenceSequenceReobservation::Superseded | FenceSequenceReobservation::ProvenNotCommitted => {
             Err(FenceSequenceAllocationOrchestrationError::Domain(
                 FenceSequenceError::ContradictoryState,
             ))
