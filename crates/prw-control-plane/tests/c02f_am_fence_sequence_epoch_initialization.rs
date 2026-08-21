@@ -3,12 +3,12 @@
 //! The source modules are included directly so the deterministic plan can be compiled and tested
 //! without public library exposure or any etcd/provider/runtime activation.
 
-#[path = "../src/recovery_epoch.rs"]
-pub mod recovery_epoch;
 #[path = "../src/fence_sequence.rs"]
 pub mod fence_sequence;
 #[path = "../src/fence_sequence_initialization.rs"]
 pub mod fence_sequence_initialization;
+#[path = "../src/recovery_epoch.rs"]
+pub mod recovery_epoch;
 
 use fence_sequence::{
     FENCE_SEQUENCE_HEAD_KEY, FenceSequenceHead, FenceSequenceHeadObservation, encode_head,
