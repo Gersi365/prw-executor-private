@@ -85,29 +85,24 @@ impl Authority {
 impl FenceSequenceInitializationAuthority for Authority {
     type Error = ScriptedAuthorityError;
 
-    fn submit_initialization(
+    async fn submit_initialization(
         &mut self,
         plan: FenceSequenceInitializationTxnPlan,
-    ) -> impl Future<Output = Result<FenceSequenceInitializationSubmissionOutcome, Self::Error>> + Send
-    {
+    ) -> Result<FenceSequenceInitializationSubmissionOutcome, Self::Error> {
         self.events.push(Event::Submit);
         self.submitted.push(plan);
-        let result = self.submits.pop_front().expect("scripted submit");
-        async move { result }
+        self.submits.pop_front().expect("scripted submit")
     }
 
-    fn fresh_reobserve(
+    async fn fresh_reobserve(
         &mut self,
         _plan: FenceSequenceInitializationTxnPlan,
-    ) -> impl Future<Output = Result<FenceSequenceInitializationReobservation, Self::Error>> + Send
-    {
+    ) -> Result<FenceSequenceInitializationReobservation, Self::Error> {
         self.events.push(Event::Reobserve);
         let scripted = self.reobserves.pop_front().expect("scripted reobserve");
-        async move {
-            match scripted {
-                Reobserve::Ready(result) => result,
-                Reobserve::Pending => pending().await,
-            }
+        match scripted {
+            Reobserve::Ready(result) => result,
+            Reobserve::Pending => pending().await,
         }
     }
 }
