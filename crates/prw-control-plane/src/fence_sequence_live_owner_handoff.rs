@@ -39,12 +39,7 @@ impl FenceSequenceLiveOwnerAcquisitionHandoff {
 
     /// Consumes the capsule and returns its exact retained evidence parts.
     #[must_use]
-    pub fn into_parts(
-        self,
-    ) -> (
-        LiveOwnerObservation,
-        FenceSequenceLiveOwnerAcquisitionPlan,
-    ) {
+    pub fn into_parts(self) -> (LiveOwnerObservation, FenceSequenceLiveOwnerAcquisitionPlan) {
         (self.observation, self.acquisition)
     }
 }
@@ -103,10 +98,7 @@ pub fn retain_live_owner_acquisition_handoff(
     observation: LiveOwnerObservation,
     acquisition: FenceSequenceLiveOwnerAcquisitionPlan,
 ) -> Result<FenceSequenceLiveOwnerAcquisitionHandoff, FenceSequenceLiveOwnerHandoffError> {
-    let replayed = plan_acquisition(
-        &observation,
-        acquisition.transaction().successor().clone(),
-    )?;
+    let replayed = plan_acquisition(&observation, acquisition.transaction().successor().clone())?;
     if &replayed != acquisition.transaction() {
         return Err(FenceSequenceLiveOwnerHandoffError::TransactionPlanMismatch);
     }
