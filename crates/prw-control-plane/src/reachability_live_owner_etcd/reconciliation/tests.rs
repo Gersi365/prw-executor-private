@@ -142,6 +142,82 @@ fn committed(plan: &LiveOwnerTxnPlan) -> LiveOwnerMutationIoExecution {
 }
 
 #[test]
+fn stale_release_resolution_binds_exact_not_current_evidence() {
+    let requested_peer = peer("ba-stale", 30);
+    let before = observation(
+        requested_peer.clone(),
+        LiveOwnerLifecycle::Current,
+        200,
+        31,
+        210,
+    );
+
+    let resolved = plan_resolved_release(&requested_peer, fence(199), &before)
+        .expect("stale release classification");
+    let LiveOwnerPlannedRelease::NotCurrent(evidence) = resolved else {
+        panic!("stale release must not produce a mutation plan");
+    };
+
+    assert_eq!(evidence.peer(), &requested_peer);
+    assert_eq!(evidence.fence(), fence(199));
+}
+
+#[test]
+fn released_exact_fence_resolution_binds_exact_not_current_evidence() {
+    let requested_peer = peer("ba-released", 32);
+    let before = observation(
+        requested_peer.clone(),
+        LiveOwnerLifecycle::Released,
+        220,
+        33,
+        230,
+    );
+
+    let resolved = plan_resolved_release(&requested_peer, fence(220), &before)
+        .expect("released release classification");
+    let LiveOwnerPlannedRelease::NotCurrent(evidence) = resolved else {
+        panic!("already released state must not produce a mutation plan");
+    };
+
+    assert_eq!(evidence.peer(), &requested_peer);
+    assert_eq!(evidence.fence(), fence(220));
+}
+
+#[test]
+fn peer_mismatch_rejects_before_not_current_evidence_can_be_minted() {
+    let requested_peer = peer("ba-peer-request", 34);
+    let observed_peer = peer("ba-peer-observed", 35);
+    let before = observation(observed_peer, LiveOwnerLifecycle::Released, 240, 36, 250);
+
+    assert_eq!(
+        plan_resolved_release(&requested_peer, fence(240), &before),
+        Err(LiveOwnerTxnError::PeerMismatch)
+    );
+}
+
+#[test]
+fn exact_current_release_resolution_preserves_mutation_path() {
+    let requested_peer = peer("ba-current", 37);
+    let before = observation(
+        requested_peer.clone(),
+        LiveOwnerLifecycle::Current,
+        260,
+        38,
+        270,
+    );
+
+    let resolved = plan_resolved_release(&requested_peer, fence(260), &before)
+        .expect("current release classification");
+    let LiveOwnerPlannedRelease::Mutation(plan) = resolved else {
+        panic!("exact-current release must retain the mutation path");
+    };
+
+    assert_eq!(plan.successor().peer(), &requested_peer);
+    assert_eq!(plan.successor().fence(), fence(260));
+    assert_eq!(plan.successor().lifecycle(), LiveOwnerLifecycle::Released);
+}
+
+#[test]
 fn indeterminate_commit_is_reobserved_without_reissue() {
     let peer = peer("ae-commit", 1);
     let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 10, 2, 20);
