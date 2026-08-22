@@ -499,7 +499,7 @@ mod tests {
             endpoints(),
             b"private-authority-ca".to_vec(),
             identity(7, 8),
-            identity(7, 9),
+            identity(7, 20),
         );
         assert!(matches!(
             reused_certificate,
@@ -510,7 +510,7 @@ mod tests {
             endpoints(),
             b"private-authority-ca".to_vec(),
             identity(7, 8),
-            identity(9, 8),
+            identity(20, 8),
         );
         assert!(matches!(
             reused_private_key,
