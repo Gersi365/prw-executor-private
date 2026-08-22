@@ -12,9 +12,7 @@ use std::{fmt, future::Future};
 use etcd_client::{Compare, CompareOp, Txn, TxnOp, TxnOpResponse};
 use prw_connectivity::PeerConnectivityIdentity;
 
-use super::{
-    ReachabilityLiveOwnerEtcdError, ReachabilityLiveOwnerEtcdStore, decode_exact_get,
-};
+use super::{ReachabilityLiveOwnerEtcdError, ReachabilityLiveOwnerEtcdStore, decode_exact_get};
 use crate::{
     fence_sequence_allocation_orchestrator::FenceSequenceAllocationResolvedOutcome,
     fence_sequence_live_owner_bridge::{
@@ -161,8 +159,10 @@ impl ReachabilityLiveOwnerEtcdStore {
     pub async fn execute_first_owner_with_reconciliation(
         &mut self,
         handoff: ReachabilityLiveOwnerFirstOwnerHandoff,
-    ) -> Result<ReachabilityLiveOwnerResolvedFirstOwner, ReachabilityLiveOwnerFirstOwnerExecutionError>
-    {
+    ) -> Result<
+        ReachabilityLiveOwnerResolvedFirstOwner,
+        ReachabilityLiveOwnerFirstOwnerExecutionError,
+    > {
         validate_first_owner_handoff(&handoff)?;
         let mut io = EtcdFirstOwnerIo { store: self };
         resolve_first_owner(&mut io, handoff).await
@@ -193,7 +193,10 @@ trait FirstOwnerMutationIo {
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
     ) -> impl Future<
-        Output = Result<Option<LiveOwnerObservation>, ReachabilityLiveOwnerFirstOwnerExecutionError>,
+        Output = Result<
+            Option<LiveOwnerObservation>,
+            ReachabilityLiveOwnerFirstOwnerExecutionError,
+        >,
     > + 'a;
 }
 
@@ -219,7 +222,10 @@ impl FirstOwnerMutationIo for EtcdFirstOwnerIo<'_> {
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
     ) -> impl Future<
-        Output = Result<Option<LiveOwnerObservation>, ReachabilityLiveOwnerFirstOwnerExecutionError>,
+        Output = Result<
+            Option<LiveOwnerObservation>,
+            ReachabilityLiveOwnerFirstOwnerExecutionError,
+        >,
     > + 'a {
         async move {
             self.store
@@ -298,7 +304,8 @@ where
 fn resolve_definitive_first_owner(
     handoff: ReachabilityLiveOwnerFirstOwnerHandoff,
     outcome: FirstOwnerDefinitiveMutation,
-) -> Result<ReachabilityLiveOwnerResolvedFirstOwner, ReachabilityLiveOwnerFirstOwnerExecutionError> {
+) -> Result<ReachabilityLiveOwnerResolvedFirstOwner, ReachabilityLiveOwnerFirstOwnerExecutionError>
+{
     let outcome = match outcome {
         FirstOwnerDefinitiveMutation::Committed => {
             ReachabilityLiveOwnerFirstOwnerResolvedOutcome::Committed
@@ -339,7 +346,8 @@ fn validate_terminal_observation(
 ) -> Result<(), ReachabilityLiveOwnerFirstOwnerExecutionError> {
     let expected_peer = handoff.transaction().successor().peer();
     let expected_key = encode_live_owner_key(expected_peer)?;
-    if observation.key() != expected_key.as_slice() || observation.record().peer() != expected_peer {
+    if observation.key() != expected_key.as_slice() || observation.record().peer() != expected_peer
+    {
         return Err(ReachabilityLiveOwnerFirstOwnerExecutionError::InvalidReobservation);
     }
     Ok(())
@@ -435,7 +443,8 @@ fn classify_first_owner_transaction_response(
     let [TxnOpResponse::Get(get_response)] = responses.as_slice() else {
         return Err(ReachabilityLiveOwnerFirstOwnerExecutionError::UnexpectedTxnResponseShape);
     };
-    let ReachabilityLiveOwnerFirstOwnerTxnOperation::LinearizableGet { key } = plan.failure() else {
+    let ReachabilityLiveOwnerFirstOwnerTxnOperation::LinearizableGet { key } = plan.failure()
+    else {
         unreachable!("validated first-owner failure branch is linearizable Get")
     };
     let observation = decode_exact_get(key, get_response)?
