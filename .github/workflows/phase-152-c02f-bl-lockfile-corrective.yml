@@ -1,0 +1,49 @@
+name: PRW Phase 152 C02f-BL Lockfile Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c02f-bl-attempt-id-generation-materialization-staging
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prw-phase-152-c02f-bl-lockfile-corrective-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    name: Materialize exact BL lockfile delta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact BL candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Generate lockfile with Cargo and enforce exact delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          git diff --check -- Cargo.lock
+          test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
+          test "$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++')" = '+ "aws-lc-rs",'
+          test -z "$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
+
+      - name: Commit only Cargo-generated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git status --short | awk '{print $2}')" = 'Cargo.lock'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git diff --cached --check
+          test "$(git diff --cached --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
+          git commit -m 'phase 152 c02f-bl: materialize Cargo-generated lock dependency'
+          git push origin HEAD:phase-152-c02f-bl-attempt-id-generation-materialization-staging
