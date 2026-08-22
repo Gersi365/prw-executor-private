@@ -6,12 +6,16 @@
 //! live-owner read, fence-sequence allocation, replacement planning/retention, and first-owner
 //! evidence primitives.
 //!
-//! Construction accepts one already-created `KvClient`; endpoint selection and `Client::connect`
-//! remain outside this boundary. C02f-BS adds a lifetime-bounded acquisition execution capability
-//! over the exact live-owner store already owned here. C02f-BU adds a separate lifetime-bounded
-//! lifecycle execution capability over that same store for only BF currentness and BD release
-//! provider primitives. Neither capability exposes a raw store/client/configuration handle or can
-//! outlive the mutable preparation borrow that created it.
+//! C02f-BW corrects the deferred provider-construction boundary: preparation no longer accepts one
+//! `KvClient` that is cloned into both authority roles. A crate-private constructor instead accepts
+//! explicit live-owner and fence-allocator role-scoped clients. The later control-plane provider
+//! bootstrap remains responsible for deriving both clients from one validated immutable logical
+//! authority-cluster configuration. Endpoint selection, TLS materialization, credential loading and
+//! `Client::connect` remain outside this boundary. C02f-BS adds a lifetime-bounded acquisition
+//! execution capability over the exact live-owner store already owned here. C02f-BU adds a separate
+//! lifetime-bounded lifecycle execution capability over that same store for only BF currentness and
+//! BD release provider primitives. Neither capability exposes a raw store/client/configuration
+//! handle or can outlive the mutable preparation borrow that created it.
 
 use std::{fmt, num::NonZeroU128};
 
@@ -116,11 +120,13 @@ impl fmt::Display for ReachabilityLiveOwnerPreparationError {
 
 impl std::error::Error for ReachabilityLiveOwnerPreparationError {}
 
-/// Narrow C02f-BJ preparation facade backed by one already-created etcd provider context.
+/// Narrow C02f-BJ preparation facade with C02f-BW role-separated provider construction.
 ///
-/// The single supplied [`KvClient`] is the only provider-construction input. Internally cloned
-/// handles originate from that same context, preventing callers from independently supplying
-/// fence-sequence and live-owner stores that could point at different authority backends.
+/// The raw provider pairing seam is crate-private to `prw-control-plane`. It accepts distinct
+/// role-scoped clients so one authenticated context is never cloned across live-owner and
+/// fence-allocation authority roles. A later provider-bootstrap tranche must derive both clients
+/// from one validated immutable logical authority-cluster configuration before constructing this
+/// facade. The preparation itself exposes no raw client or provider configuration handle.
 pub struct ReachabilityLiveOwnerAcquisitionPreparation {
     live_owner: ReachabilityLiveOwnerEtcdStore,
     allocation: FenceSequenceAllocationEtcdStore,
@@ -236,12 +242,21 @@ impl ReachabilityLiveOwnerLifecycleExecution<'_> {
 }
 
 impl ReachabilityLiveOwnerAcquisitionPreparation {
-    /// Wraps one already-created etcd KV context without selecting or contacting an endpoint.
+    /// Wraps the two already-created role-scoped etcd KV contexts without endpoint contact.
+    ///
+    /// The caller must be a `prw-control-plane` provider-bootstrap seam that derived both clients
+    /// from one validated immutable logical authority-cluster configuration. The live-owner client
+    /// is consumed only by the live-owner store and the fence-allocator client only by the
+    /// fence-sequence allocation store; neither client is cloned across authority roles.
+    #[allow(dead_code)]
     #[must_use]
-    pub fn new(kv: KvClient) -> Self {
+    pub(crate) const fn from_role_scoped_clients(
+        live_owner_kv: KvClient,
+        fence_allocator_kv: KvClient,
+    ) -> Self {
         Self {
-            live_owner: ReachabilityLiveOwnerEtcdStore::new(kv.clone()),
-            allocation: FenceSequenceAllocationEtcdStore::new(kv),
+            live_owner: ReachabilityLiveOwnerEtcdStore::new(live_owner_kv),
+            allocation: FenceSequenceAllocationEtcdStore::new(fence_allocator_kv),
         }
     }
 
