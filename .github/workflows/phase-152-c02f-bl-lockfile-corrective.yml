@@ -24,7 +24,7 @@ jobs:
           ref: phase-152-c02f-bl-attempt-id-generation-materialization-staging
           fetch-depth: 0
 
-      - name: Update existing lockfile with Cargo and classify delta
+      - name: Update existing lockfile with Cargo and enforce exact delta
         id: classify
         shell: bash
         run: |
@@ -35,49 +35,43 @@ jobs:
           numstat="$(git diff --numstat -- Cargo.lock)"
           additions="$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++' || true)"
           deletions="$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
-          if [[ "$numstat" == $'1\t0\tCargo.lock' && "$additions" == '+ "aws-lc-rs",' && -z "$deletions" ]]; then
-            echo 'exact=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          mkdir -p logs/audits/phase-152-c02f-bl-attempt-id-generation
-          {
-            echo 'C02F-BL temporary Cargo.lock corrective diagnostic'
-            echo
-            echo 'Expected: exactly 1 addition / 0 deletions and only + "aws-lc-rs", under prw-control-plane.'
-            echo 'Observed numstat:'
-            printf '%s\n' "$numstat"
-            echo
-            echo 'Observed diff:'
-            git diff -- Cargo.lock
-          } > logs/audits/phase-152-c02f-bl-attempt-id-generation/TEMP_C02F_BL_LOCK_DIFF.txt
-          git checkout -- Cargo.lock
-          echo 'exact=false' >> "$GITHUB_OUTPUT"
+          test "$numstat" = $'1\t0\tCargo.lock'
+          test "$additions" = '+ "aws-lc-rs",'
+          test -z "$deletions"
+          echo "base_blob=$(git rev-parse HEAD:Cargo.lock)" >> "$GITHUB_OUTPUT"
+          echo "target_blob=$(git hash-object Cargo.lock)" >> "$GITHUB_OUTPUT"
+          echo "source_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Commit exact Cargo-updated lockfile
-        if: steps.classify.outputs.exact == 'true'
+      - name: Commit exact Cargo-updated lockfile through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: phase-152-c02f-bl-attempt-id-generation-materialization-staging
+          BASE_BLOB: ${{ steps.classify.outputs.base_blob }}
+          TARGET_BLOB: ${{ steps.classify.outputs.target_blob }}
+          SOURCE_HEAD: ${{ steps.classify.outputs.source_head }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git status --short | awk '{print $2}')" = 'Cargo.lock'
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git diff --cached --check
-          test "$(git diff --cached --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
-          git commit -m 'phase 152 c02f-bl: materialize Cargo-generated lock dependency'
-          git push origin HEAD:phase-152-c02f-bl-attempt-id-generation-materialization-staging
-
-      - name: Commit diagnostic only when Cargo delta is not exact
-        if: steps.classify.outputs.exact == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -z "$(git status --short Cargo.lock)"
-          diagnostic='logs/audits/phase-152-c02f-bl-attempt-id-generation/TEMP_C02F_BL_LOCK_DIFF.txt'
-          test -s "$diagnostic"
-          test "$(git status --short | awk '{print $2}')" = "$diagnostic"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$diagnostic"
-          git commit -m 'phase 152 c02f-bl: record lock corrective diagnostic'
-          git push origin HEAD:phase-152-c02f-bl-attempt-id-generation-materialization-staging
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test "$(git rev-parse HEAD:Cargo.lock)" = "$BASE_BLOB"
+          test "$(git hash-object Cargo.lock)" = "$TARGET_BLOB"
+          content="$(base64 -w0 Cargo.lock)"
+          jq -n \
+            --arg message 'phase 152 c02f-bl: materialize Cargo-generated lock dependency' \
+            --arg content "$content" \
+            --arg sha "$BASE_BLOB" \
+            --arg branch "$BRANCH" \
+            '{message:$message,content:$content,sha:$sha,branch:$branch}' > /tmp/cargo-lock-update.json
+          response="$(curl --fail-with-body -sS \
+            -X PUT \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/Cargo.lock" \
+            --data-binary @/tmp/cargo-lock-update.json)"
+          committed_blob="$(printf '%s' "$response" | jq -r '.content.sha')"
+          committed_sha="$(printf '%s' "$response" | jq -r '.commit.sha')"
+          test "$committed_blob" = "$TARGET_BLOB"
+          test -n "$committed_sha"
+          printf 'C02F_BL_LOCK_COMMIT=%s\n' "$committed_sha"
+          printf 'C02F_BL_LOCK_BLOB=%s\n' "$committed_blob"
