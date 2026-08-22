@@ -129,9 +129,7 @@ impl ReachabilityLiveOwnerEtcdBootstrapConfig {
         }
 
         if live_owner_identity.certificate_pem == fence_allocator_identity.certificate_pem {
-            return Err(
-                ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate,
-            );
+            return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate);
         }
         if live_owner_identity.private_key_pem == fence_allocator_identity.private_key_pem {
             return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey);
@@ -173,9 +171,7 @@ impl fmt::Display for ReachabilityLiveOwnerEtcdBootstrapConfigError {
             Self::EndpointCount => "etcd authority bootstrap requires exactly three endpoints",
             Self::InsecureEndpoint => "etcd authority bootstrap endpoint must use https",
             Self::MalformedEndpoint => "etcd authority bootstrap endpoint is malformed",
-            Self::NonFqdnEndpoint => {
-                "etcd authority bootstrap endpoint host must be a stable fqdn"
-            }
+            Self::NonFqdnEndpoint => "etcd authority bootstrap endpoint host must be a stable fqdn",
             Self::DuplicateMemberHost => {
                 "etcd authority bootstrap endpoint member host must be unique"
             }
@@ -245,16 +241,14 @@ pub async fn bootstrap_reachability_live_owner_preparation(
         fence_allocator_identity,
     } = config;
 
-    let live_owner_options =
-        connect_options(&trust_bundle_pem, &live_owner_identity);
+    let live_owner_options = connect_options(&trust_bundle_pem, &live_owner_identity);
     let live_owner_client = Client::connect(endpoints.as_slice(), Some(live_owner_options))
         .await
         .map_err(|_| ReachabilityLiveOwnerEtcdBootstrapError::LiveOwnerConnect)?;
     let live_owner_kv = live_owner_client.kv_client();
     drop(live_owner_client);
 
-    let fence_allocator_options =
-        connect_options(&trust_bundle_pem, &fence_allocator_identity);
+    let fence_allocator_options = connect_options(&trust_bundle_pem, &fence_allocator_identity);
     let fence_allocator_client =
         Client::connect(endpoints.as_slice(), Some(fence_allocator_options))
             .await
