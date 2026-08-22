@@ -7,22 +7,18 @@
 use std::fmt;
 
 use prw_control_plane::reachability_acquisition_evidence::bootstrap::{
-    ReachabilityEtcdClientIdentityMaterialError,
-    ReachabilityLiveOwnerEtcdBootstrapConfig, ReachabilityLiveOwnerEtcdBootstrapConfigError,
+    ReachabilityEtcdClientIdentityMaterialError, ReachabilityLiveOwnerEtcdBootstrapConfig,
+    ReachabilityLiveOwnerEtcdBootstrapConfigError,
 };
 
 /// First fixed reachability authority endpoint credential name.
-pub const AUTHORITY_ENDPOINT_1_CREDENTIAL_NAME: &str =
-    "prw.reachability.authority-endpoint-1.v1";
+pub const AUTHORITY_ENDPOINT_1_CREDENTIAL_NAME: &str = "prw.reachability.authority-endpoint-1.v1";
 /// Second fixed reachability authority endpoint credential name.
-pub const AUTHORITY_ENDPOINT_2_CREDENTIAL_NAME: &str =
-    "prw.reachability.authority-endpoint-2.v1";
+pub const AUTHORITY_ENDPOINT_2_CREDENTIAL_NAME: &str = "prw.reachability.authority-endpoint-2.v1";
 /// Third fixed reachability authority endpoint credential name.
-pub const AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME: &str =
-    "prw.reachability.authority-endpoint-3.v1";
+pub const AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME: &str = "prw.reachability.authority-endpoint-3.v1";
 /// Fixed private authority CA bundle credential name.
-pub const AUTHORITY_CA_BUNDLE_CREDENTIAL_NAME: &str =
-    "prw.reachability.authority-ca-bundle.v1";
+pub const AUTHORITY_CA_BUNDLE_CREDENTIAL_NAME: &str = "prw.reachability.authority-ca-bundle.v1";
 /// Fixed live-owner client certificate credential name.
 pub const LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME: &str =
     "prw.reachability.live-owner.client-certificate.v1";
@@ -73,7 +69,9 @@ pub enum ReachabilityCustodyError {
 impl fmt::Display for ReachabilityCustodyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnsupportedPlatform => formatter.write_str("unsupported reachability custody platform"),
+            Self::UnsupportedPlatform => {
+                formatter.write_str("unsupported reachability custody platform")
+            }
             Self::CredentialsDirectoryMissing => {
                 formatter.write_str("systemd credential directory is unavailable")
             }
@@ -174,8 +172,9 @@ mod linux {
         AUTHORITY_ENDPOINT_2_CREDENTIAL_NAME, AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME,
         FENCE_ALLOCATOR_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
         FENCE_ALLOCATOR_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
-        LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME, LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
-        ReachabilityCustodyError, SYSTEMD_CREDENTIALS_DIRECTORY_ENV,
+        LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+        LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME, ReachabilityCustodyError,
+        SYSTEMD_CREDENTIALS_DIRECTORY_ENV,
     };
 
     const MAX_ENDPOINT_CREDENTIAL_BYTES: usize = 2_048;
@@ -229,10 +228,8 @@ mod linux {
             LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
             MAX_CLIENT_CERTIFICATE_BYTES,
         )?;
-        let live_owner_private_key = read_private_key_credential(
-            directory,
-            LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
-        )?;
+        let live_owner_private_key =
+            read_private_key_credential(directory, LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME)?;
         let live_owner_identity =
             ReachabilityEtcdClientIdentityMaterial::new_with_zeroizing_private_key(
                 live_owner_certificate,
@@ -360,7 +357,9 @@ mod linux {
         Ok(())
     }
 
-    fn validate_credential_metadata(metadata: &fs::Metadata) -> Result<(), ReachabilityCustodyError> {
+    fn validate_credential_metadata(
+        metadata: &fs::Metadata,
+    ) -> Result<(), ReachabilityCustodyError> {
         if metadata.uid() != geteuid().as_raw() {
             return Err(ReachabilityCustodyError::CredentialOwnershipMismatch);
         }
@@ -414,9 +413,7 @@ mod linux {
             sync::atomic::{AtomicU64, Ordering},
         };
 
-        use prw_control_plane::reachability_acquisition_evidence::bootstrap::{
-            ReachabilityLiveOwnerEtcdBootstrapConfigError,
-        };
+        use prw_control_plane::reachability_acquisition_evidence::bootstrap::ReachabilityLiveOwnerEtcdBootstrapConfigError;
 
         use super::*;
 
@@ -429,10 +426,8 @@ mod linux {
         impl TestDirectory {
             fn new() -> Self {
                 let id = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
-                let path = std::env::temp_dir().join(format!(
-                    "prw-phase152-c02f-ce-{}-{id}",
-                    process::id()
-                ));
+                let path = std::env::temp_dir()
+                    .join(format!("prw-phase152-c02f-ce-{}-{id}", process::id()));
                 fs::create_dir(&path).expect("create isolated CE test directory");
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
                     .expect("secure CE test directory mode");
@@ -449,6 +444,9 @@ mod linux {
 
             fn write_credential(&self, name: &str, bytes: &[u8]) {
                 let path = self.credential_path(name);
+                if path.exists() {
+                    fs::remove_file(&path).expect("replace CE test credential");
+                }
                 fs::write(&path, bytes).expect("write CE test credential");
                 fs::set_permissions(path, fs::Permissions::from_mode(0o400))
                     .expect("secure CE credential mode");
