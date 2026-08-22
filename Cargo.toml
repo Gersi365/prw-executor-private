@@ -8,6 +8,7 @@ members = [
     "crates/prw-file-transfer",
     "crates/prw-network",
     "crates/prw-control-plane",
+    "crates/prw-reachability-custody",
     "crates/prw-control-transport",
     "crates/prw-device-identity",
     "crates/prw-device-identity-signer",
