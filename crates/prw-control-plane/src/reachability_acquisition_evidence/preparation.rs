@@ -188,9 +188,7 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
     ///
     /// The returned value cannot outlive this mutable borrow and provides no accessor to the raw
     /// live-owner store or client. Creating the capability performs no provider I/O.
-    pub const fn acquisition_execution(
-        &mut self,
-    ) -> ReachabilityLiveOwnerAcquisitionExecution<'_> {
+    pub const fn acquisition_execution(&mut self) -> ReachabilityLiveOwnerAcquisitionExecution<'_> {
         ReachabilityLiveOwnerAcquisitionExecution {
             live_owner: &mut self.live_owner,
         }
