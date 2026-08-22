@@ -129,8 +129,12 @@ pub(crate) enum ReachabilityLiveOwnerFirstOwnerPlanError {
 impl fmt::Display for ReachabilityLiveOwnerFirstOwnerPlanError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Allocation(error) => write!(formatter, "first-owner allocation is invalid: {error}"),
-            Self::Codec(error) => write!(formatter, "first-owner live-owner encoding failed: {error}"),
+            Self::Allocation(error) => {
+                write!(formatter, "first-owner allocation is invalid: {error}")
+            }
+            Self::Codec(error) => {
+                write!(formatter, "first-owner live-owner encoding failed: {error}")
+            }
         }
     }
 }
@@ -173,8 +177,7 @@ pub(crate) fn plan_first_owner_from_allocation(
     attempt_id: AuthorityAttemptId,
 ) -> Result<ReachabilityLiveOwnerFirstOwnerHandoff, ReachabilityLiveOwnerFirstOwnerPlanError> {
     let fence = canonical_live_owner_fence(&allocation)?;
-    let successor =
-        ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence, attempt_id);
+    let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer.clone(), fence, attempt_id);
     let key = encode_live_owner_key(peer)?;
     let value = encode_live_owner_record(&successor)?;
 
@@ -312,7 +315,10 @@ mod tests {
         let transaction = handoff.transaction();
 
         assert_eq!(transaction.successor().peer(), &peer);
-        assert_eq!(transaction.successor().lifecycle(), LiveOwnerLifecycle::Current);
+        assert_eq!(
+            transaction.successor().lifecycle(),
+            LiveOwnerLifecycle::Current
+        );
         assert_eq!(transaction.successor().fence(), expected_fence);
         assert_eq!(transaction.successor().attempt_id(), attempt);
         assert_eq!(
@@ -353,11 +359,10 @@ mod tests {
 
     #[test]
     fn superseded_allocation_cannot_mint_first_owner_evidence() {
-        let allocation = resolved_allocation(
-            FenceSequenceAllocationSubmissionOutcome::CompareFailed(
+        let allocation =
+            resolved_allocation(FenceSequenceAllocationSubmissionOutcome::CompareFailed(
                 FenceSequenceReobservation::Superseded,
-            ),
-        );
+            ));
         assert_eq!(
             allocation.outcome(),
             FenceSequenceAllocationResolvedOutcome::Superseded
