@@ -38,9 +38,14 @@ jobs:
           test "$numstat" = $'1\t0\tCargo.lock'
           test "$additions" = '+ "aws-lc-rs",'
           test -z "$deletions"
-          echo "base_blob=$(git rev-parse HEAD:Cargo.lock)" >> "$GITHUB_OUTPUT"
-          echo "target_blob=$(git hash-object Cargo.lock)" >> "$GITHUB_OUTPUT"
-          echo "source_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          base_blob="$(git rev-parse HEAD:Cargo.lock)"
+          target_blob="$(git hash-object Cargo.lock)"
+          source_head="$(git rev-parse HEAD)"
+          test "$base_blob" = '870f4dca6ceafcffd3806b1af84ffb82aa6918d3'
+          test "$target_blob" = '1f5df390b7d60b323940e585f291acf047396571'
+          echo "base_blob=$base_blob" >> "$GITHUB_OUTPUT"
+          echo "target_blob=$target_blob" >> "$GITHUB_OUTPUT"
+          echo "source_head=$source_head" >> "$GITHUB_OUTPUT"
 
       - name: Commit exact Cargo-updated lockfile through Contents API
         env:
@@ -55,13 +60,20 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
           test "$(git rev-parse HEAD:Cargo.lock)" = "$BASE_BLOB"
           test "$(git hash-object Cargo.lock)" = "$TARGET_BLOB"
-          content="$(base64 -w0 Cargo.lock)"
-          jq -n \
-            --arg message 'phase 152 c02f-bl: materialize Cargo-generated lock dependency' \
-            --arg content "$content" \
-            --arg sha "$BASE_BLOB" \
-            --arg branch "$BRANCH" \
-            '{message:$message,content:$content,sha:$sha,branch:$branch}' > /tmp/cargo-lock-update.json
+          python3 - <<'PY' > /tmp/cargo-lock-update.json
+          import base64
+          import json
+          import os
+          import sys
+          with open('Cargo.lock', 'rb') as handle:
+              content = base64.b64encode(handle.read()).decode('ascii')
+          json.dump({
+              'message': 'phase 152 c02f-bl: materialize Cargo-generated lock dependency',
+              'content': content,
+              'sha': os.environ['BASE_BLOB'],
+              'branch': os.environ['BRANCH'],
+          }, sys.stdout, separators=(',', ':'))
+          PY
           response="$(curl --fail-with-body -sS \
             -X PUT \
             -H 'Accept: application/vnd.github+json' \
@@ -69,8 +81,8 @@ jobs:
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/Cargo.lock" \
             --data-binary @/tmp/cargo-lock-update.json)"
-          committed_blob="$(printf '%s' "$response" | jq -r '.content.sha')"
-          committed_sha="$(printf '%s' "$response" | jq -r '.commit.sha')"
+          committed_blob="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["content"]["sha"])')"
+          committed_sha="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"]["sha"])')"
           test "$committed_blob" = "$TARGET_BLOB"
           test -n "$committed_sha"
           printf 'C02F_BL_LOCK_COMMIT=%s\n' "$committed_sha"
