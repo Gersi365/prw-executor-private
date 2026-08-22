@@ -200,13 +200,9 @@ fn finish_preparation_with(
         .map_err(|_| ReachabilityLiveOwnerPreparationError::AuthorityAttemptIdGeneration)?;
 
     if let Some(observation) = observation {
-        let acquisition = plan_live_owner_acquisition_from_allocation(
-            &observation,
-            peer,
-            allocation,
-            attempt_id,
-        )
-        .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementPlanning)?;
+        let acquisition =
+            plan_live_owner_acquisition_from_allocation(&observation, peer, allocation, attempt_id)
+                .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementPlanning)?;
         let handoff = retain_live_owner_acquisition_handoff(observation, acquisition)
             .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementRetention)?;
         Ok(ReachabilityLiveOwnerPreparedAcquisition::Replacement(
