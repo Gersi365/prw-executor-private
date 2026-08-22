@@ -8,6 +8,7 @@
 pub(crate) mod attempt_id_generation;
 #[allow(dead_code)]
 mod first_owner;
+mod preparation;
 
 pub use crate::fence_sequence::{
     FenceSequenceAllocationPlan, FenceSequenceHead, FenceSequenceHeadObservation,
@@ -22,4 +23,8 @@ pub use crate::recovery_epoch::RecoveryEpoch;
 pub use first_owner::{
     ReachabilityLiveOwnerFirstOwnerHandoff, ReachabilityLiveOwnerFirstOwnerTxnCompare,
     ReachabilityLiveOwnerFirstOwnerTxnOperation, ReachabilityLiveOwnerFirstOwnerTxnPlan,
+};
+pub use preparation::{
+    ReachabilityLiveOwnerAcquisitionPreparation, ReachabilityLiveOwnerPreparationError,
+    ReachabilityLiveOwnerPreparedAcquisition,
 };
