@@ -70,31 +70,15 @@ jobs:
 
           source = Path('crates/prw-reachability-custody/src/lib.rs')
           text = source.read_text()
-          old = '''            fn write_credential(&self, name: &str, bytes: &[u8]) {
-              let path = self.credential_path(name);
-              fs::write(&path, bytes).expect("write CE test credential");
-              fs::set_permissions(path, fs::Permissions::from_mode(0o400))
-                  .expect("secure CE credential mode");
-          }
-          '''
-          old = ''.join(line.removeprefix('          ') for line in old.splitlines(keepends=True))
-          new = '''            fn write_credential(&self, name: &str, bytes: &[u8]) {
-              let path = self.credential_path(name);
-              if path.exists() {
-                  fs::remove_file(&path).expect("replace CE test credential");
-              }
-              fs::write(&path, bytes).expect("write CE test credential");
-              fs::set_permissions(path, fs::Permissions::from_mode(0o400))
-                  .expect("secure CE credential mode");
-          }
-          '''
-          new = ''.join(line.removeprefix('          ') for line in new.splitlines(keepends=True))
+          needle = 'fs::write(&path, bytes).expect("write CE test credential");'
+          replacement = '''if path.exists() {
+                      fs::remove_file(&path).expect("replace CE test credential");
+                  }
+                  fs::write(&path, bytes).expect("write CE test credential");'''
 
-          if old not in text:
-              raise SystemExit('expected CE test helper block missing')
-          if text.count(old) != 1:
-              raise SystemExit('CE test helper block is not unique')
-          source.write_text(text.replace(old, new, 1))
+          if text.count(needle) != 1:
+              raise SystemExit('CE test credential write statement is not unique')
+          source.write_text(text.replace(needle, replacement, 1))
           PY
 
       - name: Format and validate exact bounded source
