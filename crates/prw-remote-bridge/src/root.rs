@@ -17,6 +17,7 @@ pub mod candidate_reachability;
 pub mod reachability_freshness_wire;
 pub mod reachability_live_owner;
 pub mod reachability_live_owner_async;
+pub mod reachability_live_owner_currentness_execution;
 // C02f-Y intentionally preserves the explicit `impl Future + Send` async authority contract.
 #[allow(clippy::manual_async_fn)]
 pub mod reachability_live_owner_provider_bridge;
