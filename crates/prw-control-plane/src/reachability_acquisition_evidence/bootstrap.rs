@@ -46,12 +46,28 @@ impl ReachabilityEtcdClientIdentityMaterial {
         certificate_pem: impl Into<Vec<u8>>,
         private_key_pem: impl Into<Vec<u8>>,
     ) -> Result<Self, ReachabilityEtcdClientIdentityMaterialError> {
+        let private_key_pem = Zeroizing::new(private_key_pem.into());
+        Self::new_with_zeroizing_private_key(certificate_pem, private_key_pem)
+    }
+
+    /// Creates one role-scoped identity while preserving an existing zeroizing private-key owner.
+    ///
+    /// This is the selected production custody handoff seam. The private-key buffer is moved by
+    /// value and retained directly; it is not cloned, unwrapped, or copied into an ordinary
+    /// PRW-owned plaintext buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed error when either PEM input is empty or ASCII-whitespace-only.
+    pub fn new_with_zeroizing_private_key(
+        certificate_pem: impl Into<Vec<u8>>,
+        private_key_pem: Zeroizing<Vec<u8>>,
+    ) -> Result<Self, ReachabilityEtcdClientIdentityMaterialError> {
         let certificate_pem = certificate_pem.into();
         if !contains_non_whitespace(&certificate_pem) {
             return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyCertificate);
         }
 
-        let private_key_pem = Zeroizing::new(private_key_pem.into());
         if !contains_non_whitespace(private_key_pem.as_slice()) {
             return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyPrivateKey);
         }
