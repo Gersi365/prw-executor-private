@@ -42,6 +42,10 @@ use crate::{
 };
 
 /// Provider-neutral terminal preparation result selected by C02f-BJ.
+///
+/// The evidence variants intentionally retain their already-validated handoff objects by value so
+/// the selected public result shape and ownership semantics remain unchanged at this checkpoint.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReachabilityLiveOwnerPreparedAcquisition {
     /// Exact retained replacement evidence for later live-owner provider execution.
@@ -195,28 +199,25 @@ fn finish_preparation_with(
     let attempt_id = generate_attempt_id()
         .map_err(|_| ReachabilityLiveOwnerPreparationError::AuthorityAttemptIdGeneration)?;
 
-    match observation {
-        Some(observation) => {
-            let acquisition = plan_live_owner_acquisition_from_allocation(
-                &observation,
-                peer,
-                allocation,
-                attempt_id,
-            )
-            .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementPlanning)?;
-            let handoff = retain_live_owner_acquisition_handoff(observation, acquisition)
-                .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementRetention)?;
-            Ok(ReachabilityLiveOwnerPreparedAcquisition::Replacement(
-                handoff,
-            ))
-        }
-        None => {
-            let handoff = plan_first_owner_from_allocation(peer, allocation, attempt_id)
-                .map_err(|_| ReachabilityLiveOwnerPreparationError::FirstOwnerPlanning)?;
-            Ok(ReachabilityLiveOwnerPreparedAcquisition::FirstOwner(
-                handoff,
-            ))
-        }
+    if let Some(observation) = observation {
+        let acquisition = plan_live_owner_acquisition_from_allocation(
+            &observation,
+            peer,
+            allocation,
+            attempt_id,
+        )
+        .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementPlanning)?;
+        let handoff = retain_live_owner_acquisition_handoff(observation, acquisition)
+            .map_err(|_| ReachabilityLiveOwnerPreparationError::ReplacementRetention)?;
+        Ok(ReachabilityLiveOwnerPreparedAcquisition::Replacement(
+            handoff,
+        ))
+    } else {
+        let handoff = plan_first_owner_from_allocation(peer, allocation, attempt_id)
+            .map_err(|_| ReachabilityLiveOwnerPreparationError::FirstOwnerPlanning)?;
+        Ok(ReachabilityLiveOwnerPreparedAcquisition::FirstOwner(
+            handoff,
+        ))
     }
 }
 
