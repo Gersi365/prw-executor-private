@@ -44,9 +44,8 @@ use crate::reachability_live_owner::{
 pub fn execute_live_owner_currentness<'a>(
     store: &'a mut ReachabilityLiveOwnerEtcdStore,
     grant: &'a ReachabilityLiveOwnerGrant,
-) -> impl Future<
-    Output = Result<ReachabilityLiveOwnerCurrentness, ReachabilityLiveOwnerAuthorityError>,
-> + Send
+) -> impl Future<Output = Result<ReachabilityLiveOwnerCurrentness, ReachabilityLiveOwnerAuthorityError>>
++ Send
 + 'a {
     async move {
         let raw_fence = NonZeroU128::new(grant.fence().get())
