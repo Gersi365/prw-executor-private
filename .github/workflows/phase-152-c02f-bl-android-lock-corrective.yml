@@ -5,16 +5,16 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: prw-phase-152-c02f-bl-android-lock-corrective-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: false
 
 jobs:
-  diagnose:
+  materialize:
     if: github.event.pull_request.head.ref == 'phase-152-c02f-bl-attempt-id-generation-materialization-staging'
-    name: Diagnose BL Android native lock delta
+    name: Materialize proven BL Android native lock delta
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -24,24 +24,65 @@ jobs:
           ref: phase-152-c02f-bl-attempt-id-generation-materialization-staging
           fetch-depth: 0
 
-      - name: Generate and report Android native lock delta without writing repository
+      - name: Reproduce and pin exact Android native lock delta
+        id: classify
         shell: bash
         run: |
           set -euo pipefail
           cd apps/android/native
-          printf 'C02F_BL_ANDROID_LOCK_CWD=%s\n' "$PWD"
-          printf 'C02F_BL_ANDROID_LOCK_SOURCE_HEAD=%s\n' "$(git rev-parse HEAD)"
-          printf 'C02F_BL_ANDROID_LOCK_BASE_BLOB=%s\n' "$(git rev-parse HEAD:apps/android/native/Cargo.lock)"
+          source_head="$(git rev-parse HEAD)"
+          base_blob="$(git rev-parse HEAD:apps/android/native/Cargo.lock)"
+          test "$base_blob" = 'b8ca26b84037506f83120b86f9dd0d9ebcb2974c'
           cargo metadata --format-version 1 > /dev/null
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           git diff --check -- Cargo.lock
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_STATUS_BEGIN'
-          git status --short
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_STATUS_END'
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_NUMSTAT_BEGIN'
-          git diff --numstat -- Cargo.lock
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_NUMSTAT_END'
-          printf 'C02F_BL_ANDROID_LOCK_TARGET_BLOB=%s\n' "$(git hash-object Cargo.lock)"
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_DIFF_BEGIN'
-          git diff -- Cargo.lock
-          printf '%s\n' 'C02F_BL_ANDROID_LOCK_DIFF_END'
+          test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tapps/android/native/Cargo.lock'
+          test "$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++' || true)" = '+ "aws-lc-rs",'
+          test -z "$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
+          test "$(git status --short)" = ' M Cargo.lock'
+          target_blob="$(git hash-object Cargo.lock)"
+          test "$target_blob" = 'f97e830ac7b470f0d93344ccd7584c446e8a5004'
+          echo "source_head=$source_head" >> "$GITHUB_OUTPUT"
+          echo "base_blob=$base_blob" >> "$GITHUB_OUTPUT"
+          echo "target_blob=$target_blob" >> "$GITHUB_OUTPUT"
+
+      - name: Commit exact Cargo-generated Android native lockfile through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: phase-152-c02f-bl-attempt-id-generation-materialization-staging
+          SOURCE_HEAD: ${{ steps.classify.outputs.source_head }}
+          BASE_BLOB: ${{ steps.classify.outputs.base_blob }}
+          TARGET_BLOB: ${{ steps.classify.outputs.target_blob }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test "$(git rev-parse HEAD:apps/android/native/Cargo.lock)" = "$BASE_BLOB"
+          test "$(git hash-object apps/android/native/Cargo.lock)" = "$TARGET_BLOB"
+          python3 - <<'PY' > /tmp/android-lock-update.json
+          import base64
+          import json
+          import os
+          import sys
+          with open('apps/android/native/Cargo.lock', 'rb') as handle:
+              content = base64.b64encode(handle.read()).decode('ascii')
+          json.dump({
+              'message': 'phase 152 c02f-bl: materialize Cargo-generated Android native lock dependency',
+              'content': content,
+              'sha': os.environ['BASE_BLOB'],
+              'branch': os.environ['BRANCH'],
+          }, sys.stdout, separators=(',', ':'))
+          PY
+          response="$(curl --fail-with-body -sS \
+            -X PUT \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/apps/android/native/Cargo.lock" \
+            --data-binary @/tmp/android-lock-update.json)"
+          committed_blob="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["content"]["sha"])')"
+          committed_sha="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"]["sha"])')"
+          test "$committed_blob" = "$TARGET_BLOB"
+          test -n "$committed_sha"
+          printf 'C02F_BL_ANDROID_LOCK_COMMIT=%s\n' "$committed_sha"
+          printf 'C02F_BL_ANDROID_LOCK_BLOB=%s\n' "$committed_blob"
