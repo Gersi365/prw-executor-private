@@ -148,7 +148,8 @@ impl ReachabilityLiveOwnerAsyncAuthority for ReachabilityLiveOwnerComposedAsyncA
     + 'a {
         async move {
             let mut execution = self.preparation.lifecycle_execution();
-            execute_reconciled_live_owner_release_with_prepared_execution(&mut execution, grant).await
+            execute_reconciled_live_owner_release_with_prepared_execution(&mut execution, grant)
+                .await
         }
     }
 }

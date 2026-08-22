@@ -227,7 +227,8 @@ impl ReachabilityLiveOwnerLifecycleExecution<'_> {
         peer: &PeerConnectivityIdentity,
         fence: NonZeroU128,
         observation: Option<LiveOwnerObservation>,
-    ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError> {
+    ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError>
+    {
         self.live_owner
             .execute_release_with_reconciliation(peer, fence, observation)
             .await
