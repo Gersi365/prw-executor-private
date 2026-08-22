@@ -4,6 +4,7 @@
 //! semantic mapper. It does not expose etcd stores, transaction submission/retry entry points,
 //! endpoint/client construction, runtime activation, or production authority execution.
 
+#[allow(dead_code)]
 mod first_owner;
 
 pub use crate::fence_sequence::{
@@ -19,7 +20,4 @@ pub use crate::recovery_epoch::RecoveryEpoch;
 pub use first_owner::{
     ReachabilityLiveOwnerFirstOwnerHandoff, ReachabilityLiveOwnerFirstOwnerTxnCompare,
     ReachabilityLiveOwnerFirstOwnerTxnOperation, ReachabilityLiveOwnerFirstOwnerTxnPlan,
-};
-pub(crate) use first_owner::{
-    ReachabilityLiveOwnerFirstOwnerPlanError, plan_first_owner_from_allocation,
 };
