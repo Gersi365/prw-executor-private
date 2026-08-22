@@ -119,7 +119,7 @@ impl ReachabilityLiveOwnerFirstOwnerHandoff {
 
 /// Fail-closed deterministic first-owner planning error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReachabilityLiveOwnerFirstOwnerPlanError {
+pub(super) enum ReachabilityLiveOwnerFirstOwnerPlanError {
     /// The supplied allocation did not authorize a canonical committed live-owner fence.
     Allocation(FenceSequenceLiveOwnerBridgeError),
     /// Canonical live-owner key/record encoding failed.
@@ -171,7 +171,7 @@ impl From<ReachabilityLiveOwnerCodecError> for ReachabilityLiveOwnerFirstOwnerPl
 ///
 /// Returns a fail-closed error when the allocation is not committed/canonical or when exact key or
 /// record encoding fails.
-fn plan_first_owner_from_allocation(
+pub(super) fn plan_first_owner_from_allocation(
     peer: &PeerConnectivityIdentity,
     allocation: FenceSequenceAllocationResolved,
     attempt_id: AuthorityAttemptId,
