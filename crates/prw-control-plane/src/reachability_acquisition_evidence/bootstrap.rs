@@ -16,6 +16,7 @@
 use std::{collections::HashSet, fmt, net::IpAddr};
 
 use etcd_client::{Certificate, Client, ConnectOptions, Identity, TlsOptions};
+use zeroize::Zeroizing;
 
 use super::ReachabilityLiveOwnerAcquisitionPreparation;
 
@@ -28,7 +29,7 @@ const AUTHORITY_MEMBER_COUNT: usize = 3;
 /// provider bootstrap and are never exposed through accessors.
 pub struct ReachabilityEtcdClientIdentityMaterial {
     certificate_pem: Vec<u8>,
-    private_key_pem: Vec<u8>,
+    private_key_pem: Zeroizing<Vec<u8>>,
 }
 
 impl ReachabilityEtcdClientIdentityMaterial {
@@ -50,8 +51,8 @@ impl ReachabilityEtcdClientIdentityMaterial {
             return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyCertificate);
         }
 
-        let private_key_pem = private_key_pem.into();
-        if !contains_non_whitespace(&private_key_pem) {
+        let private_key_pem = Zeroizing::new(private_key_pem.into());
+        if !contains_non_whitespace(private_key_pem.as_slice()) {
             return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyPrivateKey);
         }
 
@@ -131,7 +132,9 @@ impl ReachabilityLiveOwnerEtcdBootstrapConfig {
         if live_owner_identity.certificate_pem == fence_allocator_identity.certificate_pem {
             return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate);
         }
-        if live_owner_identity.private_key_pem == fence_allocator_identity.private_key_pem {
+        if live_owner_identity.private_key_pem.as_slice()
+            == fence_allocator_identity.private_key_pem.as_slice()
+        {
             return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey);
         }
 
