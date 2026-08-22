@@ -210,29 +210,21 @@ impl FirstOwnerMutationIo for EtcdFirstOwnerIo<'_> {
         plan: &'a ReachabilityLiveOwnerFirstOwnerTxnPlan,
     ) -> Result<FirstOwnerMutationExecution, ReachabilityLiveOwnerFirstOwnerExecutionError> {
         let transaction = build_first_owner_etcd_transaction(plan)?;
-        let response = match self.store.kv.txn(transaction).await {
-            Ok(response) => response,
-            Err(_) => return Ok(FirstOwnerMutationExecution::Indeterminate),
+        let Ok(response) = self.store.kv.txn(transaction).await else {
+            return Ok(FirstOwnerMutationExecution::Indeterminate);
         };
         classify_first_owner_transaction_response(plan, &response)
             .map(FirstOwnerMutationExecution::Definitive)
     }
 
-    fn linearizable_observation<'a>(
+    async fn linearizable_observation<'a>(
         &'a mut self,
         peer: &'a PeerConnectivityIdentity,
-    ) -> impl Future<
-        Output = Result<
-            Option<LiveOwnerObservation>,
-            ReachabilityLiveOwnerFirstOwnerExecutionError,
-        >,
-    > + 'a {
-        async move {
-            self.store
-                .linearizable_observation(peer)
-                .await
-                .map_err(ReachabilityLiveOwnerFirstOwnerExecutionError::Etcd)
-        }
+    ) -> Result<Option<LiveOwnerObservation>, ReachabilityLiveOwnerFirstOwnerExecutionError> {
+        self.store
+            .linearizable_observation(peer)
+            .await
+            .map_err(ReachabilityLiveOwnerFirstOwnerExecutionError::Etcd)
     }
 }
 
@@ -318,7 +310,7 @@ fn resolve_definitive_first_owner(
     Ok(resolved_first_owner(handoff, outcome))
 }
 
-fn resolved_first_owner(
+const fn resolved_first_owner(
     handoff: ReachabilityLiveOwnerFirstOwnerHandoff,
     outcome: ReachabilityLiveOwnerFirstOwnerResolvedOutcome,
 ) -> ReachabilityLiveOwnerResolvedFirstOwner {
