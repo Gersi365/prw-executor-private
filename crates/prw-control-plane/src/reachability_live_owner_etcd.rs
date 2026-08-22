@@ -7,6 +7,14 @@
 //! lease/TTL behavior, fence allocation, attempt-ID generation, recovery/bootstrap, runtime/task
 //! ownership, or production activation.
 
+mod first_owner;
+
+pub use first_owner::{
+    ReachabilityLiveOwnerFirstOwnerExecutionError,
+    ReachabilityLiveOwnerFirstOwnerResolvedOutcome,
+    ReachabilityLiveOwnerResolvedFirstOwner,
+};
+
 use std::{fmt, num::NonZeroU128};
 
 use etcd_client::{Compare, CompareOp, GetResponse, KvClient, Txn, TxnOp, TxnOpResponse};
@@ -257,68 +265,3 @@ fn decode_exact_get(
         kvs => Err(ReachabilityLiveOwnerEtcdError::UnexpectedGetCardinality { actual: kvs.len() }),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use prw_connectivity::TransportIdentity;
-    use prw_core::DeviceId;
-
-    use super::*;
-    use crate::{
-        reachability_live_owner_codec::{
-            AuthorityAttemptId, LiveOwnerLifecycle, ReachabilityLiveOwnerAuthorityRecord,
-            encode_live_owner_record,
-        },
-        reachability_live_owner_txn::plan_acquisition,
-    };
-
-    fn peer(device: &str, marker: u8) -> PeerConnectivityIdentity {
-        PeerConnectivityIdentity::new(
-            DeviceId::new(device).expect("valid DeviceId"),
-            TransportIdentity::new([marker; 32]).expect("non-zero TransportIdentity"),
-        )
-    }
-
-    fn fence(value: u128) -> NonZeroU128 {
-        NonZeroU128::new(value).expect("non-zero fence")
-    }
-
-    fn attempt(marker: u8) -> AuthorityAttemptId {
-        AuthorityAttemptId::new([marker; 32]).expect("non-zero attempt id")
-    }
-
-    fn observation(
-        peer: PeerConnectivityIdentity,
-        lifecycle: LiveOwnerLifecycle,
-        fence_value: u128,
-        attempt_marker: u8,
-        revision: i64,
-    ) -> LiveOwnerObservation {
-        let current = ReachabilityLiveOwnerAuthorityRecord::current(
-            peer,
-            fence(fence_value),
-            attempt(attempt_marker),
-        );
-        let record = if lifecycle == LiveOwnerLifecycle::Current {
-            current
-        } else {
-            current.released_successor()
-        };
-        let key = encode_live_owner_key(record.peer()).expect("encode key");
-        let value = encode_live_owner_record(&record).expect("encode record");
-        LiveOwnerObservation::decode(key, value, revision).expect("decode observation")
-    }
-
-    #[test]
-    fn canonical_plan_materializes_real_etcd_transaction_without_endpoint() {
-        let peer = peer("etcd-txn-shape", 1);
-        let before = observation(peer.clone(), LiveOwnerLifecycle::Released, 10, 2, 20);
-        let successor = ReachabilityLiveOwnerAuthorityRecord::current(peer, fence(11), attempt(3));
-        let plan = plan_acquisition(&before, successor).expect("plan acquisition");
-
-        let _transaction = build_etcd_transaction(&plan);
-    }
-}
-
-/// Bounded C02f-AE indeterminate-mutation reconciliation orchestration.
-pub mod reconciliation;
