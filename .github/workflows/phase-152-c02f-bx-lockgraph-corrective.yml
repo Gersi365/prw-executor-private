@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
 
       - name: Resolve all-feature lock graph
-        run: cargo metadata --workspace --all-features --format-version 1 > /dev/null
+        run: cargo metadata --all-features --format-version 1 > /dev/null
 
       - name: Prove Cargo.lock delta is exact or already materialized
         id: guard
