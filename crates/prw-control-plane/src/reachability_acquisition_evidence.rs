@@ -5,6 +5,8 @@
 //! endpoint/client construction, runtime activation, or production authority execution.
 
 #[allow(dead_code)]
+pub(crate) mod attempt_id_generation;
+#[allow(dead_code)]
 mod first_owner;
 
 pub use crate::fence_sequence::{
