@@ -24,18 +24,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate lockfile with Cargo and enforce exact delta
+      - name: Update existing lockfile with Cargo and enforce exact delta
         shell: bash
         run: |
           set -euo pipefail
-          cargo generate-lockfile
+          cargo metadata --format-version 1 > /dev/null
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           git diff --check -- Cargo.lock
           test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
           test "$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++')" = '+ "aws-lc-rs",'
           test -z "$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
 
-      - name: Commit only Cargo-generated lockfile
+      - name: Commit only Cargo-updated lockfile
         shell: bash
         run: |
           set -euo pipefail
