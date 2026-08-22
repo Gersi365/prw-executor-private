@@ -61,41 +61,61 @@ jobs:
               raise SystemExit('unexpected pre-existing reachability custody lock entry')
           PY
 
+      - name: Apply exact test-harness corrective
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('crates/prw-reachability-custody/src/lib.rs')
+          text = source.read_text()
+          old = '''            fn write_credential(&self, name: &str, bytes: &[u8]) {
+              let path = self.credential_path(name);
+              fs::write(&path, bytes).expect("write CE test credential");
+              fs::set_permissions(path, fs::Permissions::from_mode(0o400))
+                  .expect("secure CE credential mode");
+          }
+          '''
+          old = ''.join(line.removeprefix('          ') for line in old.splitlines(keepends=True))
+          new = '''            fn write_credential(&self, name: &str, bytes: &[u8]) {
+              let path = self.credential_path(name);
+              if path.exists() {
+                  fs::remove_file(&path).expect("replace CE test credential");
+              }
+              fs::write(&path, bytes).expect("write CE test credential");
+              fs::set_permissions(path, fs::Permissions::from_mode(0o400))
+                  .expect("secure CE credential mode");
+          }
+          '''
+          new = ''.join(line.removeprefix('          ') for line in new.splitlines(keepends=True))
+
+          if old not in text:
+              raise SystemExit('expected CE test helper block missing')
+          if text.count(old) != 1:
+              raise SystemExit('CE test helper block is not unique')
+          source.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Format and validate exact bounded source
         shell: bash
         run: |
           set -Eeuo pipefail
           cargo fmt --all
           changed="$(git diff --name-only)"
-          case "$changed" in
-            Cargo.lock|$'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs') ;;
-            *)
-              printf 'unexpected helper diff:\n%s\n' "$changed" >&2
-              exit 1
-              ;;
-          esac
+          test "$changed" = $'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs'
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           cargo fmt --all -- --check
           cargo test --locked -p prw-reachability-custody
 
-      - name: Commit exact lock and formatting materialization
+      - name: Commit exact lock, formatting and test corrective
         shell: bash
         run: |
           set -Eeuo pipefail
-          if git diff --quiet; then
-            echo 'no materialization needed'
-            exit 0
-          fi
           changed="$(git diff --name-only)"
-          case "$changed" in
-            Cargo.lock|$'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs') ;;
-            *)
-              printf 'unexpected helper diff:\n%s\n' "$changed" >&2
-              exit 1
-              ;;
-          esac
+          test "$changed" = $'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Cargo.lock crates/prw-reachability-custody/src/lib.rs
-          git commit -m 'phase 152 c02f-ce: materialize custody source formatting and lock entry'
+          git commit -m 'phase 152 c02f-ce: materialize custody source and test corrective'
           git push origin HEAD:phase-152-c02f-ce-reachability-custody-source-materialization-staging
