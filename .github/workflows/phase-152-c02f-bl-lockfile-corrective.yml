@@ -1,20 +1,19 @@
 name: PRW Phase 152 C02f-BL Lockfile Corrective
 
 on:
-  push:
-    branches:
-      - phase-152-c02f-bl-attempt-id-generation-materialization-staging
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 concurrency:
-  group: prw-phase-152-c02f-bl-lockfile-corrective-${{ github.ref }}
+  group: prw-phase-152-c02f-bl-lockfile-corrective-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: false
 
 jobs:
   materialize:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'phase-152-c02f-bl-attempt-id-generation-materialization-staging'
     name: Materialize exact BL lockfile delta
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -22,6 +21,7 @@ jobs:
       - name: Checkout exact BL candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: phase-152-c02f-bl-attempt-id-generation-materialization-staging
           fetch-depth: 0
 
       - name: Update existing lockfile with Cargo and classify delta
