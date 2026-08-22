@@ -250,7 +250,7 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
     /// fence-sequence allocation store; neither client is cloned across authority roles.
     #[allow(dead_code)]
     #[must_use]
-    pub(crate) fn from_role_scoped_clients(
+    pub(crate) const fn from_role_scoped_clients(
         live_owner_kv: KvClient,
         fence_allocator_kv: KvClient,
     ) -> Self {
