@@ -10,8 +10,7 @@
 mod first_owner;
 
 pub use first_owner::{
-    ReachabilityLiveOwnerFirstOwnerExecutionError,
-    ReachabilityLiveOwnerFirstOwnerResolvedOutcome,
+    ReachabilityLiveOwnerFirstOwnerExecutionError, ReachabilityLiveOwnerFirstOwnerResolvedOutcome,
     ReachabilityLiveOwnerResolvedFirstOwner,
 };
 
