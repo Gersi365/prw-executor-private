@@ -7,9 +7,9 @@
 //! evidence primitives.
 //!
 //! Construction accepts one already-created `KvClient`; endpoint selection and `Client::connect`
-//! remain outside this boundary. Preparation may execute only the already-selected AQ fence-sequence
-//! allocation protocol. It does not execute a live-owner mutation, map semantic authority, construct
-//! runtime state, activate R1-R4 effects, deploy, or merge.
+//! remain outside this boundary. C02f-BS adds only a lifetime-bounded execution capability over the
+//! exact live-owner store already owned here. The capability exposes no raw store/client/configuration
+//! handle and cannot outlive the mutable preparation borrow that created it.
 
 use std::fmt;
 
@@ -36,8 +36,14 @@ use crate::{
     },
     fence_sequence_live_owner_bridge::plan_live_owner_acquisition_from_allocation,
     fence_sequence_live_owner_handoff::retain_live_owner_acquisition_handoff,
-    reachability_live_owner_codec::AuthorityAttemptId,
-    reachability_live_owner_etcd::ReachabilityLiveOwnerEtcdStore,
+    reachability_live_owner_codec::{AuthorityAttemptId, ReachabilityLiveOwnerAuthorityRecord},
+    reachability_live_owner_etcd::{
+        ReachabilityLiveOwnerEtcdStore, ReachabilityLiveOwnerFirstOwnerExecutionError,
+        ReachabilityLiveOwnerResolvedFirstOwner,
+        reconciliation::{
+            ReachabilityLiveOwnerReconciliationError, ReachabilityLiveOwnerResolvedMutation,
+        },
+    },
     reachability_live_owner_txn::LiveOwnerObservation,
 };
 
@@ -117,6 +123,57 @@ pub struct ReachabilityLiveOwnerAcquisitionPreparation {
     allocation: FenceSequenceAllocationEtcdStore,
 }
 
+/// C02f-BS scoped provider-execution capability borrowed from one preparation facade.
+///
+/// Construction is private to [`ReachabilityLiveOwnerAcquisitionPreparation`]. The capability owns
+/// no provider handle and exposes no raw store, `KvClient`, endpoint/configuration state, generic
+/// transaction entry point, currentness, or release operation. It can execute only the exact
+/// replacement and first-owner acquisition evidence shapes already selected before C02f-BS.
+#[must_use = "the acquisition execution capability must remain scoped to its preparation borrow"]
+pub struct ReachabilityLiveOwnerAcquisitionExecution<'a> {
+    live_owner: &'a mut ReachabilityLiveOwnerEtcdStore,
+}
+
+impl ReachabilityLiveOwnerAcquisitionExecution<'_> {
+    /// Executes one exact retained replacement handoff through the existing C02f-AE reconciliation.
+    ///
+    /// `before` and `successor` are projected only from the retained handoff. No independent caller
+    /// input can replace either value through this capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing fail-closed C02f-AE provider/reconciliation error unchanged.
+    pub async fn execute_replacement_with_reconciliation(
+        &mut self,
+        handoff: &FenceSequenceLiveOwnerAcquisitionHandoff,
+    ) -> Result<ReachabilityLiveOwnerResolvedMutation, ReachabilityLiveOwnerReconciliationError>
+    {
+        let before = handoff.observation().clone();
+        let successor: ReachabilityLiveOwnerAuthorityRecord =
+            handoff.acquisition().transaction().successor().clone();
+        self.live_owner
+            .execute_acquisition_with_reconciliation(before, successor)
+            .await
+    }
+
+    /// Executes one exact retained first-owner handoff through the existing C02f-BO/BP path.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing fail-closed first-owner provider/reconciliation error unchanged.
+    pub async fn execute_first_owner_with_reconciliation(
+        &mut self,
+        handoff: ReachabilityLiveOwnerFirstOwnerHandoff,
+    ) -> Result<
+        ReachabilityLiveOwnerResolvedFirstOwner,
+        ReachabilityLiveOwnerFirstOwnerExecutionError,
+    > {
+        self.live_owner
+            .execute_first_owner_with_reconciliation(handoff)
+            .await
+    }
+}
+
 impl ReachabilityLiveOwnerAcquisitionPreparation {
     /// Wraps one already-created etcd KV context without selecting or contacting an endpoint.
     #[must_use]
@@ -124,6 +181,17 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
         Self {
             live_owner: ReachabilityLiveOwnerEtcdStore::new(kv.clone()),
             allocation: FenceSequenceAllocationEtcdStore::new(kv),
+        }
+    }
+
+    /// Borrows only the acquisition execution capability for this exact preparation-owned provider.
+    ///
+    /// The returned value cannot outlive this mutable borrow and provides no accessor to the raw
+    /// live-owner store or client. Creating the capability performs no provider I/O.
+    #[must_use]
+    pub fn acquisition_execution(&mut self) -> ReachabilityLiveOwnerAcquisitionExecution<'_> {
+        ReachabilityLiveOwnerAcquisitionExecution {
+            live_owner: &mut self.live_owner,
         }
     }
 
