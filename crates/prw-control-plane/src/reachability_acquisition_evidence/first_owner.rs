@@ -119,7 +119,7 @@ impl ReachabilityLiveOwnerFirstOwnerHandoff {
 
 /// Fail-closed deterministic first-owner planning error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReachabilityLiveOwnerFirstOwnerPlanError {
+enum ReachabilityLiveOwnerFirstOwnerPlanError {
     /// The supplied allocation did not authorize a canonical committed live-owner fence.
     Allocation(FenceSequenceLiveOwnerBridgeError),
     /// Canonical live-owner key/record encoding failed.
@@ -171,7 +171,7 @@ impl From<ReachabilityLiveOwnerCodecError> for ReachabilityLiveOwnerFirstOwnerPl
 ///
 /// Returns a fail-closed error when the allocation is not committed/canonical or when exact key or
 /// record encoding fails.
-pub(crate) fn plan_first_owner_from_allocation(
+fn plan_first_owner_from_allocation(
     peer: &PeerConnectivityIdentity,
     allocation: FenceSequenceAllocationResolved,
     attempt_id: AuthorityAttemptId,
@@ -202,8 +202,7 @@ mod tests {
     use std::{
         convert::Infallible,
         future::Future,
-        sync::Arc,
-        task::{Context, Poll, Wake, Waker},
+        task::{Context, Poll, Waker},
         thread,
     };
 
@@ -225,15 +224,9 @@ mod tests {
         recovery_epoch::RecoveryEpoch,
     };
 
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
-
     fn block_on<F: Future>(future: F) -> F::Output {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
         let mut future = Box::pin(future);
         loop {
             match future.as_mut().poll(&mut context) {
