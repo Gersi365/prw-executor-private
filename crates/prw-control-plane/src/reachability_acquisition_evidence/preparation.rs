@@ -141,7 +141,8 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
     pub async fn prepare(
         &mut self,
         peer: &PeerConnectivityIdentity,
-    ) -> Result<ReachabilityLiveOwnerPreparedAcquisition, ReachabilityLiveOwnerPreparationError> {
+    ) -> Result<ReachabilityLiveOwnerPreparedAcquisition, ReachabilityLiveOwnerPreparationError>
+    {
         let observation = self
             .live_owner
             .linearizable_observation(peer)
@@ -155,8 +156,7 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
             .map_err(|_| ReachabilityLiveOwnerPreparationError::FenceSequenceHeadRead)?
             .ok_or(ReachabilityLiveOwnerPreparationError::MissingFenceSequenceHead)?;
 
-        let allocation_plan =
-            plan_allocation_with(head, generate_sequence_allocation_attempt_id)?;
+        let allocation_plan = plan_allocation_with(head, generate_sequence_allocation_attempt_id)?;
         let allocation = resolve_fence_sequence_allocation_with_reconciliation(
             &mut self.allocation,
             allocation_plan,
@@ -185,7 +185,8 @@ fn finish_preparation_with(
     peer: &PeerConnectivityIdentity,
     observation: Option<LiveOwnerObservation>,
     allocation: FenceSequenceAllocationResolved,
-    generate_attempt_id: impl FnOnce() -> Result<AuthorityAttemptId, ReachabilityAttemptIdGenerationError>,
+    generate_attempt_id: impl FnOnce()
+        -> Result<AuthorityAttemptId, ReachabilityAttemptIdGenerationError>,
 ) -> Result<ReachabilityLiveOwnerPreparedAcquisition, ReachabilityLiveOwnerPreparationError> {
     if allocation.outcome() == FenceSequenceAllocationResolvedOutcome::Superseded {
         return Ok(ReachabilityLiveOwnerPreparedAcquisition::Superseded);
@@ -235,9 +236,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        fence_sequence::{
-            FenceSequenceHead, FenceSequenceReobservation, encode_head,
-        },
+        fence_sequence::{FenceSequenceHead, FenceSequenceReobservation, encode_head},
         fence_sequence_allocation_orchestrator::{
             FenceSequenceAllocationAuthority, FenceSequenceAllocationSubmissionOutcome,
         },
@@ -303,8 +302,7 @@ mod tests {
     ) -> FenceSequenceAllocationResolved {
         let plan = plan_allocation(
             head(),
-            SequenceAllocationAttemptId::new(sequence_attempt)
-                .expect("non-zero sequence attempt"),
+            SequenceAllocationAttemptId::new(sequence_attempt).expect("non-zero sequence attempt"),
         )
         .expect("allocation plan");
         let mut authority = AllocationAuthority { first: outcome };
@@ -365,7 +363,12 @@ mod tests {
         };
         assert_eq!(handoff.observation(), &observed);
         assert_eq!(
-            handoff.acquisition().allocation().plan().attempt_id.as_bytes(),
+            handoff
+                .acquisition()
+                .allocation()
+                .plan()
+                .attempt_id
+                .as_bytes(),
             &sequence_attempt
         );
         assert_eq!(
@@ -373,7 +376,12 @@ mod tests {
             &peer
         );
         assert_eq!(
-            handoff.acquisition().transaction().successor().attempt_id().as_bytes(),
+            handoff
+                .acquisition()
+                .transaction()
+                .successor()
+                .attempt_id()
+                .as_bytes(),
             &authority_attempt
         );
         assert_ne!(sequence_attempt, authority_attempt);
@@ -397,7 +405,10 @@ mod tests {
         let ReachabilityLiveOwnerPreparedAcquisition::FirstOwner(handoff) = prepared else {
             panic!("expected first-owner preparation")
         };
-        assert_eq!(handoff.allocation().plan().attempt_id.as_bytes(), &sequence_attempt);
+        assert_eq!(
+            handoff.allocation().plan().attempt_id.as_bytes(),
+            &sequence_attempt
+        );
         assert_eq!(handoff.transaction().successor().peer(), &peer);
         assert_eq!(
             handoff.transaction().successor().attempt_id().as_bytes(),
@@ -424,7 +435,10 @@ mod tests {
         .expect("superseded terminal preparation");
 
         assert_eq!(calls.get(), 0);
-        assert_eq!(prepared, ReachabilityLiveOwnerPreparedAcquisition::Superseded);
+        assert_eq!(
+            prepared,
+            ReachabilityLiveOwnerPreparedAcquisition::Superseded
+        );
     }
 
     #[test]
