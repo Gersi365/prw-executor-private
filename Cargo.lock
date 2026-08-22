@@ -2572,6 +2572,7 @@ dependencies = [
  "google-cloud-spanner",
  "prw-connectivity",
  "prw-core",
+ "zeroize",
 ]
 
 [[package]]
