@@ -7,6 +7,13 @@
 //! lease/TTL behavior, fence allocation, attempt-ID generation, recovery/bootstrap, runtime/task
 //! ownership, or production activation.
 
+mod first_owner;
+
+pub use first_owner::{
+    ReachabilityLiveOwnerFirstOwnerExecutionError, ReachabilityLiveOwnerFirstOwnerResolvedOutcome,
+    ReachabilityLiveOwnerResolvedFirstOwner,
+};
+
 use std::{fmt, num::NonZeroU128};
 
 use etcd_client::{Compare, CompareOp, GetResponse, KvClient, Txn, TxnOp, TxnOpResponse};
