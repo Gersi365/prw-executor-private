@@ -85,7 +85,10 @@ pub(crate) fn execute_reconciled_live_owner_acquisition_with_prepared_execution<
 
 fn map_resolved_replacement(
     handoff: &FenceSequenceLiveOwnerAcquisitionHandoff,
-    resolved: Result<ReachabilityLiveOwnerResolvedMutation, ReachabilityLiveOwnerReconciliationError>,
+    resolved: Result<
+        ReachabilityLiveOwnerResolvedMutation,
+        ReachabilityLiveOwnerReconciliationError,
+    >,
 ) -> Result<ReachabilityLiveOwnerAcquisition, ReachabilityLiveOwnerAuthorityError> {
     let resolved = resolved.map_err(map_provider_failure)?;
     map_reconciled_live_owner_acquisition(handoff, &resolved)
