@@ -1,6 +1,6 @@
 # Phase 152 C02f-BV — Provider / Client / Bootstrap Composition Architecture Selection Staging
 
-Status: `SELECTED / DOCUMENTATION_ONLY / CONTROL_PLANE_OWNS_ETCD_PROVIDER_CONSTRUCTION / SINGLE_ETCD_PROVIDER_CONTEXT / PREPARATION_RETURN_BOUNDARY / BRIDGE_OWNS_BU_ASYNC_AUTHORITY_COMPOSITION / AF_AG_SECURITY_CONSTRAINTS_INHERITED / FAIL_CLOSED / NO_TLS_FEATURE_MATERIALIZATION / NO_ENDPOINT_VALUES / NO_SECRET_MATERIAL / NO_CONNECT / NO_RUNTIME_ACTIVATION / NO_RECOVERY_EXECUTION / NO_R1_R4_ACTIVATION / NO_DEPLOYMENT / NO_MERGE`
+Status: `SELECTED / DOCUMENTATION_ONLY / SECURITY_RECONCILIATION_REQUIRED / ONE_LOGICAL_ETCD_AUTHORITY_CLUSTER / TWO_ROLE_SCOPED_AUTHENTICATED_CLIENT_CONTEXTS / ONE_PREPARATION_FACADE / BRIDGE_OWNED_BU_ASYNC_AUTHORITY_PRESERVED / BM_SINGLE_KVCLIENT_PRODUCTION_INCOMPATIBILITY_IDENTIFIED / CONTROL_PLANE_OWNS_PROVIDER_CONSTRUCTION / FAIL_CLOSED / NO_SOURCE_MATERIALIZATION / NO_TLS_FEATURE_MATERIALIZATION / NO_ENDPOINT_VALUES / NO_SECRET_MATERIAL / NO_CONNECT / NO_RUNTIME_ACTIVATION / NO_RECOVERY_EXECUTION / NO_R1_R4_ACTIVATION / NO_DEPLOYMENT / NO_MERGE`
 
 Date: 2026-08-22
 Repository: `Gersi365/prw-executor-private`
@@ -24,476 +24,554 @@ The exact validated prerequisite is closed C02f-BU:
 - gate: `C02F_BU_FULL_ASYNC_AUTHORITY_LIFECYCLE_COMPOSITION_MATERIALIZED`;
 - PR #92 remains draft/open/unmerged.
 
-C02f-BU materialized `ReachabilityLiveOwnerComposedAsyncAuthority` over exactly one already-created `ReachabilityLiveOwnerAcquisitionPreparation`. Acquisition, currentness, and release all use provider state owned by that same preparation facade. Provider/client/bootstrap construction intentionally remained outside BU.
+C02f-BU materialized `ReachabilityLiveOwnerComposedAsyncAuthority` over exactly one already-created `ReachabilityLiveOwnerAcquisitionPreparation`. Provider/client/bootstrap construction intentionally remained outside BU.
 
 ## Purpose
 
-BV closes only the architecture gap between:
+BV closes the architecture gap between:
 
-1. the already-materialized BU composed async authority, which accepts one already-created preparation facade; and
-2. a future production composition root, which must obtain one authenticated etcd provider context without leaking provider-specific construction into bridge orchestration.
+1. the already-materialized BU composed async authority; and
+2. the future production provider/bootstrap path that must create the authenticated etcd clients needed by the already-selected live-owner and fence-sequence authority operations.
 
-BV selects the provider-construction boundary, bootstrap data flow, ownership handoff, failure behavior, and non-activation limits for that gap.
+During BV audit, the exact closed AG, AI, BM and BU states reveal a real production-security incompatibility that must be resolved before any provider bootstrap source is materialized.
 
-BV does **not** select a process startup owner, deployment platform, concrete endpoint set, concrete secret source, retry scheduler, health/readiness protocol, or production activation sequence.
+BV therefore does two things, and only these two things:
 
-## Existing validated seams BV must compose, not redesign
+1. records the incompatibility explicitly instead of silently weakening prior security selections; and
+2. selects the role-separated provider/bootstrap composition that later source materialization must implement while preserving the BU bridge-facing one-preparation-facade boundary.
 
-### C02f-AD provider seam
+## Audit-discovered prerequisite conflict
 
-`ReachabilityLiveOwnerEtcdStore` already accepts an already-created `etcd_client::KvClient`. Its constructor performs no network I/O. Endpoint selection and `Client::connect` remain outside AD.
+### AG selected live-owner runtime identity
 
-BV preserves AD unchanged.
+C02f-AG selected the normal etcd live-owner runtime principal:
 
-### C02f-BM preparation seam
+`prw-live-owner-runtime`
 
-`ReachabilityLiveOwnerAcquisitionPreparation::new(kv)` already accepts exactly one `KvClient` and internally derives the live-owner and fence-sequence provider handles from that same provider context.
+with least-privilege role:
 
-Its internal cloning is a same-context handle split, not permission to supply independently constructed stores or independently connected clusters.
+`prw-live-owner-rw`
 
-BV preserves BM unchanged.
+bounded to the exact live-owner prefix:
 
-### C02f-BU bridge composition seam
+`/prw/reachability/live-owner/`
 
-`ReachabilityLiveOwnerComposedAsyncAuthority::new(preparation)` already accepts exactly one prepared control-plane provider facade and exposes the existing async authority port.
+AG explicitly rejected normal-runtime root/admin credentials, broad unrelated keyspace access, plaintext fallback, and password/token fallback in addition to the selected mTLS certificate identity.
 
-The BU bridge constructor deliberately accepts no endpoint, `Client`, `KvClient`, TLS configuration, credential, retry policy, recovery provider, runtime, or executor.
+### AI selected a separate fence allocator identity
 
-BV preserves that constructor unchanged.
+C02f-AI explicitly did **not** widen the existing AG live-owner runtime role.
 
-## Inherited architecture constraints
+AI selected a future separately bounded etcd allocator principal/role, conceptually:
 
-BV inherits prior closed selections without reopening them.
+`prw-fence-allocator-runtime`
 
-### Identity boundary
+limited to:
 
-Logical peer identity remains exactly the selected `DeviceId + TransportIdentity` namespace.
+`/prw/reachability/fence-sequence/`
 
-The following are not logical peer identity:
+AI therefore preserves security-principal separation between:
 
-- etcd endpoint address;
-- stable member FQDN;
-- certificate subject or SAN;
-- etcd authentication username;
-- host UID/GID;
-- process identity;
-- cloud/service-account identity.
+- live-owner mutation/currentness/release authority; and
+- within-epoch fence-sequence allocation authority.
 
-Provider bootstrap may authenticate the PRW workload to the authority backend, but it must not redefine the peer namespace.
+### BM currently uses one authenticated KvClient for both roles
 
-### C02f-AF topology boundary
+The materialized C02f-BM constructor currently has the shape:
 
-The selected production authority topology remains:
-
-- exactly three voting etcd members initially;
-- one voter per independent low-latency failure domain;
-- one region / one low-latency consensus locality;
-- stable member FQDN identity;
-- reachable client/peer endpoint roles;
-- no advertised `localhost`, loopback-only, wildcard, or ephemeral-container identity.
-
-BV does not choose concrete FQDNs, ports, DNS zone, platform, region, or member addresses.
-
-### C02f-AG transport/authentication boundary
-
-The selected later production security profile remains:
-
-- `etcd-client = 0.19.0`;
-- `default-features = false`;
-- only the `tls` feature selected for later materialization;
-- `tls-roots` not selected;
-- explicit bounded private trust anchors;
-- HTTPS only for production authority client traffic;
-- server-name verification against the selected stable member FQDN;
-- client mTLS using the dedicated runtime identity;
-- normal etcd runtime principal `prw-live-owner-runtime`;
-- least-privilege role `prw-live-owner-rw` over the exact selected live-owner/fence namespaces as separately selected;
-- no root/admin credential on the normal runtime path;
-- no plaintext fallback.
-
-The current BU `prw-control-plane` manifest still has `etcd-client = { version = "=0.19.0", default-features = false }` with no TLS feature materialized. BV does not change that manifest.
-
-### Recovery boundary
-
-Recovery-epoch issuance, Spanner provider construction, sequence-head initialization/reconciliation, and disaster-recovery activation remain separate authority operations.
-
-Normal live-owner provider bootstrap must not:
-
-- construct a Spanner `DatabaseClient`;
-- issue a recovery epoch;
-- select a recovery epoch;
-- reset or initialize a fence-sequence head;
-- interpret a missing PRWF head as permission to bootstrap one;
-- activate authority under a locally invented epoch;
-- bypass current-epoch proof.
-
-The existing BM acquisition preparation remains fail closed when the required initialized sequence state is unavailable.
-
-## Selected provider-construction ownership
-
-Provider-specific etcd client construction is selected to remain owned by **`prw-control-plane`**.
-
-A future provider-bootstrap module in `prw-control-plane` may use `etcd-client` provider types internally, including the future AG-selected TLS configuration path.
-
-`prw-remote-bridge` must not add a direct `etcd-client` dependency merely to connect or configure the authority provider.
-
-The provider bootstrap boundary must not be implemented inside `ReachabilityLiveOwnerComposedAsyncAuthority`.
-
-This preserves the layering:
-
-```text
-future external composition/bootstrap caller
-        |
-        | provider-neutral validated bootstrap inputs
-        v
-prw-control-plane provider bootstrap boundary
-        |
-        | one authenticated etcd provider context
-        v
-ReachabilityLiveOwnerAcquisitionPreparation
-        |
-        | ownership transfer by value
-        v
-prw-remote-bridge ReachabilityLiveOwnerComposedAsyncAuthority
+```rust
+ReachabilityLiveOwnerAcquisitionPreparation::new(kv: KvClient)
 ```
 
-The diagram selects ownership and call direction only. It does not activate any runtime path.
+and derives from that one supplied `KvClient` both:
 
-## Selected provider bootstrap result boundary
+- `ReachabilityLiveOwnerEtcdStore`; and
+- `FenceSequenceAllocationEtcdStore`.
 
-The selected successful output of the control-plane provider bootstrap boundary is **one already-created `ReachabilityLiveOwnerAcquisitionPreparation`**, not a raw provider handle exported for arbitrary use.
+Those internal handles originate from one authenticated etcd client context.
 
-Conceptually:
+### Why the current production shape cannot satisfy both prior security selections
+
+Under the selected AG certificate-CN authentication model, one authenticated client context has one normal etcd authentication identity.
+
+Therefore the current BM one-`KvClient` production shape cannot simultaneously preserve all of the following without weakening a closed selection:
+
+1. AG `prw-live-owner-runtime` with only live-owner-prefix privilege;
+2. AI separate `prw-fence-allocator-runtime` principal/role with only fence-sequence-prefix privilege;
+3. no password/token identity switching;
+4. no root/admin or broad union credential;
+5. one BM `KvClient` used for both live-owner and fence-allocation operations.
+
+Granting the live-owner principal the allocator role would collapse the AI-selected principal separation.
+
+Granting the allocator principal the live-owner role would collapse the same separation in the opposite direction.
+
+Using root/admin or a new broad union principal would violate AG least privilege and AI role separation.
+
+Using per-request password/token identity switching would violate the selected AG normal-runtime authentication model.
+
+BV therefore records the current BM one-`KvClient` production bootstrap shape as **incompatible with the combined AG + AI security selections**.
+
+This is not a claim that the current BU source is semantically invalid for its validated source tranche. It is a production-bootstrap compatibility finding discovered only when the deferred provider/security composition is now being selected.
+
+## Production activation guard
+
+Until a separately authorized source tranche corrects the provider-preparation construction boundary, the current BM/BU one-`KvClient` composition must **not** be activated as the production AG+AI-authenticated authority bootstrap path.
+
+No production endpoint, credential, certificate, etcd user/role, runtime or deployment may be attached to that incompatible shape merely to avoid the correction.
+
+## Selected reconciliation
+
+BV selects:
+
+**one logical etcd authority cluster, two role-scoped authenticated etcd client contexts, one outward preparation facade, and one BU bridge-owned async authority.**
+
+The two authenticated client contexts are:
+
+1. **live-owner client context**
+   - authentication identity: AG-selected `prw-live-owner-runtime`;
+   - role: AG-selected `prw-live-owner-rw`;
+   - authority scope: exact live-owner namespace required by AD/AE/BF/BD/BP/BQ/BU semantics;
+
+2. **fence allocator client context**
+   - authentication identity: AI-selected separate allocator principal, conceptually `prw-fence-allocator-runtime`;
+   - role: separately bounded allocator role selected by AI;
+   - authority scope: exact `/prw/reachability/fence-sequence/` namespace required by AN/AO/AP/AQ/BM allocation semantics.
+
+The two client contexts must target the **same exact logical etcd authority cluster configuration** while using distinct client identities and least-privilege role bindings.
+
+## Same-cluster invariant replaces same-authenticated-session assumption
+
+The safety property required by BT/BU is that acquisition preparation, fence allocation, live-owner mutation, currentness and release cannot silently diverge onto unrelated authority backends.
+
+BV preserves that safety property while correcting the credential boundary.
+
+The production invariant is now expressed as:
 
 ```text
-validated authority bootstrap inputs
-        -> one etcd connection context
-        -> one KvClient derived from that context
-        -> ReachabilityLiveOwnerAcquisitionPreparation::new(kv)
-        -> return preparation
+one immutable authority-cluster configuration
+        |
+        +-- live-owner authenticated client context
+        |      identity: prw-live-owner-runtime
+        |      scope: /prw/reachability/live-owner/
+        |
+        +-- fence-allocator authenticated client context
+               identity: prw-fence-allocator-runtime
+               scope: /prw/reachability/fence-sequence/
+
+both contexts -> one preparation facade -> one BU composed async authority
 ```
 
-Exact Rust naming and error type remain mechanical details for a separately authorized source-materialization tranche, but the ownership semantics are fixed by BV.
+“Same authority backend” means the same configured logical etcd cluster and trust domain, not one shared security principal.
 
-The future boundary must not return or expose to bridge callers:
+No caller may independently supply an arbitrary live-owner cluster and an arbitrary allocator cluster.
 
+## Selected cluster-configuration ownership
+
+Provider-specific etcd client construction remains owned by **`prw-control-plane`**.
+
+A future control-plane bootstrap boundary must receive one validated immutable cluster configuration and derive both role-scoped client contexts from that same cluster configuration.
+
+The caller must not provide two unrelated endpoint sets.
+
+At minimum, both role-scoped client contexts must inherit the same selected:
+
+- logical authority-cluster configuration object;
+- production client endpoint set;
+- AF stable-member-FQDN constraints;
+- bounded server trust domain / explicit CA roots selected by AG;
+- server-name verification policy;
+- transport-security policy.
+
+Only the client authentication identity/private-key material differs by role.
+
+Concrete endpoint values, DNS zone, ports, CA bytes, certificates, private keys and secret-loading mechanisms remain deferred.
+
+## Cluster identity proof remains a later runtime gate
+
+BV prevents configuration-level split authority by deriving both role-scoped clients from one immutable cluster configuration.
+
+BV does not yet select an active provider-I/O proof such as etcd cluster-ID/status verification, because this docs-only checkpoint authorizes no endpoint contact or readiness protocol.
+
+A later runtime/readiness selection may require explicit cluster-ID consistency proof before activation. Such a proof may strengthen but may not weaken the BV same-cluster invariant.
+
+## Selected corrected preparation boundary
+
+A later separately authorized source tranche must correct the current BM construction boundary so the preparation facade can own the two role-scoped provider contexts without exposing them to bridge callers.
+
+Conceptually, a future provider-specific construction path is equivalent to:
+
+```text
+ReachabilityAuthorityEtcdProviderContext {
+    live_owner_kv: role-scoped KvClient,
+    fence_allocator_kv: role-scoped KvClient,
+}
+        -> ReachabilityLiveOwnerAcquisitionPreparation
+```
+
+Exact Rust naming is not selected by BV.
+
+The important invariants are:
+
+- the live-owner store receives only the live-owner authenticated client context;
+- the fence-sequence allocation store receives only the allocator authenticated client context;
+- both contexts derive from one immutable same-cluster configuration;
+- the preparation object remains the only outward owner passed into BU bridge composition;
+- neither raw client escapes through the public bridge-facing API.
+
+The later source tranche may alter the BM constructor or add a replacement provider-specific constructor/factory, but it must preserve the existing provider-neutral preparation/orchestration semantics and tests.
+
+## BU bridge boundary remains selected and unchanged
+
+BV does not reopen the BU bridge constructor:
+
+```rust
+ReachabilityLiveOwnerComposedAsyncAuthority::new(preparation)
+```
+
+The bridge still receives one preparation facade by value.
+
+The bridge must not receive:
+
+- endpoint strings;
 - `etcd_client::Client`;
 - `etcd_client::KvClient`;
-- `ReachabilityLiveOwnerEtcdStore`;
-- `FenceSequenceAllocationEtcdStore`;
-- generic Get/Put/Txn clients;
-- raw TLS provider objects;
-- credentials or private-key bytes;
-- an independently clonable arbitrary provider escape hatch.
+- TLS configuration;
+- CA/certificate/private-key material;
+- etcd usernames/roles;
+- retry/backoff policy;
+- Spanner recovery provider;
+- runtime/executor handles.
 
-This is a composition boundary, not a general-purpose etcd client factory.
+BU remains the selected full async live-owner lifecycle composition. BV introduces no parallel acquisition/currentness/release state machine.
 
-## Single-provider-context invariant
+## Selected provider-bootstrap ownership
 
-One successful provider-bootstrap operation creates exactly one logical etcd provider context for the BU authority instance.
+The future provider bootstrap boundary remains in `prw-control-plane`, because that crate already owns the etcd provider-specific stores and `etcd-client` dependency.
 
-The context may contain the selected set of client endpoints for one logical three-member authority cluster. “Single provider context” does **not** mean “single member endpoint.” It means one connected/configured authority context with one trust/credential profile and one logical cluster target.
+`prw-remote-bridge` must not add a direct `etcd-client` dependency merely to construct authority clients.
 
-From that one context:
+The bootstrap boundary must not be implemented inside `ReachabilityLiveOwnerComposedAsyncAuthority`.
 
-1. exactly one `KvClient` is derived for preparation construction;
-2. BM may clone that handle internally only to split the already-selected fence-sequence and live-owner stores;
-3. BU acquisition/currentness/release continue to use the exact preparation-owned context;
-4. no second `Client::connect` is performed merely for currentness, release, allocation, first-owner, or replacement execution;
-5. no second cluster, endpoint policy, credential profile, or trust bundle may be substituted for one lifecycle operation.
-
-## Selected bootstrap input categories
-
-BV selects only the categories of input that a future provider bootstrap boundary may consume. Concrete values and loading mechanisms remain deferred.
-
-The boundary may consume validated, caller-supplied provider-bootstrap material representing:
-
-- a non-empty production client endpoint set for the one selected etcd cluster;
-- the bounded private CA/trust material required by AG;
-- the dedicated runtime client certificate and private-key identity required by AG;
-- any provider-native connection options that are strictly required to apply the selected AG security profile.
-
-The boundary must not discover or invent these values from peer requests.
-
-The boundary must not accept logical `DeviceId`, `TransportIdentity`, remote file paths, forwarding targets, terminal commands, or other per-request data as authority provider configuration.
-
-## Endpoint constraints at the bootstrap boundary
-
-A future materialization must reject invalid production endpoint configuration before treating the provider as usable.
-
-Selected constraints:
-
-- endpoint set must be non-empty;
-- production client endpoints must use `https://`;
-- endpoint host identity must be compatible with the AF stable-member-FQDN model;
-- loopback-only, wildcard, and empty host identities are invalid for production authority bootstrap;
-- plaintext `http://` fallback is not permitted;
-- endpoint configuration must represent one logical authority cluster rather than a fallback list of unrelated clusters;
-- no peer-request-controlled endpoint may enter provider bootstrap;
-- no DNS or endpoint mutation is performed by this boundary.
-
-BV does not select the concrete endpoint count supplied to the client library, endpoint ordering, load-balancing policy, dial timeout, keepalive values, reconnect policy, or service-discovery mechanism.
-
-## TLS and credential application boundary
-
-A future source tranche may apply the already-selected AG TLS profile while constructing the provider context, but BV itself does not authorize that dependency or source materialization.
-
-The future composition must preserve:
-
-- explicit bounded CA/trust anchors rather than host-native root fallback;
-- normal server-name verification;
-- dedicated runtime mTLS client identity;
-- no password/token fallback on the normal runtime path;
-- no root/admin credential substitution;
-- no automatic/self-generated etcd TLS;
-- no logging of private-key, certificate-private material, or secret contents.
-
-Certificate acquisition, parsing, storage, rotation, reload, filesystem permissions, secret-manager choice, and key custody remain separate security/runtime bindings.
-
-## Connection operation semantics
-
-The future provider bootstrap boundary may perform exactly the provider connection operation necessary to establish one authenticated etcd client context.
-
-BV selects these semantics:
-
-1. validate the supplied bootstrap configuration shape;
-2. construct the selected provider connection/TLS options from those validated inputs;
-3. perform one logical etcd client connection operation for the selected cluster context;
-4. derive one `KvClient` from that successful context;
-5. immediately wrap that `KvClient` in one `ReachabilityLiveOwnerAcquisitionPreparation`;
-6. return only the preparation facade across the selected boundary.
-
-No live-owner Get/Txn, fence allocation, currentness proof, release, recovery operation, or R1-R4 effect is part of provider construction itself.
-
-Whether the underlying provider library internally maintains channels across multiple configured cluster members is provider behavior inside the one logical context and does not violate the single-context invariant.
-
-## Retry and fallback policy
-
-BV selects **no outer connection retry scheduler**.
-
-A future materialization may expose one async connection attempt whose failure is returned to its caller. Process-level retry/backoff, startup retry budget, reconnection, circuit breaking, and health-driven replacement remain a later runtime/liveness selection.
-
-The provider bootstrap boundary must not:
-
-- silently retry forever;
-- fall back to plaintext;
-- fall back to a different cluster;
-- fall back to a local in-memory authority;
-- reuse stale cached authority proof as a substitute for connection;
-- manufacture a successful preparation after connection/authentication failure.
-
-## Fail-closed bootstrap result
-
-Provider bootstrap succeeds only when the selected provider connection context has been constructed successfully under the supplied validated security configuration.
-
-Any of the following must fail closed and return no usable preparation:
-
-- invalid/empty endpoint configuration;
-- invalid security-profile input shape;
-- inability to establish the provider client context;
-- TLS validation failure;
-- client-certificate authentication failure;
-- provider configuration error;
-- provider/client construction error whose success cannot be proven.
-
-A bootstrap error is not `Granted`, `Current`, `Released`, or a recovered authority state.
-
-## Composition into BU
-
-After and only after successful provider bootstrap, the future composition caller may pass the returned preparation by value into the already-materialized BU constructor:
+The selected layering is:
 
 ```text
-preparation
-    -> ReachabilityLiveOwnerComposedAsyncAuthority::new(preparation)
-    -> existing ReachabilityLiveOwnerAsyncAuthority surface
-```
-
-No additional provider handle is passed to the bridge.
-
-No bridge-side reconnect, endpoint selection, TLS configuration, or provider construction is selected.
-
-BU remains the only selected full async live-owner lifecycle composition. BV does not introduce a parallel acquisition/currentness/release implementation.
-
-## Process/runtime ownership remains deferred
-
-BV deliberately does not select which final process/module owns the production startup call that invokes provider bootstrap and stores/injects the resulting BU authority.
-
-Specifically deferred:
-
-- `prw-agent` production startup integration;
-- a dedicated control-plane daemon/process;
-- executor/runtime creation and ownership;
-- task spawning;
-- shutdown ordering;
-- restart policy;
-- reconnect policy;
-- health/readiness endpoints;
-- dependency-injection container shape;
-- global singleton storage;
-- concurrency/sharding of authority instances.
-
-No `tokio::main`, `block_on`, nested runtime, detached task, background worker, `Arc<Mutex<_>>`, or service activation is selected by BV.
-
-## Readiness is not provider construction
-
-A successful etcd connection does not by itself prove PRW authority readiness.
-
-BV therefore rejects interpreting “provider connected” as any of:
-
-- current recovery epoch proven;
-- PRWF sequence head initialized/current;
-- live-owner namespace valid;
-- R1-R4 effect fencing active;
-- remote reachability effects safe to expose;
-- production service ready.
-
-Those proofs and activation gates remain owned by their separately selected authority/recovery/runtime layers.
-
-## Recovery and normal-start separation
-
-Normal provider bootstrap and disaster-recovery bootstrap are separate operations.
-
-BV selects no automatic behavior that, on missing or malformed authority state, issues a new epoch, initializes a new sequence head, restores etcd state, or starts a replacement cluster.
-
-A normal runtime encountering missing required initialized state must fail closed through the existing provider/orchestration semantics.
-
-Recovery remains explicit and must satisfy the already-selected external epoch and sequence initialization contracts before normal live-owner acquisition can succeed.
-
-## Security material lifetime boundary
-
-BV does not select ownership or lifetime of raw secret bytes after provider construction.
-
-A future security/materialization tranche must minimize secret exposure and ensure that bootstrap composition does not retain duplicate plaintext private-key material merely for convenience.
-
-The bridge authority must not expose credentials, trust bundles, endpoints, or provider client internals through its public async authority interface.
-
-## Error ownership
-
-BV selects a bounded bootstrap error boundary distinct from semantic live-owner authority results.
-
-Future provider-bootstrap errors may distinguish only what is operationally necessary for safe startup diagnostics, but they must not be converted into semantic authority success.
-
-The bootstrap error surface must not contain secret material or full private-key/certificate payloads.
-
-Exact Rust enum variants remain a source-materialization detail.
-
-## Testability requirements for later source materialization
-
-A future source tranche must preserve deterministic validation without requiring production endpoints or secrets.
-
-At minimum, the materialized boundary should be testable for:
-
-- configuration-shape rejection before connection;
-- exact one-context/one-preparation ownership shape;
-- absence of raw `Client`/`KvClient` escape across the public bootstrap result;
-- BU composition from the returned preparation without adding `etcd-client` to `prw-remote-bridge`;
-- fail-closed propagation of provider connection failure;
-- no automatic recovery/fence initialization;
-- no runtime/task creation;
-- no plaintext or unrelated-cluster fallback.
-
-Disposable provider integration, if later used, must remain non-production and separately validated.
-
-## Cargo/dependency boundary
-
-BV does not mutate dependencies.
-
-In particular, this checkpoint does not:
-
-- enable `etcd-client` feature `tls`;
-- enable `tls-roots`;
-- add `etcd-client` to `prw-remote-bridge`;
-- add `etcd-client` directly to `prw-agent`;
-- add a runtime/executor dependency;
-- add a secret-manager/KMS dependency;
-- add a DNS/service-discovery dependency.
-
-Any future source tranche that needs the AG-selected `tls` feature must receive separate explicit authorization that includes dependency/lockfile materialization.
-
-## Explicitly rejected designs
-
-BV rejects the following as the selected first production composition:
-
-1. bridge constructor accepts endpoints/TLS/credentials directly;
-2. bridge creates its own `etcd_client::Client`;
-3. acquisition, currentness, and release each establish independent provider connections;
-4. fence-sequence and live-owner stores are supplied from independently constructed clients;
-5. provider bootstrap returns a raw general-purpose `KvClient` to bridge callers;
-6. normal startup silently initializes recovery/fence state;
-7. connection failure falls back to local or stale authority;
-8. provider bootstrap owns an infinite retry/background loop;
-9. production bootstrap permits HTTP or native-root fallback contrary to AG;
-10. normal runtime uses root/admin credentials;
-11. provider connection success is treated as production readiness;
-12. peer/request identity controls provider endpoints or credentials.
-
-## Selected layering after BV
-
-The selected non-activated architecture is:
-
-```text
-future process/runtime composition root          (still deferred)
+future external composition/runtime caller        (still deferred)
         |
-        | validated config + security material
+        | provider-neutral validated bootstrap material
         v
-prw-control-plane provider bootstrap boundary    (BV selected; source not materialized)
+prw-control-plane provider bootstrap boundary     (BV selected; source deferred)
         |
-        | one authenticated etcd provider context
-        | -> one KvClient -> one preparation
-        v
-ReachabilityLiveOwnerAcquisitionPreparation      (BM/BU existing)
-        |
-        +-- acquisition execution                 (BS/BQ/BP existing)
-        +-- lifecycle currentness                 (BF/BU existing)
-        +-- lifecycle release                     (BD/BU existing)
+        +-- live-owner role-scoped etcd client
+        +-- fence-allocator role-scoped etcd client
         |
         v
-ReachabilityLiveOwnerComposedAsyncAuthority      (BU existing)
+corrected ReachabilityLiveOwnerAcquisitionPreparation
+        |
+        v
+prw-remote-bridge ReachabilityLiveOwnerComposedAsyncAuthority
         |
         v
 higher-level runtime/effect integration           (still deferred)
 ```
 
-The recovery-epoch Spanner authority and recovery/sequence initialization orchestration remain separate from this normal live-owner provider bootstrap path.
+## Selected bootstrap input categories
+
+BV selects only categories of future input, never concrete values.
+
+One immutable authority-cluster configuration may contain validated representations of:
+
+- a non-empty production client endpoint set for one exact logical etcd cluster;
+- the bounded private server trust material required by AG;
+- provider-native connection options strictly required to apply the selected transport-security profile.
+
+Role-specific client identity material is separate:
+
+- live-owner runtime client certificate/private-key identity;
+- fence-allocator runtime client certificate/private-key identity.
+
+The bootstrap boundary must not accept peer-request data as provider configuration.
+
+`DeviceId`, `TransportIdentity`, file paths, forwarding targets, terminal commands, remote request payloads and user-controlled network destinations must never select authority endpoints or credentials.
+
+## Endpoint constraints
+
+Future materialization must reject invalid production endpoint configuration before returning usable provider contexts.
+
+Selected constraints:
+
+- endpoint set is non-empty;
+- production authority client endpoints use `https://` only;
+- host identities conform to the AF stable-member-FQDN model;
+- loopback-only, wildcard and empty host identities are invalid for production authority bootstrap;
+- no plaintext `http://` fallback;
+- no fallback list spanning unrelated clusters;
+- both role-scoped client contexts derive from the exact same immutable endpoint set;
+- no peer/request-controlled endpoint enters provider bootstrap;
+- no DNS or endpoint mutation occurs in this boundary.
+
+BV does not select concrete endpoints, endpoint ordering, load-balancing behavior, dial timeout, keepalive, service discovery or reconnect policy.
+
+## TLS and credential constraints
+
+BV inherits AG without materializing it.
+
+A future source tranche may apply the AG-selected TLS profile only under separate explicit authorization that includes dependency/lockfile materialization.
+
+Both role-scoped client contexts must preserve:
+
+- explicit bounded private trust anchors;
+- normal server-name verification;
+- production HTTPS;
+- dedicated mTLS client identity;
+- no native-root fallback;
+- no plaintext fallback;
+- no root/admin credential substitution;
+- no automatic/self-generated etcd TLS;
+- no secret logging.
+
+The live-owner and allocator contexts must not reuse the same client private key merely to simplify bootstrap.
+
+Certificate issuance, key custody, secret storage, rotation, reload and filesystem/secret-manager integration remain later security/runtime bindings.
+
+## Connection operation semantics
+
+The future provider bootstrap boundary may perform only the provider construction needed to produce the two role-scoped clients and corrected preparation facade.
+
+Selected sequence:
+
+1. validate one immutable authority-cluster configuration;
+2. validate presence/shape of the live-owner client identity input;
+3. validate presence/shape of the fence-allocator client identity input;
+4. construct the live-owner TLS/provider connection options from the shared cluster configuration plus live-owner identity;
+5. construct the allocator TLS/provider connection options from the same shared cluster configuration plus allocator identity;
+6. perform one logical etcd client connection operation for the live-owner role context;
+7. perform one logical etcd client connection operation for the allocator role context;
+8. derive only the role-appropriate `KvClient` handle from each successful context;
+9. construct one corrected preparation facade from those two role-scoped handles;
+10. return only the preparation facade across the bridge-facing composition boundary.
+
+No live-owner Get/Txn, fence allocation, currentness proof, release, recovery issuance, sequence initialization or R1-R4 effect activation is part of provider construction itself.
+
+## Partial-bootstrap failure semantics
+
+Bootstrap succeeds only if **both** required role-scoped provider contexts are successfully constructed.
+
+If live-owner client construction succeeds but allocator client construction fails, the bootstrap attempt fails closed and returns no usable preparation.
+
+If allocator client construction succeeds but live-owner client construction fails, the bootstrap attempt fails closed and returns no usable preparation.
+
+A partially created client must not be exposed as degraded authority.
+
+Cleanup/drop behavior may rely on ordinary provider object destruction at this architecture stage; no background compensation task is selected.
+
+## Retry and fallback policy
+
+BV selects no outer connection retry scheduler.
+
+A later source implementation may return failure from one bounded bootstrap attempt to its caller. Process-level startup retry/backoff, reconnect, circuit breaking and replacement remain later runtime/liveness selections.
+
+The bootstrap boundary must not:
+
+- retry forever;
+- fall back to plaintext;
+- fall back to another cluster;
+- fall back to a broad union credential;
+- fall back to root/admin;
+- collapse both roles onto whichever credential connected successfully;
+- fall back to local/in-memory authority;
+- manufacture a preparation after partial or ambiguous bootstrap failure.
+
+## Fail-closed bootstrap errors
+
+Any of the following must produce no usable preparation:
+
+- invalid/empty shared endpoint configuration;
+- mismatched role/configuration shape;
+- missing live-owner identity input;
+- missing allocator identity input;
+- TLS validation failure;
+- mTLS client-authentication failure;
+- inability to construct either provider context;
+- provider/client construction ambiguity;
+- any condition that would require weakening AG or AI to continue.
+
+Bootstrap failure is not `Granted`, `Current`, `Released`, recovered authority, sequence initialization, or production readiness.
+
+## Readiness is separate from provider construction
+
+Successful construction of both role-scoped clients does not prove:
+
+- they reached the same actual cluster instance at runtime;
+- the current recovery epoch is proven;
+- PRWF sequence state is initialized/current;
+- live-owner state is valid;
+- R1-R4 stale-fence rejection is active;
+- remote effects are safe to expose;
+- production service readiness.
+
+Those proofs remain later authority/runtime gates.
+
+## Recovery boundary remains separate
+
+Normal live-owner provider bootstrap must not:
+
+- construct the Spanner recovery provider;
+- issue or select a recovery epoch;
+- reset or initialize PRWF state;
+- restore or replace an etcd cluster;
+- interpret missing fence state as permission to create production authority;
+- activate under a locally invented epoch.
+
+The existing fail-closed missing-sequence-head behavior remains the safe normal-runtime behavior until explicit recovery/initialization has been completed by its separately selected orchestration.
+
+## Process/runtime owner remains deferred
+
+BV does not select which final process/module invokes provider bootstrap and retains/injects the resulting BU authority.
+
+Still deferred:
+
+- `prw-agent` production startup integration;
+- dedicated control-plane process selection;
+- runtime/executor creation and ownership;
+- task spawning;
+- shutdown ordering;
+- restart/reconnect policy;
+- health/readiness endpoints;
+- dependency-injection container;
+- singleton/global storage;
+- concurrency/sharding of authority instances.
+
+No `tokio::main`, nested runtime, `block_on`, detached worker, retry task, `Arc<Mutex<_>>` authority container, systemd activation, deployment or production connection is selected.
+
+## Security material lifetime boundary
+
+BV does not select how raw secret bytes are obtained or retained.
+
+Future materialization must minimize duplicate plaintext secret retention and must not expose credentials, private keys, trust bundles or provider client handles through the BU async-authority API.
+
+Role-specific client identities remain separate security material even though both clients target one authority cluster.
+
+## Error ownership
+
+BV selects a bootstrap-error boundary distinct from semantic live-owner authority results.
+
+Future errors may distinguish configuration validation, live-owner client construction, allocator client construction and provider failures only as needed for safe diagnostics.
+
+Errors must not contain private keys, full secret/certificate payloads or authorization tokens.
+
+No bootstrap error may be converted into semantic authority success.
+
+## Later source-materialization requirements
+
+A separately authorized source tranche must treat the current BM single-`KvClient` constructor as a compatibility/test surface unless it is proven safe for a non-production use case.
+
+The production provider-specific construction path must use the BV role-separated shape.
+
+That tranche must validate at minimum:
+
+- one immutable cluster configuration feeds both role-specific client constructors;
+- distinct client identity inputs are required;
+- live-owner operations cannot receive the allocator client;
+- fence allocation cannot receive the live-owner client;
+- raw provider clients do not escape to `prw-remote-bridge`;
+- BU bridge constructor remains one-preparation-by-value;
+- no direct `etcd-client` dependency is added to `prw-remote-bridge` merely for bootstrap;
+- no automatic recovery/sequence initialization;
+- no runtime/task creation;
+- no fallback to broad credentials or unrelated clusters;
+- canonical Rust/Android regressions remain clean.
+
+Disposable provider integration, if later used, remains non-production evidence only.
+
+## Cargo/dependency boundary
+
+BV changes no dependency.
+
+This checkpoint does not:
+
+- enable `etcd-client` feature `tls`;
+- enable `tls-roots`;
+- add `etcd-client` to `prw-remote-bridge`;
+- add `etcd-client` directly to `prw-agent`;
+- add runtime/executor dependencies;
+- add secret-manager/KMS dependencies;
+- add DNS/service-discovery dependencies.
+
+The current BU `prw-control-plane` manifest remains `etcd-client = { version = "=0.19.0", default-features = false }`.
+
+Any source tranche that enables the AG-selected `tls` feature requires separate explicit authorization covering Cargo/lockfile materialization.
+
+## Explicitly rejected designs
+
+BV rejects:
+
+1. one broad/root/admin client used for live-owner and fence allocation;
+2. binding both AG and AI permissions to `prw-live-owner-runtime` merely to preserve the current BM constructor;
+3. binding both permissions to `prw-fence-allocator-runtime`;
+4. password/token role switching on the selected normal mTLS path;
+5. live-owner and allocator clients targeting independently supplied cluster configurations;
+6. bridge constructor accepting endpoints/TLS/credentials;
+7. bridge owning `Client::connect`;
+8. acquisition/currentness/release establishing independent clients;
+9. provider bootstrap returning raw general-purpose `KvClient` handles to bridge callers;
+10. normal startup silently issuing recovery epochs or initializing fence state;
+11. connection failure falling back to local/stale authority;
+12. provider bootstrap owning infinite retry/background loops;
+13. production HTTP/native-root fallback contrary to AG;
+14. treating provider connection success as production readiness;
+15. peer/request identity selecting provider endpoints or credentials.
+
+## Relationship to BT/BU same-provider selection
+
+BT/BU selected a critical anti-divergence invariant: the full lifecycle must not silently use unrelated authority backends.
+
+BV preserves the **anti-divergence intent** but refines the deferred production provider construction required to satisfy the later-composed AG+AI credential model.
+
+The bridge-facing invariant remains one preparation facade and one composed async authority.
+
+The provider-internal production implementation must use two role-scoped authenticated clients derived from one same-cluster configuration.
+
+This BV refinement is necessary because the previously deferred security/bootstrap layer makes one shared authenticated `KvClient` incompatible with the closed AG+AI least-privilege selections.
 
 ## Source-stability requirement
 
-Because BV is documentation-only:
+BV is documentation-only.
 
-- no Rust source file may change;
-- no Android source file may change;
-- no Agent source file may change;
-- no Cargo manifest or lockfile may change;
-- no workflow may change;
-- no secret/config file may be added;
-- no endpoint value may be added;
-- no deployment/runtime configuration may be added.
+The intended final net diff from BU is exactly one new contract file.
 
-The intended BV net diff is exactly one new contract file.
+No Rust source, Android source, Agent source, Cargo manifest, lockfile, workflow, secret/config file, endpoint value, deployment file or runtime configuration may appear in the BV net diff.
+
+The initial BV documentation commit is preserved in history as the pre-reconciliation draft. The corrective documentation commit records the audit-discovered AG/AI/BM incompatibility without force-push or history rewriting.
 
 ## Next dependent tranche
 
-After BV is validated and frozen, a later separately authorized tranche may materialize the selected provider/client/bootstrap boundary in source.
+After BV is validated and frozen, the next source boundary requires separate explicit authorization.
 
-That later tranche must reverify:
+That source tranche must include the **provider-preparation credential-separation corrective** before any production provider bootstrap can be considered activatable.
+
+Before mutation it must reverify:
 
 - exact BV head and gate;
-- current `etcd-client` manifest/lock state;
-- AG security selection and any explicit authorization to materialize the `tls` feature;
-- AF endpoint/FQDN constraints;
-- BU single-provider-context ownership;
-- absence of runtime/deployment authorization.
+- current BM/BU preparation and bridge source;
+- AG live-owner principal/role/prefix selection;
+- AI separate allocator principal/role/prefix selection;
+- current `etcd-client` Cargo/lock state;
+- AF stable-FQDN/topology constraints;
+- absence of deployment/runtime authorization.
 
-The later tranche may not infer permission to create endpoints, certificates, private keys, etcd users/roles, Spanner resources, runtime tasks, production connections, or deployment from BV.
+If the same tranche also enables the AG-selected `tls` feature, its authorization must explicitly cover dependency/lockfile materialization.
+
+It may not infer permission to create endpoints, certificates/private keys, etcd users/roles, Spanner resources, runtime tasks, production connections, recovery operations, deployment or merge.
 
 ## Authorization boundary
 
-`C02F_BV_PROVIDER_CLIENT_BOOTSTRAP_COMPOSITION_SELECTION_ONLY / DOCUMENTATION_ONLY / NO_SOURCE_MATERIALIZATION / NO_TLS_FEATURE_MATERIALIZATION / NO_SECRET_CREATION / NO_ENDPOINT_CONTACT / NO_AUTH_RBAC_MUTATION / NO_RECOVERY_EXECUTION / NO_RUNTIME_ACTIVATION / NO_R1_R4_ACTIVATION / NO_DEPLOYMENT / NO_MERGE`
+`C02F_BV_PROVIDER_CLIENT_BOOTSTRAP_COMPOSITION_SELECTION_ONLY / DOCUMENTATION_ONLY / ROLE_SEPARATED_PROVIDER_CONTEXTS_SELECTED / SAME_LOGICAL_CLUSTER_REQUIRED / BM_SINGLE_KVCLIENT_PRODUCTION_ACTIVATION_BLOCKED_PENDING_CORRECTIVE / NO_SOURCE_MATERIALIZATION / NO_TLS_FEATURE_MATERIALIZATION / NO_SECRET_CREATION / NO_ENDPOINT_CONTACT / NO_AUTH_RBAC_MUTATION / NO_RECOVERY_EXECUTION / NO_RUNTIME_ACTIVATION / NO_R1_R4_ACTIVATION / NO_DEPLOYMENT / NO_MERGE`
 
-Any Rust/Cargo source materialization, TLS feature enablement, endpoint/client connection, certificate/secret creation, etcd auth/RBAC mutation, recovery execution, runtime activation, Agent integration, deployment, retargeting, or merge requires separate explicit authorization.
+Any Rust/Cargo source materialization, BM constructor correction, TLS feature enablement, endpoint/client connection, certificate/secret creation, etcd auth/RBAC mutation, recovery execution, runtime activation, Agent integration, deployment, retargeting or merge requires separate explicit authorization.
 
 ## Gate
 
-After exact diff verification, draft-PR validation/evidence capture, immutable audit persistence, rolling-status append/readback, and final read-only repository recheck complete without contradiction, the checkpoint gate is:
+After exact diff verification, draft-PR validation/evidence capture, immutable audit persistence, rolling-status append/readback and final read-only repository recheck complete without contradiction, the checkpoint gate is:
 
 `C02F_BV_PROVIDER_CLIENT_BOOTSTRAP_COMPOSITION_SELECTED`
