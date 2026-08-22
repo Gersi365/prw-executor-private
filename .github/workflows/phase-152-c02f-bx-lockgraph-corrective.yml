@@ -6,6 +6,7 @@ on:
       - phase-152-c02f-bx-provider-client-bootstrap-source-materialization-staging
     paths:
       - .github/workflows/phase-152-c02f-bx-lockgraph-corrective.yml
+  pull_request:
 
 permissions:
   contents: write
@@ -16,7 +17,9 @@ concurrency:
 
 jobs:
   correct-lockgraph:
-    if: github.repository == 'Gersi365/prw-executor-private'
+    if: >-
+      github.repository == 'Gersi365/prw-executor-private' &&
+      (github.event_name == 'push' || github.event.pull_request.head.ref == 'phase-152-c02f-bx-provider-client-bootstrap-source-materialization-staging')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,16 +32,30 @@ jobs:
       - name: Resolve all-feature lock graph
         run: cargo metadata --workspace --all-features --format-version 1 > /dev/null
 
-      - name: Prove Cargo.lock changed by exactly one allowed dependency edge
+      - name: Prove Cargo.lock delta is exact or already materialized
+        id: guard
         shell: bash
         run: |
           set -euo pipefail
-          git diff --exit-code -- Cargo.toml crates/prw-control-plane/Cargo.toml || true
           python3 - <<'PY'
           import subprocess
           from pathlib import Path
 
           changed = subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          text = Path("Cargo.lock").read_text()
+          marker = '''name = "rustls"\nversion = "0.23.43"'''
+          start = text.index(marker)
+          end = text.index("\n[[package]]", start)
+          stanza = text[start:end]
+          has_ring = '\n "ring",\n' in stanza
+
+          if not changed:
+              if not has_ring:
+                  raise SystemExit("Cargo produced no diff but rustls 0.23.43 still lacks ring")
+              with open("$GITHUB_OUTPUT", "a") as output:
+                  output.write("needs_commit=false\n")
+              raise SystemExit(0)
+
           if changed != ["Cargo.lock"]:
               raise SystemExit(f"unexpected changed files: {changed!r}")
 
@@ -47,18 +64,15 @@ jobs:
           removed = [line for line in patch.splitlines() if line.startswith("-") and not line.startswith("---")]
           if added != ['+ "ring",'] or removed:
               raise SystemExit(f"unexpected Cargo.lock patch; added={added!r}, removed={removed!r}\n{patch}")
-
-          text = Path("Cargo.lock").read_text()
-          marker = '''name = "rustls"\nversion = "0.23.43"'''
-          start = text.index(marker)
-          end = text.index("\n[[package]]", start)
-          stanza = text[start:end]
-          if '\n "ring",\n' not in stanza:
+          if not has_ring:
               raise SystemExit("rustls 0.23.43 stanza does not contain ring dependency")
           print(patch)
+          with open("$GITHUB_OUTPUT", "a") as output:
+              output.write("needs_commit=true\n")
           PY
 
       - name: Commit exact guarded lock edge
+        if: steps.guard.outputs.needs_commit == 'true'
         shell: bash
         run: |
           set -euo pipefail
