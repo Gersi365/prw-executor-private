@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
           import subprocess
           from pathlib import Path
 
@@ -48,11 +49,12 @@ jobs:
           end = text.index("\n[[package]]", start)
           stanza = text[start:end]
           has_ring = '\n "ring",\n' in stanza
+          output_path = os.environ["GITHUB_OUTPUT"]
 
           if not changed:
               if not has_ring:
                   raise SystemExit("Cargo produced no diff but rustls 0.23.43 still lacks ring")
-              with open("$GITHUB_OUTPUT", "a") as output:
+              with open(output_path, "a") as output:
                   output.write("needs_commit=false\n")
               raise SystemExit(0)
 
@@ -67,7 +69,7 @@ jobs:
           if not has_ring:
               raise SystemExit("rustls 0.23.43 stanza does not contain ring dependency")
           print(patch)
-          with open("$GITHUB_OUTPUT", "a") as output:
+          with open(output_path, "a") as output:
               output.write("needs_commit=true\n")
           PY
 
