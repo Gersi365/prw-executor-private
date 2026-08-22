@@ -1,8 +1,8 @@
 //! Provider-neutral local IPC contracts for the Ubuntu PRW Agent.
 //!
 //! Phase 006 records the local endpoint and authorization boundary. Phase 007
-//! records bounded stream framing and protocol-version metadata. This crate
-//! still performs no socket I/O and creates no filesystem objects.
+//! records bounded stream framing and protocol-version metadata. The local IPC
+//! contract surface itself performs no socket I/O and creates no filesystem objects.
 
 pub mod frame_codec;
 pub mod frame_object;
@@ -15,6 +15,7 @@ pub mod linux_bootstrap;
 )]
 pub(crate) mod linux_identity;
 pub mod local_commands;
+pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
 
 use std::fmt;
