@@ -17,6 +17,7 @@ pub(crate) mod linux_identity;
 pub mod local_commands;
 pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
+pub mod reachability_authority_custody_bootstrap;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
