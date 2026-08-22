@@ -7,11 +7,13 @@
 //! evidence primitives.
 //!
 //! Construction accepts one already-created `KvClient`; endpoint selection and `Client::connect`
-//! remain outside this boundary. C02f-BS adds only a lifetime-bounded execution capability over the
-//! exact live-owner store already owned here. The capability exposes no raw store/client/configuration
-//! handle and cannot outlive the mutable preparation borrow that created it.
+//! remain outside this boundary. C02f-BS adds a lifetime-bounded acquisition execution capability
+//! over the exact live-owner store already owned here. C02f-BU adds a separate lifetime-bounded
+//! lifecycle execution capability over that same store for only BF currentness and BD release
+//! provider primitives. Neither capability exposes a raw store/client/configuration handle or can
+//! outlive the mutable preparation borrow that created it.
 
-use std::fmt;
+use std::{fmt, num::NonZeroU128};
 
 use etcd_client::KvClient;
 use prw_connectivity::PeerConnectivityIdentity;
@@ -38,13 +40,14 @@ use crate::{
     fence_sequence_live_owner_handoff::retain_live_owner_acquisition_handoff,
     reachability_live_owner_codec::{AuthorityAttemptId, ReachabilityLiveOwnerAuthorityRecord},
     reachability_live_owner_etcd::{
-        ReachabilityLiveOwnerEtcdStore, ReachabilityLiveOwnerFirstOwnerExecutionError,
-        ReachabilityLiveOwnerResolvedFirstOwner,
+        ReachabilityLiveOwnerEtcdError, ReachabilityLiveOwnerEtcdStore,
+        ReachabilityLiveOwnerFirstOwnerExecutionError, ReachabilityLiveOwnerResolvedFirstOwner,
         reconciliation::{
             ReachabilityLiveOwnerReconciliationError, ReachabilityLiveOwnerResolvedMutation,
+            ReachabilityLiveOwnerResolvedRelease,
         },
     },
-    reachability_live_owner_txn::LiveOwnerObservation,
+    reachability_live_owner_txn::{LiveOwnerObservation, LiveOwnerProviderCurrentness},
 };
 
 /// Provider-neutral terminal preparation result selected by C02f-BJ.
@@ -174,6 +177,64 @@ impl ReachabilityLiveOwnerAcquisitionExecution<'_> {
     }
 }
 
+/// C02f-BU scoped lifecycle provider capability borrowed from one preparation facade.
+///
+/// This capability is deliberately separate from C02f-BS acquisition execution. It owns no provider
+/// handle, exposes no raw store/client/configuration or generic transaction API, and can invoke only
+/// the provider primitives already consumed by BF currentness and BD release. It cannot outlive the
+/// mutable preparation borrow that created it.
+#[must_use = "the lifecycle execution capability must remain scoped to its preparation borrow"]
+pub struct ReachabilityLiveOwnerLifecycleExecution<'a> {
+    live_owner: &'a mut ReachabilityLiveOwnerEtcdStore,
+}
+
+impl ReachabilityLiveOwnerLifecycleExecution<'_> {
+    /// Executes the exact existing C02f-AD authoritative currentness primitive.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing fail-closed C02f-AD provider/classification error unchanged.
+    pub async fn currentness(
+        &mut self,
+        peer: &PeerConnectivityIdentity,
+        fence: NonZeroU128,
+    ) -> Result<LiveOwnerProviderCurrentness, ReachabilityLiveOwnerEtcdError> {
+        self.live_owner.currentness(peer, fence).await
+    }
+
+    /// Performs the exact existing C02f-AD default-linearizable live-owner observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing fail-closed C02f-AD read/decode error unchanged.
+    pub async fn linearizable_observation(
+        &mut self,
+        peer: &PeerConnectivityIdentity,
+    ) -> Result<Option<LiveOwnerObservation>, ReachabilityLiveOwnerEtcdError> {
+        self.live_owner.linearizable_observation(peer).await
+    }
+
+    /// Executes the exact existing C02f-AE bounded release reconciliation primitive.
+    ///
+    /// The bridge remains responsible for obtaining and retaining the initial observation and for
+    /// semantic result mapping. This method does not perform an additional observation on its own.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing fail-closed C02f-AE provider/reconciliation error unchanged.
+    pub async fn execute_release_with_reconciliation(
+        &mut self,
+        peer: &PeerConnectivityIdentity,
+        fence: NonZeroU128,
+        observation: Option<LiveOwnerObservation>,
+    ) -> Result<ReachabilityLiveOwnerResolvedRelease, ReachabilityLiveOwnerReconciliationError>
+    {
+        self.live_owner
+            .execute_release_with_reconciliation(peer, fence, observation)
+            .await
+    }
+}
+
 impl ReachabilityLiveOwnerAcquisitionPreparation {
     /// Wraps one already-created etcd KV context without selecting or contacting an endpoint.
     #[must_use]
@@ -190,6 +251,16 @@ impl ReachabilityLiveOwnerAcquisitionPreparation {
     /// live-owner store or client. Creating the capability performs no provider I/O.
     pub const fn acquisition_execution(&mut self) -> ReachabilityLiveOwnerAcquisitionExecution<'_> {
         ReachabilityLiveOwnerAcquisitionExecution {
+            live_owner: &mut self.live_owner,
+        }
+    }
+
+    /// Borrows only the lifecycle execution capability for this exact preparation-owned provider.
+    ///
+    /// The returned value cannot outlive this mutable borrow and provides no accessor to the raw
+    /// live-owner store or client. Creating the capability performs no provider I/O.
+    pub const fn lifecycle_execution(&mut self) -> ReachabilityLiveOwnerLifecycleExecution<'_> {
+        ReachabilityLiveOwnerLifecycleExecution {
             live_owner: &mut self.live_owner,
         }
     }

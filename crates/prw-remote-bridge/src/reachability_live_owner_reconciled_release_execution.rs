@@ -4,16 +4,21 @@
 //! the already-materialized C02f-AD linearizable read and C02f-AE bounded reconciliation into the
 //! validated C02f-BB semantic mapper. This module materializes only that sequence.
 //!
-//! The caller supplies an already-created mutable `ReachabilityLiveOwnerEtcdStore`; this module does
-//! not select endpoints, construct an etcd client, configure TLS/auth/RBAC, create a runtime/task,
-//! allocate fences or attempt IDs, compose acquisition/currentness, activate R1-R4 effects, deploy,
-//! or merge anything. Provider I/O occurs only when the returned future is polled.
+//! The public compatibility entry point still accepts an already-created mutable
+//! `ReachabilityLiveOwnerEtcdStore`. C02f-BU additionally exposes one crate-private adapter over the
+//! narrow preparation-owned lifecycle capability selected by C02f-BT. Neither path selects
+//! endpoints, constructs an etcd client, configures TLS/auth/RBAC, creates a runtime/task, allocates
+//! fences or attempt IDs, activates R1-R4 effects, deploys, or merges anything. Provider I/O occurs
+//! only when the returned future is polled.
 
 #![allow(clippy::manual_async_fn)]
 
 use std::{future::Future, num::NonZeroU128};
 
-use prw_control_plane::reachability_live_owner_etcd::ReachabilityLiveOwnerEtcdStore;
+use prw_control_plane::{
+    reachability_acquisition_evidence::ReachabilityLiveOwnerLifecycleExecution,
+    reachability_live_owner_etcd::ReachabilityLiveOwnerEtcdStore,
+};
 
 use crate::{
     reachability_live_owner::{
@@ -56,6 +61,35 @@ pub fn execute_reconciled_live_owner_release<'a>(
             .map_err(map_provider_failure)?;
 
         let resolved = store
+            .execute_release_with_reconciliation(grant.peer(), raw_fence, observation)
+            .await
+            .map_err(map_provider_failure)?;
+
+        map_reconciled_live_owner_release(grant, &resolved)
+    }
+}
+
+/// Executes the exact BD release composition through the C02f-BT/BU scoped lifecycle borrow.
+///
+/// The bridge still owns semantic fence projection, the exact initial observation -> bounded
+/// reconciliation sequence, and the C02f-BB semantic mapper. The capability exposes only those
+/// provider primitives on the preparation-owned live-owner store.
+pub(crate) fn execute_reconciled_live_owner_release_with_prepared_execution<'a>(
+    execution: &'a mut ReachabilityLiveOwnerLifecycleExecution<'_>,
+    grant: &'a ReachabilityLiveOwnerGrant,
+) -> impl Future<Output = Result<ReachabilityLiveOwnerRelease, ReachabilityLiveOwnerAuthorityError>>
++ Send
++ 'a {
+    async move {
+        let raw_fence = NonZeroU128::new(grant.fence().get())
+            .ok_or(ReachabilityLiveOwnerAuthorityError::FenceExhausted)?;
+
+        let observation = execution
+            .linearizable_observation(grant.peer())
+            .await
+            .map_err(map_provider_failure)?;
+
+        let resolved = execution
             .execute_release_with_reconciliation(grant.peer(), raw_fence, observation)
             .await
             .map_err(map_provider_failure)?;

@@ -4,16 +4,19 @@
 //! through the already-materialized C02f-AD linearizable provider currentness primitive into the
 //! provider-neutral semantic currentness result. This module materializes only that sequence.
 //!
-//! The caller supplies an already-created mutable `ReachabilityLiveOwnerEtcdStore`; this module does
-//! not select endpoints, construct an etcd client, configure TLS/auth/RBAC, create a runtime/task,
-//! allocate or reissue fences, generate attempt IDs, compose acquisition/release, activate R1-R4
-//! effects, deploy, or merge anything. Provider I/O occurs only when the returned future is polled.
+//! The public compatibility entry point still accepts an already-created mutable
+//! `ReachabilityLiveOwnerEtcdStore`. C02f-BU additionally exposes one crate-private adapter over the
+//! narrow preparation-owned lifecycle capability selected by C02f-BT. Neither path selects
+//! endpoints, constructs an etcd client, configures TLS/auth/RBAC, creates a runtime/task, allocates
+//! or reissues fences, generates attempt IDs, activates R1-R4 effects, deploys, or merges anything.
+//! Provider I/O occurs only when the returned future is polled.
 
 #![allow(clippy::manual_async_fn)]
 
 use std::{future::Future, num::NonZeroU128};
 
 use prw_control_plane::{
+    reachability_acquisition_evidence::ReachabilityLiveOwnerLifecycleExecution,
     reachability_live_owner_etcd::ReachabilityLiveOwnerEtcdStore,
     reachability_live_owner_txn::LiveOwnerProviderCurrentness,
 };
@@ -52,6 +55,29 @@ pub fn execute_live_owner_currentness<'a>(
             .ok_or(ReachabilityLiveOwnerAuthorityError::FenceExhausted)?;
 
         let provider_currentness = store
+            .currentness(grant.peer(), raw_fence)
+            .await
+            .map_err(map_provider_failure)?;
+
+        Ok(map_provider_currentness(provider_currentness))
+    }
+}
+
+/// Executes the exact BF currentness composition through the C02f-BT/BU scoped lifecycle borrow.
+///
+/// This adapter deliberately retains bridge ownership of semantic fence projection and result/error
+/// mapping. The control-plane capability receives only the exact peer and non-zero provider fence.
+pub(crate) fn execute_live_owner_currentness_with_prepared_execution<'a>(
+    execution: &'a mut ReachabilityLiveOwnerLifecycleExecution<'_>,
+    grant: &'a ReachabilityLiveOwnerGrant,
+) -> impl Future<Output = Result<ReachabilityLiveOwnerCurrentness, ReachabilityLiveOwnerAuthorityError>>
++ Send
++ 'a {
+    async move {
+        let raw_fence = NonZeroU128::new(grant.fence().get())
+            .ok_or(ReachabilityLiveOwnerAuthorityError::FenceExhausted)?;
+
+        let provider_currentness = execution
             .currentness(grant.peer(), raw_fence)
             .await
             .map_err(map_provider_failure)?;
