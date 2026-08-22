@@ -58,7 +58,7 @@ The existing provider TLS composition may borrow the zeroizing buffer as a slice
 
 No new package version is selected.
 
-If Cargo proves a root `Cargo.lock` package-edge correction is required, only the deterministic `prw-control-plane -> zeroize` edge is authorized. No version/checksum drift is authorized.
+If Cargo proves a package-edge correction is required in the root `Cargo.lock` and/or the independent `apps/android/native/Cargo.lock`, only the deterministic `prw-control-plane -> zeroize` edge is authorized in each affected lockfile. No package version/checksum drift is authorized.
 
 ## Security invariants
 
