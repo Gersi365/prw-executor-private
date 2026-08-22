@@ -134,7 +134,7 @@ The BZ gate may be claimed only after:
 6. AD/AE disposable workflow verdicts are reported accurately;
 7. Drive audit is written and read back;
 8. rolling status is updated append-only with the previous prefix byte-identical;
-9. the BZ PR remains draft/open/unmerged.
+9. the BZ pull request remains draft/open/unmerged.
 
 ## Gate
 
