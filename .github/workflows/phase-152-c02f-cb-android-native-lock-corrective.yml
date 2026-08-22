@@ -1,0 +1,74 @@
+name: Phase 152 C02f-CB guarded Android native lock corrective
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c02f-ca-reachability-bootstrap-custody-secret-memory-selection-staging
+    paths:
+      - apps/android/native/Cargo.lock
+      - contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02F_CB_CONTROL_PLANE_ROLE_PRIVATE_KEY_ZEROIZATION_SOURCE_HARDENING_STAGING.md
+      - .github/workflows/phase-152-c02f-cb-android-native-lock-corrective.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct-lock:
+    if: github.event.pull_request.head.ref == 'phase-152-c02f-cb-control-plane-role-private-key-zeroization-source-hardening-staging'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-152-c02f-cb-control-plane-role-private-key-zeroization-source-hardening-staging
+          fetch-depth: 0
+
+      - name: Apply only the Android-native zeroize edge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lock = Path('apps/android/native/Cargo.lock')
+          text = lock.read_text()
+          package_start = text.find('[[package]]\nname = "prw-control-plane"\n')
+          if package_start < 0:
+              raise SystemExit('prw-control-plane Android lock stanza missing')
+          package_end = text.find('\n[[package]]', package_start + 1)
+          if package_end < 0:
+              package_end = len(text)
+          stanza = text[package_start:package_end]
+          edge = ' "zeroize",\n'
+          if edge not in stanza:
+              anchor = ' "prw-core",\n'
+              if stanza.count(anchor) != 1:
+                  raise SystemExit('unexpected Android lock dependency anchor')
+              stanza = stanza.replace(anchor, anchor + edge, 1)
+              text = text[:package_start] + stanza + text[package_end:]
+              lock.write_text(text)
+          PY
+
+      - name: Guard exact corrective
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git diff --name-only)" = 'apps/android/native/Cargo.lock'
+          test "$(git diff --numstat -- apps/android/native/Cargo.lock)" = $'1\t0\tapps/android/native/Cargo.lock'
+          git diff -- apps/android/native/Cargo.lock | grep -F '+ "zeroize",'
+          cd apps/android/native
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Commit exact corrective
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then
+            echo 'no Android-native lock corrective needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/android/native/Cargo.lock
+          git commit -m 'phase 152 c02f-cb: correct Android native zeroize lock edge'
+          git push origin HEAD:phase-152-c02f-cb-control-plane-role-private-key-zeroization-source-hardening-staging
