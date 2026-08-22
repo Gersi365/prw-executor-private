@@ -2,9 +2,11 @@
 //!
 //! This module exposes the retained provider-neutral evidence types needed by higher-level semantic
 //! mapping. C02f-BS additionally exposes one lifetime-bounded acquisition-execution capability over
-//! the exact live-owner store already owned by the C02f-BM preparation facade. The capability does
-//! not expose the store, `KvClient`, endpoint/configuration state, generic transaction execution,
-//! currentness, release, runtime activation, or provider construction.
+//! the exact live-owner store already owned by the C02f-BM preparation facade. C02f-BU adds a
+//! separate lifetime-bounded lifecycle-execution capability over that same preparation-owned store
+//! for only the provider primitives required by the selected BF currentness and BD release bridge
+//! compositions. Neither capability exposes the store, `KvClient`, endpoint/configuration state,
+//! generic transaction execution, runtime activation, or provider construction.
 
 #[allow(dead_code)]
 pub(crate) mod attempt_id_generation;
@@ -28,5 +30,6 @@ pub use first_owner::{
 };
 pub use preparation::{
     ReachabilityLiveOwnerAcquisitionExecution, ReachabilityLiveOwnerAcquisitionPreparation,
-    ReachabilityLiveOwnerPreparationError, ReachabilityLiveOwnerPreparedAcquisition,
+    ReachabilityLiveOwnerLifecycleExecution, ReachabilityLiveOwnerPreparationError,
+    ReachabilityLiveOwnerPreparedAcquisition,
 };
