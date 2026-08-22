@@ -15,3 +15,5 @@ prw-core = { path = "../prw-core" }
 
 [lints]
 workspace = true
+
+# Phase 152 C02f-BX exact-head validation marker; no dependency semantics.
