@@ -2717,6 +2717,15 @@ name = "prw-private-dns"
 version = "0.1.0"
 
 [[package]]
+name = "prw-reachability-custody"
+version = "0.1.0"
+dependencies = [
+ "prw-control-plane",
+ "rustix",
+ "zeroize",
+]
+
+[[package]]
 name = "prw-registry"
 version = "0.1.0"
 dependencies = [
