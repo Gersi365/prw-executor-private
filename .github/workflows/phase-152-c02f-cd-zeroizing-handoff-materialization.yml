@@ -23,6 +23,14 @@ jobs:
           ref: phase-152-c02f-cd-control-plane-zeroizing-private-key-handoff-source-materialization-staging
           fetch-depth: 0
 
+      - name: Install focused-test prerequisite
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+          protoc --version
+
       - name: Apply exact zeroizing handoff seam
         shell: bash
         run: |
