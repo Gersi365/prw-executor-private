@@ -24,18 +24,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update existing lockfile with Cargo and enforce exact delta
+      - name: Update existing lockfile with Cargo and classify delta
+        id: classify
         shell: bash
         run: |
           set -euo pipefail
           cargo metadata --format-version 1 > /dev/null
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           git diff --check -- Cargo.lock
-          test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
-          test "$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++')" = '+ "aws-lc-rs",'
-          test -z "$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
+          numstat="$(git diff --numstat -- Cargo.lock)"
+          additions="$(git diff -- Cargo.lock | grep '^+' | grep -v '^+++' || true)"
+          deletions="$(git diff -- Cargo.lock | grep '^-' | grep -v '^---' || true)"
+          if [[ "$numstat" == $'1\t0\tCargo.lock' && "$additions" == '+ "aws-lc-rs",' && -z "$deletions" ]]; then
+            echo 'exact=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p logs/audits/phase-152-c02f-bl-attempt-id-generation
+          {
+            echo 'C02F-BL temporary Cargo.lock corrective diagnostic'
+            echo
+            echo 'Expected: exactly 1 addition / 0 deletions and only + "aws-lc-rs", under prw-control-plane.'
+            echo 'Observed numstat:'
+            printf '%s\n' "$numstat"
+            echo
+            echo 'Observed diff:'
+            git diff -- Cargo.lock
+          } > logs/audits/phase-152-c02f-bl-attempt-id-generation/TEMP_C02F_BL_LOCK_DIFF.txt
+          git checkout -- Cargo.lock
+          echo 'exact=false' >> "$GITHUB_OUTPUT"
 
-      - name: Commit only Cargo-updated lockfile
+      - name: Commit exact Cargo-updated lockfile
+        if: steps.classify.outputs.exact == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -46,4 +65,19 @@ jobs:
           git diff --cached --check
           test "$(git diff --cached --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
           git commit -m 'phase 152 c02f-bl: materialize Cargo-generated lock dependency'
+          git push origin HEAD:phase-152-c02f-bl-attempt-id-generation-materialization-staging
+
+      - name: Commit diagnostic only when Cargo delta is not exact
+        if: steps.classify.outputs.exact == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --short Cargo.lock)"
+          diagnostic='logs/audits/phase-152-c02f-bl-attempt-id-generation/TEMP_C02F_BL_LOCK_DIFF.txt'
+          test -s "$diagnostic"
+          test "$(git status --short | awk '{print $2}')" = "$diagnostic"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$diagnostic"
+          git commit -m 'phase 152 c02f-bl: record lock corrective diagnostic'
           git push origin HEAD:phase-152-c02f-bl-attempt-id-generation-materialization-staging
