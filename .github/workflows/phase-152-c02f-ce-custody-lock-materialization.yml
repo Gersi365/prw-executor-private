@@ -1,17 +1,20 @@
 name: Phase 152 C02f-CE guarded custody lock materialization
 
 on:
-  push:
+  pull_request:
     branches:
-      - phase-152-c02f-ce-reachability-custody-source-materialization-staging
-    paths:
-      - Cargo.toml
+      - phase-152-c02f-cd-control-plane-zeroizing-private-key-handoff-source-materialization-staging
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
 
 jobs:
   materialize:
+    if: >-
+      github.event.pull_request.head.ref ==
+      'phase-152-c02f-ce-reachability-custody-source-materialization-staging' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact CE branch
