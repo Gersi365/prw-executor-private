@@ -1,0 +1,123 @@
+name: Phase 152 C02f-CD guarded zeroizing handoff materialization
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c02f-cc-reachability-custody-zeroizing-handoff-schema-selection-staging
+    paths:
+      - crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs
+      - contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C02F_CD_CONTROL_PLANE_ZEROIZING_PRIVATE_KEY_HANDOFF_SOURCE_MATERIALIZATION_STAGING.md
+      - .github/workflows/phase-152-c02f-cd-zeroizing-handoff-materialization.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.event.pull_request.head.ref == 'phase-152-c02f-cd-control-plane-zeroizing-private-key-handoff-source-materialization-staging'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-152-c02f-cd-control-plane-zeroizing-private-key-handoff-source-materialization-staging
+          fetch-depth: 0
+
+      - name: Apply exact zeroizing handoff seam
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs')
+          text = source.read_text()
+          old = '''    pub fn new(
+              certificate_pem: impl Into<Vec<u8>>,
+              private_key_pem: impl Into<Vec<u8>>,
+          ) -> Result<Self, ReachabilityEtcdClientIdentityMaterialError> {
+              let certificate_pem = certificate_pem.into();
+              if !contains_non_whitespace(&certificate_pem) {
+                  return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyCertificate);
+              }
+
+              let private_key_pem = Zeroizing::new(private_key_pem.into());
+              if !contains_non_whitespace(private_key_pem.as_slice()) {
+                  return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyPrivateKey);
+              }
+
+              Ok(Self {
+                  certificate_pem,
+                  private_key_pem,
+              })
+          }
+          '''
+          new = '''    pub fn new(
+              certificate_pem: impl Into<Vec<u8>>,
+              private_key_pem: impl Into<Vec<u8>>,
+          ) -> Result<Self, ReachabilityEtcdClientIdentityMaterialError> {
+              let private_key_pem = Zeroizing::new(private_key_pem.into());
+              Self::new_with_zeroizing_private_key(certificate_pem, private_key_pem)
+          }
+
+          /// Creates one role-scoped identity while preserving an existing zeroizing private-key owner.
+          ///
+          /// This is the selected production custody handoff seam. The private-key buffer is moved by
+          /// value and retained directly; it is not cloned, unwrapped, or copied into an ordinary
+          /// PRW-owned plaintext buffer.
+          ///
+          /// # Errors
+          ///
+          /// Returns a fail-closed error when either PEM input is empty or ASCII-whitespace-only.
+          pub fn new_with_zeroizing_private_key(
+              certificate_pem: impl Into<Vec<u8>>,
+              private_key_pem: Zeroizing<Vec<u8>>,
+          ) -> Result<Self, ReachabilityEtcdClientIdentityMaterialError> {
+              let certificate_pem = certificate_pem.into();
+              if !contains_non_whitespace(&certificate_pem) {
+                  return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyCertificate);
+              }
+
+              if !contains_non_whitespace(private_key_pem.as_slice()) {
+                  return Err(ReachabilityEtcdClientIdentityMaterialError::EmptyPrivateKey);
+              }
+
+              Ok(Self {
+                  certificate_pem,
+                  private_key_pem,
+              })
+          }
+          '''
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit('unexpected identity constructor anchor')
+              text = text.replace(old, new, 1)
+              source.write_text(text)
+          PY
+          cargo fmt --all
+
+      - name: Guard exact source delta
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git diff --name-only)" = 'crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs'
+          git diff -- crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs | grep -F '+    pub fn new_with_zeroizing_private_key('
+          git diff -- crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs | grep -F '+        private_key_pem: Zeroizing<Vec<u8>>,'
+          git diff -- crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs | grep -F '+        Self::new_with_zeroizing_private_key(certificate_pem, private_key_pem)'
+          ! git diff -- crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs | grep '^+' | grep -E 'into_inner|to_vec\(|\.clone\('
+          cargo fmt --all -- --check
+          cargo test --locked -p prw-control-plane reachability_acquisition_evidence::bootstrap::tests::identity_material_rejects_empty_or_whitespace_secret_bytes
+
+      - name: Commit exact source materialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then
+            echo 'no materialization needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-control-plane/src/reachability_acquisition_evidence/bootstrap.rs
+          git commit -m 'phase 152 c02f-cd: materialize zeroizing private-key handoff seam'
+          git push origin HEAD:phase-152-c02f-cd-control-plane-zeroizing-private-key-handoff-source-materialization-staging
