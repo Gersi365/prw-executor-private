@@ -1,0 +1,98 @@
+name: Phase 152 C02f-CE guarded custody lock materialization
+
+on:
+  push:
+    branches:
+      - phase-152-c02f-ce-reachability-custody-source-materialization-staging
+    paths:
+      - Cargo.toml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact CE branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-152-c02f-ce-reachability-custody-source-materialization-staging
+          fetch-depth: 0
+
+      - name: Install focused-test prerequisite
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+          protoc --version
+
+      - name: Materialize exact workspace lock entry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lock = Path('Cargo.lock')
+          text = lock.read_text()
+          package = (
+              '[[package]]\n'
+              'name = "prw-reachability-custody"\n'
+              'version = "0.1.0"\n'
+              'dependencies = [\n'
+              ' "prw-control-plane",\n'
+              ' "rustix",\n'
+              ' "zeroize",\n'
+              ']\n\n'
+          )
+          marker = '[[package]]\nname = "prw-registry"\n'
+
+          if 'name = "prw-reachability-custody"' not in text:
+              if marker not in text:
+                  raise SystemExit('canonical prw-registry lock marker missing')
+              text = text.replace(marker, package + marker, 1)
+              lock.write_text(text)
+          elif package not in text:
+              raise SystemExit('unexpected pre-existing reachability custody lock entry')
+          PY
+
+      - name: Format and validate exact bounded source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo fmt --all
+          changed="$(git diff --name-only)"
+          case "$changed" in
+            Cargo.lock|$'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs') ;;
+            *)
+              printf 'unexpected helper diff:\n%s\n' "$changed" >&2
+              exit 1
+              ;;
+          esac
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          cargo test --locked -p prw-reachability-custody
+
+      - name: Commit exact lock and formatting materialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then
+            echo 'no materialization needed'
+            exit 0
+          fi
+          changed="$(git diff --name-only)"
+          case "$changed" in
+            Cargo.lock|$'Cargo.lock\ncrates/prw-reachability-custody/src/lib.rs') ;;
+            *)
+              printf 'unexpected helper diff:\n%s\n' "$changed" >&2
+              exit 1
+              ;;
+          esac
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock crates/prw-reachability-custody/src/lib.rs
+          git commit -m 'phase 152 c02f-ce: materialize custody source formatting and lock entry'
+          git push origin HEAD:phase-152-c02f-ce-reachability-custody-source-materialization-staging
