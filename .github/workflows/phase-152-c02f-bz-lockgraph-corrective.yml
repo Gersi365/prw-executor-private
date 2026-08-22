@@ -1,0 +1,71 @@
+name: Phase 152 C02f-BZ guarded lockgraph corrective
+
+on:
+  pull_request:
+    branches:
+      - phase-152-c02f-by-agent-runtime-authority-bootstrap-ownership-selection-staging
+    paths:
+      - crates/prw-agent/Cargo.toml
+      - .github/workflows/phase-152-c02f-bz-lockgraph-corrective.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct-lockgraph:
+    if: github.event.pull_request.head.ref == 'phase-152-c02f-bz-agent-authority-composition-seam-source-materialization-staging'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Materialize only the Agent control-plane lock edge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --format-version 1 > /dev/null
+
+          mapfile -t changed < <(git diff --name-only)
+          if (( ${#changed[@]} == 0 )); then
+            echo "Cargo.lock already canonical for this manifest edge."
+            exit 0
+          fi
+          if (( ${#changed[@]} != 1 )) || [[ "${changed[0]}" != "Cargo.lock" ]]; then
+            printf 'Unexpected changed paths after cargo metadata:\n'
+            printf '  %s\n' "${changed[@]}"
+            exit 1
+          fi
+
+          read -r additions deletions path < <(git diff --numstat -- Cargo.lock)
+          if [[ "$path" != "Cargo.lock" || "$additions" != "1" || "$deletions" != "0" ]]; then
+            echo "Expected Cargo.lock +1/-0 only; got +${additions}/-${deletions} ${path}."
+            git diff -- Cargo.lock
+            exit 1
+          fi
+
+          if [[ "$(git diff -- Cargo.lock | grep -c '^+ "prw-control-plane",$' || true)" != "1" ]]; then
+            echo "Expected exactly one added prw-control-plane dependency edge."
+            git diff -- Cargo.lock
+            exit 1
+          fi
+          if git diff -- Cargo.lock | grep '^-' | grep -v '^---' >/dev/null; then
+            echo "Lock corrective unexpectedly removed content."
+            git diff -- Cargo.lock
+            exit 1
+          fi
+
+      - name: Commit exact corrective when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.lock; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock
+          git commit -m 'phase 152 c02f-bz: correct agent control-plane lock edge'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
