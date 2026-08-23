@@ -70,7 +70,10 @@ impl AuthenticatedRemotePeerConnection {
     pub async fn accept_control_stream(
         &self,
     ) -> Result<MeshControlStream, RemoteServerTransportRuntimeError> {
-        self.connection.accept_control_stream().await.map_err(Into::into)
+        self.connection
+            .accept_control_stream()
+            .await
+            .map_err(Into::into)
     }
 
     /// Explicitly closes this accepted peer connection.
