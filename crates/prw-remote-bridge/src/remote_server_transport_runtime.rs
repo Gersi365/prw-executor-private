@@ -6,7 +6,7 @@
 
 use std::{fmt, net::SocketAddr};
 
-use prw_connectivity::TransportIdentity;
+pub use prw_connectivity::TransportIdentity;
 use prw_remote_transport::runtime::{
     MeshControlStream, MeshQuicConnection, MeshQuicEndpoint, MeshQuicRuntimeError,
     build_server_config_from_der,
