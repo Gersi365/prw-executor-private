@@ -60,7 +60,7 @@ impl From<RemoteServerTransportRuntimeError> for AgentRemoteTransportBindError {
 
 /// Failed bind transaction that retains the already-admitted authority owner.
 pub struct AgentRemoteTransportBindFailure {
-    authority_owner: ReachabilityAuthorityRuntimeOwner,
+    authority_owner: Box<ReachabilityAuthorityRuntimeOwner>,
     error: AgentRemoteTransportBindError,
 }
 
@@ -87,12 +87,12 @@ impl std::error::Error for AgentRemoteTransportBindFailure {
 }
 
 impl AgentRemoteTransportBindFailure {
-    const fn new(
+    fn new(
         authority_owner: ReachabilityAuthorityRuntimeOwner,
         error: AgentRemoteTransportBindError,
     ) -> Self {
         Self {
-            authority_owner,
+            authority_owner: Box::new(authority_owner),
             error,
         }
     }
@@ -106,7 +106,7 @@ impl AgentRemoteTransportBindFailure {
     /// Recovers the exact admitted authority owner after a failed endpoint transaction.
     #[must_use]
     pub fn into_authority_owner(self) -> ReachabilityAuthorityRuntimeOwner {
-        self.authority_owner
+        *self.authority_owner
     }
 }
 
