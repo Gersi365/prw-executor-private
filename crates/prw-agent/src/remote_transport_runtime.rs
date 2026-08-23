@@ -29,7 +29,9 @@ pub enum AgentRemoteTransportBindError {
 impl fmt::Display for AgentRemoteTransportBindError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Credential(_) => formatter.write_str("Agent mesh transport credential load failed"),
+            Self::Credential(_) => {
+                formatter.write_str("Agent mesh transport credential load failed")
+            }
             Self::Transport(_) => formatter.write_str("Agent remote transport bind failed"),
         }
     }
@@ -203,7 +205,8 @@ mod tests {
         constructor: fn(
             ReachabilityAuthorityRuntimeOwner,
             SocketAddr,
-        ) -> Result<AgentRemoteTransportRuntime, AgentRemoteTransportBindFailure>,
+        )
+            -> Result<AgentRemoteTransportRuntime, AgentRemoteTransportBindFailure>,
     ) {
         let _ = constructor;
     }
