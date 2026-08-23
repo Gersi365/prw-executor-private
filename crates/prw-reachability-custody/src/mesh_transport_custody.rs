@@ -17,6 +17,10 @@ pub const MESH_AGENT_PRIVATE_KEY_CREDENTIAL_NAME: &str = "prw.mesh.agent-private
 pub const SYSTEMD_CREDENTIALS_DIRECTORY_ENV: &str = "CREDENTIALS_DIRECTORY";
 
 /// Bounded fixed mesh transport material acquired from systemd custody.
+#[allow(
+    clippy::struct_field_names,
+    reason = "DER suffixes encode the exact serialized credential formats and are security-significant"
+)]
 pub struct MeshTransportCredentialMaterial {
     root_certificate_der: Vec<u8>,
     certificate_der: Vec<u8>,
