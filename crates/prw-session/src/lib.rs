@@ -409,7 +409,7 @@ mod tests {
 
         let proof_a = signer
             .sign_session_auth_proof(&bound, &challenge_a)
-            .expect("correct proof a");
+            .expect("proof a");
         assert!(service.submit_proof(&session_a, &proof_a, 11).is_ok());
     }
 
