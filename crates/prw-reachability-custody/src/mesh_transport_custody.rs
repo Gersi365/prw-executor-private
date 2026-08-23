@@ -59,6 +59,21 @@ impl MeshTransportCredentialMaterial {
     pub fn private_key_len(&self) -> usize {
         self.private_key_pkcs8_der.len()
     }
+
+    /// Consumes this custody object and transfers its exact DER material toward TLS composition.
+    ///
+    /// The private key remains wrapped in [`Zeroizing`] during the ownership transfer. This is the
+    /// only public private-key handoff: no borrowed, mutable, clone, slice, or reusable raw-key
+    /// accessor is exposed. The caller is expected to transfer the owned key immediately into the
+    /// transport-owned rustls builder.
+    #[must_use]
+    pub fn into_transport_tls_der(self) -> (Vec<u8>, Vec<u8>, Zeroizing<Vec<u8>>) {
+        (
+            self.root_certificate_der,
+            self.certificate_der,
+            self.private_key_pkcs8_der,
+        )
+    }
 }
 
 /// Failure while acquiring fixed mesh transport material from systemd service credentials.
@@ -111,9 +126,11 @@ impl std::error::Error for MeshTransportCustodyError {}
 /// Loads the fixed Agent mesh transport credentials from systemd service custody.
 ///
 /// The loader reads only three fixed credential names relative to `$CREDENTIALS_DIRECTORY`.
-/// Private-key bytes are read directly into a zeroizing buffer and have no public raw-byte
-/// accessor. No certificate parsing, TLS construction, socket I/O, readiness transition,
-/// credential provisioning, or systemd mutation occurs here.
+/// Private-key bytes are read directly into a zeroizing buffer and have no reusable borrowed/raw
+/// getter. The only public secret transfer consumes the complete custody object and preserves the
+/// zeroizing key wrapper for immediate TLS ownership transfer. No certificate parsing, TLS
+/// construction, socket I/O, readiness transition, credential provisioning, or systemd mutation
+/// occurs here.
 ///
 /// # Errors
 ///
@@ -425,6 +442,17 @@ mod linux {
             let debug = format!("{material:?}");
             assert!(debug.contains("<redacted>"));
             assert!(!debug.contains("agent-private-key"));
+        }
+
+        #[test]
+        fn consuming_tls_handoff_preserves_exact_der_and_zeroizing_key_container() {
+            let directory = TestDirectory::new();
+            directory.populate_valid();
+            let material = load_from_credentials_directory(directory.path()).expect("material");
+            let (root, certificate, private_key) = material.into_transport_tls_der();
+            assert_eq!(root, b"root-der");
+            assert_eq!(certificate, b"agent-cert-der");
+            assert_eq!(&*private_key, b"agent-private-key");
         }
 
         #[test]
