@@ -28,7 +28,7 @@ The method requires:
 - the existing mutable `SessionAuthenticationService`;
 - an exact logical `DeviceId`;
 - one typed `SessionId`;
-- verifier-owned challenge issue and expiry times.
+- one verifier-owned half-open challenge validity range `issued_at_unix_seconds..expires_at_unix_seconds`.
 
 The selected sequence is:
 
@@ -36,7 +36,7 @@ The selected sequence is:
 2. call the existing registry `validate_transport_identity(device_id, peer_transport_identity)` currentness gate;
 3. retrieve that exact currently registered device record by `DeviceId`;
 4. clone only its registry-owned `DeviceIdentityBinding` snapshot;
-5. call the existing `SessionAuthenticationService::begin_session(...)` with that registry-owned binding and verifier-owned session/times;
+5. call the existing `SessionAuthenticationService::begin_session(...)` with that registry-owned binding, typed session identifier, and the range start/end as the verifier-owned issue/expiry times;
 6. return the existing typed `SessionAuthChallenge`.
 
 No caller-supplied `DeviceIdentityBinding` is accepted by this Agent method.
@@ -73,10 +73,11 @@ No new module, dependency, manifest, lockfile, registry implementation, session 
 
 Source validation must prove at minimum:
 
-- the new method requires an `AuthenticatedRemotePeerConnection`, authoritative registry, exact `DeviceId`, typed `SessionId`, and existing `SessionAuthenticationService`;
+- the new method requires an `AuthenticatedRemotePeerConnection`, authoritative registry, exact `DeviceId`, typed `SessionId`, verifier-owned validity range, and existing `SessionAuthenticationService`;
 - the public method accepts no `DeviceIdentityBinding` argument;
 - current registry transport validation occurs before `begin_session`;
 - the binding passed to `begin_session` is cloned only from `registry.device(device_id).binding()`;
+- the validity range is forwarded only as the existing Phase 128 verifier-owned issue/expiry boundary and lifetime validation remains owned by `SessionAuthenticationService`;
 - registry and session errors retain their existing typed classifications inside one narrow Agent error envelope;
 - C03e-D accepted-peer source, C03d wire, C03e binding, manifests, lockfiles, `main.rs`, workflows and Android application source remain byte-stable;
 - canonical Rust and Android validation pass on the exact final source head.
