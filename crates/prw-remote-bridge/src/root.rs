@@ -29,3 +29,4 @@ pub mod reachability_live_owner_reconciled_acquisition_execution;
 pub mod reachability_live_owner_reconciled_release;
 pub mod reachability_live_owner_reconciled_release_execution;
 pub mod reachability_owner;
+pub mod session_auth_wire;
