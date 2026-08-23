@@ -392,7 +392,7 @@ impl<'a> Decoder<'a> {
         SessionId::new(value).map_err(|_| SessionAuthenticationWireError::InvalidPayload)
     }
 
-    fn finish(self) -> Result<(), SessionAuthenticationWireError> {
+    const fn finish(self) -> Result<(), SessionAuthenticationWireError> {
         if self.position == self.input.len() {
             Ok(())
         } else {
