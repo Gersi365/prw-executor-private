@@ -31,7 +31,9 @@ pub enum ReachabilityAuthorityCustodyBootstrapError {
 impl fmt::Display for ReachabilityAuthorityCustodyBootstrapError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Custody(_) => formatter.write_str("reachability authority custody bootstrap failed"),
+            Self::Custody(_) => {
+                formatter.write_str("reachability authority custody bootstrap failed")
+            }
             Self::ProviderBootstrap(_) => {
                 formatter.write_str("reachability authority provider bootstrap failed")
             }
@@ -74,11 +76,8 @@ impl From<ReachabilityLiveOwnerEtcdBootstrapError> for ReachabilityAuthorityCust
 /// Returns [`ReachabilityAuthorityCustodyBootstrapError::Custody`] if systemd custody fails before
 /// provider I/O, or [`ReachabilityAuthorityCustodyBootstrapError::ProviderBootstrap`] if the
 /// validated config cannot establish the two role-scoped provider clients.
-pub async fn bootstrap_reachability_live_owner_authority_from_systemd_credentials(
-) -> Result<
-    ReachabilityLiveOwnerComposedAsyncAuthority,
-    ReachabilityAuthorityCustodyBootstrapError,
-> {
+pub async fn bootstrap_reachability_live_owner_authority_from_systemd_credentials()
+-> Result<ReachabilityLiveOwnerComposedAsyncAuthority, ReachabilityAuthorityCustodyBootstrapError> {
     let config = load_reachability_live_owner_etcd_bootstrap_config_from_systemd_credentials()?;
     bootstrap_reachability_live_owner_authority(config)
         .await
