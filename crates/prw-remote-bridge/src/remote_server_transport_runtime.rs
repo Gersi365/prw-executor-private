@@ -96,10 +96,7 @@ impl RemoteServerTransportRuntime {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-    use prw_remote_transport::{
-        RemoteTransportError,
-        runtime::MeshQuicRuntimeError,
-    };
+    use prw_remote_transport::{RemoteTransportError, runtime::MeshQuicRuntimeError};
 
     use super::{RemoteServerTransportRuntime, RemoteServerTransportRuntimeError};
 
