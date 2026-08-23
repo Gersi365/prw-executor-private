@@ -354,11 +354,7 @@ mod tests {
             service.abort_pending_session(&session_id),
             Err(SessionServiceError::UnknownSession)
         );
-        assert!(
-            service
-                .begin_session(bound, session_id, 101, 200)
-                .is_ok()
-        );
+        assert!(service.begin_session(bound, session_id, 101, 200).is_ok());
     }
 
     #[test]
@@ -413,7 +409,7 @@ mod tests {
 
         let proof_a = signer
             .sign_session_auth_proof(&bound, &challenge_a)
-            .expect("proof a");
+            .expect("correct proof a");
         assert!(service.submit_proof(&session_a, &proof_a, 11).is_ok());
     }
 
