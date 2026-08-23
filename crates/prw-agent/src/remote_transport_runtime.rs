@@ -107,7 +107,9 @@ pub enum AgentRemoteSessionChallengeError {
 impl fmt::Display for AgentRemoteSessionChallengeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Registry(_) => formatter.write_str("Agent remote session registry binding failed"),
+            Self::Registry(_) => {
+                formatter.write_str("Agent remote session registry binding failed")
+            }
             Self::Session(_) => formatter.write_str("Agent remote session challenge failed"),
         }
     }
@@ -344,8 +346,9 @@ mod tests {
     use prw_session::{SessionAuthenticationService, SessionServiceError};
 
     use super::{
-        AgentRemotePeerAcceptError, AgentRemoteSessionChallengeError, AgentRemoteTransportBindError,
-        AgentRemoteTransportBindFailure, AgentRemoteTransportRuntime,
+        AgentRemotePeerAcceptError, AgentRemoteSessionChallengeError,
+        AgentRemoteTransportBindError, AgentRemoteTransportBindFailure,
+        AgentRemoteTransportRuntime,
     };
     use crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner;
 
