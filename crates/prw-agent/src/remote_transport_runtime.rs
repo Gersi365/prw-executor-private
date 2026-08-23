@@ -2,8 +2,9 @@
 //!
 //! C03e-C is the first Agent-owned composition that can bind a real mesh QUIC server endpoint. The
 //! constructor requires the opaque reachability-authority runtime owner and retains it for the full
-//! endpoint lifetime. This module does not accept peers, authenticate logical sessions, dispatch
-//! capabilities, spawn tasks, or publish remote readiness.
+//! endpoint lifetime. C03e-D adds only one lower-transport-authenticated accepted-peer handoff. This
+//! module does not authenticate logical sessions, dispatch capabilities, spawn tasks, or publish
+//! remote readiness.
 
 use std::{fmt, net::SocketAddr};
 
@@ -11,7 +12,8 @@ use prw_reachability_custody::mesh_transport_custody::{
     MeshTransportCustodyError, load_mesh_transport_credentials_from_systemd,
 };
 use prw_remote_bridge::remote_server_transport_runtime::{
-    RemoteServerTransportRuntime, RemoteServerTransportRuntimeError,
+    AuthenticatedRemotePeerConnection, RemoteServerTransportRuntime,
+    RemoteServerTransportRuntimeError, TransportIdentity,
 };
 
 use crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner;
@@ -53,6 +55,36 @@ impl From<MeshTransportCustodyError> for AgentRemoteTransportBindError {
 }
 
 impl From<RemoteServerTransportRuntimeError> for AgentRemoteTransportBindError {
+    fn from(error: RemoteServerTransportRuntimeError) -> Self {
+        Self::Transport(error)
+    }
+}
+
+/// Stable failure class while accepting one authenticated lower-transport peer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AgentRemotePeerAcceptError {
+    /// Existing bridge/C03c peer acceptance or transport-identity validation failed.
+    Transport(RemoteServerTransportRuntimeError),
+}
+
+impl fmt::Display for AgentRemotePeerAcceptError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transport(_) => formatter.write_str("Agent remote peer accept failed"),
+        }
+    }
+}
+
+impl std::error::Error for AgentRemotePeerAcceptError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Transport(error) => Some(error),
+        }
+    }
+}
+
+impl From<RemoteServerTransportRuntimeError> for AgentRemotePeerAcceptError {
     fn from(error: RemoteServerTransportRuntimeError) -> Self {
         Self::Transport(error)
     }
@@ -170,6 +202,26 @@ impl AgentRemoteTransportRuntime {
         &self.authority_owner
     }
 
+    /// Accepts one peer only after the existing C03c lower-transport identity checks succeed.
+    ///
+    /// The expected peer value is a certificate-derived transport identity, not a logical device
+    /// identity and not a capability grant. The endpoint-level reachability authority owner remains
+    /// retained by `self` whether acceptance succeeds or fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgentRemotePeerAcceptError`] for C03c/bridge timeout, endpoint, handshake, ALPN, or
+    /// exact expected transport-identity validation failure.
+    pub async fn accept_authenticated_peer(
+        &self,
+        expected_peer: TransportIdentity,
+    ) -> Result<AuthenticatedRemotePeerConnection, AgentRemotePeerAcceptError> {
+        self.transport
+            .accept_authenticated_peer(expected_peer)
+            .await
+            .map_err(Into::into)
+    }
+
     /// Returns the kernel-selected local UDP address of the real mesh endpoint.
     ///
     /// # Errors
@@ -196,8 +248,11 @@ impl AgentRemoteTransportRuntime {
 mod tests {
     use std::net::SocketAddr;
 
+    use prw_remote_bridge::remote_server_transport_runtime::RemoteServerTransportRuntimeError;
+
     use super::{
-        AgentRemoteTransportBindError, AgentRemoteTransportBindFailure, AgentRemoteTransportRuntime,
+        AgentRemotePeerAcceptError, AgentRemoteTransportBindError, AgentRemoteTransportBindFailure,
+        AgentRemoteTransportRuntime,
     };
     use crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner;
 
@@ -218,6 +273,12 @@ mod tests {
         let _ = (error, recover);
     }
 
+    fn assert_peer_error_mapping(
+        mapping: fn(RemoteServerTransportRuntimeError) -> AgentRemotePeerAcceptError,
+    ) {
+        let _ = mapping;
+    }
+
     #[test]
     fn remote_endpoint_constructor_requires_exact_authority_owner() {
         assert_constructor_signature(AgentRemoteTransportRuntime::bind_from_systemd_credentials);
@@ -229,5 +290,10 @@ mod tests {
             AgentRemoteTransportBindFailure::error,
             AgentRemoteTransportBindFailure::into_authority_owner,
         );
+    }
+
+    #[test]
+    fn accepted_peer_failure_uses_narrow_transport_error_mapping() {
+        assert_peer_error_mapping(AgentRemotePeerAcceptError::from);
     }
 }
