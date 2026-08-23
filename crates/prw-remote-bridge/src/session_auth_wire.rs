@@ -195,8 +195,7 @@ pub fn encode_session_authentication_frame(
         }
         SessionAuthenticationWireMessage::Proof(proof) => {
             if proof.signature().algorithm() != DeviceIdentityAlgorithm::EcdsaP256Sha256
-                || proof.signature().encoding()
-                    != DeviceIdentitySignatureEncoding::EcdsaSigValueDer
+                || proof.signature().encoding() != DeviceIdentitySignatureEncoding::EcdsaSigValueDer
             {
                 return Err(SessionAuthenticationWireError::UnsupportedSignatureProfile);
             }
@@ -212,8 +211,12 @@ pub fn encode_session_authentication_frame(
         }
     }
 
-    ControlFrame::new(ControlMessageKind::SessionAuthentication, request_id, payload)
-        .map_err(SessionAuthenticationWireError::Frame)
+    ControlFrame::new(
+        ControlMessageKind::SessionAuthentication,
+        request_id,
+        payload,
+    )
+    .map_err(SessionAuthenticationWireError::Frame)
 }
 
 /// Decodes one bounded PRWS message from the reserved PRWM `SessionAuthentication` envelope.
@@ -319,12 +322,9 @@ fn push_session_id(
     push_u16_len(output, bytes)
 }
 
-fn push_u16_len(
-    output: &mut Vec<u8>,
-    bytes: &[u8],
-) -> Result<(), SessionAuthenticationWireError> {
-    let len = u16::try_from(bytes.len())
-        .map_err(|_| SessionAuthenticationWireError::InvalidPayload)?;
+fn push_u16_len(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), SessionAuthenticationWireError> {
+    let len =
+        u16::try_from(bytes.len()).map_err(|_| SessionAuthenticationWireError::InvalidPayload)?;
     output.extend_from_slice(&len.to_be_bytes());
     output.extend_from_slice(bytes);
     Ok(())
