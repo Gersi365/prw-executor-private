@@ -26,6 +26,8 @@ The source path is:
 
 Transport authentication remains distinct from logical PRW session authentication. A valid mTLS peer certificate or expected `TransportIdentity` does not itself create an `AuthenticatedDeviceSession`.
 
+C03d inherits C03c's already-closed real-kernel UDP/QUIC/mTLS and expected-peer-`TransportIdentity` evidence. C03d does not duplicate the C03c certificate/socket fixture merely to retest that lower transport layer; its focused validation proves the newly introduced PRWS codec and Phase 128 typed-authentication composition. A later composition checkpoint may exercise the entire session exchange over a running real-socket orchestration path without changing these wire semantics.
+
 ## PRWS v1 payload
 
 Every C03d payload carried inside PRWM `SessionAuthentication` uses:
@@ -67,26 +69,28 @@ No algorithm negotiation or bearer credential is introduced.
 
 ## QUIC stream rule
 
-C03c intentionally materialized one complete PRWM frame per QUIC send direction. C03d therefore uses one bidirectional QUIC stream per challenge/proof exchange:
+C03c intentionally materialized one complete PRWM frame per QUIC send direction. C03d therefore materializes async stream adapters for one bidirectional QUIC stream per challenge/proof exchange:
 
 - server send direction: exactly one challenge frame, then finish;
 - client send direction: exactly one proof frame, then finish.
 
 No extra ACK, lease, retry, reconnect or multi-frame stream semantics are added here.
 
-## Required real validation
+## Required focused validation
 
-C03d must prove on real loopback UDP/QUIC/mTLS sockets that:
+C03d must prove that:
 
-1. C03c still revalidates expected peer `TransportIdentity` before the stream is admitted;
+1. C03c remains the authoritative real UDP/QUIC/mTLS and expected-peer-`TransportIdentity` lower transport boundary;
 2. server creates the challenge with existing `SessionAuthenticationService`;
-3. challenge crosses a real QUIC stream in PRWM `SessionAuthentication` framing;
+3. the typed challenge encodes into PRWM `SessionAuthentication` with the selected PRWS v1 payload and a non-zero correlation identifier;
 4. client decodes and rehydrates the typed challenge against the expected enrolled device binding;
 5. client signs through the existing Phase 128 Ubuntu device-identity signer;
-6. proof crosses the reverse QUIC stream direction using the same PRWM request identifier;
-7. server decodes and submits the proof to the existing `SessionAuthenticationService`;
+6. the proof encodes/decodes under the same PRWM correlation identifier and locked P-256 DER signature profile;
+7. server submits the decoded proof to the existing `SessionAuthenticationService`;
 8. successful verification returns the exact bound `AuthenticatedDeviceSession`;
-9. malformed magic/version/flags/kind/truncation/trailing data, invalid session identifiers, invalid signature bounds/profile, wrong outer PRWM kind and correlation mismatch fail closed before authentication completion.
+9. malformed magic/version/flags/kind/truncation/trailing data, invalid session identifiers, invalid signature bounds/profile and wrong outer PRWM kind fail closed before authentication completion;
+10. the async send/receive adapters compile directly against the already-validated C03c `MeshControlStream` boundary without introducing another transport implementation;
+11. no new direct certificate-generation, TLS-runtime or executor dependency is added to `prw-remote-bridge`, so the locked dependency graph remains byte-stable except for the existing `prw-core` dependency moving from test-only to production use.
 
 ## Negative guarantees
 
@@ -110,10 +114,10 @@ C03d should remain bounded to:
 
 - this contract;
 - one reusable `prw-remote-bridge` session-auth wire module and module export;
-- only the dependency declarations required for the adapter/test boundary;
-- one focused real-socket integration test.
+- the minimal `prw-core` dependency-scope move required by the production wire adapter;
+- one focused typed challenge/proof composition validation using dependencies already present in the locked graph.
 
-No Agent `main.rs`, Android application source, workflow or production runtime activation change is authorized.
+`Cargo.lock` must remain byte-stable. No Agent `main.rs`, Android application source, workflow or production runtime activation change is authorized.
 
 ## Completion gate
 
