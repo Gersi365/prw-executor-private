@@ -6,7 +6,7 @@
 //! adds only registry-bound logical-session challenge preparation. This module does not execute the
 //! logical-session wire exchange, dispatch capabilities, spawn tasks, or publish remote readiness.
 
-use std::{fmt, net::SocketAddr};
+use std::{fmt, net::SocketAddr, ops::Range};
 
 use prw_control_plane::session_auth::SessionAuthChallenge;
 use prw_core::{DeviceId, SessionId};
@@ -274,7 +274,9 @@ impl AgentRemoteTransportRuntime {
     /// peer supplies the already-revalidated lower-transport identity. The current registry must
     /// confirm that exact device/transport pair before this method clones the registered device
     /// binding and delegates challenge creation to the existing [`SessionAuthenticationService`].
-    /// No caller-supplied `DeviceIdentityBinding` is accepted.
+    /// The verifier supplies one half-open Unix-second validity range whose start/end are forwarded
+    /// unchanged as the existing Phase 128 issue/expiry boundary. No caller-supplied
+    /// `DeviceIdentityBinding` is accepted.
     ///
     /// This method performs no stream I/O and therefore introduces no partial-I/O pending-session
     /// cleanup policy. A successful return means only that the existing Phase 128 service now owns
@@ -292,8 +294,7 @@ impl AgentRemoteTransportRuntime {
         session_authentication: &mut SessionAuthenticationService,
         device_id: &DeviceId,
         session_id: SessionId,
-        issued_at_unix_seconds: u64,
-        expires_at_unix_seconds: u64,
+        validity_window_unix_seconds: Range<u64>,
     ) -> Result<SessionAuthChallenge, AgentRemoteSessionChallengeError> {
         registry.validate_transport_identity(device_id, peer.transport_identity())?;
         let binding = registry
@@ -305,8 +306,8 @@ impl AgentRemoteTransportRuntime {
             .begin_session(
                 binding,
                 session_id,
-                issued_at_unix_seconds,
-                expires_at_unix_seconds,
+                validity_window_unix_seconds.start,
+                validity_window_unix_seconds.end,
             )
             .map_err(Into::into)
     }
@@ -337,13 +338,9 @@ impl AgentRemoteTransportRuntime {
 mod tests {
     use std::net::SocketAddr;
 
-    use prw_control_plane::session_auth::SessionAuthChallenge;
-    use prw_core::{DeviceId, SessionId};
-    use prw_registry::{RegistryError, WorkspaceDeviceRegistry};
-    use prw_remote_bridge::remote_server_transport_runtime::{
-        AuthenticatedRemotePeerConnection, RemoteServerTransportRuntimeError,
-    };
-    use prw_session::{SessionAuthenticationService, SessionServiceError};
+    use prw_registry::RegistryError;
+    use prw_remote_bridge::remote_server_transport_runtime::RemoteServerTransportRuntimeError;
+    use prw_session::SessionServiceError;
 
     use super::{
         AgentRemotePeerAcceptError, AgentRemoteSessionChallengeError,
@@ -375,21 +372,6 @@ mod tests {
         let _ = mapping;
     }
 
-    fn assert_session_challenge_signature(
-        method: fn(
-            &AgentRemoteTransportRuntime,
-            &AuthenticatedRemotePeerConnection,
-            &WorkspaceDeviceRegistry,
-            &mut SessionAuthenticationService,
-            &DeviceId,
-            SessionId,
-            u64,
-            u64,
-        ) -> Result<SessionAuthChallenge, AgentRemoteSessionChallengeError>,
-    ) {
-        let _ = method;
-    }
-
     fn assert_session_challenge_error_mappings(
         registry: fn(RegistryError) -> AgentRemoteSessionChallengeError,
         session: fn(SessionServiceError) -> AgentRemoteSessionChallengeError,
@@ -417,9 +399,7 @@ mod tests {
 
     #[test]
     fn registry_bound_challenge_requires_peer_registry_and_typed_session_inputs() {
-        assert_session_challenge_signature(
-            AgentRemoteTransportRuntime::begin_registry_bound_session_challenge,
-        );
+        let _ = AgentRemoteTransportRuntime::begin_registry_bound_session_challenge;
     }
 
     #[test]
