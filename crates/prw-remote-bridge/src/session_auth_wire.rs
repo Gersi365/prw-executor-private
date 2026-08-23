@@ -7,15 +7,12 @@
 use std::fmt;
 
 use prw_control_plane::{
-    DeviceIdentityAlgorithm, DeviceIdentityBinding, DeviceIdentitySignature,
-    DeviceIdentitySignatureEncoding,
+    DeviceIdentityAlgorithm, DeviceIdentitySignature, DeviceIdentitySignatureEncoding,
     session_auth::{
         MAX_SESSION_AUTH_CHALLENGE_LIFETIME_SECONDS, MAX_SESSION_AUTH_IDENTIFIER_BYTES,
-        SESSION_AUTH_NONCE_LEN, SessionAuthChallenge, SessionAuthChallengeState, SessionAuthNonce,
-        SessionAuthProof,
+        SESSION_AUTH_NONCE_LEN, SessionAuthChallenge, SessionAuthNonce, SessionAuthProof,
     },
 };
-use prw_core::SessionId;
 use prw_remote_transport::{
     ControlFrame, ControlMessageKind, RemoteTransportError,
     runtime::{MeshControlStream, MeshQuicRuntimeError},
@@ -41,12 +38,10 @@ const PROOF_KIND: u16 = 2;
 pub enum SessionAuthenticationWireError {
     /// The outer PRWM frame was not the reserved `SessionAuthentication` kind.
     InvalidOuterKind,
-    /// PRWS structure, bounds, UTF-8, lifetime, or trailing data were invalid.
+    /// PRWS structure, bounds, UTF-8, lifetime, identifier, or trailing data were invalid.
     InvalidPayload,
     /// A proof used a device-signature profile other than the locked Phase 128 profile.
     UnsupportedSignatureProfile,
-    /// The decoded challenge could not be rehydrated against the expected enrolled binding.
-    ChallengeRehydration,
     /// PRWM frame construction failed.
     Frame(RemoteTransportError),
     /// Real QUIC stream I/O failed.
@@ -59,7 +54,6 @@ impl fmt::Display for SessionAuthenticationWireError {
             Self::InvalidOuterKind => "invalid outer PRWM kind for session authentication",
             Self::InvalidPayload => "invalid logical-session authentication wire payload",
             Self::UnsupportedSignatureProfile => "unsupported logical-session signature profile",
-            Self::ChallengeRehydration => "logical-session challenge rehydration failed",
             Self::Frame(_) => "failed to construct logical-session PRWM frame",
             Self::Runtime(_) => "logical-session QUIC stream I/O failed",
         };
@@ -92,7 +86,7 @@ impl From<MeshQuicRuntimeError> for SessionAuthenticationWireError {
 /// Transport representation of one server-issued Phase 128 challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionAuthenticationWireChallenge {
-    session_id: SessionId,
+    session_id: String,
     nonce: SessionAuthNonce,
     issued_at_unix_seconds: u64,
     expires_at_unix_seconds: u64,
@@ -103,16 +97,16 @@ impl SessionAuthenticationWireChallenge {
     #[must_use]
     pub fn from_typed(challenge: &SessionAuthChallenge) -> Self {
         Self {
-            session_id: challenge.session_id().clone(),
+            session_id: challenge.session_id().as_str().to_owned(),
             nonce: challenge.nonce(),
             issued_at_unix_seconds: challenge.issued_at_unix_seconds(),
             expires_at_unix_seconds: challenge.expires_at_unix_seconds(),
         }
     }
 
-    /// Returns the challenge session identifier.
+    /// Returns the bounded UTF-8 session identifier carried on the wire.
     #[must_use]
-    pub const fn session_id(&self) -> &SessionId {
+    pub fn session_id(&self) -> &str {
         &self.session_id
     }
 
@@ -133,26 +127,43 @@ impl SessionAuthenticationWireChallenge {
     pub const fn expires_at_unix_seconds(&self) -> u64 {
         self.expires_at_unix_seconds
     }
+}
 
-    /// Rehydrates the existing typed challenge against the expected enrolled device binding.
-    ///
-    /// # Errors
-    ///
-    /// Fails when the supplied binding is not enrolled or the challenge lifetime violates the
-    /// locked Phase 128 bound.
-    pub fn to_typed_challenge(
-        &self,
-        expected_binding: &DeviceIdentityBinding,
-    ) -> Result<SessionAuthChallenge, SessionAuthenticationWireError> {
-        let state = SessionAuthChallengeState::new(
-            expected_binding.clone(),
-            self.session_id.clone(),
-            self.nonce,
-            self.issued_at_unix_seconds,
-            self.expires_at_unix_seconds,
-        )
-        .map_err(|_| SessionAuthenticationWireError::ChallengeRehydration)?;
-        Ok(state.challenge().clone())
+/// Transport representation of one Phase 128 device proof.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionAuthenticationWireProof {
+    session_id: String,
+    nonce: SessionAuthNonce,
+    signature: DeviceIdentitySignature,
+}
+
+impl SessionAuthenticationWireProof {
+    /// Copies the public proof fields from one typed Phase 128 proof.
+    #[must_use]
+    pub fn from_typed(proof: &SessionAuthProof) -> Self {
+        Self {
+            session_id: proof.session_id().as_str().to_owned(),
+            nonce: proof.nonce(),
+            signature: proof.signature().clone(),
+        }
+    }
+
+    /// Returns the bounded UTF-8 session identifier carried on the wire.
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    /// Returns the submitted challenge nonce.
+    #[must_use]
+    pub const fn nonce(&self) -> SessionAuthNonce {
+        self.nonce
+    }
+
+    /// Returns the locked-profile device signature.
+    #[must_use]
+    pub const fn signature(&self) -> &DeviceIdentitySignature {
+        &self.signature
     }
 }
 
@@ -161,8 +172,8 @@ impl SessionAuthenticationWireChallenge {
 pub enum SessionAuthenticationWireMessage {
     /// Server-issued challenge fields.
     Challenge(SessionAuthenticationWireChallenge),
-    /// Client device-identity proof.
-    Proof(SessionAuthProof),
+    /// Client device-identity proof fields.
+    Proof(SessionAuthenticationWireProof),
 }
 
 /// Encodes one PRWS message inside the reserved PRWM `SessionAuthentication` envelope.
@@ -272,9 +283,11 @@ pub fn decode_session_authentication_frame(
                 decoder.take(signature_len)?.to_vec(),
             )
             .map_err(|_| SessionAuthenticationWireError::InvalidPayload)?;
-            SessionAuthenticationWireMessage::Proof(SessionAuthProof::new(
-                session_id, nonce, signature,
-            ))
+            SessionAuthenticationWireMessage::Proof(SessionAuthenticationWireProof {
+                session_id,
+                nonce,
+                signature,
+            })
         }
         _ => return Err(SessionAuthenticationWireError::InvalidPayload),
     };
@@ -313,13 +326,10 @@ pub async fn receive_session_authentication_message(
 
 fn push_session_id(
     output: &mut Vec<u8>,
-    session_id: &SessionId,
+    session_id: &str,
 ) -> Result<(), SessionAuthenticationWireError> {
-    let bytes = session_id.as_str().as_bytes();
-    if bytes.is_empty() || bytes.len() > MAX_SESSION_AUTH_IDENTIFIER_BYTES {
-        return Err(SessionAuthenticationWireError::InvalidPayload);
-    }
-    push_u16_len(output, bytes)
+    validate_session_id(session_id)?;
+    push_u16_len(output, session_id.as_bytes())
 }
 
 fn push_u16_len(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), SessionAuthenticationWireError> {
@@ -327,6 +337,14 @@ fn push_u16_len(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), SessionAuthent
         u16::try_from(bytes.len()).map_err(|_| SessionAuthenticationWireError::InvalidPayload)?;
     output.extend_from_slice(&len.to_be_bytes());
     output.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn validate_session_id(value: &str) -> Result<(), SessionAuthenticationWireError> {
+    let len = value.len();
+    if len == 0 || len > MAX_SESSION_AUTH_IDENTIFIER_BYTES || value.trim().is_empty() {
+        return Err(SessionAuthenticationWireError::InvalidPayload);
+    }
     Ok(())
 }
 
@@ -382,14 +400,15 @@ impl<'a> Decoder<'a> {
         Ok(u64::from_be_bytes(bytes))
     }
 
-    fn session_id(&mut self) -> Result<SessionId, SessionAuthenticationWireError> {
+    fn session_id(&mut self) -> Result<String, SessionAuthenticationWireError> {
         let len = usize::from(self.u16()?);
         if len == 0 || len > MAX_SESSION_AUTH_IDENTIFIER_BYTES {
             return Err(SessionAuthenticationWireError::InvalidPayload);
         }
         let value = std::str::from_utf8(self.take(len)?)
             .map_err(|_| SessionAuthenticationWireError::InvalidPayload)?;
-        SessionId::new(value).map_err(|_| SessionAuthenticationWireError::InvalidPayload)
+        validate_session_id(value)?;
+        Ok(value.to_owned())
     }
 
     const fn finish(self) -> Result<(), SessionAuthenticationWireError> {
