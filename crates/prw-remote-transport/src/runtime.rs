@@ -200,7 +200,7 @@ impl MeshQuicEndpoint {
     }
 }
 
-/// One established mTLS QUIC connection whose expected peer TransportIdentity was revalidated.
+/// One established mTLS QUIC connection whose expected peer `TransportIdentity` was revalidated.
 #[derive(Debug, Clone)]
 pub struct MeshQuicConnection {
     connection: Connection,
