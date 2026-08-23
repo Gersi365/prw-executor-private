@@ -17,7 +17,15 @@ use prw_session::AuthenticatedDeviceSession;
 
 use super::RemoteSessionCapabilityRuntimeOwner;
 
+#[allow(
+    dead_code,
+    reason = "C03e-L stages the binding composition seam before separately gated operation-surface exposure"
+)]
 const REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE: u32 = 2;
+#[allow(
+    dead_code,
+    reason = "C03e-L stages the binding composition seam before separately gated operation-surface exposure"
+)]
 const REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON: &[u8] = b"remote session binding failed";
 
 /// Retains one authenticated peer and its bound capability lifetime under one Agent owner.
@@ -64,6 +72,10 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
 /// Returns the existing [`RemoteBridgeError`] produced by [`BoundRemoteSession::new`], including its
 /// current invalid-lease classification. No retry, replacement session, replacement lease, or
 /// authenticated-session deletion is attempted.
+#[allow(
+    dead_code,
+    reason = "C03e-L stages the binding composition seam before separately gated operation-surface exposure"
+)]
 pub fn compose_authenticated_remote_session(
     peer: AuthenticatedRemotePeerConnection,
     session: AuthenticatedDeviceSession,
