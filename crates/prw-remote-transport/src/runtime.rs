@@ -14,12 +14,13 @@ use prw_connectivity::TransportIdentity;
 use quinn::{
     ClientConfig, Connection, Endpoint, RecvStream, SendStream, ServerConfig, TokioRuntime,
 };
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::time::timeout;
 
 use crate::{
     CONTROL_HEADER_BYTES, ControlFrame, MAX_CONTROL_PAYLOAD_BYTES, MESH_ALPN, OPERATION_TIMEOUT,
-    RemoteTransportError, endpoint_config, negotiated_alpn, require_peer_transport_identity,
-    transport_server_name,
+    RemoteTransportError, build_server_config, endpoint_config, negotiated_alpn,
+    require_peer_transport_identity, transport_server_name,
 };
 
 /// Failure at the reusable real-socket QUIC runtime boundary.
@@ -90,6 +91,28 @@ impl From<RemoteTransportError> for MeshQuicRuntimeError {
     fn from(error: RemoteTransportError) -> Self {
         Self::Transport(error)
     }
+}
+
+/// Converts one owned root/leaf/PKCS#8 DER set through the existing locked server TLS builder.
+///
+/// This helper performs only typed DER ownership conversion. It does not bind a socket, publish
+/// readiness, authenticate a logical PRW session, or weaken the TLS/QUIC profile owned by
+/// [`build_server_config`].
+///
+/// # Errors
+///
+/// Propagates the existing locked transport validation when trust-root, certificate, private-key,
+/// rustls, or Quinn configuration rejects the supplied material.
+pub fn build_server_config_from_der(
+    root_certificate_der: Vec<u8>,
+    certificate_der: Vec<u8>,
+    private_key_pkcs8_der: Vec<u8>,
+) -> Result<ServerConfig, MeshQuicRuntimeError> {
+    let roots = vec![CertificateDer::from(root_certificate_der)];
+    let certificate_chain = vec![CertificateDer::from(certificate_der)];
+    let private_key: PrivateKeyDer<'static> =
+        PrivatePkcs8KeyDer::from(private_key_pkcs8_der).into();
+    build_server_config(roots, certificate_chain, private_key).map_err(MeshQuicRuntimeError::Transport)
 }
 
 /// One reusable Quinn endpoint backed by a real bound UDP socket.
