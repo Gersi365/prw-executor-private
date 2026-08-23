@@ -15,6 +15,7 @@ pub mod linux_bootstrap;
 )]
 pub(crate) mod linux_identity;
 pub mod local_commands;
+pub mod reachability_authority_admission;
 pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
 pub mod reachability_authority_custody_bootstrap;
