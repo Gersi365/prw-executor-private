@@ -2548,6 +2548,7 @@ dependencies = [
  "prw-forwarding",
  "prw-network",
  "prw-policy",
+ "prw-reachability-custody",
  "prw-registry",
  "prw-remote-bridge",
  "prw-session",
