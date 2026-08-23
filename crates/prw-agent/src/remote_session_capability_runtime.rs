@@ -5,6 +5,10 @@
 //! accept streams, authenticate sessions, authorize or dispatch capabilities, spawn tasks,
 //! publish remote readiness, or perform transport I/O.
 
+mod authenticated_remote_session_runtime;
+
+pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
+
 use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
 /// Agent-owned lifetime boundary for one already-bound remote session.
