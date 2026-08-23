@@ -10,8 +10,7 @@
 use std::ops::Range;
 
 use prw_remote_bridge::{
-    RemoteBridgeError,
-    remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
+    RemoteBridgeError, remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
     remote_session_binding::BoundRemoteSession,
 };
 use prw_session::AuthenticatedDeviceSession;
@@ -98,8 +97,7 @@ mod tests {
     use std::ops::Range;
 
     use prw_remote_bridge::{
-        RemoteBridgeError,
-        remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
+        RemoteBridgeError, remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
     };
     use prw_session::AuthenticatedDeviceSession;
 
@@ -123,7 +121,8 @@ mod tests {
             AuthenticatedRemotePeerConnection,
             AuthenticatedDeviceSession,
             Range<u64>,
-        ) -> Result<AuthenticatedRemoteSessionRuntimeOwner, RemoteBridgeError>,
+        )
+            -> Result<AuthenticatedRemoteSessionRuntimeOwner, RemoteBridgeError>,
     ) {
         let _ = composition;
     }
