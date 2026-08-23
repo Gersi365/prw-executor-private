@@ -74,7 +74,7 @@ fn fixtures() -> (CertificateDer<'static>, PeerMaterial, PeerMaterial) {
     (ca.der().clone(), make_leaf(&ca), make_leaf(&ca))
 }
 
-fn loopback_any() -> SocketAddr {
+const fn loopback_any() -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)
 }
 
