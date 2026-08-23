@@ -46,7 +46,10 @@ fn logical_session_challenge_and_proof_round_trip_into_existing_authentication_s
         ),
     )
     .expect("encode challenge frame");
-    assert_eq!(challenge_frame.kind(), ControlMessageKind::SessionAuthentication);
+    assert_eq!(
+        challenge_frame.kind(),
+        ControlMessageKind::SessionAuthentication
+    );
     assert_eq!(challenge_frame.request_id(), 91);
 
     let decoded_challenge = match decode_session_authentication_frame(&challenge_frame)
@@ -68,15 +71,17 @@ fn logical_session_challenge_and_proof_round_trip_into_existing_authentication_s
         &SessionAuthenticationWireMessage::Proof(proof),
     )
     .expect("encode proof frame");
-    assert_eq!(proof_frame.kind(), ControlMessageKind::SessionAuthentication);
+    assert_eq!(
+        proof_frame.kind(),
+        ControlMessageKind::SessionAuthentication
+    );
     assert_eq!(proof_frame.request_id(), challenge_frame.request_id());
 
-    let decoded_proof = match decode_session_authentication_frame(&proof_frame)
-        .expect("decode proof frame")
-    {
-        SessionAuthenticationWireMessage::Proof(proof) => proof,
-        SessionAuthenticationWireMessage::Challenge(_) => panic!("expected proof"),
-    };
+    let decoded_proof =
+        match decode_session_authentication_frame(&proof_frame).expect("decode proof frame") {
+            SessionAuthenticationWireMessage::Proof(proof) => proof,
+            SessionAuthenticationWireMessage::Challenge(_) => panic!("expected proof"),
+        };
     let authenticated = service
         .submit_proof(&session_id, &decoded_proof, 1_001)
         .expect("existing session service authenticates decoded proof");
