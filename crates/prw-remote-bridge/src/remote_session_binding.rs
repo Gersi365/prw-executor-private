@@ -41,11 +41,8 @@ impl BoundRemoteSession {
         issued_at_unix_seconds: u64,
         expires_at_unix_seconds: u64,
     ) -> Result<Self, RemoteBridgeError> {
-        let lease = RemoteSessionLease::new(
-            session,
-            issued_at_unix_seconds,
-            expires_at_unix_seconds,
-        )?;
+        let lease =
+            RemoteSessionLease::new(session, issued_at_unix_seconds, expires_at_unix_seconds)?;
         Ok(Self {
             transport_identity,
             lease,
