@@ -25,9 +25,6 @@ prw-terminal = { path = "../prw-terminal" }
 [dev-dependencies]
 aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
 prw-device-identity-signer = { path = "../prw-device-identity-signer" }
-rcgen = { version = "=0.14.8", default-features = false, features = ["aws_lc_rs"] }
-rustls = { version = "=0.23.43", default-features = false, features = ["std", "aws_lc_rs"] }
-tokio = { version = "=1.53.1", default-features = false, features = ["rt", "macros"] }
 
 [lints]
 workspace = true
