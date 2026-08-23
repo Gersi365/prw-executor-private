@@ -14,6 +14,7 @@ prw-files = { path = "../prw-files" }
 prw-forwarding = { path = "../prw-forwarding" }
 prw-network = { path = "../prw-network" }
 prw-policy = { path = "../prw-policy" }
+prw-reachability-custody = { path = "../prw-reachability-custody" }
 prw-registry = { path = "../prw-registry" }
 prw-remote-bridge = { path = "../prw-remote-bridge" }
 prw-session = { path = "../prw-session" }
