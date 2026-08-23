@@ -27,34 +27,44 @@ jobs:
         run: |
           set -euo pipefail
           cargo metadata --format-version 1 --no-deps > /dev/null
+          git diff --no-ext-diff -- Cargo.lock || true
           python3 - <<'PY'
           from pathlib import Path
+          import difflib
           import subprocess
 
           before = subprocess.check_output(["git", "show", "HEAD:Cargo.lock"], text=True)
           after = Path("Cargo.lock").read_text()
-          dep = ' "prw-reachability-custody",\n'
+          dep_line = ' "prw-reachability-custody",\n'
 
-          marker = '[[package]]\nname = "prw-agent"\n'
-          start = before.index(marker)
-          end = before.index('\n[[package]]', start + len(marker))
-          before_agent = before[start:end]
-
-          if dep in before_agent:
-              expected = before
+          if before == after:
+              marker = '[[package]]\nname = "prw-agent"\n'
+              start = after.index(marker)
+              end = after.index('\n[[package]]', start + len(marker))
+              if dep_line not in after[start:end]:
+                  raise SystemExit("CG dependency is absent but cargo metadata produced no lock delta")
           else:
-              needle = ' "prw-policy",\n "prw-registry",\n'
-              if before_agent.count(needle) != 1:
-                  raise SystemExit("expected unique prw-agent lock insertion point missing")
-              expected = before[:start] + before_agent.replace(
-                  needle,
-                  ' "prw-policy",\n "prw-reachability-custody",\n "prw-registry",\n',
-                  1,
-              ) + before[end:]
+              diff = list(difflib.ndiff(before.splitlines(keepends=True), after.splitlines(keepends=True)))
+              added = [line[2:] for line in diff if line.startswith('+ ')]
+              removed = [line[2:] for line in diff if line.startswith('- ')]
+              if removed or added != [dep_line]:
+                  raise SystemExit(
+                      f"Cargo.lock drift exceeds one authorized line: added={added!r} removed={removed!r}"
+                  )
 
-          if after != expected:
-              subprocess.run(["git", "diff", "--", "Cargo.lock"], check=False)
-              raise SystemExit("Cargo.lock drift exceeds the single authorized CG dependency line")
+              marker = '[[package]]\nname = "prw-agent"\n'
+              start = after.index(marker)
+              end = after.index('\n[[package]]', start + len(marker))
+              if dep_line not in after[start:end]:
+                  raise SystemExit("authorized dependency line was not added inside prw-agent lock block")
+
+          cargo_marker = '[[package]]\nname = "prw-reachability-custody"\n'
+          before_start = before.index(cargo_marker)
+          before_end = before.index('\n[[package]]', before_start + len(cargo_marker))
+          after_start = after.index(cargo_marker)
+          after_end = after.index('\n[[package]]', after_start + len(cargo_marker))
+          if before[before_start:before_end] != after[after_start:after_end]:
+              raise SystemExit("existing prw-reachability-custody package entry drifted")
           PY
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
           git diff --exit-code -- . ':!Cargo.lock'
