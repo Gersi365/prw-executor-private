@@ -185,6 +185,29 @@ impl SessionAuthenticationService {
         Ok(authenticated)
     }
 
+    /// Explicitly aborts one still-pending session-authentication transaction.
+    ///
+    /// This removes only the private pending challenge state. It does not return challenge or
+    /// identity material, remove an authenticated session, retry authentication, close a transport,
+    /// or grant any capability. Cleanup is explicit rather than delegated to `Drop`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionServiceError::SessionAlreadyAuthenticated`] if the identifier has already
+    /// authenticated, or [`SessionServiceError::UnknownSession`] if no pending transaction exists.
+    pub fn abort_pending_session(
+        &mut self,
+        session_id: &SessionId,
+    ) -> Result<(), SessionServiceError> {
+        if self.authenticated.contains_key(session_id) {
+            return Err(SessionServiceError::SessionAlreadyAuthenticated);
+        }
+        if self.pending.remove(session_id).is_none() {
+            return Err(SessionServiceError::UnknownSession);
+        }
+        Ok(())
+    }
+
     /// Returns a completed authenticated session by identifier.
     #[must_use]
     pub fn authenticated_session(
@@ -313,6 +336,60 @@ mod tests {
     }
 
     #[test]
+    fn explicit_abort_removes_only_pending_state() {
+        let signer = signer();
+        let bound = binding(&signer, DeviceLifecycle::Enrolled);
+        let session_id = SessionId::new("session-abort").expect("session id");
+        let mut service = SessionAuthenticationService::new();
+        service
+            .begin_session(bound.clone(), session_id.clone(), 10, 100)
+            .expect("begin pending session");
+
+        assert_eq!(service.pending_count(), 1);
+        assert_eq!(service.authenticated_count(), 0);
+        assert_eq!(service.abort_pending_session(&session_id), Ok(()));
+        assert_eq!(service.pending_count(), 0);
+        assert_eq!(service.authenticated_count(), 0);
+        assert_eq!(
+            service.abort_pending_session(&session_id),
+            Err(SessionServiceError::UnknownSession)
+        );
+        assert!(
+            service
+                .begin_session(bound, session_id, 101, 200)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn authenticated_session_cannot_be_aborted() {
+        let signer = signer();
+        let bound = binding(&signer, DeviceLifecycle::Enrolled);
+        let session_id = SessionId::new("session-authenticated-abort").expect("session id");
+        let mut service = SessionAuthenticationService::new();
+        let challenge = service
+            .begin_session(bound.clone(), session_id.clone(), 10, 100)
+            .expect("begin session");
+        let proof = signer
+            .sign_session_auth_proof(&bound, &challenge)
+            .expect("proof");
+        let authenticated = service
+            .submit_proof(&session_id, &proof, 11)
+            .expect("authenticate session");
+
+        assert_eq!(
+            service.abort_pending_session(&session_id),
+            Err(SessionServiceError::SessionAlreadyAuthenticated)
+        );
+        assert_eq!(service.pending_count(), 0);
+        assert_eq!(service.authenticated_count(), 1);
+        assert_eq!(
+            service.authenticated_session(&session_id),
+            Some(&authenticated)
+        );
+    }
+
+    #[test]
     fn proof_for_other_session_is_rejected_without_consuming_correct_challenge() {
         let signer = signer();
         let bound = binding(&signer, DeviceLifecycle::Enrolled);
@@ -398,6 +475,39 @@ mod tests {
             Err(SessionServiceError::ProofRejected)
         );
         assert!(service.submit_proof(&session_id, &correct, 101).is_ok());
+    }
+
+    #[test]
+    fn rejected_proof_remains_pending_until_explicit_abort() {
+        let signer = signer();
+        let bound = binding(&signer, DeviceLifecycle::Enrolled);
+        let session_id = SessionId::new("session-rejected-abort").expect("session id");
+        let mut service = SessionAuthenticationService::new();
+        let challenge = service
+            .begin_session(bound.clone(), session_id.clone(), 100, 200)
+            .expect("begin session");
+        let correct = signer
+            .sign_session_auth_proof(&bound, &challenge)
+            .expect("correct proof");
+        let wrong = SessionAuthProof::new(
+            session_id.clone(),
+            SessionAuthNonce::new([0x5A; 32]),
+            DeviceIdentitySignature::new(
+                correct.signature().algorithm(),
+                correct.signature().encoding(),
+                correct.signature().as_bytes().to_vec(),
+            )
+            .expect("copy typed signature"),
+        );
+
+        assert_eq!(
+            service.submit_proof(&session_id, &wrong, 101),
+            Err(SessionServiceError::ProofRejected)
+        );
+        assert_eq!(service.pending_count(), 1);
+        assert_eq!(service.abort_pending_session(&session_id), Ok(()));
+        assert_eq!(service.pending_count(), 0);
+        assert_eq!(service.authenticated_count(), 0);
     }
 
     #[test]
