@@ -48,7 +48,9 @@ pub enum AgentRemoteSessionAuthenticationPrimaryError {
 impl fmt::Display for AgentRemoteSessionAuthenticationPrimaryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Transport(_) => formatter.write_str("remote session control-stream accept failed"),
+            Self::Transport(_) => {
+                formatter.write_str("remote session control-stream accept failed")
+            }
             Self::Wire(_) => formatter.write_str("remote session authentication wire failed"),
             Self::RequestIdMismatch => {
                 formatter.write_str("remote session authentication request id mismatch")
@@ -259,7 +261,9 @@ fn fail_transaction(
     session_id: &SessionId,
     primary: AgentRemoteSessionAuthenticationPrimaryError,
 ) -> AgentRemoteSessionAuthenticationFailure {
-    let cleanup_error = session_authentication.abort_pending_session(session_id).err();
+    let cleanup_error = session_authentication
+        .abort_pending_session(session_id)
+        .err();
     peer.close(
         SESSION_AUTHENTICATION_FAILURE_CLOSE_CODE,
         SESSION_AUTHENTICATION_FAILURE_CLOSE_REASON,
