@@ -4,6 +4,8 @@
 //! not grant PRW capabilities, perform NAT traversal, resolve DNS, mutate host networking,
 //! or integrate the production Agent.
 
+pub mod runtime;
+
 use std::{fmt, sync::Arc, time::Duration};
 
 use aws_lc_rs::digest::{SHA256, digest};
