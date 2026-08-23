@@ -30,7 +30,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import subprocess
-          import sys
 
           before = subprocess.check_output(["git", "show", "HEAD:Cargo.lock"], text=True)
           after = Path("Cargo.lock").read_text()
@@ -44,12 +43,12 @@ jobs:
           if dep in before_agent:
               expected = before
           else:
-              needle = ' "prw-registry",\n "prw-remote-bridge",\n'
+              needle = ' "prw-policy",\n "prw-registry",\n'
               if before_agent.count(needle) != 1:
                   raise SystemExit("expected unique prw-agent lock insertion point missing")
               expected = before[:start] + before_agent.replace(
                   needle,
-                  ' "prw-registry",\n "prw-reachability-custody",\n "prw-remote-bridge",\n',
+                  ' "prw-policy",\n "prw-reachability-custody",\n "prw-registry",\n',
                   1,
               ) + before[end:]
 
