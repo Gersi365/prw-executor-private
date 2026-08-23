@@ -19,6 +19,7 @@ pub mod reachability_authority_admission;
 pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
 pub mod reachability_authority_custody_bootstrap;
+pub mod remote_session_authentication_transaction;
 pub mod remote_transport_runtime;
 
 use std::fmt;
