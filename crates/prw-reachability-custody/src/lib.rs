@@ -4,6 +4,8 @@
 //! It does not provision credentials, connect to etcd, activate authority lifecycle operations,
 //! modify systemd units, or expose private-key bytes through a public API.
 
+pub mod mesh_transport_custody;
+
 use std::fmt;
 
 use prw_control_plane::reachability_acquisition_evidence::bootstrap::{
