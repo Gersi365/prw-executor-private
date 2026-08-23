@@ -54,8 +54,7 @@ struct Fixture {
 fn signer() -> UbuntuEnrollmentSigner {
     let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &SystemRandom::new())
         .expect("generate disposable C03e device key");
-    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref())
-        .expect("load disposable C03e signer")
+    UbuntuEnrollmentSigner::from_pkcs8_v1_der(pkcs8.as_ref()).expect("load disposable C03e signer")
 }
 
 fn fixture() -> Fixture {
@@ -157,11 +156,7 @@ fn registry_transport_rotation_invalidates_existing_bound_transport_snapshot() {
     let replacement = TransportIdentity::new([0x54; 32]).expect("replacement identity");
     fixture
         .registry
-        .rotate_transport_identity(
-            &fixture.device_id,
-            fixture.transport_identity,
-            replacement,
-        )
+        .rotate_transport_identity(&fixture.device_id, fixture.transport_identity, replacement)
         .expect("rotate current transport identity");
     let policy = AgentStatusPolicy;
     let bridge = CapabilityBridge::new(&fixture.registry, &policy);
@@ -202,11 +197,7 @@ fn failed_bound_authorization_never_invokes_dispatcher() {
     let replacement = TransportIdentity::new([0x55; 32]).expect("replacement identity");
     fixture
         .registry
-        .rotate_transport_identity(
-            &fixture.device_id,
-            fixture.transport_identity,
-            replacement,
-        )
+        .rotate_transport_identity(&fixture.device_id, fixture.transport_identity, replacement)
         .expect("rotate current transport identity");
     let policy = AgentStatusPolicy;
     let bridge = CapabilityBridge::new(&fixture.registry, &policy);
