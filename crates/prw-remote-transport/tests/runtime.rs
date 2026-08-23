@@ -34,11 +34,11 @@ fn make_leaf(ca: &CertifiedIssuer<'_, KeyPair>) -> PeerMaterial {
     let provisional = provisional_params
         .signed_by(&key, ca)
         .expect("sign provisional test leaf");
-    let identity = transport_identity_from_certificate(provisional.der())
-        .expect("derive transport identity");
+    let identity =
+        transport_identity_from_certificate(provisional.der()).expect("derive transport identity");
 
-    let mut final_params = CertificateParams::new(vec![transport_server_name(identity)])
-        .expect("valid transport SAN");
+    let mut final_params =
+        CertificateParams::new(vec![transport_server_name(identity)]).expect("valid transport SAN");
     final_params.extended_key_usages = vec![
         ExtendedKeyUsagePurpose::ServerAuth,
         ExtendedKeyUsagePurpose::ClientAuth,
@@ -49,7 +49,10 @@ fn make_leaf(ca: &CertifiedIssuer<'_, KeyPair>) -> PeerMaterial {
         .expect("sign final test leaf")
         .der()
         .clone();
-    assert_eq!(transport_identity_from_certificate(&certificate), Ok(identity));
+    assert_eq!(
+        transport_identity_from_certificate(&certificate),
+        Ok(identity)
+    );
 
     PeerMaterial {
         certificate,
@@ -105,7 +108,10 @@ async fn reusable_runtime_exchanges_prwm_over_real_udp_quic_mtls() {
             .accept_authenticated(client_material.identity)
             .await
             .expect("authenticated server connection");
-        assert_eq!(connection.peer_transport_identity(), client_material.identity);
+        assert_eq!(
+            connection.peer_transport_identity(),
+            client_material.identity
+        );
         let mut stream = connection
             .accept_control_stream()
             .await
@@ -125,7 +131,10 @@ async fn reusable_runtime_exchanges_prwm_over_real_udp_quic_mtls() {
             .connect_authenticated(server_addr, server_material.identity)
             .await
             .expect("authenticated client connection");
-        assert_eq!(connection.peer_transport_identity(), server_material.identity);
+        assert_eq!(
+            connection.peer_transport_identity(),
+            server_material.identity
+        );
         let mut stream = connection
             .open_control_stream()
             .await
