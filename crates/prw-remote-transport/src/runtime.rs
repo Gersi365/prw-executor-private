@@ -112,7 +112,8 @@ pub fn build_server_config_from_der(
     let certificate_chain = vec![CertificateDer::from(certificate_der)];
     let private_key: PrivateKeyDer<'static> =
         PrivatePkcs8KeyDer::from(private_key_pkcs8_der).into();
-    build_server_config(roots, certificate_chain, private_key).map_err(MeshQuicRuntimeError::Transport)
+    build_server_config(roots, certificate_chain, private_key)
+        .map_err(MeshQuicRuntimeError::Transport)
 }
 
 /// One reusable Quinn endpoint backed by a real bound UDP socket.
