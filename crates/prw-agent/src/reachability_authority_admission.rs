@@ -2,9 +2,10 @@
 //!
 //! C02f-CH preserves the existing local Agent readiness meaning and requires successful
 //! reachability authority construction before future authority-dependent remote admission. This
-//! module materializes only that source-level admission token and callable bootstrap/admission
-//! seam. It does not wire the operation into `main.rs`, runtime readiness, remote transport, or
-//! any background/retry lifecycle.
+//! module materializes the source-level admission token and callable bootstrap/admission seam.
+//! C02f-CK additionally materializes the Agent-owned lifetime boundary for one admitted authority.
+//! Neither path is wired into `main.rs`, runtime readiness, remote transport, or background/retry
+//! lifecycle.
 
 use prw_remote_bridge::reachability_live_owner_async::ReachabilityLiveOwnerComposedAsyncAuthority;
 
@@ -27,6 +28,34 @@ impl ReachabilityLiveOwnerAuthorityAdmission {
     #[must_use]
     pub const fn authority(&self) -> &ReachabilityLiveOwnerComposedAsyncAuthority {
         &self.authority
+    }
+}
+
+/// Agent-owned lifetime boundary for one successfully admitted reachability authority.
+///
+/// Construction performs only ownership composition. The owner retains the opaque admission token
+/// and exposes mutable authority access only inside `prw-agent` for a future separately gated
+/// reachability operation consumer.
+pub struct ReachabilityAuthorityRuntimeOwner {
+    admission: ReachabilityLiveOwnerAuthorityAdmission,
+}
+
+impl ReachabilityAuthorityRuntimeOwner {
+    /// Consumes one successful admission token without performing I/O.
+    #[must_use]
+    pub const fn new(admission: ReachabilityLiveOwnerAuthorityAdmission) -> Self {
+        Self { admission }
+    }
+
+    /// Returns the admitted composed authority for a separately gated Agent operation seam.
+    #[allow(
+        dead_code,
+        reason = "C02f-CK materializes a source-only seam for a separately gated consumer"
+    )]
+    pub(crate) const fn authority_mut(
+        &mut self,
+    ) -> &mut ReachabilityLiveOwnerComposedAsyncAuthority {
+        &mut self.admission.authority
     }
 }
 
@@ -54,8 +83,12 @@ pub async fn bootstrap_and_admit_reachability_live_owner_authority_from_systemd_
 mod tests {
     use std::future::Future;
 
+    use prw_remote_bridge::reachability_live_owner_async::{
+        ReachabilityLiveOwnerComposedAsyncAuthority,
+    };
+
     use super::{
-        ReachabilityLiveOwnerAuthorityAdmission,
+        ReachabilityAuthorityRuntimeOwner, ReachabilityLiveOwnerAuthorityAdmission,
         bootstrap_and_admit_reachability_live_owner_authority_from_systemd_credentials,
     };
     use crate::reachability_authority_custody_bootstrap::ReachabilityAuthorityCustodyBootstrapError;
@@ -72,10 +105,32 @@ mod tests {
     {
     }
 
+    fn assert_runtime_owner_constructor(
+        constructor: fn(
+            ReachabilityLiveOwnerAuthorityAdmission,
+        ) -> ReachabilityAuthorityRuntimeOwner,
+    ) {
+        let _ = constructor;
+    }
+
+    fn assert_runtime_owner_authority_accessor(
+        accessor: for<'a> fn(
+            &'a mut ReachabilityAuthorityRuntimeOwner,
+        ) -> &'a mut ReachabilityLiveOwnerComposedAsyncAuthority,
+    ) {
+        let _ = accessor;
+    }
+
     #[test]
     fn admission_bootstrap_has_exact_no_argument_to_admission_shape() {
         assert_admission_signature(
             bootstrap_and_admit_reachability_live_owner_authority_from_systemd_credentials,
         );
+    }
+
+    #[test]
+    fn runtime_owner_has_exact_admission_and_mutable_authority_shapes() {
+        assert_runtime_owner_constructor(ReachabilityAuthorityRuntimeOwner::new);
+        assert_runtime_owner_authority_accessor(ReachabilityAuthorityRuntimeOwner::authority_mut);
     }
 }
