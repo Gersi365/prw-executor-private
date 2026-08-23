@@ -83,9 +83,7 @@ pub async fn bootstrap_and_admit_reachability_live_owner_authority_from_systemd_
 mod tests {
     use std::future::Future;
 
-    use prw_remote_bridge::reachability_live_owner_async::{
-        ReachabilityLiveOwnerComposedAsyncAuthority,
-    };
+    use prw_remote_bridge::reachability_live_owner_async::ReachabilityLiveOwnerComposedAsyncAuthority;
 
     use super::{
         ReachabilityAuthorityRuntimeOwner, ReachabilityLiveOwnerAuthorityAdmission,
