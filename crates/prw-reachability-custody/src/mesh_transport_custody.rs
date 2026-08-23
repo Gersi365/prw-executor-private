@@ -27,7 +27,10 @@ impl fmt::Debug for MeshTransportCredentialMaterial {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MeshTransportCredentialMaterial")
-            .field("root_certificate_der_bytes", &self.root_certificate_der.len())
+            .field(
+                "root_certificate_der_bytes",
+                &self.root_certificate_der.len(),
+            )
             .field("certificate_der_bytes", &self.certificate_der.len())
             .field("private_key_pkcs8_der", &"<redacted>")
             .finish()
@@ -266,9 +269,7 @@ mod linux {
         Ok(file)
     }
 
-    fn validate_credentials_directory(
-        directory: &Path,
-    ) -> Result<(), MeshTransportCustodyError> {
+    fn validate_credentials_directory(directory: &Path) -> Result<(), MeshTransportCustodyError> {
         if !directory.is_absolute() {
             return Err(MeshTransportCustodyError::CredentialsDirectoryInvalid);
         }
@@ -358,8 +359,8 @@ mod linux {
         impl TestDirectory {
             fn new() -> Self {
                 let id = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
-                let path = std::env::temp_dir()
-                    .join(format!("prw-phase152-c03b-{}-{id}", process::id()));
+                let path =
+                    std::env::temp_dir().join(format!("prw-phase152-c03b-{}-{id}", process::id()));
                 fs::create_dir(&path).expect("create isolated C03b test directory");
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
                     .expect("secure C03b test directory mode");
