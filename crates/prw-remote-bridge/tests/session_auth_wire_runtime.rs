@@ -2,13 +2,16 @@ use aws_lc_rs::{
     rand::SystemRandom,
     signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
 };
-use prw_control_plane::DeviceIdentityBinding;
+use prw_control_plane::{
+    DeviceIdentityBinding,
+    session_auth::{SessionAuthChallengeState, SessionAuthProof},
+};
 use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
 use prw_device_identity_signer::UbuntuEnrollmentSigner;
 use prw_remote_bridge::session_auth_wire::{
     SESSION_AUTH_WIRE_MAGIC, SessionAuthenticationWireChallenge, SessionAuthenticationWireError,
-    SessionAuthenticationWireMessage, decode_session_authentication_frame,
-    encode_session_authentication_frame,
+    SessionAuthenticationWireMessage, SessionAuthenticationWireProof,
+    decode_session_authentication_frame, encode_session_authentication_frame,
 };
 use prw_remote_transport::{ControlFrame, ControlMessageKind};
 use prw_session::SessionAuthenticationService;
@@ -58,9 +61,15 @@ fn logical_session_challenge_and_proof_round_trip_into_existing_authentication_s
         SessionAuthenticationWireMessage::Challenge(wire) => wire,
         SessionAuthenticationWireMessage::Proof(_) => panic!("expected challenge"),
     };
-    let typed_challenge = decoded_challenge
-        .to_typed_challenge(&binding)
-        .expect("rehydrate typed challenge against enrolled binding");
+    let decoded_challenge_state = SessionAuthChallengeState::new(
+        binding.clone(),
+        SessionId::new(decoded_challenge.session_id()).expect("decoded session id"),
+        decoded_challenge.nonce(),
+        decoded_challenge.issued_at_unix_seconds(),
+        decoded_challenge.expires_at_unix_seconds(),
+    )
+    .expect("rehydrate typed challenge through existing domain constructor");
+    let typed_challenge = decoded_challenge_state.challenge().clone();
     assert_eq!(typed_challenge, challenge);
 
     let proof = signer
@@ -68,7 +77,9 @@ fn logical_session_challenge_and_proof_round_trip_into_existing_authentication_s
         .expect("sign existing Phase 128 proof");
     let proof_frame = encode_session_authentication_frame(
         challenge_frame.request_id(),
-        &SessionAuthenticationWireMessage::Proof(proof),
+        &SessionAuthenticationWireMessage::Proof(SessionAuthenticationWireProof::from_typed(
+            &proof,
+        )),
     )
     .expect("encode proof frame");
     assert_eq!(
@@ -77,11 +88,16 @@ fn logical_session_challenge_and_proof_round_trip_into_existing_authentication_s
     );
     assert_eq!(proof_frame.request_id(), challenge_frame.request_id());
 
-    let decoded_proof =
+    let decoded_wire_proof =
         match decode_session_authentication_frame(&proof_frame).expect("decode proof frame") {
             SessionAuthenticationWireMessage::Proof(proof) => proof,
             SessionAuthenticationWireMessage::Challenge(_) => panic!("expected proof"),
         };
+    let decoded_proof = SessionAuthProof::new(
+        SessionId::new(decoded_wire_proof.session_id()).expect("decoded proof session id"),
+        decoded_wire_proof.nonce(),
+        decoded_wire_proof.signature().clone(),
+    );
     let authenticated = service
         .submit_proof(&session_id, &decoded_proof, 1_001)
         .expect("existing session service authenticates decoded proof");
