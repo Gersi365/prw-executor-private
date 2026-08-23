@@ -1,0 +1,75 @@
+name: Phase 152 C02f-CG Lock Materialization
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - phase-152-c02f-cf-agent-authority-bootstrap-composition-source-materialization-staging
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.event.pull_request.head.ref == 'phase-152-c02f-cg-agent-reachability-custody-bootstrap-facade-source-materialization-staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact CG head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Materialize exact allowed lock delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --format-version 1 --no-deps > /dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          before = subprocess.check_output(["git", "show", "HEAD:Cargo.lock"], text=True)
+          after = Path("Cargo.lock").read_text()
+          dep = ' "prw-reachability-custody",\n'
+
+          marker = '[[package]]\nname = "prw-agent"\n'
+          start = before.index(marker)
+          end = before.index('\n[[package]]', start + len(marker))
+          before_agent = before[start:end]
+
+          if dep in before_agent:
+              expected = before
+          else:
+              needle = ' "prw-registry",\n "prw-remote-bridge",\n'
+              if before_agent.count(needle) != 1:
+                  raise SystemExit("expected unique prw-agent lock insertion point missing")
+              expected = before[:start] + before_agent.replace(
+                  needle,
+                  ' "prw-registry",\n "prw-reachability-custody",\n "prw-remote-bridge",\n',
+                  1,
+              ) + before[end:]
+
+          if after != expected:
+              subprocess.run(["git", "diff", "--", "Cargo.lock"], check=False)
+              raise SystemExit("Cargo.lock drift exceeds the single authorized CG dependency line")
+          PY
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          git diff --exit-code -- . ':!Cargo.lock'
+
+      - name: Commit lock materialization when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.lock; then
+            echo "CG lock already materialized"
+            exit 0
+          fi
+          git add Cargo.lock
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "phase 152 c02f-cg: materialize agent custody lock dependency"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
