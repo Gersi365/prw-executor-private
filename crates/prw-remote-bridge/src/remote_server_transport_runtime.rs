@@ -1,16 +1,18 @@
 //! Bridge-owned real QUIC server endpoint wrapper for the authority-gated Agent runtime.
 //!
 //! C03e-C composes the existing C03e-B DER helper and C03c real-socket endpoint behind one narrow
-//! server-runtime owner. It does not accept peers, authenticate logical sessions, grant
-//! capabilities, or publish Agent readiness.
+//! server-runtime owner. C03e-D adds only an opaque handoff for one lower-transport-authenticated
+//! peer. It does not authenticate logical sessions, grant capabilities, or publish Agent readiness.
 
 use std::{fmt, net::SocketAddr};
 
+pub use prw_connectivity::TransportIdentity;
 use prw_remote_transport::runtime::{
-    MeshQuicEndpoint, MeshQuicRuntimeError, build_server_config_from_der,
+    MeshControlStream, MeshQuicConnection, MeshQuicEndpoint, MeshQuicRuntimeError,
+    build_server_config_from_der,
 };
 
-/// Failure while constructing or querying one bridge-owned real server endpoint.
+/// Failure while constructing, querying, or accepting through one bridge-owned real server endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RemoteServerTransportRuntimeError {
@@ -37,6 +39,46 @@ impl std::error::Error for RemoteServerTransportRuntimeError {
 impl From<MeshQuicRuntimeError> for RemoteServerTransportRuntimeError {
     fn from(error: MeshQuicRuntimeError) -> Self {
         Self::Transport(error)
+    }
+}
+
+/// One established lower-transport-authenticated peer accepted by the bridge-owned server endpoint.
+///
+/// The constructor is intentionally private. Instances exist only after C03c validates the QUIC/TLS
+/// handshake, locked ALPN, and the exact expected certificate-derived [`TransportIdentity`]. Holding
+/// this value is not logical-session authentication and is not capability authorization.
+#[derive(Debug)]
+pub struct AuthenticatedRemotePeerConnection {
+    connection: MeshQuicConnection,
+}
+
+impl AuthenticatedRemotePeerConnection {
+    /// Returns the exact peer transport identity already revalidated by C03c.
+    #[must_use]
+    pub const fn transport_identity(&self) -> TransportIdentity {
+        self.connection.peer_transport_identity()
+    }
+
+    /// Accepts one peer-initiated bounded PRWM control stream.
+    ///
+    /// This exposes only the existing bounded C03c stream primitive required by the separately
+    /// gated C03d logical-session wire adapter. The raw Quinn connection is not exposed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the existing C03c bounded stream-accept failure classification.
+    pub async fn accept_control_stream(
+        &self,
+    ) -> Result<MeshControlStream, RemoteServerTransportRuntimeError> {
+        self.connection
+            .accept_control_stream()
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Explicitly closes this accepted peer connection.
+    pub fn close(&self, code: u32, reason: &[u8]) {
+        self.connection.close(code, reason);
     }
 }
 
@@ -72,6 +114,24 @@ impl RemoteServerTransportRuntime {
         Ok(Self { endpoint })
     }
 
+    /// Accepts one real QUIC/TLS peer through the existing C03c authenticated transport primitive.
+    ///
+    /// The expected identity is a transport-level certificate identity, not a logical `DeviceId`
+    /// and not an authorization grant. Successful return proves only the already-locked lower
+    /// transport checks and yields an opaque bridge-owned peer handle.
+    ///
+    /// # Errors
+    ///
+    /// Propagates C03c timeout, endpoint closure, handshake, ALPN, or exact transport-identity
+    /// validation failure through [`RemoteServerTransportRuntimeError::Transport`].
+    pub async fn accept_authenticated_peer(
+        &self,
+        expected_peer: TransportIdentity,
+    ) -> Result<AuthenticatedRemotePeerConnection, RemoteServerTransportRuntimeError> {
+        let connection = self.endpoint.accept_authenticated(expected_peer).await?;
+        Ok(AuthenticatedRemotePeerConnection { connection })
+    }
+
     /// Returns the kernel-selected local UDP address of the bound endpoint.
     ///
     /// # Errors
@@ -96,12 +156,23 @@ impl RemoteServerTransportRuntime {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+    use prw_connectivity::TransportIdentity;
     use prw_remote_transport::{RemoteTransportError, runtime::MeshQuicRuntimeError};
 
-    use super::{RemoteServerTransportRuntime, RemoteServerTransportRuntimeError};
+    use super::{
+        AuthenticatedRemotePeerConnection, RemoteServerTransportRuntime,
+        RemoteServerTransportRuntimeError,
+    };
 
     const fn loopback_any() -> SocketAddr {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)
+    }
+
+    fn assert_peer_public_surface(
+        identity: fn(&AuthenticatedRemotePeerConnection) -> TransportIdentity,
+        close: fn(&AuthenticatedRemotePeerConnection, u32, &[u8]),
+    ) {
+        let _ = (identity, close);
     }
 
     #[test]
@@ -119,5 +190,13 @@ mod tests {
                 MeshQuicRuntimeError::Transport(RemoteTransportError::InvalidTrustRoots)
             ))
         ));
+    }
+
+    #[test]
+    fn accepted_peer_public_surface_exposes_validated_identity_and_explicit_close_only() {
+        assert_peer_public_surface(
+            AuthenticatedRemotePeerConnection::transport_identity,
+            AuthenticatedRemotePeerConnection::close,
+        );
     }
 }
