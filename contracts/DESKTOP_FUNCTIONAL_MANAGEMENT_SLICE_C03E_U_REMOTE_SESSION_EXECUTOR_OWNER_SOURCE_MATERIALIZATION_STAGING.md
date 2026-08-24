@@ -25,7 +25,8 @@ Materialize only the executor-custody source selected by C03e-T:
 2. materialize one non-cloneable current-thread runtime owner;
 3. materialize one bounded construction error;
 4. expose those types only through the existing `remote_session_capability_runtime` module;
-5. stop before any future-driving, task-spawn, network, authority-sharing or production-activation surface.
+5. record the direct dependency edge in `Cargo.lock` without package/version/checksum drift;
+6. stop before any future-driving, task-spawn, network, authority-sharing or production-activation surface.
 
 ## Exact dependency surface
 
@@ -42,7 +43,11 @@ C03e-U does not add direct Agent:
 - a second executor family;
 - a second Tokio version.
 
-Because Tokio 1.53.1 is already present in the workspace dependency graph, C03e-U expects no `Cargo.lock` semantic/version change. Any unexpected lockfile change must be reviewed rather than accepted automatically.
+Canonical validation proved that the direct Agent dependency must also be represented in the workspace lockfile package metadata. Therefore `Cargo.lock` changes only by adding one existing-package dependency edge under the `prw-agent` package:
+
+`"tokio",`
+
+No Tokio package entry, version, checksum or transitive package selection changes. Tokio remains exactly `1.53.1`.
 
 ## Source placement
 
@@ -160,16 +165,34 @@ Tests must not:
 - claim readiness;
 - claim production activation.
 
+## Canonical corrective history
+
+The initial source candidate exposed two validation defects, both corrected without widening runtime semantics:
+
+1. Rust validation #1005 passed the locked graph and failed only canonical rustfmt in the executor-owner test; corrective commit `c95bb6ef80aeac377814d95b4cc869786b9353ac` applied only the canonical line wrapping.
+2. Rust validation #1006 then passed locked graph and rustfmt, but `cargo clippy --locked` refused to proceed because the new direct `prw-agent -> tokio` dependency was not yet represented in `Cargo.lock`; tests/build were therefore skipped and are not PASS evidence.
+
+The lockfile defect was corrected by a branch-scoped, self-removing one-shot workflow staged at `fe0d712653b8a4d15f1eeafe3e518a4bada8481e`. Its resulting commit `4c6152f587b36f33920645bbb28da4d3ccd312e8`:
+
+- adds exactly one line, `"tokio",`, to the `prw-agent` dependency list in `Cargo.lock`;
+- proves the corrected graph through `cargo metadata --locked --format-version 1` before committing;
+- removes the temporary corrective workflow in the same resulting commit;
+- leaves no corrective workflow path in the final tree;
+- introduces no package/version/checksum/transitive dependency drift.
+
+The push produced with the workflow token is not used as canonical completion evidence. Final completion requires fresh exact-head canonical PR validation after this contract update.
+
 ## Expected final diff boundary
 
 The intended final T -> U diff is limited to:
 
 1. this U contract;
-2. `crates/prw-agent/Cargo.toml` direct Tokio dependency;
-3. `crates/prw-agent/src/remote_session_capability_runtime.rs` child-module declaration/re-export;
-4. `crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs` source.
+2. `Cargo.lock`, with only the direct `prw-agent -> tokio` dependency edge;
+3. `crates/prw-agent/Cargo.toml` direct Tokio dependency;
+4. `crates/prw-agent/src/remote_session_capability_runtime.rs` child-module declaration/re-export;
+5. `crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs` source.
 
-`Cargo.lock`, `apps/android`, `main.rs`, root `lib.rs`, bridge/transport source, workflow, readiness, packaging/systemd and host-network paths must remain unchanged unless a concrete validation defect proves otherwise.
+`apps/android`, `main.rs`, root `lib.rs`, bridge/transport source, permanent workflow, readiness, packaging/systemd and host-network paths must remain unchanged.
 
 ## Validation requirements
 
@@ -206,7 +229,7 @@ C03e-U does not:
 
 ## Completion meaning
 
-Closure of C03e-U means only that the C03e-T-selected executor custody exists in source with the exact direct dependency and bounded constructor surface.
+Closure of C03e-U means only that the C03e-T-selected executor custody exists in source with the exact direct dependency, corrected lockfile dependency edge and bounded constructor surface.
 
 The next allowed checkpoint is one borrowed single-worker drive seam using the private runtime without task spawn. Current-authority sharing, spawned task/join ownership, concurrent sessions, `main.rs`, readiness and runtime activation remain separately gated.
 
