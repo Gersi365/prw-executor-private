@@ -15,6 +15,7 @@ pub use legacy_bridge::*;
 
 pub mod candidate_publication_freshness;
 pub mod candidate_reachability;
+pub mod capability_request_wire;
 pub mod reachability_freshness_wire;
 pub mod reachability_live_owner;
 pub mod reachability_live_owner_acquisition_composition;
