@@ -16,9 +16,7 @@ use prw_file_transfer::{TransferId, UploadPlan};
 use prw_forwarding::{ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec};
 use prw_policy::{Capability, Decision, PolicyEvaluator};
 use prw_registry::{RegistryValidatedPrincipal, WorkspaceDeviceRegistry};
-use prw_remote_transport::{
-    ControlFrame, ControlMessageKind, MAX_CONTROL_PAYLOAD_BYTES, RemoteTransportError,
-};
+use prw_remote_transport::{ControlFrame, ControlMessageKind, MAX_CONTROL_PAYLOAD_BYTES};
 use prw_session::AuthenticatedDeviceSession;
 use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
 
@@ -543,18 +541,7 @@ impl<'a, P: PolicyEvaluator> CapabilityBridge<'a, P> {
     ) -> Result<ControlFrame, RemoteBridgeError> {
         let authorized =
             self.authorize(presented_transport_identity, lease, now_unix_seconds, frame)?;
-        let response = dispatcher
-            .dispatch(&authorized)
-            .map_err(|_| RemoteBridgeError::DispatchFailed)?;
-        if response.len() > MAX_CONTROL_PAYLOAD_BYTES {
-            return Err(RemoteBridgeError::DispatchResponseTooLarge);
-        }
-        ControlFrame::new(
-            ControlMessageKind::Response,
-            authorized.request_id(),
-            response,
-        )
-        .map_err(map_transport_error)
+        crate::authorized_request_dispatch::dispatch_authorized_request(&authorized, dispatcher)
     }
 }
 
@@ -605,10 +592,6 @@ impl fmt::Display for RemoteBridgeError {
 }
 
 impl std::error::Error for RemoteBridgeError {}
-
-const fn map_transport_error(_error: RemoteTransportError) -> RemoteBridgeError {
-    RemoteBridgeError::ResponseFrameRejected
-}
 
 const fn validate_nonzero_inline_length(length: usize) -> Result<(), RemoteBridgeError> {
     if length == 0 || length > MAX_BRIDGE_INLINE_BYTES {

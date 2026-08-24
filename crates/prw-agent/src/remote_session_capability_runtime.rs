@@ -1,17 +1,20 @@
 //! Agent-owned lifetime boundary for one bound remote-session capability context.
 //!
 //! C03f selected this ownership boundary. C03e-J materializes only the source-level by-value
-//! wrapper on the current post-authentication C03e-I lineage. C03e-U adds only the separately
-//! selected executor-custody owner for future remote async work. This module still does not wire
-//! the Agent binary, publish readiness, spawn tasks, or activate remote transport.
+//! wrapper on the current post-authentication C03e-I lineage. C03e-U adds the separately selected
+//! executor-custody owner, and C03e-X adds the C03e-W-selected shared-current registry/policy
+//! authority owner. This module still does not wire the Agent binary, publish readiness, spawn
+//! tasks, or activate remote transport.
 
 mod authenticated_remote_session_runtime;
 mod remote_session_executor_runtime;
+mod shared_current_capability_authority;
 
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
 };
+pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 
 use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
