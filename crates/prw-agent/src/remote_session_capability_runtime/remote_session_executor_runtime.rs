@@ -1007,10 +1007,8 @@ mod repeated_real_admission_supervisor {
         remote_transport_runtime::AgentRemoteTransportRuntime,
     };
 
-    type ActiveRemoteWorkers = HashMap<
-        DeviceId,
-        RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>,
-    >;
+    type ActiveRemoteWorkers =
+        HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
 
     /// One bounded pre-authentication request for the repeated real-admission supervisor.
     pub struct RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
@@ -1230,10 +1228,8 @@ mod repeated_real_admission_supervisor {
         }
     }
 
-    async fn drain_registered_workers<C>(
-        active: &mut ActiveRemoteWorkers,
-        on_completion: &mut C,
-    ) where
+    async fn drain_registered_workers<C>(active: &mut ActiveRemoteWorkers, on_completion: &mut C)
+    where
         C: FnMut(RemoteSessionRegisteredWorkerCompletion),
     {
         poll_fn(|context| {
@@ -1341,16 +1337,7 @@ mod repeated_real_admission_supervisor {
             clippy::too_many_arguments,
             reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"
         )]
-        pub fn drive_repeated_real_remote_admission_collection<
-            P,
-            D,
-            T,
-            S,
-            F,
-            C,
-            R,
-            E,
-        >(
+        pub fn drive_repeated_real_remote_admission_collection<P, D, T, S, F, C, R, E>(
             &mut self,
             max_active_workers: NonZeroUsize,
             transport_runtime: &AgentRemoteTransportRuntime,
@@ -1636,12 +1623,10 @@ mod repeated_real_admission_supervisor {
             };
             let mut rejection = None;
 
-            let prepared = prepare_expected_request(
-                &active,
-                request,
-                &mut timing_factory,
-                &mut |observed| rejection = Some(observed),
-            );
+            let prepared =
+                prepare_expected_request(&active, request, &mut timing_factory, &mut |observed| {
+                    rejection = Some(observed)
+                });
 
             assert!(prepared.is_none());
             assert_eq!(timing_samples.get(), 0);
