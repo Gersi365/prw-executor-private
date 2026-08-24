@@ -1,0 +1,204 @@
+name: Phase 152 C03e-Z Temporary Shared-Current Single-Worker Materializer
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-z-shared-current-single-worker-transaction-integration-source-materialization-staging
+    paths:
+      - .github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact bounded C03e-Z source changes and self-remove
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          BRANCH='phase-152-c03e-z-shared-current-single-worker-transaction-integration-source-materialization-staging'
+          AUTH='crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs'
+          EXEC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+          CONTRACT='contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C03E_Z_SHARED_CURRENT_SINGLE_WORKER_TRANSACTION_INTEGRATION_SOURCE_MATERIALIZATION_STAGING.md'
+          WORKFLOW='.github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml'
+
+          test "${GITHUB_REF_NAME}" = "${BRANCH}"
+          test -f "${AUTH}"
+          test -f "${EXEC}"
+          test -f "${CONTRACT}"
+          test -f "${WORKFLOW}"
+          git diff --quiet
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          auth_path = Path('crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs')
+          text = auth_path.read_text()
+
+          def replace_exact(source: str, old: str, new: str, expected: int = 1) -> str:
+              count = source.count(old)
+              if count != expected:
+                  raise SystemExit(f'expected {expected} occurrence(s), found {count}: {old[:120]!r}')
+              return source.replace(old, new)
+
+          text = replace_exact(
+              text,
+              '''use prw_remote_bridge::{
+              CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
+              capability_request_wire::{''',
+              '''use prw_remote_bridge::{
+              CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
+              authorized_request_dispatch::dispatch_authorized_request,
+              capability_request_wire::{''',
+          )
+          text = replace_exact(
+              text,
+              'use super::RemoteSessionCapabilityRuntimeOwner;',
+              'use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthority};',
+          )
+          text = replace_exact(
+              text,
+              'P: PolicyEvaluator + Sync,',
+              'P: PolicyEvaluator + Send + Sync,',
+              expected=3,
+          )
+          text = replace_exact(
+              text,
+              "bridge: &CapabilityBridge<'_, P>,",
+              'authority: &SharedCurrentCapabilityAuthority<P>,',
+              expected=3,
+          )
+          text = replace_exact(
+              text,
+              '''        let response = self.capability_owner.bound_session.process_request(
+                  bridge,
+                  now_unix_seconds,
+                  &request,
+                  dispatcher,
+              )?;
+              send_capability_response_frame(&mut stream, &response).await?;''',
+              '''        let bound_session = &self.capability_owner.bound_session;
+              let authorized = authority
+                  .with_current_authority(|registry, policy| {
+                      let bridge = CapabilityBridge::new(registry, policy);
+                      bound_session.authorize(&bridge, now_unix_seconds, &request)
+                  })
+                  .await?;
+              let response = dispatch_authorized_request(&authorized, dispatcher)?;
+              send_capability_response_frame(&mut stream, &response).await?;''',
+          )
+          text = replace_exact(
+              text,
+              '.process_one_capability_request(bridge, now_unix_seconds, dispatcher)',
+              '.process_one_capability_request(authority, now_unix_seconds, dispatcher)',
+          )
+          text = replace_exact(
+              text,
+              '''            let mut request_loop = Box::pin(self.run_capability_request_loop(
+                  bridge,
+                  verifier_time_unix_seconds,
+                  dispatcher,
+              ));''',
+              '''            let mut request_loop = Box::pin(self.run_capability_request_loop(
+                  authority,
+                  verifier_time_unix_seconds,
+                  dispatcher,
+              ));''',
+          )
+          text = replace_exact(
+              text,
+              '''    /// bound session delegates exactly once to the current [`CapabilityBridge`] using caller-supplied
+              /// verifier time and mutable dispatcher. Only bridge success is sent as one response frame on
+              /// the same stream.''',
+              '''    /// bound session authorizes exactly once against the caller-supplied shared-current authority
+              /// using verifier time, then dispatches only after the authority read guard is released. Only
+              /// successful authorization and dispatch are sent as one response frame on the same stream.''',
+          )
+          text = replace_exact(
+              text,
+              '''    /// identity and lease internally, while the bridge performs current registry/policy validation.''',
+              '''    /// identity and lease internally, while an ephemeral bridge performs current registry/policy
+              /// validation inside the shared-current authority read operation.''',
+          )
+          auth_path.write_text(text)
+
+          exec_path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = exec_path.read_text()
+          text = replace_exact(
+              text,
+              'use prw_remote_bridge::{CapabilityBridge, CapabilityDispatcher};',
+              'use prw_remote_bridge::CapabilityDispatcher;',
+          )
+          text = replace_exact(
+              text,
+              '''use super::authenticated_remote_session_runtime::{
+                  AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+              };''',
+              '''use super::{
+                  SharedCurrentCapabilityAuthority,
+                  authenticated_remote_session_runtime::{
+                      AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+                  },
+              };''',
+          )
+          text = replace_exact(
+              text,
+              'P: PolicyEvaluator + Sync,',
+              'P: PolicyEvaluator + Send + Sync,',
+          )
+          text = replace_exact(
+              text,
+              "bridge: &CapabilityBridge<'_, P>,",
+              'authority: &SharedCurrentCapabilityAuthority<P>,',
+          )
+          text = replace_exact(
+              text,
+              '''                bridge,
+                  verifier_time_unix_seconds,''',
+              '''                authority,
+                  verifier_time_unix_seconds,''',
+          )
+          text = replace_exact(
+              text,
+              '''//! adds only one borrowed domain-specific drive seam for the existing C03e-S worker body. It does
+              //! not bind remote transport, spawn a task, publish readiness, or wire the Agent binary.''',
+              '''//! adds only one borrowed domain-specific drive seam for the existing C03e-S worker body. C03e-Z
+              //! integrates that seam with the C03e-X shared-current authority without task spawn. It does not bind
+              //! remote transport, publish readiness, or wire the Agent binary.''',
+          )
+          exec_path.write_text(text)
+          PY
+
+          cargo +1.97.1 fmt --all
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
+
+          git diff --exit-code HEAD -- Cargo.lock crates/prw-agent/Cargo.toml crates/prw-remote-bridge/Cargo.toml
+
+          rm -- "${WORKFLOW}"
+
+          mapfile -t changed < <(git diff --name-only HEAD | sort)
+          printf '%s\n' "${changed[@]}"
+          expected=(
+            '.github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml'
+            'crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs'
+            'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+          )
+          mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
+          test "${#changed[@]}" -eq "${#expected_sorted[@]}"
+          for i in "${!expected_sorted[@]}"; do
+            test "${changed[$i]}" = "${expected_sorted[$i]}"
+          done
+
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "${AUTH}" "${EXEC}" "${WORKFLOW}"
+          git commit -m 'Phase 152 C03e-Z: materialize shared-current single-worker integration'
+          git push origin "HEAD:${BRANCH}"
