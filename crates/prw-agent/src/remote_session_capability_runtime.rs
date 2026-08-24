@@ -3,18 +3,23 @@
 //! C03f selected this ownership boundary. C03e-J materializes only the source-level by-value
 //! wrapper on the current post-authentication C03e-I lineage. C03e-U adds the separately selected
 //! executor-custody owner, C03e-X adds the C03e-W-selected shared-current registry/policy authority
-//! owner, and C03e-AB adds one lexically-contained spawned-and-joined worker seam. This module still
-//! does not wire the Agent binary, publish readiness, retain persistent workers, or activate remote
-//! transport.
+//! owner, C03e-AB adds one lexically-contained spawned-and-joined worker seam, and C03e-AD adds one
+//! single-worker orderly cancellation pair. This module still does not wire the Agent binary,
+//! publish readiness, retain persistent workers, or activate remote transport.
 
 mod authenticated_remote_session_runtime;
 mod remote_session_executor_runtime;
+mod remote_session_worker_cancellation;
 mod shared_current_capability_authority;
 
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
     RemoteSessionSpawnedWorkerJoinError,
+};
+pub use remote_session_worker_cancellation::{
+    RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,
+    remote_session_worker_cancellation_pair,
 };
 pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 
