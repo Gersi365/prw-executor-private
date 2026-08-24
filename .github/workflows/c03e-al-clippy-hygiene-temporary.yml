@@ -32,7 +32,7 @@ jobs:
 
           replacements = [
               ('use tokio::{sync::mpsc, task::JoinHandle};', 'use tokio::sync::mpsc;'),
-              ('AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,', 'AuthenticatedRemoteSessionWorkerStop,'),
+              ('use super::{\n        AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,', 'use super::{\n        AuthenticatedRemoteSessionWorkerStop,'),
               ('RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,', 'RemoteSessionWorkerAdmission,'),
               ('/// Returns the pre-authentication logical DeviceId used only for scheduling the AJ attempt.', '/// Returns the pre-authentication logical `DeviceId` used only for scheduling the AJ attempt.'),
               ('/// One active authenticated worker already owns the same logical DeviceId.', '/// One active authenticated worker already owns the same logical `DeviceId`.'),
