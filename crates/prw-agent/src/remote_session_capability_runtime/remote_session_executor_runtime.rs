@@ -74,7 +74,8 @@ mod tests {
 
     #[test]
     fn selected_current_thread_runtime_constructs_without_running_remote_work() {
-        let runtime = RemoteSessionExecutorRuntime::new().expect("current-thread runtime constructs");
+        let runtime =
+            RemoteSessionExecutorRuntime::new().expect("current-thread runtime constructs");
         drop(runtime);
     }
 }
