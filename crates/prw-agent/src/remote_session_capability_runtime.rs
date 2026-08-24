@@ -5,9 +5,10 @@
 //! executor-custody owner, C03e-X adds the C03e-W-selected shared-current registry/policy authority
 //! owner, C03e-AB adds one lexically-contained spawned-and-joined worker seam, and C03e-AD adds one
 //! single-worker orderly cancellation pair. C03e-AH adds the first pre-listener persistent
-//! current-thread worker collection seam, and C03e-AJ adds one bounded expected-device real remote
-//! admission transaction. This module still does not wire the Agent binary, publish readiness, or
-//! activate a repeated remote listener loop.
+//! current-thread worker collection seam, C03e-AJ adds one bounded expected-device real remote
+//! admission transaction, and C03e-AL composes repeated expected-device admission with that
+//! persistent collection under the same private current-thread runtime. This module still does not
+//! wire the Agent binary, publish readiness, or activate a production listener lifecycle.
 
 mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
@@ -21,9 +22,13 @@ pub use real_remote_admission_transaction::{
 };
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
-    RemoteSessionPersistentCollectionConfigError, RemoteSessionRegisteredWorkerCompletion,
-    RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,
-    RemoteSessionWorkerAdmissionRejection, RemoteSessionWorkerAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
+    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+    RemoteSessionRepeatedAdmissionFailure, RemoteSessionSpawnedWorkerJoinError,
+    RemoteSessionWorkerAdmission, RemoteSessionWorkerAdmissionRejection,
+    RemoteSessionWorkerAdmissionRejectionReason,
 };
 pub use remote_session_worker_cancellation::{
     RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,
