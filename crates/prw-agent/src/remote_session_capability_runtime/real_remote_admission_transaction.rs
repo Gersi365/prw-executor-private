@@ -125,6 +125,10 @@ impl From<RemoteBridgeError> for RemoteSessionRealAdmissionError {
 /// # Errors
 ///
 /// Returns [`RemoteSessionRealAdmissionError`] preserving the exact bounded phase that failed.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "C03e-AJ intentionally keeps the selected transaction inputs explicit and typed"
+)]
 pub async fn admit_expected_remote_device_session<P>(
     runtime: &AgentRemoteTransportRuntime,
     authority: &SharedCurrentCapabilityAuthority<P>,
