@@ -147,7 +147,8 @@ where
             let expected_transport_identity = registered_device
                 .transport_identity()
                 .ok_or(RegistryError::TransportIdentityMissing)?;
-            registry.validate_transport_identity(expected_device_id, expected_transport_identity)?;
+            registry
+                .validate_transport_identity(expected_device_id, expected_transport_identity)?;
             Ok::<_, RegistryError>(expected_transport_identity)
         })
         .await?;
