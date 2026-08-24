@@ -1,0 +1,131 @@
+name: Phase 152 C03e-X Bridge Canonicalization
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-x-shared-current-capability-authority-source-materialization-staging
+    paths:
+      - '.github/workflows/phase-152-c03e-x-bridge-canonicalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  canonicalize-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove exact C03e-X corrective boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REPOSITORY" = 'Gersi365/prw-executor-private'
+          test "$GITHUB_REF_NAME" = 'phase-152-c03e-x-shared-current-capability-authority-source-materialization-staging'
+          test -f crates/prw-remote-bridge/src/lib.rs
+          test -f crates/prw-remote-bridge/src/authorized_request_dispatch.rs
+          test -f crates/prw-agent/src/remote_session_capability_runtime/shared_current_capability_authority.rs
+          grep -Fq 'pub mod authorized_request_dispatch;' crates/prw-remote-bridge/src/root.rs
+          grep -Fq 'pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;' crates/prw-agent/src/remote_session_capability_runtime.rs
+          echo c03e_x_corrective_boundary=pass
+
+      - name: Delegate legacy process_request to canonical authorized dispatch helper
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-remote-bridge/src/lib.rs')
+          text = path.read_text()
+
+          old_import = '''use prw_remote_transport::{
+              ControlFrame, ControlMessageKind, MAX_CONTROL_PAYLOAD_BYTES, RemoteTransportError,
+          };'''.replace('          ', '')
+          new_import = '''use prw_remote_transport::{ControlFrame, ControlMessageKind, MAX_CONTROL_PAYLOAD_BYTES};'''
+
+          old_body = '''        let authorized =
+                      self.authorize(presented_transport_identity, lease, now_unix_seconds, frame)?;
+                  let response = dispatcher
+                      .dispatch(&authorized)
+                      .map_err(|_| RemoteBridgeError::DispatchFailed)?;
+                  if response.len() > MAX_CONTROL_PAYLOAD_BYTES {
+                      return Err(RemoteBridgeError::DispatchResponseTooLarge);
+                  }
+                  ControlFrame::new(
+                      ControlMessageKind::Response,
+                      authorized.request_id(),
+                      response,
+                  )
+                  .map_err(map_transport_error)'''.replace('          ', '')
+          new_body = '''        let authorized =
+                      self.authorize(presented_transport_identity, lease, now_unix_seconds, frame)?;
+                  crate::authorized_request_dispatch::dispatch_authorized_request(&authorized, dispatcher)'''.replace('          ', '')
+
+          old_mapper = '''const fn map_transport_error(_error: RemoteTransportError) -> RemoteBridgeError {
+              RemoteBridgeError::ResponseFrameRejected
+          }
+
+          '''.replace('          ', '')
+
+          if text.count(old_import) != 1:
+              raise SystemExit('C03e-X exact remote transport import boundary mismatch')
+          if text.count(old_body) != 1:
+              raise SystemExit('C03e-X exact process_request body boundary mismatch')
+          if text.count(old_mapper) != 1:
+              raise SystemExit('C03e-X exact legacy transport mapper boundary mismatch')
+          if text.count('map_transport_error') != 2:
+              raise SystemExit('C03e-X unexpected map_transport_error use count')
+
+          text = text.replace(old_import, new_import)
+          text = text.replace(old_body, new_body)
+          text = text.replace(old_mapper, '')
+          path.write_text(text)
+          PY
+
+          cargo fmt --all
+          git diff --check
+          grep -Fq 'crate::authorized_request_dispatch::dispatch_authorized_request(&authorized, dispatcher)' crates/prw-remote-bridge/src/lib.rs
+          test "$(grep -Fc 'map_transport_error' crates/prw-remote-bridge/src/lib.rs)" = '0'
+          echo c03e_x_bridge_delegation=pass
+
+      - name: Verify locked graph and bounded final source paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --format-version 1 > /dev/null
+          python3 - <<'PY'
+          import subprocess
+
+          allowed = {
+              'crates/prw-agent/src/remote_session_capability_runtime.rs',
+              'crates/prw-agent/src/remote_session_capability_runtime/shared_current_capability_authority.rs',
+              'crates/prw-remote-bridge/src/authorized_request_dispatch.rs',
+              'crates/prw-remote-bridge/src/lib.rs',
+              'crates/prw-remote-bridge/src/root.rs',
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f'unexpected C03e-X formatter/bridge paths: {sorted(unexpected)}')
+          print('c03e_x_changed_paths=' + ','.join(sorted(changed)))
+          PY
+          echo c03e_x_locked_graph=pass
+
+      - name: Commit canonical bridge delegation and self-remove workflow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/phase-152-c03e-x-bridge-canonicalization.yml
+          git add \
+            crates/prw-agent/src/remote_session_capability_runtime.rs \
+            crates/prw-agent/src/remote_session_capability_runtime/shared_current_capability_authority.rs \
+            crates/prw-remote-bridge/src/authorized_request_dispatch.rs \
+            crates/prw-remote-bridge/src/lib.rs \
+            crates/prw-remote-bridge/src/root.rs
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Phase 152 C03e-X: canonicalize authorized dispatch split'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
