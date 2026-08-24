@@ -2,9 +2,10 @@
 //!
 //! C03e-I selected this outer ownership shape. C03e-K materializes the by-value owner that retains
 //! the already-authenticated live peer together with the C03e-J capability owner. C03e-L adds the
-//! post-authentication binding/composition transaction, while C03e-O adds exactly one serialized
-//! capability request transaction over the C03e-N bridge-owned wire adapter. It does not run a
-//! request loop, spawn tasks, publish readiness, retry/reconnect, or wire the Agent binary.
+//! post-authentication binding/composition transaction, C03e-O adds exactly one serialized
+//! capability request transaction over the C03e-N bridge-owned wire adapter, and C03e-Q adds the
+//! C03e-P-selected borrowed serial request loop. It does not spawn tasks, publish readiness,
+//! retry/reconnect, or wire the Agent binary.
 
 use std::{fmt, ops::Range};
 
@@ -34,6 +35,9 @@ const REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE: u32 = 2;
     reason = "C03e-L stages the binding composition seam before separately gated operation-surface exposure"
 )]
 const REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON: &[u8] = b"remote session binding failed";
+const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE: u32 = 3;
+const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
+    b"remote capability session terminated";
 
 /// Failure while processing exactly one capability request on one authenticated remote session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +148,45 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         send_capability_response_frame(&mut stream, &response).await?;
         Ok(())
     }
+
+    /// Runs the C03e-P-selected serial capability-session request loop.
+    ///
+    /// The verifier-time provider is sampled exactly once immediately before each existing C03e-O
+    /// transaction. Only a successful transaction reaches the next iteration. The first transaction
+    /// failure closes the same retained peer exactly once with the fixed capability-session
+    /// termination diagnostic and returns that original typed failure unchanged.
+    ///
+    /// This borrowed loop owns no task, cancellation token, drain deadline, join handle, retry,
+    /// replacement session, concurrent request admission or readiness state.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`AuthenticatedRemoteSessionCapabilityTransactionError`] emitted by the
+    /// existing one-request transaction after explicitly closing the retained peer.
+    pub async fn run_capability_request_loop<
+        P: PolicyEvaluator + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+    >(
+        &mut self,
+        bridge: &CapabilityBridge<'_, P>,
+        mut verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+    ) -> Result<(), AuthenticatedRemoteSessionCapabilityTransactionError> {
+        loop {
+            let now_unix_seconds = verifier_time_unix_seconds();
+            if let Err(error) = self
+                .process_one_capability_request(bridge, now_unix_seconds, dispatcher)
+                .await
+            {
+                self.peer.close(
+                    REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
+                    REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
+                );
+                return Err(error);
+            }
+        }
+    }
 }
 
 /// Binds one already-authenticated logical session to its same live peer and application lease.
@@ -205,8 +248,10 @@ mod tests {
 
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
-        AuthenticatedRemoteSessionRuntimeOwner, REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE,
-        REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON, compose_authenticated_remote_session,
+        AuthenticatedRemoteSessionRuntimeOwner, REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
+        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
+        REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
+        compose_authenticated_remote_session,
     };
     use crate::remote_session_capability_runtime::RemoteSessionCapabilityRuntimeOwner;
 
@@ -244,6 +289,12 @@ mod tests {
     fn binding_failure_peer_close_diagnostic_is_fixed_nonzero_and_nonempty() {
         assert_ne!(REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, 0);
         assert!(!REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON.is_empty());
+    }
+
+    #[test]
+    fn capability_session_termination_close_diagnostic_is_fixed_nonzero_and_nonempty() {
+        assert_eq!(REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE, 3);
+        assert!(!REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON.is_empty());
     }
 
     #[test]
