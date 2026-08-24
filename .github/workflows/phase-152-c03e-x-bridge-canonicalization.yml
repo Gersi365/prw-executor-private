@@ -138,3 +138,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Phase 152 C03e-X: canonicalize authorized dispatch split'
           git push origin "HEAD:${BRANCH}"
+
+# C03e-X deterministic trigger: 2026-08-24T13:04Z
