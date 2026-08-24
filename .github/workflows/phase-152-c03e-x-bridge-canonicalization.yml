@@ -6,6 +6,11 @@ on:
       - phase-152-c03e-x-shared-current-capability-authority-source-materialization-staging
     paths:
       - '.github/workflows/phase-152-c03e-x-bridge-canonicalization.yml'
+  pull_request:
+    branches:
+      - phase-152-c03e-w-shared-current-capability-authority-selection-staging
+    paths:
+      - '.github/workflows/phase-152-c03e-x-bridge-canonicalization.yml'
 
 permissions:
   contents: write
@@ -16,13 +21,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Prove exact C03e-X corrective boundary
         shell: bash
         run: |
           set -Eeuo pipefail
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           test "$GITHUB_REPOSITORY" = 'Gersi365/prw-executor-private'
-          test "$GITHUB_REF_NAME" = 'phase-152-c03e-x-shared-current-capability-authority-source-materialization-staging'
+          test "$BRANCH" = 'phase-152-c03e-x-shared-current-capability-authority-source-materialization-staging'
           test -f crates/prw-remote-bridge/src/lib.rs
           test -f crates/prw-remote-bridge/src/authorized_request_dispatch.rs
           test -f crates/prw-agent/src/remote_session_capability_runtime/shared_current_capability_authority.rs
@@ -117,6 +125,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           git rm .github/workflows/phase-152-c03e-x-bridge-canonicalization.yml
           git add \
             crates/prw-agent/src/remote_session_capability_runtime.rs \
@@ -128,4 +137,4 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Phase 152 C03e-X: canonicalize authorized dispatch split'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${BRANCH}"
