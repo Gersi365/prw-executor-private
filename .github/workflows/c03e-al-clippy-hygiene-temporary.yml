@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name == 'push' ||
+      github.event.pull_request.head.ref == 'phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
