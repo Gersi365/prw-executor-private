@@ -1,6 +1,6 @@
 //! Agent-owned shared-current registry/policy authority for staged remote-session workers.
 //!
-//! C03e-W selects one combined Tokio RwLock state so future spawned workers can revalidate each
+//! C03e-W selects one combined Tokio `RwLock` state so future spawned workers can revalidate each
 //! protected operation against current registry and policy state without per-task authority
 //! snapshots. C03e-X materializes only this owner and its bounded internal read operation. It does
 //! not spawn tasks, expose lock guards, wire the Agent binary, publish readiness or activate remote
@@ -103,8 +103,10 @@ mod tests {
             }
         }
 
+        fn assert_clone<T: Clone>(_value: &T) {}
+
         let authority =
             SharedCurrentCapabilityAuthority::new(WorkspaceDeviceRegistry::new(), NonClonePolicy);
-        let _clone = authority.clone();
+        assert_clone(&authority);
     }
 }
