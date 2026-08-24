@@ -1,13 +1,19 @@
 //! Agent-owned executor custody for the staged remote-session runtime path.
 //!
 //! C03e-T selected the narrow first executor shape: one explicit non-cloneable Tokio
-//! current-thread runtime owner. C03e-U materializes only that construction/custody boundary.
-//! It does not bind remote transport, drive a future, spawn a task, publish readiness, or wire
-//! the Agent binary.
+//! current-thread runtime owner. C03e-U materializes that construction/custody boundary, and C03e-V
+//! adds only one borrowed domain-specific drive seam for the existing C03e-S worker body. It does
+//! not bind remote transport, spawn a task, publish readiness, or wire the Agent binary.
 
-use std::fmt;
+use std::{fmt, future::Future};
 
+use prw_policy::PolicyEvaluator;
+use prw_remote_bridge::{CapabilityBridge, CapabilityDispatcher};
 use tokio::runtime::{Builder, Runtime};
+
+use super::authenticated_remote_session_runtime::{
+    AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+};
 
 /// Failure while constructing the Agent-owned remote-session executor runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,16 +30,13 @@ impl fmt::Display for RemoteSessionExecutorRuntimeCreateError {
 
 impl std::error::Error for RemoteSessionExecutorRuntimeCreateError {}
 
-/// Explicit Agent-owned Tokio custody for future remote transport/session async work.
+/// Explicit Agent-owned Tokio custody for remote transport/session async work.
 ///
-/// The raw Tokio runtime remains private. C03e-U intentionally exposes no `block_on`, task spawn,
-/// handle clone, network bind, peer acceptance, session admission, cancellation channel, readiness,
-/// or production activation surface.
+/// The raw Tokio runtime remains private. C03e-V exposes only the bounded
+/// [`Self::drive_capability_request_worker`] seam; no generic `block_on`, task spawn, handle clone,
+/// network bind, peer acceptance, concurrent session admission, cancellation-controller creation,
+/// readiness or production activation surface is exposed.
 pub struct RemoteSessionExecutorRuntime {
-    #[allow(
-        dead_code,
-        reason = "C03e-U materializes executor custody before the separately gated borrowed drive seam"
-    )]
     runtime: Runtime,
 }
 
@@ -51,6 +54,39 @@ impl RemoteSessionExecutorRuntime {
             .build()
             .map(|runtime| Self { runtime })
             .map_err(|_| RemoteSessionExecutorRuntimeCreateError::Construction)
+    }
+
+    /// Drives exactly one borrowed C03e-S remote-session worker body to its terminal stop.
+    ///
+    /// The executor owner and authenticated-session owner are both mutably borrowed for the whole
+    /// synchronous drive call. The existing C03e-S worker remains the sole authority for the race
+    /// between the C03e-Q request loop and caller-supplied cancellation, including its existing
+    /// code-3 failure close, code-4 cancellation close and exact terminal classification.
+    ///
+    /// This seam intentionally uses the private Tokio runtime only through one internal `block_on`
+    /// call. It does not expose a generic future-driving API, spawn a task, construct a cancellation
+    /// controller, clone a runtime handle, retain a join handle, admit a second session, bind remote
+    /// transport, wire `main.rs`, or publish readiness.
+    pub fn drive_capability_request_worker<
+        P: PolicyEvaluator + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+        bridge: &CapabilityBridge<'_, P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> AuthenticatedRemoteSessionWorkerStop {
+        self.runtime
+            .block_on(session_owner.run_capability_request_worker(
+                bridge,
+                verifier_time_unix_seconds,
+                dispatcher,
+                cancellation,
+            ))
     }
 }
 
