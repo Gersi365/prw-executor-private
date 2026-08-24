@@ -3,11 +3,17 @@
 //! C03e-I selected this outer ownership shape. C03e-K materializes the by-value owner that retains
 //! the already-authenticated live peer together with the C03e-J capability owner. C03e-L adds the
 //! post-authentication binding/composition transaction, C03e-O adds exactly one serialized
-//! capability request transaction over the C03e-N bridge-owned wire adapter, and C03e-Q adds the
-//! C03e-P-selected borrowed serial request loop. It does not spawn tasks, publish readiness,
-//! retry/reconnect, or wire the Agent binary.
+//! capability request transaction over the C03e-N bridge-owned wire adapter, C03e-Q adds the
+//! C03e-P-selected borrowed serial request loop, and C03e-S adds the C03e-R-selected executor-neutral
+//! cancellation-aware single-worker seam. It does not spawn tasks, publish readiness, retry/reconnect,
+//! or wire the Agent binary.
 
-use std::{fmt, ops::Range};
+use std::{
+    fmt,
+    future::{Future, poll_fn},
+    ops::Range,
+    task::Poll,
+};
 
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
@@ -38,6 +44,9 @@ const REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON: &[u8] = b"remote session bind
 const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE: u32 = 3;
 const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
     b"remote capability session terminated";
+const REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE: u32 = 4;
+const REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON: &[u8] =
+    b"remote capability session shutdown";
 
 /// Failure while processing exactly one capability request on one authenticated remote session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +98,22 @@ impl From<RemoteBridgeError> for AuthenticatedRemoteSessionCapabilityTransaction
     fn from(error: RemoteBridgeError) -> Self {
         Self::Bridge(error)
     }
+}
+
+/// Terminal result of the executor-neutral C03e-S single-worker seam.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AuthenticatedRemoteSessionWorkerStop {
+    /// External worker cancellation won and the retained peer was closed with the code-4 diagnostic.
+    Cancelled,
+    /// The existing C03e-Q loop failed first and preserved its original typed transaction failure.
+    Failed(AuthenticatedRemoteSessionCapabilityTransactionError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthenticatedRemoteSessionWorkerRaceOutcome {
+    Cancelled,
+    Failed(AuthenticatedRemoteSessionCapabilityTransactionError),
 }
 
 /// Retains one authenticated peer and its bound capability lifetime under one Agent owner.
@@ -187,6 +212,80 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             }
         }
     }
+
+    /// Runs one cancellation-aware remote-session worker body without spawning a task.
+    ///
+    /// The caller supplies an executor-neutral cancellation future. This method polls the existing
+    /// C03e-Q loop before cancellation on each wake, so an already-ready terminal Q failure retains
+    /// its original code-3 close/error classification. Cancellation wins only while Q remains
+    /// pending. When cancellation wins, the in-flight Q future is dropped first; after that mutable
+    /// owner borrow is released, this method closes the same retained peer exactly once with the
+    /// fixed code-4 shutdown diagnostic and returns [`AuthenticatedRemoteSessionWorkerStop::Cancelled`].
+    ///
+    /// A clean `Ok(())` return from the current Q loop is not a selected lifecycle completion. If a
+    /// future Q implementation ever produces it, this seam stops polling that completed loop and
+    /// remains pending solely on the caller-owned cancellation future rather than fabricating a
+    /// success or failure classification.
+    ///
+    /// This method creates no channel, task, runtime, join handle, registry entry, retry or readiness
+    /// state and does not expose the retained peer.
+    pub async fn run_capability_request_worker<
+        P: PolicyEvaluator + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        bridge: &CapabilityBridge<'_, P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> AuthenticatedRemoteSessionWorkerStop {
+        let outcome = {
+            let mut request_loop = Box::pin(self.run_capability_request_loop(
+                bridge,
+                verifier_time_unix_seconds,
+                dispatcher,
+            ));
+            let mut cancellation = Box::pin(cancellation);
+            let mut request_loop_completed_cleanly = false;
+
+            poll_fn(|context| {
+                if !request_loop_completed_cleanly {
+                    match request_loop.as_mut().poll(context) {
+                        Poll::Ready(Ok(())) => request_loop_completed_cleanly = true,
+                        Poll::Ready(Err(error)) => {
+                            return Poll::Ready(
+                                AuthenticatedRemoteSessionWorkerRaceOutcome::Failed(error),
+                            );
+                        }
+                        Poll::Pending => {}
+                    }
+                }
+
+                match cancellation.as_mut().poll(context) {
+                    Poll::Ready(()) => {
+                        Poll::Ready(AuthenticatedRemoteSessionWorkerRaceOutcome::Cancelled)
+                    }
+                    Poll::Pending => Poll::Pending,
+                }
+            })
+            .await
+        };
+
+        match outcome {
+            AuthenticatedRemoteSessionWorkerRaceOutcome::Cancelled => {
+                self.peer.close(
+                    REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+                    REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+                );
+                AuthenticatedRemoteSessionWorkerStop::Cancelled
+            }
+            AuthenticatedRemoteSessionWorkerRaceOutcome::Failed(error) => {
+                AuthenticatedRemoteSessionWorkerStop::Failed(error)
+            }
+        }
+    }
 }
 
 /// Binds one already-authenticated logical session to its same live peer and application lease.
@@ -248,7 +347,10 @@ mod tests {
 
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
-        AuthenticatedRemoteSessionRuntimeOwner, REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
+        AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+        REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+        REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
         REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
         compose_authenticated_remote_session,
@@ -298,11 +400,28 @@ mod tests {
     }
 
     #[test]
+    fn capability_session_shutdown_close_diagnostic_is_fixed_nonzero_and_nonempty() {
+        assert_eq!(REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE, 4);
+        assert!(!REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON.is_empty());
+    }
+
+    #[test]
     fn bridge_failure_classification_is_preserved() {
         let error = RemoteBridgeError::SessionExpired;
         assert_eq!(
             AuthenticatedRemoteSessionCapabilityTransactionError::from(error),
             AuthenticatedRemoteSessionCapabilityTransactionError::Bridge(error)
+        );
+    }
+
+    #[test]
+    fn worker_failure_preserves_exact_transaction_error() {
+        let error = AuthenticatedRemoteSessionCapabilityTransactionError::Bridge(
+            RemoteBridgeError::SessionExpired,
+        );
+        assert_eq!(
+            AuthenticatedRemoteSessionWorkerStop::Failed(error),
+            AuthenticatedRemoteSessionWorkerStop::Failed(error)
         );
     }
 }
