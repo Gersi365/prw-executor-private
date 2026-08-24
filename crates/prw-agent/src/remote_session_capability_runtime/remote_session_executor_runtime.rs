@@ -8,11 +8,14 @@
 use std::{fmt, future::Future};
 
 use prw_policy::PolicyEvaluator;
-use prw_remote_bridge::{CapabilityBridge, CapabilityDispatcher};
+use prw_remote_bridge::CapabilityDispatcher;
 use tokio::runtime::{Builder, Runtime};
 
-use super::authenticated_remote_session_runtime::{
-    AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+use super::{
+    SharedCurrentCapabilityAuthority,
+    authenticated_remote_session_runtime::{
+        AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+    },
 };
 
 /// Failure while constructing the Agent-owned remote-session executor runtime.
@@ -68,21 +71,21 @@ impl RemoteSessionExecutorRuntime {
     /// controller, clone a runtime handle, retain a join handle, admit a second session, bind remote
     /// transport, wire `main.rs`, or publish readiness.
     pub fn drive_capability_request_worker<
-        P: PolicyEvaluator + Sync,
+        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
         T: FnMut() -> u64 + Send,
         C: Future<Output = ()> + Send,
     >(
         &mut self,
         session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
-        bridge: &CapabilityBridge<'_, P>,
+        authority: &SharedCurrentCapabilityAuthority<P>,
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
     ) -> AuthenticatedRemoteSessionWorkerStop {
         self.runtime
             .block_on(session_owner.run_capability_request_worker(
-                bridge,
+                authority,
                 verifier_time_unix_seconds,
                 dispatcher,
                 cancellation,
