@@ -74,7 +74,7 @@ where
             return Poll::Ready(Some(worker_result));
         }
 
-        if let Poll::Ready(()) = supervisor_shutdown.as_mut().poll(context) {
+        if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
             return Poll::Ready(None);
         }
 
@@ -268,8 +268,7 @@ impl RemoteSessionExecutorRuntime {
 mod tests {
     use std::{
         future::{Future, pending, ready},
-        sync::Arc,
-        task::{Context, Poll, Wake, Waker},
+        task::{Context, Poll, Waker},
     };
 
     use tokio::runtime::{Builder, Runtime};
@@ -279,12 +278,6 @@ mod tests {
         RemoteSessionExecutorRuntimeCreateError, RemoteSessionSpawnedWorkerJoinError,
         await_supervised_worker, remote_session_worker_cancellation_pair,
     };
-
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
 
     fn assert_constructor_signature(
         constructor: fn() -> Result<
@@ -368,8 +361,7 @@ mod tests {
         assert_eq!(result, Ok(13_u8));
 
         let mut cancellation = Box::pin(signal.into_cancelled());
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
+        let mut context = Context::from_waker(Waker::noop());
         assert_eq!(cancellation.as_mut().poll(&mut context), Poll::Pending);
     }
 
