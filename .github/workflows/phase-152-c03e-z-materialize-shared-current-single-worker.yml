@@ -6,17 +6,24 @@ on:
       - phase-152-c03e-z-shared-current-single-worker-transaction-integration-source-materialization-staging
     paths:
       - .github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml
+  pull_request:
+    branches:
+      - phase-152-c03e-y-shared-current-single-worker-transaction-integration-selection-staging
+    paths:
+      - .github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml
 
 permissions:
   contents: write
 
 jobs:
   materialize:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'phase-152-c03e-z-shared-current-single-worker-transaction-integration-source-materialization-staging'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Apply exact bounded C03e-Z source changes and self-remove
         shell: bash
@@ -24,12 +31,13 @@ jobs:
           set -Eeuo pipefail
 
           BRANCH='phase-152-c03e-z-shared-current-single-worker-transaction-integration-source-materialization-staging'
+          EXPECTED_HEAD='${{ github.event.pull_request.head.sha || github.sha }}'
           AUTH='crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs'
           EXEC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
           CONTRACT='contracts/DESKTOP_FUNCTIONAL_MANAGEMENT_SLICE_C03E_Z_SHARED_CURRENT_SINGLE_WORKER_TRANSACTION_INTEGRATION_SOURCE_MATERIALIZATION_STAGING.md'
           WORKFLOW='.github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml'
 
-          test "${GITHUB_REF_NAME}" = "${BRANCH}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD}"
           test -f "${AUTH}"
           test -f "${EXEC}"
           test -f "${CONTRACT}"
