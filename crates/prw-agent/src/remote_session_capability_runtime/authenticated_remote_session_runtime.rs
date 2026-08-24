@@ -137,7 +137,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         }
     }
 
-    /// Returns the authenticated logical DeviceId retained by this runtime owner.
+    /// Returns the authenticated logical `DeviceId` retained by this runtime owner.
     ///
     /// This Agent-internal accessor derives identity only from the already-bound authenticated
     /// session. It performs no I/O, registry lookup, policy evaluation or transport selection.

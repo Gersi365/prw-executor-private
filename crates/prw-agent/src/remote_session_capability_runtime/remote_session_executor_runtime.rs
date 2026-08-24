@@ -104,7 +104,7 @@ impl<D, T> RemoteSessionWorkerAdmission<D, T> {
         }
     }
 
-    fn logical_device_id(&self) -> &DeviceId {
+    const fn logical_device_id(&self) -> &DeviceId {
         self.session_owner.logical_device_id()
     }
 
@@ -123,7 +123,7 @@ impl<D, T> RemoteSessionWorkerAdmission<D, T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RemoteSessionWorkerAdmissionRejectionReason {
-    /// One active worker already owns the same authenticated logical DeviceId key.
+    /// One active worker already owns the same authenticated logical `DeviceId` key.
     DuplicateActiveDevice,
 }
 
@@ -153,7 +153,7 @@ impl<D, T> RemoteSessionWorkerAdmissionRejection<D, T> {
     }
 }
 
-/// One explicitly reaped persistent-worker completion associated with its logical DeviceId.
+/// One explicitly reaped persistent-worker completion associated with its logical `DeviceId`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteSessionRegisteredWorkerCompletion {
     device_id: DeviceId,
@@ -161,14 +161,17 @@ pub struct RemoteSessionRegisteredWorkerCompletion {
 }
 
 impl RemoteSessionRegisteredWorkerCompletion {
-    /// Returns the authenticated logical DeviceId that keyed the retained worker entry.
+    /// Returns the authenticated logical `DeviceId` that keyed the retained worker entry.
     #[must_use]
     pub const fn device_id(&self) -> &DeviceId {
         &self.device_id
     }
 
     /// Returns the existing bounded worker/join terminal result.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns the stored bounded join error when Tokio reported abnormal worker completion.
     pub const fn result(
         &self,
     ) -> Result<AuthenticatedRemoteSessionWorkerStop, RemoteSessionSpawnedWorkerJoinError> {
@@ -220,7 +223,7 @@ enum RemoteSessionPersistentSupervisorEvent<C> {
     Admission(C),
 }
 
-fn validate_persistent_worker_capacity(
+const fn validate_persistent_worker_capacity(
     max_active_workers: NonZeroUsize,
 ) -> Result<usize, RemoteSessionPersistentCollectionConfigError> {
     let max_active_workers = max_active_workers.get();
@@ -512,11 +515,11 @@ impl RemoteSessionExecutorRuntime {
     /// runtime using an injected already-authenticated admission source.
     ///
     /// The complete collection lifetime remains inside one private `Runtime::block_on`. Active
-    /// workers are keyed only by the DeviceId derived from each authenticated runtime owner. The
+    /// workers are keyed only by the `DeviceId` derived from each authenticated runtime owner. The
     /// injected bounded mpsc receiver is not polled while the collection is at capacity. Ready
     /// worker completions are reaped before shutdown and admission work on every supervisor poll.
     ///
-    /// Duplicate DeviceId candidates are rejected before worker spawn and returned intact through
+    /// Duplicate `DeviceId` candidates are rejected before worker spawn and returned intact through
     /// `on_rejection`. Reaped worker results are reported immediately through `on_completion` and
     /// are not accumulated by the supervisor. When orderly shutdown wins, admission stops, every
     /// retained controller is asked to cancel before any remaining handle is drained, and the same
