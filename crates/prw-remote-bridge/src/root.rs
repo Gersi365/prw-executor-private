@@ -13,6 +13,7 @@ mod legacy_bridge;
 
 pub use legacy_bridge::*;
 
+pub mod capability_request_wire;
 pub mod candidate_publication_freshness;
 pub mod candidate_reachability;
 pub mod reachability_freshness_wire;
