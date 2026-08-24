@@ -444,3 +444,41 @@ mod tests {
         }
     }
 }
+
+impl AuthenticatedRemoteSessionRuntimeOwner {
+    /// Consumes an authenticated owner completed after orderly supervisor shutdown already latched.
+    ///
+    /// No capability request is polled and no worker task is created. The retained peer is closed
+    /// exactly once with the existing fixed C03e-S code-4 shutdown diagnostic before ownership is
+    /// released.
+    pub(super) fn close_for_orderly_shutdown(self) {
+        self.peer.close(
+            REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+            REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+        );
+    }
+}
+
+#[cfg(test)]
+mod orderly_shutdown_close_tests {
+    use super::{
+        AuthenticatedRemoteSessionRuntimeOwner, REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+        REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+    };
+
+    fn assert_consuming_close_signature(close: fn(AuthenticatedRemoteSessionRuntimeOwner)) {
+        let _ = close;
+    }
+
+    #[test]
+    fn orderly_shutdown_owner_close_is_consuming_and_reuses_code_four_diagnostic() {
+        assert_consuming_close_signature(
+            AuthenticatedRemoteSessionRuntimeOwner::close_for_orderly_shutdown,
+        );
+        assert_eq!(REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE, 4);
+        assert_eq!(
+            REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+            b"remote capability session shutdown"
+        );
+    }
+}
