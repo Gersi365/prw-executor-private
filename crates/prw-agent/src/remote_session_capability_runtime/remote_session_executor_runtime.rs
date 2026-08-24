@@ -990,13 +990,12 @@ mod repeated_real_admission_supervisor {
     use prw_policy::PolicyEvaluator;
     use prw_remote_bridge::CapabilityDispatcher;
     use prw_session::SessionAuthenticationService;
-    use tokio::{sync::mpsc, task::JoinHandle};
+    use tokio::sync::mpsc;
 
     use super::{
-        AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
-        RemoteSessionExecutorRuntime, RemoteSessionPersistentCollectionConfigError,
-        RemoteSessionPersistentWorkerEntry, RemoteSessionRegisteredWorkerCompletion,
-        RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,
+        AuthenticatedRemoteSessionWorkerStop, RemoteSessionExecutorRuntime,
+        RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
+        RemoteSessionRegisteredWorkerCompletion, RemoteSessionWorkerAdmission,
         SharedCurrentCapabilityAuthority, reap_ready_persistent_workers,
         remote_session_worker_cancellation_pair, validate_persistent_worker_capacity,
     };
@@ -1038,7 +1037,7 @@ mod repeated_real_admission_supervisor {
             }
         }
 
-        /// Returns the pre-authentication logical DeviceId used only for scheduling the AJ attempt.
+        /// Returns the pre-authentication logical `DeviceId` used only for scheduling the AJ attempt.
         #[must_use]
         pub const fn expected_device_id(&self) -> &DeviceId {
             &self.expected_device_id
@@ -1059,6 +1058,10 @@ mod repeated_real_admission_supervisor {
 
     /// Fresh timing inputs sampled only when one expected-device AJ attempt actually starts.
     #[derive(Debug, Clone, PartialEq, Eq)]
+    #[expect(
+        clippy::struct_field_names,
+        reason = "C03e-AL keeps explicit unix-second units on every AJ timing input"
+    )]
     pub struct RemoteSessionRealAdmissionTiming {
         challenge_validity_unix_seconds: Range<u64>,
         authentication_now_unix_seconds: u64,
@@ -1082,7 +1085,7 @@ mod repeated_real_admission_supervisor {
 
         /// Consumes the timing bundle into the exact existing AJ timing inputs.
         #[must_use]
-        pub fn into_parts(self) -> (Range<u64>, u64, Range<u64>) {
+        pub const fn into_parts(self) -> (Range<u64>, u64, Range<u64>) {
             (
                 self.challenge_validity_unix_seconds,
                 self.authentication_now_unix_seconds,
@@ -1095,7 +1098,7 @@ mod repeated_real_admission_supervisor {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[non_exhaustive]
     pub enum RemoteSessionExpectedDeviceAdmissionRejectionReason {
-        /// One active authenticated worker already owns the same logical DeviceId.
+        /// One active authenticated worker already owns the same logical `DeviceId`.
         DuplicateActiveDevice,
     }
 
@@ -1133,7 +1136,7 @@ mod repeated_real_admission_supervisor {
     }
 
     impl RemoteSessionRepeatedAdmissionFailure {
-        /// Returns the logical DeviceId that selected the failed AJ attempt.
+        /// Returns the logical `DeviceId` that selected the failed AJ attempt.
         #[must_use]
         pub const fn expected_device_id(&self) -> &DeviceId {
             &self.expected_device_id
@@ -1145,7 +1148,7 @@ mod repeated_real_admission_supervisor {
             &self.error
         }
 
-        /// Recovers the logical DeviceId and exact existing AJ error.
+        /// Recovers the logical `DeviceId` and exact existing AJ error.
         #[must_use]
         pub fn into_parts(self) -> (DeviceId, RemoteSessionRealAdmissionError) {
             (self.expected_device_id, self.error)
@@ -1322,7 +1325,7 @@ mod repeated_real_admission_supervisor {
         ///
         /// Ready worker completions are reaped first. Supervisor shutdown is polled before either a
         /// new expected request or the one in-flight AJ transaction. Requests are not polled while
-        /// the active collection is full, duplicate expected DeviceIds are rejected before timing or
+        /// the active collection is full, duplicate expected `DeviceId` values are rejected before timing or
         /// network work, and at most one AJ future exists at a time.
         ///
         /// When shutdown latches during AJ, all active worker cancellations are requested and the AJ
@@ -1335,6 +1338,7 @@ mod repeated_real_admission_supervisor {
         /// `max_active_workers` exceeds the registered-device ceiling.
         #[expect(
             clippy::too_many_arguments,
+            clippy::too_many_lines,
             reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"
         )]
         pub fn drive_repeated_real_remote_admission_collection<P, D, T, S, F, C, R, E>(
@@ -1606,8 +1610,8 @@ mod repeated_real_admission_supervisor {
         #[test]
         fn duplicate_expected_device_is_rejected_before_timing_sample() {
             let duplicate = device_id("duplicate-device");
-            let mut active = HashMap::new();
-            active.insert(duplicate.clone(), ());
+            let mut active = HashMap::<DeviceId, u8>::new();
+            active.insert(duplicate.clone(), 1_u8);
             let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
                 duplicate.clone(),
                 session_id("duplicate-session"),
@@ -1625,7 +1629,7 @@ mod repeated_real_admission_supervisor {
 
             let prepared =
                 prepare_expected_request(&active, request, &mut timing_factory, &mut |observed| {
-                    rejection = Some(observed)
+                    rejection = Some(observed);
                 });
 
             assert!(prepared.is_none());
@@ -1641,9 +1645,9 @@ mod repeated_real_admission_supervisor {
         #[test]
         fn timing_is_sampled_once_only_for_request_that_can_start() {
             let expected = device_id("fresh-device");
-            let active = HashMap::<DeviceId, ()>::new();
+            let active = HashMap::<DeviceId, u8>::new();
             let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
-                expected.clone(),
+                expected,
                 session_id("fresh-session"),
                 2,
                 11_u8,
