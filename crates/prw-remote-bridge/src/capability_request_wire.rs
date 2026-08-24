@@ -8,7 +8,10 @@
 
 use std::fmt;
 
-use prw_remote_transport::{ControlFrame, runtime::{MeshControlStream, MeshQuicRuntimeError}};
+use prw_remote_transport::{
+    ControlFrame,
+    runtime::{MeshControlStream, MeshQuicRuntimeError},
+};
 
 /// Failure at the C03e-N bridge-owned capability frame I/O boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
