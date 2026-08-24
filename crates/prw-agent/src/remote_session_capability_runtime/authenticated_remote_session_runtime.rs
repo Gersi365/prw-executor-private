@@ -249,8 +249,9 @@ mod tests {
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
         AuthenticatedRemoteSessionRuntimeOwner, REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
-        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON, REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE,
-        REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON, compose_authenticated_remote_session,
+        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
+        REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
+        compose_authenticated_remote_session,
     };
     use crate::remote_session_capability_runtime::RemoteSessionCapabilityRuntimeOwner;
 
