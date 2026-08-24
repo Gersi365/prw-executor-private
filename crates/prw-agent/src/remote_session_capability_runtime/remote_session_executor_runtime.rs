@@ -258,12 +258,8 @@ impl RemoteSessionExecutorRuntime {
                     .await
             });
 
-            await_supervised_worker(
-                worker_handle,
-                cancellation_controller,
-                supervisor_shutdown,
-            )
-            .await
+            await_supervised_worker(worker_handle, cancellation_controller, supervisor_shutdown)
+                .await
         })
     }
 }
