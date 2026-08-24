@@ -4,8 +4,9 @@
 //! wrapper on the current post-authentication C03e-I lineage. C03e-U adds the separately selected
 //! executor-custody owner, C03e-X adds the C03e-W-selected shared-current registry/policy authority
 //! owner, C03e-AB adds one lexically-contained spawned-and-joined worker seam, and C03e-AD adds one
-//! single-worker orderly cancellation pair. This module still does not wire the Agent binary,
-//! publish readiness, retain persistent workers, or activate remote transport.
+//! single-worker orderly cancellation pair. C03e-AH adds the first pre-listener persistent
+//! current-thread worker collection seam. This module still does not wire the Agent binary,
+//! publish readiness, or activate remote transport.
 
 mod authenticated_remote_session_runtime;
 mod remote_session_executor_runtime;
@@ -15,7 +16,9 @@ mod shared_current_capability_authority;
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
-    RemoteSessionSpawnedWorkerJoinError,
+    RemoteSessionPersistentCollectionConfigError, RemoteSessionRegisteredWorkerCompletion,
+    RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,
+    RemoteSessionWorkerAdmissionRejection, RemoteSessionWorkerAdmissionRejectionReason,
 };
 pub use remote_session_worker_cancellation::{
     RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,

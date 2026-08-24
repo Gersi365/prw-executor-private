@@ -15,6 +15,7 @@ use std::{
     task::Poll,
 };
 
+use prw_core::DeviceId;
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
     CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
@@ -134,6 +135,15 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             peer,
             capability_owner,
         }
+    }
+
+    /// Returns the authenticated logical `DeviceId` retained by this runtime owner.
+    ///
+    /// This Agent-internal accessor derives identity only from the already-bound authenticated
+    /// session. It performs no I/O, registry lookup, policy evaluation or transport selection.
+    #[must_use]
+    pub(super) const fn logical_device_id(&self) -> &DeviceId {
+        self.capability_owner.bound_session.session().device_id()
     }
 
     /// Processes exactly one capability request on exactly one newly accepted control stream.
