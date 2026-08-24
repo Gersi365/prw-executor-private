@@ -124,7 +124,10 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// [`RemoteBridgeError`] through [`AuthenticatedRemoteSessionCapabilityTransactionError`].
     /// Failure produces no fabricated success response, retry, replacement stream/session/lease,
     /// pending-session abort, authenticated-session deletion or automatic whole-peer close.
-    pub async fn process_one_capability_request<P: PolicyEvaluator, D: CapabilityDispatcher>(
+    pub async fn process_one_capability_request<
+        P: PolicyEvaluator + Sync,
+        D: CapabilityDispatcher + Send,
+    >(
         &mut self,
         bridge: &CapabilityBridge<'_, P>,
         now_unix_seconds: u64,
