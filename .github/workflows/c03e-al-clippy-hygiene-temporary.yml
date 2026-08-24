@@ -1,0 +1,74 @@
+name: C03e-AL Temporary Clippy Hygiene
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging
+    paths:
+      - .github/workflows/c03e-al-clippy-hygiene-temporary.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging
+          fetch-depth: 0
+      - name: Apply exact Clippy hygiene corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = path.read_text()
+
+          replacements = [
+              ('use tokio::{sync::mpsc, task::JoinHandle};', 'use tokio::sync::mpsc;'),
+              ('AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,', 'AuthenticatedRemoteSessionWorkerStop,'),
+              ('RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,', 'RemoteSessionWorkerAdmission,'),
+              ('/// Returns the pre-authentication logical DeviceId used only for scheduling the AJ attempt.', '/// Returns the pre-authentication logical `DeviceId` used only for scheduling the AJ attempt.'),
+              ('/// One active authenticated worker already owns the same logical DeviceId.', '/// One active authenticated worker already owns the same logical `DeviceId`.'),
+              ('/// Returns the logical DeviceId that selected the failed AJ attempt.', '/// Returns the logical `DeviceId` that selected the failed AJ attempt.'),
+              ('/// Recovers the logical DeviceId and exact existing AJ error.', '/// Recovers the logical `DeviceId` and exact existing AJ error.'),
+              ('/// the active collection is full, duplicate expected DeviceIds are rejected before timing or', '/// the active collection is full, duplicate expected `DeviceId` values are rejected before timing or'),
+              (
+                  '#[derive(Debug, Clone, PartialEq, Eq)]\n    pub struct RemoteSessionRealAdmissionTiming {',
+                  '#[derive(Debug, Clone, PartialEq, Eq)]\n    #[expect(\n        clippy::struct_field_names,\n        reason = "C03e-AL keeps explicit unix-second units on every AJ timing input"\n    )]\n    pub struct RemoteSessionRealAdmissionTiming {'
+              ),
+              (
+                  '/// Consumes the timing bundle into the exact existing AJ timing inputs.\n        #[must_use]\n        pub fn into_parts(self) -> (Range<u64>, u64, Range<u64>) {',
+                  '/// Consumes the timing bundle into the exact existing AJ timing inputs.\n        #[must_use]\n        pub const fn into_parts(self) -> (Range<u64>, u64, Range<u64>) {'
+              ),
+              (
+                  '#[expect(\n            clippy::too_many_arguments,\n            reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"\n        )]',
+                  '#[expect(\n            clippy::too_many_arguments,\n            clippy::too_many_lines,\n            reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"\n        )]'
+              ),
+              ('let mut active = HashMap::new();\n            active.insert(duplicate.clone(), ());', 'let mut active = HashMap::<DeviceId, u8>::new();\n            active.insert(duplicate.clone(), 1_u8);'),
+              ('rejection = Some(observed)\n                });', 'rejection = Some(observed);\n                });'),
+              ('let active = HashMap::<DeviceId, ()>::new();', 'let active = HashMap::<DeviceId, u8>::new();'),
+              (
+                  'let request = RemoteSessionExpectedDeviceAdmissionRequest::new(\n                expected.clone(),\n                session_id("fresh-session"),',
+                  'let request = RemoteSessionExpectedDeviceAdmissionRequest::new(\n                expected,\n                session_id("fresh-session"),'
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, found {count}: {old!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          git rm .github/workflows/c03e-al-clippy-hygiene-temporary.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+          git commit -m 'Phase 152 C03e-AL: apply Clippy hygiene corrections'
+          git push origin HEAD:phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging
