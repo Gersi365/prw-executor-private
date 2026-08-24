@@ -39,25 +39,19 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          auth_path = Path('crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs')
-          text = auth_path.read_text()
-
           def replace_exact(source: str, old: str, new: str, expected: int = 1) -> str:
               count = source.count(old)
               if count != expected:
                   raise SystemExit(f'expected {expected} occurrence(s), found {count}: {old[:120]!r}')
               return source.replace(old, new)
 
-          text = replace_exact(
-              text,
-              '''use prw_remote_bridge::{
-              CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
-              capability_request_wire::{''',
-              '''use prw_remote_bridge::{
-              CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
-              authorized_request_dispatch::dispatch_authorized_request,
-              capability_request_wire::{''',
-          )
+          auth_path = Path('crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs')
+          text = auth_path.read_text()
+
+          old = "use prw_remote_bridge::{\n    CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,\n    capability_request_wire::{"
+          new = "use prw_remote_bridge::{\n    CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,\n    authorized_request_dispatch::dispatch_authorized_request,\n    capability_request_wire::{"
+          text = replace_exact(text, old, new)
+
           text = replace_exact(
               text,
               'use super::RemoteSessionCapabilityRuntimeOwner;',
@@ -75,58 +69,50 @@ jobs:
               'authority: &SharedCurrentCapabilityAuthority<P>,',
               expected=3,
           )
-          text = replace_exact(
-              text,
-              '''        let response = self.capability_owner.bound_session.process_request(
-                  bridge,
-                  now_unix_seconds,
-                  &request,
-                  dispatcher,
-              )?;
-              send_capability_response_frame(&mut stream, &response).await?;''',
-              '''        let bound_session = &self.capability_owner.bound_session;
-              let authorized = authority
-                  .with_current_authority(|registry, policy| {
-                      let bridge = CapabilityBridge::new(registry, policy);
-                      bound_session.authorize(&bridge, now_unix_seconds, &request)
-                  })
-                  .await?;
-              let response = dispatch_authorized_request(&authorized, dispatcher)?;
-              send_capability_response_frame(&mut stream, &response).await?;''',
+
+          old = (
+              "        let response = self.capability_owner.bound_session.process_request(\n"
+              "            bridge,\n"
+              "            now_unix_seconds,\n"
+              "            &request,\n"
+              "            dispatcher,\n"
+              "        )?;\n"
+              "        send_capability_response_frame(&mut stream, &response).await?;"
           )
+          new = (
+              "        let bound_session = &self.capability_owner.bound_session;\n"
+              "        let authorized = authority\n"
+              "            .with_current_authority(|registry, policy| {\n"
+              "                let bridge = CapabilityBridge::new(registry, policy);\n"
+              "                bound_session.authorize(&bridge, now_unix_seconds, &request)\n"
+              "            })\n"
+              "            .await?;\n"
+              "        let response = dispatch_authorized_request(&authorized, dispatcher)?;\n"
+              "        send_capability_response_frame(&mut stream, &response).await?;"
+          )
+          text = replace_exact(text, old, new)
+
           text = replace_exact(
               text,
               '.process_one_capability_request(bridge, now_unix_seconds, dispatcher)',
               '.process_one_capability_request(authority, now_unix_seconds, dispatcher)',
           )
-          text = replace_exact(
-              text,
-              '''            let mut request_loop = Box::pin(self.run_capability_request_loop(
-                  bridge,
-                  verifier_time_unix_seconds,
-                  dispatcher,
-              ));''',
-              '''            let mut request_loop = Box::pin(self.run_capability_request_loop(
-                  authority,
-                  verifier_time_unix_seconds,
-                  dispatcher,
-              ));''',
+
+          old = (
+              "            let mut request_loop = Box::pin(self.run_capability_request_loop(\n"
+              "                bridge,\n"
+              "                verifier_time_unix_seconds,\n"
+              "                dispatcher,\n"
+              "            ));"
           )
-          text = replace_exact(
-              text,
-              '''    /// bound session delegates exactly once to the current [`CapabilityBridge`] using caller-supplied
-              /// verifier time and mutable dispatcher. Only bridge success is sent as one response frame on
-              /// the same stream.''',
-              '''    /// bound session authorizes exactly once against the caller-supplied shared-current authority
-              /// using verifier time, then dispatches only after the authority read guard is released. Only
-              /// successful authorization and dispatch are sent as one response frame on the same stream.''',
+          new = (
+              "            let mut request_loop = Box::pin(self.run_capability_request_loop(\n"
+              "                authority,\n"
+              "                verifier_time_unix_seconds,\n"
+              "                dispatcher,\n"
+              "            ));"
           )
-          text = replace_exact(
-              text,
-              '''    /// identity and lease internally, while the bridge performs current registry/policy validation.''',
-              '''    /// identity and lease internally, while an ephemeral bridge performs current registry/policy
-              /// validation inside the shared-current authority read operation.''',
-          )
+          text = replace_exact(text, old, new)
           auth_path.write_text(text)
 
           exec_path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
@@ -136,18 +122,21 @@ jobs:
               'use prw_remote_bridge::{CapabilityBridge, CapabilityDispatcher};',
               'use prw_remote_bridge::CapabilityDispatcher;',
           )
-          text = replace_exact(
-              text,
-              '''use super::authenticated_remote_session_runtime::{
-                  AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
-              };''',
-              '''use super::{
-                  SharedCurrentCapabilityAuthority,
-                  authenticated_remote_session_runtime::{
-                      AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
-                  },
-              };''',
+
+          old = (
+              "use super::authenticated_remote_session_runtime::{\n"
+              "    AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,\n"
+              "};"
           )
+          new = (
+              "use super::{\n"
+              "    SharedCurrentCapabilityAuthority,\n"
+              "    authenticated_remote_session_runtime::{\n"
+              "        AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,\n"
+              "    },\n"
+              "};"
+          )
+          text = replace_exact(text, old, new)
           text = replace_exact(
               text,
               'P: PolicyEvaluator + Sync,',
@@ -160,18 +149,8 @@ jobs:
           )
           text = replace_exact(
               text,
-              '''                bridge,
-                  verifier_time_unix_seconds,''',
-              '''                authority,
-                  verifier_time_unix_seconds,''',
-          )
-          text = replace_exact(
-              text,
-              '''//! adds only one borrowed domain-specific drive seam for the existing C03e-S worker body. It does
-              //! not bind remote transport, spawn a task, publish readiness, or wire the Agent binary.''',
-              '''//! adds only one borrowed domain-specific drive seam for the existing C03e-S worker body. C03e-Z
-              //! integrates that seam with the C03e-X shared-current authority without task spawn. It does not bind
-              //! remote transport, publish readiness, or wire the Agent binary.''',
+              "                bridge,\n                verifier_time_unix_seconds,",
+              "                authority,\n                verifier_time_unix_seconds,",
           )
           exec_path.write_text(text)
           PY
@@ -184,7 +163,6 @@ jobs:
           rm -- "${WORKFLOW}"
 
           mapfile -t changed < <(git diff --name-only HEAD | sort)
-          printf '%s\n' "${changed[@]}"
           expected=(
             '.github/workflows/phase-152-c03e-z-materialize-shared-current-single-worker.yml'
             'crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime.rs'
