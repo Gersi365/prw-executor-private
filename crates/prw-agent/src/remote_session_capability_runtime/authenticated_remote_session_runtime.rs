@@ -18,6 +18,7 @@ use std::{
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
     CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
+    authorized_request_dispatch::dispatch_authorized_request,
     capability_request_wire::{
         CapabilityRequestWireError, receive_capability_request_frame,
         send_capability_response_frame,
@@ -29,7 +30,7 @@ use prw_remote_bridge::{
 };
 use prw_session::AuthenticatedDeviceSession;
 
-use super::RemoteSessionCapabilityRuntimeOwner;
+use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthority};
 
 #[allow(
     dead_code,
@@ -154,22 +155,24 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Failure produces no fabricated success response, retry, replacement stream/session/lease,
     /// pending-session abort, authenticated-session deletion or automatic whole-peer close.
     pub async fn process_one_capability_request<
-        P: PolicyEvaluator + Sync,
+        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
     >(
         &mut self,
-        bridge: &CapabilityBridge<'_, P>,
+        authority: &SharedCurrentCapabilityAuthority<P>,
         now_unix_seconds: u64,
         dispatcher: &mut D,
     ) -> Result<(), AuthenticatedRemoteSessionCapabilityTransactionError> {
         let mut stream = self.peer.accept_control_stream().await?;
         let request = receive_capability_request_frame(&mut stream).await?;
-        let response = self.capability_owner.bound_session.process_request(
-            bridge,
-            now_unix_seconds,
-            &request,
-            dispatcher,
-        )?;
+        let bound_session = &self.capability_owner.bound_session;
+        let authorized = authority
+            .with_current_authority(|registry, policy| {
+                let bridge = CapabilityBridge::new(registry, policy);
+                bound_session.authorize(&bridge, now_unix_seconds, &request)
+            })
+            .await?;
+        let response = dispatch_authorized_request(&authorized, dispatcher)?;
         send_capability_response_frame(&mut stream, &response).await?;
         Ok(())
     }
@@ -189,19 +192,19 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Returns the first [`AuthenticatedRemoteSessionCapabilityTransactionError`] emitted by the
     /// existing one-request transaction after explicitly closing the retained peer.
     pub async fn run_capability_request_loop<
-        P: PolicyEvaluator + Sync,
+        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
         T: FnMut() -> u64 + Send,
     >(
         &mut self,
-        bridge: &CapabilityBridge<'_, P>,
+        authority: &SharedCurrentCapabilityAuthority<P>,
         mut verifier_time_unix_seconds: T,
         dispatcher: &mut D,
     ) -> Result<(), AuthenticatedRemoteSessionCapabilityTransactionError> {
         loop {
             let now_unix_seconds = verifier_time_unix_seconds();
             if let Err(error) = self
-                .process_one_capability_request(bridge, now_unix_seconds, dispatcher)
+                .process_one_capability_request(authority, now_unix_seconds, dispatcher)
                 .await
             {
                 self.peer.close(
@@ -230,20 +233,20 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// This method creates no channel, task, runtime, join handle, registry entry, retry or readiness
     /// state and does not expose the retained peer.
     pub async fn run_capability_request_worker<
-        P: PolicyEvaluator + Sync,
+        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
         T: FnMut() -> u64 + Send,
         C: Future<Output = ()> + Send,
     >(
         &mut self,
-        bridge: &CapabilityBridge<'_, P>,
+        authority: &SharedCurrentCapabilityAuthority<P>,
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
     ) -> AuthenticatedRemoteSessionWorkerStop {
         let outcome = {
             let mut request_loop = Box::pin(self.run_capability_request_loop(
-                bridge,
+                authority,
                 verifier_time_unix_seconds,
                 dispatcher,
             ));
