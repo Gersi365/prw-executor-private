@@ -41,7 +41,10 @@ impl<P> SharedCurrentCapabilityAuthority<P> {
     #[must_use]
     pub fn new(registry: WorkspaceDeviceRegistry, policy: P) -> Self {
         Self {
-            state: Arc::new(RwLock::new(CurrentCapabilityAuthorityState { registry, policy })),
+            state: Arc::new(RwLock::new(CurrentCapabilityAuthorityState {
+                registry,
+                policy,
+            })),
         }
     }
 }
