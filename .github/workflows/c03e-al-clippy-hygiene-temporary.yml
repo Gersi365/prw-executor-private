@@ -2,13 +2,15 @@ name: C03e-AL Temporary Clippy Hygiene
 
 on:
   push:
+    branches:
+      - phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.ref_name == 'phase-152-c03e-al-repeated-real-admission-persistent-collection-supervisor-source-materialization-staging'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
