@@ -4,12 +4,9 @@
 //! one Tokio async wake. C03e-AD materializes only that pair. It does not clone cancellation
 //! authority, retain worker handles, fan out shutdown, wire process signals, or activate transport.
 
-use std::{
-    future::Future,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use tokio::sync::Notify;
@@ -68,11 +65,9 @@ impl RemoteSessionWorkerCancellationSignal {
     /// The monotonic flag is the lifecycle state. `Notify` is only the async wake mechanism. A
     /// notification racing between the flag check and waiter registration is retained as a Tokio
     /// permit, so the single waiter cannot permanently miss an explicit cancellation request.
-    pub fn into_cancelled(self) -> impl Future<Output = ()> + Send + 'static {
-        async move {
-            while !self.state.requested.load(Ordering::Acquire) {
-                self.state.wake.notified().await;
-            }
+    pub async fn into_cancelled(self) {
+        while !self.state.requested.load(Ordering::Acquire) {
+            self.state.wake.notified().await;
         }
     }
 }
