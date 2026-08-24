@@ -1,0 +1,101 @@
+name: Phase 152 C03e-U Lockfile Corrective
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-u-remote-session-executor-owner-source-materialization-staging
+    paths:
+      - '.github/workflows/phase-152-c03e-u-lockfile-corrective.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  correct-lockfile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove exact corrective boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REPOSITORY" = 'Gersi365/prw-executor-private'
+          test "$GITHUB_REF_NAME" = 'phase-152-c03e-u-remote-session-executor-owner-source-materialization-staging'
+          test -f Cargo.lock
+          test -f crates/prw-agent/Cargo.toml
+          grep -Fq 'tokio = { version = "=1.53.1", default-features = false, features = ["rt", "net", "time", "sync"] }' crates/prw-agent/Cargo.toml
+          echo c03e_u_lockfile_corrective_boundary=pass
+
+      - name: Materialize only the prw-agent Tokio lock edge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('Cargo.lock')
+          text = path.read_text()
+          old = '''[[package]]
+          name = "prw-agent"
+          version = "0.1.0"
+          dependencies = [
+           "aws-lc-rs",
+           "nix",
+           "prw-control-plane",
+           "prw-core",
+           "prw-device-identity-custody",
+           "prw-file-service",
+           "prw-file-transfer",
+           "prw-files",
+           "prw-forwarding",
+           "prw-network",
+           "prw-policy",
+           "prw-reachability-custody",
+           "prw-registry",
+           "prw-remote-bridge",
+           "prw-session",
+           "prw-terminal",
+           "rustix",
+          ]'''.replace('          ', '')
+          new = old.replace(' "rustix",\n]', ' "rustix",\n "tokio",\n]')
+          if text.count(old) != 1:
+              raise SystemExit('prw-agent Cargo.lock block boundary mismatch')
+          if ' "tokio",\n]' in old:
+              raise SystemExit('unexpected pre-existing direct Tokio edge')
+          text = text.replace(old, new)
+          path.write_text(text)
+          PY
+
+          git diff --check -- Cargo.lock
+          test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Cargo.lock').read_text()
+          start = text.index('[[package]]\nname = "prw-agent"')
+          end = text.index('\n\n[[package]]', start)
+          block = text[start:end]
+          if block.count(' "tokio",') != 1:
+              raise SystemExit('prw-agent direct Tokio edge not exact')
+          print('c03e_u_lockfile_edge=pass')
+          PY
+
+      - name: Verify locked graph accepts the corrected edge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo metadata --locked --format-version 1 > /dev/null
+          echo c03e_u_locked_graph=pass
+
+      - name: Commit lock edge and self-remove corrective workflow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/phase-152-c03e-u-lockfile-corrective.yml
+          git add Cargo.lock
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Phase 152 C03e-U: materialize Cargo.lock Tokio edge'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
