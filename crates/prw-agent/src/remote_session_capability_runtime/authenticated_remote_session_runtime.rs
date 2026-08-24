@@ -419,9 +419,15 @@ mod tests {
         let error = AuthenticatedRemoteSessionCapabilityTransactionError::Bridge(
             RemoteBridgeError::SessionExpired,
         );
-        assert_eq!(
-            AuthenticatedRemoteSessionWorkerStop::Failed(error),
-            AuthenticatedRemoteSessionWorkerStop::Failed(error)
-        );
+        let stop = AuthenticatedRemoteSessionWorkerStop::Failed(error);
+
+        match stop {
+            AuthenticatedRemoteSessionWorkerStop::Failed(observed) => {
+                assert_eq!(observed, error);
+            }
+            AuthenticatedRemoteSessionWorkerStop::Cancelled => {
+                panic!("worker failure must not be reclassified as cancellation");
+            }
+        }
     }
 }
