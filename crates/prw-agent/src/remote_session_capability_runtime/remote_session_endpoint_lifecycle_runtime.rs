@@ -90,12 +90,7 @@ fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, Trans
     };
 
     compose_endpoint_bind_with_executor(executor, authority, bind_transport).map_err(
-        |(authority, error)| {
-            (
-                authority,
-                EndpointStartupCompositionError::Transport(error),
-            )
-        },
+        |(authority, error)| (authority, EndpointStartupCompositionError::Transport(error)),
     )
 }
 
@@ -329,10 +324,8 @@ impl RemoteSessionEndpointLifecycleRuntime {
         (Self, RemoteSessionSupervisorShutdownController),
         RemoteSessionEndpointLifecycleStartupFailure,
     > {
-        let startup = compose_endpoint_bind_with_executor(
-            executor,
-            authority_owner,
-            |authority_owner| {
+        let startup =
+            compose_endpoint_bind_with_executor(executor, authority_owner, |authority_owner| {
                 AgentRemoteTransportRuntime::bind_from_systemd_credentials(
                     authority_owner,
                     bind_addr,
@@ -342,8 +335,7 @@ impl RemoteSessionEndpointLifecycleRuntime {
                     let authority_owner = failure.into_authority_owner();
                     (Box::new(authority_owner), error)
                 })
-            },
-        );
+            });
 
         let (executor, transport) = match startup {
             Ok(parts) => parts,
@@ -508,7 +500,10 @@ mod tests {
     fn assert_reachability_bootstrap_signature(
         bootstrap: fn(
             &mut RemoteSessionExecutorRuntime,
-        ) -> Result<ReachabilityAuthorityRuntimeOwner, ReachabilityAuthorityCustodyBootstrapError>,
+        ) -> Result<
+            ReachabilityAuthorityRuntimeOwner,
+            ReachabilityAuthorityCustodyBootstrapError,
+        >,
     ) {
         let _ = bootstrap;
     }
