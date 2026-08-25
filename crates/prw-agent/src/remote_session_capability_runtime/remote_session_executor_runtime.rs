@@ -1928,7 +1928,7 @@ impl RemoteSessionExecutorRuntime {
         reason = "C03e-AR materializes the AQ-selected source seam for a separately gated process consumer"
     )]
     pub(crate) fn bootstrap_reachability_authority_from_systemd_credentials(
-        &mut self,
+        &self,
     ) -> Result<
         crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
         crate::reachability_authority_custody_bootstrap::ReachabilityAuthorityCustodyBootstrapError,
