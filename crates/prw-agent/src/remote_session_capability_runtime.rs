@@ -17,6 +17,10 @@ mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
 mod remote_session_endpoint_lifecycle_runtime;
 mod remote_session_executor_runtime;
+#[allow(
+    dead_code,
+    reason = "C03e-AT materializes process-lifecycle control for a separately gated consumer"
+)]
 pub(crate) mod remote_session_process_lifecycle_control;
 mod remote_session_worker_cancellation;
 mod shared_current_capability_authority;
