@@ -530,10 +530,10 @@ const fn map_remote_process_finalization(
 fn finalize_remote_process_companion(
     companion: Result<RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError>,
 ) -> LinuxAgentRemoteProcessCompanionFinalization {
-    match companion {
-        Ok(owner) => map_remote_process_finalization(owner.finalize()),
-        Err(_) => LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed,
-    }
+    companion.map_or(
+        LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed,
+        |owner| map_remote_process_finalization(owner.finalize()),
+    )
 }
 
 fn initial_runtime_config() -> LocalLinuxProductionRuntimeConfig {
@@ -785,15 +785,12 @@ mod tests {
 
     #[test]
     fn public_remote_companion_facade_has_exact_injected_operation_shape() {
+        type RemoteCompanionEntry = fn(
+            fn(LinuxAgentRemoteSupervisorShutdownPublisher),
+        ) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
+
         fn operation(_: LinuxAgentRemoteSupervisorShutdownPublisher) {}
-        fn assert_signature(
-            entry: fn(
-                fn(LinuxAgentRemoteSupervisorShutdownPublisher),
-            ) -> Result<
-                LinuxAgentBootstrapWithRemoteReport,
-                LinuxAgentBootstrapStartFailure,
-            >,
-        ) {
+        fn assert_signature(entry: RemoteCompanionEntry) {
             let _ = entry;
         }
 
