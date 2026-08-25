@@ -2,9 +2,10 @@
 //!
 //! C03e-AO selected executor-before-bind startup, recoverable reachability-authority custody on
 //! startup failure, one remote-specific explicit supervisor-shutdown pair, and delegation to the
-//! existing C03e-AN endpoint lifecycle. C03e-AP materializes only those source seams. This module
-//! does not wire Agent `main.rs`, publish readiness, consume process signals, retry startup, or
-//! activate an endpoint from an executable path.
+//! existing C03e-AN endpoint lifecycle. C03e-AP materializes only those source seams. C03e-AR adds
+//! the separately selected Agent-internal path that consumes an already-created executor before
+//! the same existing endpoint bind. This module does not wire Agent `main.rs`, publish readiness,
+//! consume process signals, retry startup, or activate an endpoint from an executable path.
 
 use std::{
     fmt,
@@ -56,6 +57,22 @@ type EndpointStartupCompositionResult<
     EndpointStartupCompositionFailure<Authority, ExecutorError, TransportError>,
 >;
 
+type EndpointBindCompositionResult<Authority, Executor, Transport, TransportError> =
+    Result<(Executor, Transport), (Box<Authority>, TransportError)>;
+
+fn compose_endpoint_bind_with_executor<Authority, Executor, Transport, TransportError>(
+    executor: Executor,
+    authority: Authority,
+    bind_transport: impl FnOnce(Authority) -> Result<Transport, (Box<Authority>, TransportError)>,
+) -> EndpointBindCompositionResult<Authority, Executor, Transport, TransportError> {
+    let transport = match bind_transport(authority) {
+        Ok(transport) => transport,
+        Err(failure) => return Err(failure),
+    };
+
+    Ok((executor, transport))
+}
+
 fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, TransportError>(
     authority: Authority,
     construct_executor: impl FnOnce() -> Result<Executor, ExecutorError>,
@@ -72,14 +89,14 @@ fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, Trans
         }
     };
 
-    let transport = match bind_transport(authority) {
-        Ok(transport) => transport,
-        Err((authority, error)) => {
-            return Err((authority, EndpointStartupCompositionError::Transport(error)));
-        }
-    };
-
-    Ok((executor, transport))
+    compose_endpoint_bind_with_executor(executor, authority, bind_transport).map_err(
+        |(authority, error)| {
+            (
+                authority,
+                EndpointStartupCompositionError::Transport(error),
+            )
+        },
+    )
 }
 
 /// Stable failure class while composing one Agent-owned remote endpoint lifecycle runtime.
@@ -288,6 +305,68 @@ impl RemoteSessionEndpointLifecycleRuntime {
         ))
     }
 
+    /// Binds the existing real remote endpoint using an already-created private executor.
+    ///
+    /// This Agent-internal seam consumes the exact supplied executor and admitted reachability
+    /// authority. It attempts the existing fixed-credential/TLS/socket bind once and creates the
+    /// existing supervisor-shutdown pair only after bind succeeds. It never constructs a replacement
+    /// executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing AP startup-failure owner with the exact reachability authority retained
+    /// and the existing transport failure classification. No retry, alternate bind, executor
+    /// replacement, reachability re-bootstrap or readiness publication is performed.
+    #[allow(
+        dead_code,
+        reason = "C03e-AR materializes the AQ-selected source seam for a separately gated process consumer"
+    )]
+    pub(crate) fn bind_with_executor_from_systemd_credentials(
+        executor: RemoteSessionExecutorRuntime,
+        authority_owner: ReachabilityAuthorityRuntimeOwner,
+        bind_addr: SocketAddr,
+    ) -> Result<
+        (Self, RemoteSessionSupervisorShutdownController),
+        RemoteSessionEndpointLifecycleStartupFailure,
+    > {
+        let startup = compose_endpoint_bind_with_executor(
+            executor,
+            authority_owner,
+            |authority_owner| {
+                AgentRemoteTransportRuntime::bind_from_systemd_credentials(
+                    authority_owner,
+                    bind_addr,
+                )
+                .map_err(|failure| {
+                    let error = failure.error();
+                    let authority_owner = failure.into_authority_owner();
+                    (Box::new(authority_owner), error)
+                })
+            },
+        );
+
+        let (executor, transport) = match startup {
+            Ok(parts) => parts,
+            Err((authority_owner, error)) => {
+                return Err(RemoteSessionEndpointLifecycleStartupFailure::new(
+                    authority_owner,
+                    RemoteSessionEndpointLifecycleStartupError::Transport(error),
+                ));
+            }
+        };
+
+        let (shutdown_controller, supervisor_shutdown) = remote_session_supervisor_shutdown_pair();
+
+        Ok((
+            Self {
+                executor,
+                transport,
+                supervisor_shutdown,
+            },
+            shutdown_controller,
+        ))
+    }
+
     /// Consumes this startup owner and drives exactly one repeated-admission endpoint lifecycle.
     ///
     /// The stored supervisor-shutdown signal is consumed exactly once. All admission, worker,
@@ -358,10 +437,14 @@ mod tests {
 
     use super::{
         EndpointStartupCompositionError, RemoteSessionEndpointLifecycleRuntime,
-        RemoteSessionEndpointLifecycleStartupFailure, RemoteSessionSupervisorShutdownController,
+        RemoteSessionEndpointLifecycleStartupFailure, RemoteSessionExecutorRuntime,
+        RemoteSessionSupervisorShutdownController, compose_endpoint_bind_with_executor,
         compose_endpoint_startup, remote_session_supervisor_shutdown_pair,
     };
-    use crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner;
+    use crate::{
+        reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
+        reachability_authority_custody_bootstrap::ReachabilityAuthorityCustodyBootstrapError,
+    };
 
     #[derive(Default)]
     struct WakeFlag {
@@ -404,6 +487,30 @@ mod tests {
         >,
     ) {
         let _ = constructor;
+    }
+
+    fn assert_same_executor_constructor_signature(
+        constructor: fn(
+            RemoteSessionExecutorRuntime,
+            ReachabilityAuthorityRuntimeOwner,
+            SocketAddr,
+        ) -> Result<
+            (
+                RemoteSessionEndpointLifecycleRuntime,
+                RemoteSessionSupervisorShutdownController,
+            ),
+            RemoteSessionEndpointLifecycleStartupFailure,
+        >,
+    ) {
+        let _ = constructor;
+    }
+
+    fn assert_reachability_bootstrap_signature(
+        bootstrap: fn(
+            &mut RemoteSessionExecutorRuntime,
+        ) -> Result<ReachabilityAuthorityRuntimeOwner, ReachabilityAuthorityCustodyBootstrapError>,
+    ) {
+        let _ = bootstrap;
     }
 
     #[test]
@@ -532,9 +639,41 @@ mod tests {
     }
 
     #[test]
-    fn production_constructor_has_exact_selected_shape() {
+    fn supplied_executor_is_preserved_through_successful_fake_bind() {
+        let bind_calls = Cell::new(0_u8);
+
+        let result = compose_endpoint_bind_with_executor(31_u8, 37_u8, |authority| {
+            bind_calls.set(bind_calls.get() + 1);
+            Ok::<_, (Box<u8>, &'static str)>((authority, 41_u8))
+        });
+
+        assert_eq!(bind_calls.get(), 1);
+        assert_eq!(result, Ok((31_u8, (37_u8, 41_u8))));
+    }
+
+    #[test]
+    fn supplied_executor_bind_failure_retains_exact_authority_without_retry() {
+        let bind_calls = Cell::new(0_u8);
+
+        let result = compose_endpoint_bind_with_executor(43_u8, 47_u8, |authority| {
+            bind_calls.set(bind_calls.get() + 1);
+            Err::<(u8, u8), _>((Box::new(authority), "bind failed"))
+        });
+
+        assert_eq!(bind_calls.get(), 1);
+        assert_eq!(result, Err((Box::new(47_u8), "bind failed")));
+    }
+
+    #[test]
+    fn production_constructors_and_bootstrap_have_exact_selected_shapes() {
         assert_constructor_signature(
             RemoteSessionEndpointLifecycleRuntime::bind_from_systemd_credentials,
+        );
+        assert_same_executor_constructor_signature(
+            RemoteSessionEndpointLifecycleRuntime::bind_with_executor_from_systemd_credentials,
+        );
+        assert_reachability_bootstrap_signature(
+            RemoteSessionExecutorRuntime::bootstrap_reachability_authority_from_systemd_credentials,
         );
     }
 }
