@@ -242,12 +242,7 @@ pub fn run_signal_aware_linux_production_runtime_loop(
 /// Returns the existing bounded signal-source or lifecycle-assembly failure unchanged. Companion
 /// startup/finalization policy is represented by the caller-owned companion value and does not add a
 /// new local startup failure class.
-pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_companion<
-    F,
-    S,
-    O,
-    G,
->(
+pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_companion<F, S, O, G>(
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
     on_started: F,
     start_companion: S,
@@ -485,7 +480,7 @@ mod tests {
             config(),
             BoundedLocalReadPolicy::allow_local_reads(),
             LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready),
-            dns,
+            &dns,
         )
     }
 
