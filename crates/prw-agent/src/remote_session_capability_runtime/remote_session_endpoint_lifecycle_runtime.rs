@@ -40,16 +40,32 @@ enum EndpointStartupCompositionError<ExecutorError, TransportError> {
     Transport(TransportError),
 }
 
+type EndpointStartupCompositionFailure<Authority, ExecutorError, TransportError> = (
+    Box<Authority>,
+    EndpointStartupCompositionError<ExecutorError, TransportError>,
+);
+
+type EndpointStartupCompositionResult<
+    Authority,
+    Executor,
+    Transport,
+    ExecutorError,
+    TransportError,
+> = Result<
+    (Executor, Transport),
+    EndpointStartupCompositionFailure<Authority, ExecutorError, TransportError>,
+>;
+
 fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, TransportError>(
     authority: Authority,
     construct_executor: impl FnOnce() -> Result<Executor, ExecutorError>,
     bind_transport: impl FnOnce(Authority) -> Result<Transport, (Box<Authority>, TransportError)>,
-) -> Result<
-    (Executor, Transport),
-    (
-        Box<Authority>,
-        EndpointStartupCompositionError<ExecutorError, TransportError>,
-    ),
+) -> EndpointStartupCompositionResult<
+    Authority,
+    Executor,
+    Transport,
+    ExecutorError,
+    TransportError,
 > {
     let executor = match construct_executor() {
         Ok(executor) => executor,
@@ -130,7 +146,7 @@ impl std::error::Error for RemoteSessionEndpointLifecycleStartupFailure {
 }
 
 impl RemoteSessionEndpointLifecycleStartupFailure {
-    fn new(
+    const fn new(
         authority_owner: Box<ReachabilityAuthorityRuntimeOwner>,
         error: RemoteSessionEndpointLifecycleStartupError,
     ) -> Self {
