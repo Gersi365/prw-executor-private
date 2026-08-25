@@ -393,7 +393,7 @@ impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, 
         clippy::too_many_arguments,
         reason = "C03e-AZ keeps the selected injected remote-operation inputs explicit and typed"
     )]
-    pub fn new(
+    pub const fn new(
         bind_addr: SocketAddr,
         max_active_workers: NonZeroUsize,
         capability_authority: SharedCurrentCapabilityAuthority<P>,
@@ -452,7 +452,7 @@ where
 
         let _ = run_remote_process_operation_composition(
             RemoteSessionExecutorRuntime::new,
-            |executor| executor.bootstrap_reachability_authority_from_systemd_credentials(),
+            RemoteSessionExecutorRuntime::bootstrap_reachability_authority_from_systemd_credentials,
             move |executor, authority_owner| {
                 RemoteSessionEndpointLifecycleRuntime::bind_with_executor_from_systemd_credentials(
                     executor,
