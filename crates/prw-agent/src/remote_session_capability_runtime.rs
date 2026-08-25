@@ -9,7 +9,8 @@
 //! admission transaction, C03e-AL composes repeated expected-device admission with that persistent
 //! collection under the same private current-thread runtime, C03e-AP adds the AO-selected
 //! executor-before-bind endpoint lifecycle startup plus explicit remote-supervisor shutdown control,
-//! and C03e-AT adds the AS-selected crate-internal one-thread process-lifecycle handoff/join control.
+//! C03e-AT adds the AS-selected crate-internal one-thread process-lifecycle handoff/join control, and
+//! C03e-BB adds the BA-selected read-only observation of the exact already-bound endpoint address.
 //! This module still does not wire the Agent binary, publish readiness, or activate a production
 //! listener lifecycle.
 
@@ -30,8 +31,9 @@ pub use real_remote_admission_transaction::{
     RemoteSessionRealAdmissionError, admit_expected_remote_device_session,
 };
 pub use remote_session_endpoint_lifecycle_runtime::{
-    RemoteSessionEndpointLifecycleRuntime, RemoteSessionEndpointLifecycleStartupError,
-    RemoteSessionEndpointLifecycleStartupFailure, RemoteSessionSupervisorShutdownController,
+    RemoteSessionEndpointBoundAddressError, RemoteSessionEndpointLifecycleRuntime,
+    RemoteSessionEndpointLifecycleStartupError, RemoteSessionEndpointLifecycleStartupFailure,
+    RemoteSessionSupervisorShutdownController,
 };
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,

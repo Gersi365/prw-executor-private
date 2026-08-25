@@ -4,8 +4,10 @@
 //! startup failure, one remote-specific explicit supervisor-shutdown pair, and delegation to the
 //! existing C03e-AN endpoint lifecycle. C03e-AP materializes only those source seams. C03e-AR adds
 //! the separately selected Agent-internal path that consumes an already-created executor before
-//! the same existing endpoint bind. This module does not wire Agent `main.rs`, publish readiness,
-//! consume process signals, retry startup, or activate an endpoint from an executable path.
+//! the same existing endpoint bind. C03e-BB adds only the BA-selected read-only observation of the
+//! exact local address reported by that already-bound retained endpoint. This module does not wire
+//! Agent `main.rs`, publish readiness, consume process signals, retry startup, or activate an
+//! endpoint from an executable path.
 
 use std::{
     fmt,
@@ -89,6 +91,30 @@ fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, Trans
         |(authority, error)| (authority, EndpointStartupCompositionError::Transport(error)),
     )
 }
+
+fn map_bound_addr_observation<E>(
+    observation: Result<SocketAddr, E>,
+) -> Result<SocketAddr, RemoteSessionEndpointBoundAddressError> {
+    observation.map_err(|_| RemoteSessionEndpointBoundAddressError::Unavailable)
+}
+
+/// Stable failure class while observing the exact local address of one already-bound endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RemoteSessionEndpointBoundAddressError {
+    /// The retained lower transport could not report its already-bound local address.
+    Unavailable,
+}
+
+impl fmt::Display for RemoteSessionEndpointBoundAddressError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unavailable => formatter.write_str("remote endpoint bound address unavailable"),
+        }
+    }
+}
+
+impl std::error::Error for RemoteSessionEndpointBoundAddressError {}
 
 /// Stable failure class while composing one Agent-owned remote endpoint lifecycle runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -355,6 +381,20 @@ impl RemoteSessionEndpointLifecycleRuntime {
         ))
     }
 
+    /// Returns the exact local socket address reported by the retained already-bound endpoint.
+    ///
+    /// This is a synchronous read-only observation. It does not use the original bind input as an
+    /// authoritative substitute, create a connectivity candidate, publish reachability, retry,
+    /// rebind, close the endpoint, request shutdown, or mutate lifecycle ownership.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RemoteSessionEndpointBoundAddressError::Unavailable`] when the existing retained
+    /// lower transport cannot report its already-bound local address.
+    pub fn bound_addr(&self) -> Result<SocketAddr, RemoteSessionEndpointBoundAddressError> {
+        map_bound_addr_observation(self.transport.local_addr())
+    }
+
     /// Consumes this startup owner and drives exactly one repeated-admission endpoint lifecycle.
     ///
     /// The stored supervisor-shutdown signal is consumed exactly once. All admission, worker,
@@ -424,10 +464,11 @@ mod tests {
     };
 
     use super::{
-        EndpointStartupCompositionError, RemoteSessionEndpointLifecycleRuntime,
-        RemoteSessionEndpointLifecycleStartupFailure, RemoteSessionExecutorRuntime,
-        RemoteSessionSupervisorShutdownController, compose_endpoint_bind_with_executor,
-        compose_endpoint_startup, remote_session_supervisor_shutdown_pair,
+        EndpointStartupCompositionError, RemoteSessionEndpointBoundAddressError,
+        RemoteSessionEndpointLifecycleRuntime, RemoteSessionEndpointLifecycleStartupFailure,
+        RemoteSessionExecutorRuntime, RemoteSessionSupervisorShutdownController,
+        compose_endpoint_bind_with_executor, compose_endpoint_startup, map_bound_addr_observation,
+        remote_session_supervisor_shutdown_pair,
     };
     use crate::{
         reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
@@ -477,6 +518,14 @@ mod tests {
         let _ = constructor;
     }
 
+    fn assert_bound_addr_signature(
+        observation: fn(
+            &RemoteSessionEndpointLifecycleRuntime,
+        ) -> Result<SocketAddr, RemoteSessionEndpointBoundAddressError>,
+    ) {
+        let _ = observation;
+    }
+
     #[expect(
         clippy::type_complexity,
         reason = "C03e-AR test intentionally states the exact Agent-internal same-executor constructor shape"
@@ -506,6 +555,24 @@ mod tests {
         >,
     ) {
         let _ = bootstrap;
+    }
+
+    #[test]
+    fn bound_addr_mapping_preserves_exact_socket_addr() {
+        let bound_addr = SocketAddr::from(([127, 0, 0, 1], 43_121));
+
+        assert_eq!(
+            map_bound_addr_observation::<()>(Ok(bound_addr)),
+            Ok(bound_addr)
+        );
+    }
+
+    #[test]
+    fn bound_addr_mapping_collapses_lower_error_to_unavailable() {
+        assert_eq!(
+            map_bound_addr_observation::<&'static str>(Err("lower address unavailable")),
+            Err(RemoteSessionEndpointBoundAddressError::Unavailable)
+        );
     }
 
     #[test]
@@ -670,5 +737,6 @@ mod tests {
         assert_reachability_bootstrap_signature(
             RemoteSessionExecutorRuntime::bootstrap_reachability_authority_from_systemd_credentials,
         );
+        assert_bound_addr_signature(RemoteSessionEndpointLifecycleRuntime::bound_addr);
     }
 }
