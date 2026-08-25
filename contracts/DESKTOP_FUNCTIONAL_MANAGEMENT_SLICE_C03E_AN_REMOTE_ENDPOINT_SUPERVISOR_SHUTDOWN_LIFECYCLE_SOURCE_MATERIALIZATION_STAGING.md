@@ -180,6 +180,18 @@ C03e-AN does not materialize:
 - deployment;
 - merge.
 
+## Bounded canonical-validation corrective record
+
+The first canonical source candidate at `eddb00845fa55bb23f94fd12801686fd7f365f7e` failed only the Rust validation path after rustfmt had passed. The observed source defects were bounded to:
+
+- missing `# Errors` documentation on the new public lifecycle method;
+- an unnecessary mutable borrow on the private endpoint-finish helper executor parameter;
+- missing explicit `Result` success-type inference in the focused configuration-error preservation test.
+
+The corrective retained the AM-selected architecture and behavior. It added no dependency, manifest, lockfile, runtime, network, readiness, activation, deployment, or merge change. The transient corrective workflow self-removed, restoring the intended two-path AM -> AN net scope before canonical closure validation.
+
+The corrected source tree was materialized at `51a4fb13411525f4b4c236229d0a8710e3f76645`. Canonical closure must use the subsequent exact head containing this record and the same corrected Rust source, never the failed `eddb008...` candidate or any transient-helper head.
+
 ## Validation and closure
 
 Because C03e-AN changes Rust Agent source, canonical closure requires on the exact final source head:
