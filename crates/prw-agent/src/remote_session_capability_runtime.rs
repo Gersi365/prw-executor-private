@@ -7,8 +7,9 @@
 //! single-worker orderly cancellation pair. C03e-AH adds the first pre-listener persistent
 //! current-thread worker collection seam, C03e-AJ adds one bounded expected-device real remote
 //! admission transaction, C03e-AL composes repeated expected-device admission with that persistent
-//! collection under the same private current-thread runtime, and C03e-AP adds the AO-selected
-//! executor-before-bind endpoint lifecycle startup plus explicit remote-supervisor shutdown control.
+//! collection under the same private current-thread runtime, C03e-AP adds the AO-selected
+//! executor-before-bind endpoint lifecycle startup plus explicit remote-supervisor shutdown control,
+//! and C03e-AT adds the AS-selected crate-internal one-thread process-lifecycle handoff/join control.
 //! This module still does not wire the Agent binary, publish readiness, or activate a production
 //! listener lifecycle.
 
@@ -16,6 +17,7 @@ mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
 mod remote_session_endpoint_lifecycle_runtime;
 mod remote_session_executor_runtime;
+pub(crate) mod remote_session_process_lifecycle_control;
 mod remote_session_worker_cancellation;
 mod shared_current_capability_authority;
 
