@@ -5,14 +5,32 @@
 //! still defining no candidate wire encoding, socket operation, discovery authority or runtime
 //! activation. Publication freshness remains a separate verifier-owned input to the upper owner.
 
-use std::fmt;
+use std::{fmt, net::SocketAddr};
 
 use prw_connectivity::{
-    ConnectivityCandidate, ConnectivityError, PeerConnectivityIdentity, PeerConnectivityPlan,
-    TransportIdentity,
+    ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError, PeerConnectivityIdentity,
+    PeerConnectivityPlan, TransportIdentity,
 };
 use prw_registry::{RegistryError, WorkspaceDeviceRegistry};
 use prw_session::AuthenticatedDeviceSession;
+
+/// Projects one already-observed bound socket address into the existing validated connectivity
+/// endpoint domain type.
+///
+/// This semantic adapter performs no socket operation, interface discovery, address rewrite,
+/// candidate construction, publication or provider mutation. It delegates the exact observed IP
+/// address and port to [`ConnectivityEndpoint::new`], whose existing validation remains
+/// authoritative.
+///
+/// # Errors
+///
+/// Returns the existing [`ConnectivityError`] when the observed address or port is not a valid
+/// connectivity endpoint. No fallback address is attempted.
+pub fn project_observed_socket_addr_to_connectivity_endpoint(
+    observed: SocketAddr,
+) -> Result<ConnectivityEndpoint, ConnectivityError> {
+    ConnectivityEndpoint::new(observed.ip(), observed.port())
+}
 
 /// Stable source-level failure classification for candidate publication/admission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,4 +214,94 @@ pub fn refresh_from_authenticated_publication(
 
     plan.refresh_candidates(publication.candidates.clone())
         .map_err(CandidateReachabilityError::Connectivity)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    use prw_connectivity::{ConnectivityEndpoint, ConnectivityError};
+
+    use super::project_observed_socket_addr_to_connectivity_endpoint;
+
+    fn assert_projection_signature(
+        projection: fn(SocketAddr) -> Result<ConnectivityEndpoint, ConnectivityError>,
+    ) {
+        let _ = projection;
+    }
+
+    #[test]
+    fn projection_has_exact_selected_shape() {
+        assert_projection_signature(project_observed_socket_addr_to_connectivity_endpoint);
+    }
+
+    #[test]
+    fn projection_preserves_exact_ipv4_address_and_port() {
+        let address = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 41));
+        let observed = SocketAddr::new(address, 43_210);
+
+        let projected = project_observed_socket_addr_to_connectivity_endpoint(observed)
+            .expect("documentation IPv4 endpoint is valid");
+
+        assert_eq!(projected.address(), address);
+        assert_eq!(projected.port(), 43_210);
+    }
+
+    #[test]
+    fn projection_preserves_exact_ipv6_address_and_port() {
+        let address = IpAddr::V6(Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 41));
+        let observed = SocketAddr::new(address, 43_211);
+
+        let projected = project_observed_socket_addr_to_connectivity_endpoint(observed)
+            .expect("documentation IPv6 endpoint is valid");
+
+        assert_eq!(projected.address(), address);
+        assert_eq!(projected.port(), 43_211);
+    }
+
+    #[test]
+    fn projection_preserves_existing_zero_port_rejection() {
+        let observed = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
+
+        assert_eq!(
+            project_observed_socket_addr_to_connectivity_endpoint(observed),
+            Err(ConnectivityError::InvalidEndpointPort)
+        );
+    }
+
+    #[test]
+    fn projection_preserves_existing_unspecified_address_rejection() {
+        for address in [
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        ] {
+            assert_eq!(
+                project_observed_socket_addr_to_connectivity_endpoint(SocketAddr::new(address, 1)),
+                Err(ConnectivityError::InvalidEndpointAddress)
+            );
+        }
+    }
+
+    #[test]
+    fn projection_preserves_existing_multicast_address_rejection() {
+        for address in [
+            IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1)),
+        ] {
+            assert_eq!(
+                project_observed_socket_addr_to_connectivity_endpoint(SocketAddr::new(address, 1)),
+                Err(ConnectivityError::InvalidEndpointAddress)
+            );
+        }
+    }
+
+    #[test]
+    fn projection_preserves_existing_ipv4_limited_broadcast_rejection() {
+        let observed = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), 1);
+
+        assert_eq!(
+            project_observed_socket_addr_to_connectivity_endpoint(observed),
+            Err(ConnectivityError::InvalidEndpointAddress)
+        );
+    }
 }
