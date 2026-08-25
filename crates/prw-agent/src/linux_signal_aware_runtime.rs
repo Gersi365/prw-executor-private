@@ -480,7 +480,7 @@ mod tests {
             config(),
             BoundedLocalReadPolicy::allow_local_reads(),
             LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready),
-            &dns,
+            dns,
         )
     }
 
