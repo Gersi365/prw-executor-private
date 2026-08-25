@@ -6,7 +6,8 @@
 //! validated Phase 098 signal-aware runtime.
 
 use std::{
-    net::SocketAddr,
+    ffi::OsString,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     num::{NonZeroU16, NonZeroUsize},
     time::Duration,
 };
@@ -50,6 +51,79 @@ use crate::remote_session_capability_runtime::{
         RemoteSessionSupervisorShutdownPublisher,
     },
 };
+
+/// Fixed non-secret process configuration name for the production remote endpoint bind address.
+pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
+
+/// Stable failure while acquiring or validating production remote bind-address configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LinuxAgentRemoteBindAddressSourceError {
+    /// The fixed configuration value is absent or empty.
+    Unavailable,
+    /// The operating-system value is not valid Unicode.
+    EncodingInvalid,
+    /// The configured value is not an exact `SocketAddr`.
+    SocketAddressInvalid,
+    /// The parsed address is not eligible for this explicit bind-and-observe lane.
+    AddressNotBindAdvertisable,
+}
+
+impl std::fmt::Display for LinuxAgentRemoteBindAddressSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Unavailable => "remote bind-address configuration unavailable",
+            Self::EncodingInvalid => "remote bind-address configuration encoding invalid",
+            Self::SocketAddressInvalid => "remote bind-address socket address invalid",
+            Self::AddressNotBindAdvertisable => "remote bind-address is not bind-advertisable",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentRemoteBindAddressSourceError {}
+
+fn parse_linux_agent_remote_bind_addr_value(
+    value: Option<OsString>,
+) -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
+    let value = value.ok_or(LinuxAgentRemoteBindAddressSourceError::Unavailable)?;
+    if value.is_empty() {
+        return Err(LinuxAgentRemoteBindAddressSourceError::Unavailable);
+    }
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentRemoteBindAddressSourceError::EncodingInvalid)?;
+    let address = value
+        .parse::<SocketAddr>()
+        .map_err(|_| LinuxAgentRemoteBindAddressSourceError::SocketAddressInvalid)?;
+    let ip = address.ip();
+    if ip.is_unspecified()
+        || ip.is_multicast()
+        || matches!(ip, IpAddr::V4(ipv4) if ipv4 == Ipv4Addr::BROADCAST)
+    {
+        return Err(LinuxAgentRemoteBindAddressSourceError::AddressNotBindAdvertisable);
+    }
+    Ok(address)
+}
+
+/// Loads the explicitly configured production remote bind address from the process environment.
+///
+/// The fixed value is parsed directly as [`SocketAddr`]. This function performs no DNS lookup,
+/// interface enumeration, route inspection, public-address discovery, socket bind or fallback.
+/// Port `0` remains valid pre-bind so the retained endpoint may report the kernel-selected port
+/// through the separately materialized bound-address observation after a successful bind.
+///
+/// Configuration validity is not identity, authentication, authorization, readiness, reachability,
+/// publication provenance or public-routability evidence.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is absent/empty, non-Unicode, malformed, unspecified,
+/// multicast, or IPv4 limited broadcast. The error classification does not expose the configured
+/// value.
+pub fn load_linux_agent_remote_bind_addr_from_env()
+-> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
+    parse_linux_agent_remote_bind_addr_value(std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV))
+}
 
 /// Stable high-level terminal class exposed to the Agent binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -495,7 +569,7 @@ pub enum LinuxAgentRemoteProcessThreadFinalization {
     Panicked,
 }
 
-/// Secondary bounded finalization evidence for the injected remote process companion.
+/// Secondary bounded finalization evidence for the injected remote companion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentRemoteProcessCompanionFinalization {
     /// The remote process thread could not be created; local bootstrap semantics remain primary.
@@ -821,9 +895,13 @@ const fn map_lifecycle_start_kind(
 mod tests {
     use std::{
         cell::{Cell, RefCell},
-        net::SocketAddr,
+        ffi::OsString,
+        net::{Ipv4Addr, Ipv6Addr, SocketAddr},
         num::NonZeroUsize,
     };
+
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     use prw_core::DeviceId;
     use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
@@ -836,12 +914,15 @@ mod tests {
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
-        LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteBindAddressSourceError,
+        LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
-        LinuxAgentRemoteSupervisorShutdownPublisher, finalize_remote_process_companion,
-        initial_runtime_config, linux_agent_remote_process_operation, map_lifecycle_start_kind,
-        map_remote_shutdown_publish, run, run_remote_process_operation_composition,
+        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
+        finalize_remote_process_companion, initial_runtime_config,
+        linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
+        map_lifecycle_start_kind, map_remote_shutdown_publish,
+        parse_linux_agent_remote_bind_addr_value, run, run_remote_process_operation_composition,
         run_with_remote_process_companion,
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
@@ -895,6 +976,88 @@ mod tests {
         F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
     {
         drop(operation);
+    }
+
+    #[test]
+    fn remote_bind_source_public_reader_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError>,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(PRW_REMOTE_BIND_ADDR_ENV, "PRW_REMOTE_BIND_ADDR");
+        assert_signature(load_linux_agent_remote_bind_addr_from_env);
+    }
+
+    #[test]
+    fn remote_bind_source_rejects_missing_empty_and_malformed_values() {
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(None),
+            Err(LinuxAgentRemoteBindAddressSourceError::Unavailable)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::new())),
+            Err(LinuxAgentRemoteBindAddressSourceError::Unavailable)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from("example.invalid:4433"))),
+            Err(LinuxAgentRemoteBindAddressSourceError::SocketAddressInvalid)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_bind_source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from_vec(vec![0xff]))),
+            Err(LinuxAgentRemoteBindAddressSourceError::EncodingInvalid)
+        );
+    }
+
+    #[test]
+    fn remote_bind_source_preserves_exact_ipv4_ipv6_loopback_and_port_zero() {
+        let ipv4 = SocketAddr::from(([192, 0, 2, 10], 4433));
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from(ipv4.to_string()))),
+            Ok(ipv4)
+        );
+
+        let ipv6 = SocketAddr::from((Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 10), 4434));
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from(ipv6.to_string()))),
+            Ok(ipv6)
+        );
+
+        let port_zero = SocketAddr::from(([192, 0, 2, 10], 0));
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from(port_zero.to_string()))),
+            Ok(port_zero)
+        );
+
+        let loopback = SocketAddr::from(([127, 0, 0, 1], 4435));
+        assert_eq!(
+            parse_linux_agent_remote_bind_addr_value(Some(OsString::from(loopback.to_string()))),
+            Ok(loopback)
+        );
+    }
+
+    #[test]
+    fn remote_bind_source_rejects_non_advertisable_address_classes() {
+        for rejected in [
+            SocketAddr::from(([0, 0, 0, 0], 4433)),
+            SocketAddr::from((Ipv6Addr::UNSPECIFIED, 4433)),
+            SocketAddr::from(([224, 0, 0, 1], 4433)),
+            SocketAddr::from((Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1), 4433)),
+            SocketAddr::from((Ipv4Addr::BROADCAST, 4433)),
+        ] {
+            assert_eq!(
+                parse_linux_agent_remote_bind_addr_value(Some(OsString::from(
+                    rejected.to_string()
+                ))),
+                Err(LinuxAgentRemoteBindAddressSourceError::AddressNotBindAdvertisable)
+            );
+        }
     }
 
     #[test]
