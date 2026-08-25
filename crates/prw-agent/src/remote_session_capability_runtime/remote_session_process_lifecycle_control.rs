@@ -25,7 +25,7 @@ impl OrderlyRemoteShutdown for RemoteSessionSupervisorShutdownController {
 
 /// Result of the one-shot remote supervisor-controller ownership handoff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteSessionSupervisorShutdownPublish {
+pub enum RemoteSessionSupervisorShutdownPublish {
     /// The exact controller moved to process-side ownership.
     Published,
     /// Process-side ownership disappeared; the recovered exact controller requested orderly shutdown.
@@ -33,7 +33,7 @@ pub(crate) enum RemoteSessionSupervisorShutdownPublish {
 }
 
 fn publish_or_request_shutdown<C: OrderlyRemoteShutdown>(
-    sender: SyncSender<C>,
+    sender: &SyncSender<C>,
     controller: C,
 ) -> RemoteSessionSupervisorShutdownPublish {
     match sender.send(controller) {
@@ -47,7 +47,7 @@ fn publish_or_request_shutdown<C: OrderlyRemoteShutdown>(
 }
 
 /// One-shot lane-side authority for publishing the existing non-cloneable shutdown controller.
-pub(crate) struct RemoteSessionSupervisorShutdownPublisher {
+pub struct RemoteSessionSupervisorShutdownPublisher {
     sender: SyncSender<RemoteSessionSupervisorShutdownController>,
 }
 
@@ -57,17 +57,17 @@ impl RemoteSessionSupervisorShutdownPublisher {
     /// If process ownership has already disappeared, the failed send returns the exact controller
     /// to this lane-side operation and orderly shutdown is requested immediately through that same
     /// controller. No replacement authority, thread abort, endpoint close, or retry is performed.
-    pub(crate) fn publish(
+    pub fn publish(
         self,
         controller: RemoteSessionSupervisorShutdownController,
     ) -> RemoteSessionSupervisorShutdownPublish {
-        publish_or_request_shutdown(self.sender, controller)
+        publish_or_request_shutdown(&self.sender, controller)
     }
 }
 
 /// Bounded controller observation during process-side finalization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteSessionProcessControllerFinalization {
+pub enum RemoteSessionProcessControllerFinalization {
     /// The handed-off AP controller received the orderly shutdown request.
     ShutdownRequested,
     /// The remote lane terminated before publishing an AP controller.
@@ -76,7 +76,7 @@ pub(crate) enum RemoteSessionProcessControllerFinalization {
 
 /// Bounded join evidence for the one remote capability OS thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteSessionProcessThreadFinalization {
+pub enum RemoteSessionProcessThreadFinalization {
     /// The exact join-owned remote capability thread returned normally.
     Joined,
     /// The exact thread terminated by panic; payload/thread identity is intentionally discarded.
@@ -85,34 +85,34 @@ pub(crate) enum RemoteSessionProcessThreadFinalization {
 
 /// Secondary bounded evidence from finalizing one remote capability process companion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RemoteSessionProcessLifecycleFinalization {
+pub struct RemoteSessionProcessLifecycleFinalization {
     controller: RemoteSessionProcessControllerFinalization,
     thread: RemoteSessionProcessThreadFinalization,
 }
 
 impl RemoteSessionProcessLifecycleFinalization {
     #[must_use]
-    pub(crate) const fn controller(self) -> RemoteSessionProcessControllerFinalization {
+    pub const fn controller(self) -> RemoteSessionProcessControllerFinalization {
         self.controller
     }
 
     #[must_use]
-    pub(crate) const fn thread(self) -> RemoteSessionProcessThreadFinalization {
+    pub const fn thread(self) -> RemoteSessionProcessThreadFinalization {
         self.thread
     }
 }
 
 fn finalize_controller_and_join<C: OrderlyRemoteShutdown>(
-    controller: Receiver<C>,
+    controller: &Receiver<C>,
     thread: JoinHandle<()>,
 ) -> RemoteSessionProcessLifecycleFinalization {
-    let controller = match controller.recv() {
-        Ok(controller) => {
+    let controller = controller.recv().map_or(
+        RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+        |controller| {
             controller.request_orderly_shutdown();
             RemoteSessionProcessControllerFinalization::ShutdownRequested
-        }
-        Err(_) => RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup,
-    };
+        },
+    );
 
     let thread = match thread.join() {
         Ok(()) => RemoteSessionProcessThreadFinalization::Joined,
@@ -124,7 +124,7 @@ fn finalize_controller_and_join<C: OrderlyRemoteShutdown>(
 
 /// Bounded thread-construction failure for the remote process companion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RemoteSessionProcessLifecycleSpawnError;
+pub struct RemoteSessionProcessLifecycleSpawnError;
 
 impl fmt::Display for RemoteSessionProcessLifecycleSpawnError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -135,7 +135,7 @@ impl fmt::Display for RemoteSessionProcessLifecycleSpawnError {
 impl std::error::Error for RemoteSessionProcessLifecycleSpawnError {}
 
 /// Non-cloneable process owner for exactly one joinable remote capability OS thread.
-pub(crate) struct RemoteSessionProcessLifecycleOwner {
+pub struct RemoteSessionProcessLifecycleOwner {
     controller: Receiver<RemoteSessionSupervisorShutdownController>,
     thread: JoinHandle<()>,
 }
@@ -150,7 +150,7 @@ impl RemoteSessionProcessLifecycleOwner {
     /// # Errors
     ///
     /// Returns a bounded remote-capability-unavailable classification if OS-thread creation fails.
-    pub(crate) fn spawn<F>(operation: F) -> Result<Self, RemoteSessionProcessLifecycleSpawnError>
+    pub fn spawn<F>(operation: F) -> Result<Self, RemoteSessionProcessLifecycleSpawnError>
     where
         F: FnOnce(RemoteSessionSupervisorShutdownPublisher) + Send + 'static,
     {
@@ -169,8 +169,8 @@ impl RemoteSessionProcessLifecycleOwner {
     /// drops its sender. The exact remote thread is then joined explicitly. No hard cancellation,
     /// signal injection, detached fallback, or replacement shutdown authority is used.
     #[must_use]
-    pub(crate) fn finalize(self) -> RemoteSessionProcessLifecycleFinalization {
-        finalize_controller_and_join(self.controller, self.thread)
+    pub fn finalize(self) -> RemoteSessionProcessLifecycleFinalization {
+        finalize_controller_and_join(&self.controller, self.thread)
     }
 }
 
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn remote_process_owner_spawn_has_bounded_injected_operation_shape() {
         fn operation(_: super::RemoteSessionSupervisorShutdownPublisher) {}
-        assert_spawn_shape(|operation_fn| RemoteSessionProcessLifecycleOwner::spawn(operation_fn));
+        assert_spawn_shape(RemoteSessionProcessLifecycleOwner::spawn);
         let _ = operation;
     }
 
@@ -248,7 +248,7 @@ mod tests {
             }
         });
 
-        let finalization = finalize_controller_and_join(controller_rx, lane);
+        let finalization = finalize_controller_and_join(&controller_rx, lane);
         assert_eq!(requests.load(Ordering::SeqCst), 1);
         assert_eq!(
             finalization.controller(),
@@ -279,7 +279,7 @@ mod tests {
         });
 
         let finalizer = thread::spawn(move || {
-            let finalization = finalize_controller_and_join(controller_rx, lane);
+            let finalization = finalize_controller_and_join(&controller_rx, lane);
             done_tx.send(finalization).expect("finalization publishes");
         });
 
@@ -303,7 +303,7 @@ mod tests {
         let (controller_tx, controller_rx) = sync_channel::<FakeController>(1);
         let lane = thread::spawn(move || drop(controller_tx));
 
-        let finalization = finalize_controller_and_join(controller_rx, lane);
+        let finalization = finalize_controller_and_join(&controller_rx, lane);
         assert_eq!(
             finalization.controller(),
             RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup
@@ -321,7 +321,7 @@ mod tests {
         let (controller, requests) = fake_controller();
 
         assert_eq!(
-            publish_or_request_shutdown(sender, controller),
+            publish_or_request_shutdown(&sender, controller),
             RemoteSessionSupervisorShutdownPublish::ReceiverGoneShutdownRequested
         );
         assert_eq!(requests.load(Ordering::SeqCst), 1);
@@ -335,7 +335,7 @@ mod tests {
             panic!("private fake panic payload");
         });
 
-        let finalization = finalize_controller_and_join(controller_rx, lane);
+        let finalization = finalize_controller_and_join(&controller_rx, lane);
         assert_eq!(
             finalization.controller(),
             RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup
