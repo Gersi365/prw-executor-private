@@ -288,6 +288,20 @@ impl PeerConnectivityPlan {
         self.candidates.len()
     }
 
+    /// Returns the highest candidate identifier ever accepted by this plan lifetime.
+    ///
+    /// `None` means no non-zero candidate identifier has ever been accepted. A returned
+    /// identifier is historical anti-reuse state and is not necessarily a currently active
+    /// candidate. This observation does not allocate, reserve, publish, or classify a candidate.
+    #[must_use]
+    pub const fn candidate_id_high_watermark(&self) -> Option<CandidateId> {
+        if self.candidate_id_high_watermark == 0 {
+            None
+        } else {
+            Some(CandidateId(self.candidate_id_high_watermark))
+        }
+    }
+
     /// Atomically replaces transient network candidates while preserving peer identity.
     ///
     /// Every refreshed candidate starts with an `Unknown` observation so reachability evidence
@@ -760,6 +774,79 @@ mod tests {
             Err(ConnectivityError::DuplicateCandidateId)
         );
         assert_eq!(plan, before);
+    }
+
+    #[test]
+    fn candidate_id_high_watermark_is_none_for_plan_without_candidates() {
+        let plan = PeerConnectivityPlan::new(peer(), Vec::new()).expect("empty plan");
+
+        assert_eq!(plan.candidate_id_high_watermark(), None);
+    }
+
+    #[test]
+    fn candidate_id_high_watermark_reports_maximum_initial_identifier() {
+        let plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                candidate(2, ConnectivityPathKind::LocalDirect, 2002),
+                candidate(7, ConnectivityPathKind::InternetDirect, 2007),
+            ],
+        )
+        .expect("initial plan");
+
+        assert_eq!(plan.candidate_id_high_watermark(), Some(id(7)));
+    }
+
+    #[test]
+    fn candidate_id_high_watermark_does_not_decrease_when_higher_candidate_is_removed() {
+        let retained = candidate(2, ConnectivityPathKind::LocalDirect, 2002);
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                retained,
+                candidate(7, ConnectivityPathKind::InternetDirect, 2007),
+            ],
+        )
+        .expect("initial plan");
+
+        plan.refresh_candidates(vec![retained])
+            .expect("retaining exact lower candidate is valid");
+
+        assert_eq!(plan.candidate_id_high_watermark(), Some(id(7)));
+    }
+
+    #[test]
+    fn candidate_id_high_watermark_advances_after_accepting_higher_identifier() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(2, ConnectivityPathKind::LocalDirect, 2002)],
+        )
+        .expect("initial plan");
+
+        plan.refresh_candidates(vec![candidate(
+            8,
+            ConnectivityPathKind::InternetDirect,
+            3008,
+        )])
+        .expect("higher candidate identifier is valid");
+
+        assert_eq!(plan.candidate_id_high_watermark(), Some(id(8)));
+    }
+
+    #[test]
+    fn failed_candidate_refresh_preserves_candidate_id_high_watermark() {
+        let mut plan = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(7, ConnectivityPathKind::InternetDirect, 2007)],
+        )
+        .expect("initial plan");
+        let before = plan.candidate_id_high_watermark();
+
+        assert_eq!(
+            plan.refresh_candidates(vec![candidate(6, ConnectivityPathKind::Relay, 3006,)]),
+            Err(ConnectivityError::CandidateIdRebound)
+        );
+        assert_eq!(plan.candidate_id_high_watermark(), before);
     }
 
     #[test]
