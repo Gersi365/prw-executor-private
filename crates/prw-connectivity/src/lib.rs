@@ -843,11 +843,7 @@ mod tests {
         let before = plan.candidate_id_high_watermark();
 
         assert_eq!(
-            plan.refresh_candidates(vec![candidate(
-                6,
-                ConnectivityPathKind::Relay,
-                3006,
-            )]),
+            plan.refresh_candidates(vec![candidate(6, ConnectivityPathKind::Relay, 3006,)]),
             Err(ConnectivityError::CandidateIdRebound)
         );
         assert_eq!(plan.candidate_id_high_watermark(), before);
