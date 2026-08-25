@@ -24,10 +24,10 @@ BF modifies only:
 and adds this materialization contract.
 
 The exact materialized source commit immediately before this final contract update is:
-`491707fae17e9958fa86c3b30b6fe7f0d8d8e79e`
+`27027f9b9a06b7030207e1770f0e89f88e596bec`
 
 The exact `linux_bootstrap.rs` blob at that source commit is:
-`17a41d36cafc86e3cf463e15278f6a02c0937ebc`
+`8d569a432fa5d8706cc1458a771f40dedd501f72`
 
 No Cargo manifest, lockfile, crate root, `main.rs`, packaging/systemd file or workflow is changed.
 
@@ -42,7 +42,8 @@ pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
 and a public environment reader:
 
 ```rust
-pub fn load_linux_agent_remote_bind_addr_from_env() -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError>
+pub fn load_linux_agent_remote_bind_addr_from_env()
+-> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError>
 ```
 
 The public reader performs only `std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV)` followed by the selected pure parser/validator.
@@ -205,7 +206,11 @@ The final BF branch must differ from exact closed BE only in:
 
 Any additional path blocks closure until explained and explicitly authorized.
 
-## 17. Closure condition
+## 17. Validation note
+
+The first PR-head validation on `d9d9c98eb46ecf363ac3f4ab9218c399346adbd8` reached the locked dependency graph successfully and then failed only at `cargo fmt --all -- --check`. The exact rustfmt diff was applied verbatim to the source at `27027f9b9a06b7030207e1770f0e89f88e596bec`. That older CI head is obsolete for closure; only validation of the final head after this contract anchor may close BF.
+
+## 18. Closure condition
 
 BF can close only after:
 - exact BE predecessor lineage remains unchanged;
