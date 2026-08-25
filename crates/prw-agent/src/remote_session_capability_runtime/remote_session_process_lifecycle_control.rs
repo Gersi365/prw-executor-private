@@ -218,7 +218,10 @@ mod tests {
     where
         F: FnOnce(
             fn(super::RemoteSessionSupervisorShutdownPublisher),
-        ) -> Result<RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError>,
+        ) -> Result<
+            RemoteSessionProcessLifecycleOwner,
+            RemoteSessionProcessLifecycleSpawnError,
+        >,
     {
         let _ = spawn;
     }
@@ -237,7 +240,9 @@ mod tests {
         let thread_requests = Arc::clone(&requests);
 
         let lane = thread::spawn(move || {
-            controller_tx.send(controller).expect("controller publishes");
+            controller_tx
+                .send(controller)
+                .expect("controller publishes");
             while thread_requests.load(Ordering::SeqCst) == 0 {
                 thread::yield_now();
             }
@@ -265,7 +270,9 @@ mod tests {
 
         let lane = thread::spawn(move || {
             release_rx.recv().expect("lane release arrives");
-            controller_tx.send(controller).expect("controller publishes");
+            controller_tx
+                .send(controller)
+                .expect("controller publishes");
             while lane_requests.load(Ordering::SeqCst) == 0 {
                 thread::yield_now();
             }
