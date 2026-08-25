@@ -1,84 +1,112 @@
-name: Phase 152 C03e-AN Bounded Clippy Corrective
+name: C03e-AN Bounded Clippy Corrective Temporary
 
 on:
-  push:
-    branches:
-      - phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging
-    paths:
-      - .github/workflows/phase-152-c03e-an-clippy-corrective.yml
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
-  correct:
-    runs-on: ubuntu-latest
+  correct-and-self-remove:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.ref == 'phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging'
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout exact branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging
           fetch-depth: 0
 
-      - name: Apply exact bounded source corrective
+      - name: Apply exact bounded Rust corrective
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs")
-          source = path.read_text(encoding="utf-8")
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = path.read_text()
 
-          old_executor = "        executor: &mut RemoteSessionExecutorRuntime,"
-          new_executor = "        executor: &RemoteSessionExecutorRuntime,"
-          assert source.count(old_executor) == 1, "unexpected executor parameter anchor count"
-          source = source.replace(old_executor, new_executor, 1)
+          old = '        executor: &mut RemoteSessionExecutorRuntime,\n'
+          new = '        executor: &RemoteSessionExecutorRuntime,\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'executor parameter anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
 
-          old_docs = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
-        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
-        #[expect(
-'''
-          new_docs = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
-        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
-        ///
-        /// # Errors
-        ///
-        /// Returns the existing persistent-collection configuration error unchanged after the
-        /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
-        /// capacity configuration.
-        #[expect(
-'''
-          assert source.count(old_docs) == 1, "unexpected public-method docs anchor count"
-          source = source.replace(old_docs, new_docs, 1)
+          old = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
+          /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+          #[expect(
+          '''
+          new = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
+          /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+          ///
+          /// # Errors
+          ///
+          /// Returns the existing persistent-collection configuration error unchanged after the
+          /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
+          /// capacity configuration.
+          #[expect(
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'errors-doc anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
 
-          old_original = '''            let original = Err(
-                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-            );
-'''
-          new_original = '''            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
-                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-            );
-'''
-          assert source.count(old_original) == 1, "unexpected test Result anchor count"
-          source = source.replace(old_original, new_original, 1)
+          old = '''            let mut executor = RemoteSessionExecutorRuntime::new()
+                          .expect("test current-thread executor constructs");
+                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+          '''
+          new = '''            let executor = RemoteSessionExecutorRuntime::new()
+                          .expect("test current-thread executor constructs");
+                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'test executor mutability anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
 
-          path.write_text(source, encoding="utf-8")
+          old = '''            let original = Err(
+                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+                      );
+          '''
+          new = '''            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
+                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+                      );
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'test Result anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''                &mut executor,
+                          original,
+                          move |code, reason| {
+          '''
+          new = '''                &executor,
+                          original,
+                          move |code, reason| {
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'test executor borrow anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
           PY
 
-          cargo fmt --all -- --check
+          cargo fmt --all
           git diff --check
 
-      - name: Commit source corrective and self-remove helper
+          changed="$(git diff --name-only | sort)"
+          test "$changed" = 'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+
+      - name: Commit corrective and self-remove helper
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "Gersi365"
-          git config user.email "Gersi365@outlook.com"
-          rm .github/workflows/phase-152-c03e-an-clippy-corrective.yml
-          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs .github/workflows/phase-152-c03e-an-clippy-corrective.yml
+          git rm .github/workflows/phase-152-c03e-an-clippy-corrective.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
           test "$(git diff --cached --name-only | wc -l)" -eq 2
-          git diff --cached --name-only | grep -Fx 'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
           git diff --cached --name-only | grep -Fx '.github/workflows/phase-152-c03e-an-clippy-corrective.yml'
-          git commit -m "Phase 152 C03e-AN: correct canonical Rust validation defects"
+          git diff --cached --name-only | grep -Fx 'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+          git commit -m 'Phase 152 C03e-AN: correct canonical Rust validation defects'
           git push origin HEAD:phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging
