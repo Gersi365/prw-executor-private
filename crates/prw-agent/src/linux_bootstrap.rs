@@ -122,8 +122,7 @@ fn parse_linux_agent_remote_bind_addr_value(
 /// Fails closed when the fixed configuration is absent/empty, non-Unicode, malformed, unspecified,
 /// multicast, or IPv4 limited broadcast. The error classification does not expose the configured
 /// value.
-pub fn load_linux_agent_remote_bind_addr_from_env(
-) -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
+pub fn load_linux_agent_remote_bind_addr_from_env() -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
     parse_linux_agent_remote_bind_addr_value(std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV))
 }
 
@@ -571,7 +570,7 @@ pub enum LinuxAgentRemoteProcessThreadFinalization {
     Panicked,
 }
 
-/// Secondary bounded finalization evidence for the injected remote process companion.
+/// Secondary bounded finalization evidence for the injected remote companion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentRemoteProcessCompanionFinalization {
     /// The remote process thread could not be created; local bootstrap semantics remain primary.
