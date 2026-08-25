@@ -3,6 +3,8 @@
 //! Phase 098 composes the thread-affine SIGTERM/SIGINT source, one-step
 //! signal-aware readiness, Phase 092 runtime-specific scheduling, Phase 097
 //! bounded lifetime evidence/error policy, and Phase 096 lifecycle cleanup.
+//! C03e-AT adds one crate-internal owned companion seam whose finalizer runs
+//! after local listener cleanup and before exact signal-mask restoration.
 //! This module remains below `main.rs` and systemd activation.
 
 use std::thread;
@@ -226,6 +228,78 @@ pub fn run_signal_aware_linux_production_runtime_loop(
     })
 }
 
+/// Runs the complete signal-aware local lifecycle with one owned process companion.
+///
+/// The companion is started only after the existing signal source and local lifecycle have been
+/// assembled. Its owned value is carried through the unchanged local runtime loop and explicit
+/// listener/socket cleanup. The consuming finalizer runs after that cleanup and before exact prior
+/// signal-mask restoration.
+///
+/// This is a crate-internal composition seam, not a generic public lifecycle plugin surface.
+///
+/// # Errors
+///
+/// Returns the existing bounded signal-source or lifecycle-assembly failure unchanged. Companion
+/// startup/finalization policy is represented by the caller-owned companion value and does not add a
+/// new local startup failure class.
+pub fn run_signal_aware_linux_production_runtime_from_env_with_companion<F, S, O, G>(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+    start_companion: S,
+    finalize_companion: G,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+    S: FnOnce() -> O,
+    G: FnOnce(O),
+{
+    let signal_source = LocalLinuxTerminationSignalSource::create()
+        .map_err(LocalLinuxSignalAwareRuntimeStartError::SignalSource)?;
+
+    let execution = match with_local_linux_production_lifecycle_from_env(
+        inputs.config(),
+        |listener, wake, capacity, control| {
+            on_started(LocalLinuxRuntimeShutdownHandle::new(
+                control.clone(),
+                wake.notifier(),
+            ));
+            let companion = start_companion();
+            let exit = run_signal_aware_linux_production_runtime_loop(
+                listener,
+                &signal_source,
+                wake,
+                capacity,
+                control,
+                inputs,
+            );
+            (exit, companion)
+        },
+    ) {
+        Ok(execution) => execution,
+        Err(error) => {
+            let mask_restore = signal_source.restore();
+            return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
+                error,
+                mask_restore,
+            });
+        }
+    };
+
+    let cleanup = execution.cleanup();
+    let (exit, companion) = execution.into_value();
+    finalize_companion(companion);
+    let mask_restore = signal_source.restore();
+
+    Ok(LocalLinuxSignalAwareRuntimeTerminalReport {
+        reason: exit.reason,
+        counters: exit.counters,
+        cancellations: exit.cancellations,
+        final_completions: exit.final_completions,
+        cleanup,
+        mask_restore,
+    })
+}
+
 /// Runs the complete signal-aware production-local runtime from process environment.
 ///
 /// The SIGTERM/SIGINT mask and `SignalFd` are established before Phase 096 lifecycle
@@ -247,38 +321,64 @@ pub fn run_signal_aware_linux_production_runtime_from_env<F>(
 where
     F: FnOnce(LocalLinuxRuntimeShutdownHandle),
 {
+    run_signal_aware_linux_production_runtime_from_env_with_companion(
+        inputs,
+        on_started,
+        || (),
+        |()| {},
+    )
+}
+
+#[cfg(test)]
+fn run_signal_aware_linux_production_runtime_in_root_path_with_companion<F, S, O, G>(
+    root_path: &std::path::Path,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+    start_companion: S,
+    finalize_companion: G,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+    S: FnOnce() -> O,
+    G: FnOnce(O),
+{
     let signal_source = LocalLinuxTerminationSignalSource::create()
         .map_err(LocalLinuxSignalAwareRuntimeStartError::SignalSource)?;
 
-    let execution = match with_local_linux_production_lifecycle_from_env(
-        inputs.config(),
-        |listener, wake, capacity, control| {
-            on_started(LocalLinuxRuntimeShutdownHandle::new(
-                control.clone(),
-                wake.notifier(),
-            ));
-            run_signal_aware_linux_production_runtime_loop(
-                listener,
-                &signal_source,
-                wake,
-                capacity,
-                control,
-                inputs,
-            )
-        },
-    ) {
-        Ok(execution) => execution,
-        Err(error) => {
-            let mask_restore = signal_source.restore();
-            return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
-                error,
-                mask_restore,
-            });
-        }
-    };
+    let execution =
+        match super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
+            root_path,
+            inputs.config(),
+            |listener, wake, capacity, control| {
+                on_started(LocalLinuxRuntimeShutdownHandle::new(
+                    control.clone(),
+                    wake.notifier(),
+                ));
+                let companion = start_companion();
+                let exit = run_signal_aware_linux_production_runtime_loop(
+                    listener,
+                    &signal_source,
+                    wake,
+                    capacity,
+                    control,
+                    inputs,
+                );
+                (exit, companion)
+            },
+        ) {
+            Ok(execution) => execution,
+            Err(error) => {
+                let mask_restore = signal_source.restore();
+                return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
+                    error,
+                    mask_restore,
+                });
+            }
+        };
 
     let cleanup = execution.cleanup();
-    let exit = execution.into_value();
+    let (exit, companion) = execution.into_value();
+    finalize_companion(companion);
     let mask_restore = signal_source.restore();
 
     Ok(LocalLinuxSignalAwareRuntimeTerminalReport {
@@ -300,54 +400,18 @@ fn run_signal_aware_linux_production_runtime_in_root_path<F>(
 where
     F: FnOnce(LocalLinuxRuntimeShutdownHandle),
 {
-    let signal_source = LocalLinuxTerminationSignalSource::create()
-        .map_err(LocalLinuxSignalAwareRuntimeStartError::SignalSource)?;
-
-    let execution =
-        match super::production_lifecycle::with_local_linux_production_lifecycle_in_root_path(
-            root_path,
-            inputs.config(),
-            |listener, wake, capacity, control| {
-                on_started(LocalLinuxRuntimeShutdownHandle::new(
-                    control.clone(),
-                    wake.notifier(),
-                ));
-                run_signal_aware_linux_production_runtime_loop(
-                    listener,
-                    &signal_source,
-                    wake,
-                    capacity,
-                    control,
-                    inputs,
-                )
-            },
-        ) {
-            Ok(execution) => execution,
-            Err(error) => {
-                let mask_restore = signal_source.restore();
-                return Err(LocalLinuxSignalAwareRuntimeStartError::Lifecycle {
-                    error,
-                    mask_restore,
-                });
-            }
-        };
-
-    let cleanup = execution.cleanup();
-    let exit = execution.into_value();
-    let mask_restore = signal_source.restore();
-
-    Ok(LocalLinuxSignalAwareRuntimeTerminalReport {
-        reason: exit.reason,
-        counters: exit.counters,
-        cancellations: exit.cancellations,
-        final_completions: exit.final_completions,
-        cleanup,
-        mask_restore,
-    })
+    run_signal_aware_linux_production_runtime_in_root_path_with_companion(
+        root_path,
+        inputs,
+        on_started,
+        || (),
+        |()| {},
+    )
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::fs::{self, Permissions};
     use std::num::{NonZeroU16, NonZeroUsize};
     use std::os::unix::fs::PermissionsExt;
@@ -364,6 +428,7 @@ mod tests {
     use super::{
         LocalLinuxSignalAwareRuntimeTerminalReason,
         run_signal_aware_linux_production_runtime_in_root_path,
+        run_signal_aware_linux_production_runtime_in_root_path_with_companion,
     };
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
     use crate::linux_identity::production_runtime_loop::LocalLinuxProductionRuntimeInputs;
@@ -422,6 +487,62 @@ mod tests {
     fn socket_path(root: &Path) -> PathBuf {
         root.join(AGENT_RUNTIME_SUBDIRECTORY)
             .join(AGENT_SOCKET_FILENAME)
+    }
+
+    #[test]
+    fn companion_finalizes_after_listener_cleanup_before_signal_mask_restore() {
+        let original_mask = SigSet::thread_get_mask().expect("original companion test mask reads");
+        let root = create_root("companion-ordering");
+        let path = socket_path(&root);
+        let dns = dns_snapshot();
+        let start_saw_live_socket = Cell::new(false);
+        let finalizer_ran = Cell::new(false);
+        let finalizer_saw_blocked_termination_mask = Cell::new(false);
+
+        let report = run_signal_aware_linux_production_runtime_in_root_path_with_companion(
+            &root,
+            inputs(&dns),
+            |shutdown| {
+                shutdown
+                    .request_shutdown_and_wake()
+                    .expect("local programmatic shutdown wake succeeds");
+            },
+            || {
+                start_saw_live_socket.set(path.exists());
+            },
+            |()| {
+                assert!(
+                    !path.exists(),
+                    "local listener/socket cleanup must finish before companion finalization"
+                );
+                let finalizer_mask =
+                    SigSet::thread_get_mask().expect("companion finalizer mask reads");
+                finalizer_saw_blocked_termination_mask.set(
+                    finalizer_mask.contains(Signal::SIGTERM)
+                        && finalizer_mask.contains(Signal::SIGINT),
+                );
+                finalizer_ran.set(true);
+            },
+        )
+        .expect("companion-aware signal runtime starts");
+
+        assert!(start_saw_live_socket.get());
+        assert!(finalizer_ran.get());
+        assert!(finalizer_saw_blocked_termination_mask.get());
+        assert_eq!(
+            report.reason(),
+            LocalLinuxSignalAwareRuntimeTerminalReason::ProgrammaticShutdown
+        );
+        assert_eq!(report.cleanup(), LocalLinuxProductionRuntimeCleanup::Clean);
+        assert_eq!(
+            report.mask_restore(),
+            LocalLinuxTerminationSignalMaskRestore::Restored
+        );
+        assert_eq!(
+            SigSet::thread_get_mask().expect("restored companion test mask reads"),
+            original_mask
+        );
+        fs::remove_dir_all(root).expect("temporary companion ordering root removes");
     }
 
     #[test]
