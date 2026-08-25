@@ -23,11 +23,11 @@ BF modifies only:
 
 and adds this materialization contract.
 
-The source commit before this contract is:
-`a9545accefa6cc57eacf2c89ae1772d72489c249`
+The exact materialized source commit immediately before this final contract update is:
+`491707fae17e9958fa86c3b30b6fe7f0d8d8e79e`
 
-The materialized `linux_bootstrap.rs` blob at that commit is:
-`1bfae9a68976417c21e87cc4fb0927904fb7c526`
+The exact `linux_bootstrap.rs` blob at that source commit is:
+`17a41d36cafc86e3cf463e15278f6a02c0937ebc`
 
 No Cargo manifest, lockfile, crate root, `main.rs`, packaging/systemd file or workflow is changed.
 
@@ -42,8 +42,7 @@ pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
 and a public environment reader:
 
 ```rust
-pub fn load_linux_agent_remote_bind_addr_from_env(
-) -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError>
+pub fn load_linux_agent_remote_bind_addr_from_env() -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError>
 ```
 
 The public reader performs only `std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV)` followed by the selected pure parser/validator.
