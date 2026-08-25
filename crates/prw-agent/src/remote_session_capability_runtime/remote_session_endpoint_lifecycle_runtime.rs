@@ -58,20 +58,14 @@ fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, Trans
     let executor = match construct_executor() {
         Ok(executor) => executor,
         Err(error) => {
-            return Err((
-                authority,
-                EndpointStartupCompositionError::Executor(error),
-            ));
+            return Err((authority, EndpointStartupCompositionError::Executor(error)));
         }
     };
 
     let transport = match bind_transport(authority) {
         Ok(transport) => transport,
         Err((authority, error)) => {
-            return Err((
-                authority,
-                EndpointStartupCompositionError::Transport(error),
-            ));
+            return Err((authority, EndpointStartupCompositionError::Transport(error)));
         }
     };
 
@@ -91,7 +85,9 @@ pub enum RemoteSessionEndpointLifecycleStartupError {
 impl fmt::Display for RemoteSessionEndpointLifecycleStartupError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Executor(_) => formatter.write_str("remote endpoint executor construction failed"),
+            Self::Executor(_) => {
+                formatter.write_str("remote endpoint executor construction failed")
+            }
             Self::Transport(_) => formatter.write_str("remote endpoint bind failed"),
         }
     }
@@ -270,8 +266,7 @@ impl RemoteSessionEndpointLifecycleRuntime {
             }
         };
 
-        let (shutdown_controller, supervisor_shutdown) =
-            remote_session_supervisor_shutdown_pair();
+        let (shutdown_controller, supervisor_shutdown) = remote_session_supervisor_shutdown_pair();
 
         Ok((
             Self {
