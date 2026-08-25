@@ -1013,7 +1013,7 @@ mod repeated_real_admission_supervisor {
     const REMOTE_ENDPOINT_SHUTDOWN_REASON: &[u8] = b"remote endpoint shutdown";
 
     fn finish_remote_endpoint_shutdown<R, C, W>(
-        executor: &mut RemoteSessionExecutorRuntime,
+        executor: &RemoteSessionExecutorRuntime,
         result: R,
         close_endpoint: C,
         wait_idle: W,
@@ -1535,6 +1535,12 @@ mod repeated_real_admission_supervisor {
         ///
         /// This domain-specific seam uses only sequential private runtime drives. It exposes no
         /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+        ///
+        /// # Errors
+        ///
+        /// Returns the existing persistent-collection configuration error unchanged after the
+        /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
+        /// capacity configuration.
         #[expect(
             clippy::too_many_arguments,
             reason = "C03e-AN composes the exact existing C03e-AL inputs with endpoint teardown"
@@ -1628,17 +1634,17 @@ mod repeated_real_admission_supervisor {
 
         #[test]
         fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
-            let mut executor = RemoteSessionExecutorRuntime::new()
+            let executor = RemoteSessionExecutorRuntime::new()
                 .expect("test current-thread executor constructs");
             let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
             let close_events = Rc::clone(&events);
             let idle_events = Rc::clone(&events);
-            let original = Err(
+            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
                 RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
             );
 
             let result = finish_remote_endpoint_shutdown(
-                &mut executor,
+                &executor,
                 original,
                 move |code, reason| {
                     assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
