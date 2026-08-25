@@ -1,0 +1,236 @@
+name: C03e-AN Endpoint Lifecycle Materialization Temporary
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-self-remove:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.ref == 'phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging
+          fetch-depth: 0
+      - name: Materialize selected endpoint lifecycle source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = path.read_text()
+
+          anchor = '''    type ActiveRemoteWorkers =
+              HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
+
+          /// One bounded pre-authentication request for the repeated real-admission supervisor.
+          '''
+          replacement = '''    type ActiveRemoteWorkers =
+              HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
+
+          const REMOTE_ENDPOINT_SHUTDOWN_CODE: u32 = 0;
+          const REMOTE_ENDPOINT_SHUTDOWN_REASON: &[u8] = b"remote endpoint shutdown";
+
+          fn finish_remote_endpoint_shutdown<R, C, W>(
+              executor: &mut RemoteSessionExecutorRuntime,
+              result: R,
+              close_endpoint: C,
+              wait_idle: W,
+          ) -> R
+          where
+              C: FnOnce(u32, &[u8]),
+              W: Future<Output = ()>,
+          {
+              close_endpoint(
+                  REMOTE_ENDPOINT_SHUTDOWN_CODE,
+                  REMOTE_ENDPOINT_SHUTDOWN_REASON,
+              );
+              executor.runtime.block_on(wait_idle);
+              result
+          }
+
+          /// One bounded pre-authentication request for the repeated real-admission supervisor.
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'active-worker anchor count != 1: {text.count(anchor)}')
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = '''            Ok(())
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+          '''
+          wrapper = '''            Ok(())
+              }
+
+              /// Drives the repeated remote-session supervisor and then deterministically closes and
+              /// drains the already-bound remote endpoint on the same private current-thread runtime.
+              ///
+              /// The existing C03e-AL supervisor is driven to full return before whole-endpoint close.
+              /// Its result is captured without early propagation so even pre-drive configuration
+              /// failure still closes the endpoint once and drives `wait_idle()` before the exact
+              /// original result is returned.
+              ///
+              /// This domain-specific seam uses only sequential private runtime drives. It exposes no
+              /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+              #[expect(
+                  clippy::too_many_arguments,
+                  reason = "C03e-AN composes the exact existing C03e-AL inputs with endpoint teardown"
+              )]
+              pub fn drive_repeated_real_remote_admission_endpoint_lifecycle<
+                  P, D, T, S, F, C, R, E,
+              >(
+                  &mut self,
+                  max_active_workers: NonZeroUsize,
+                  transport_runtime: &AgentRemoteTransportRuntime,
+                  authority: &SharedCurrentCapabilityAuthority<P>,
+                  session_authentication: &mut SessionAuthenticationService,
+                  expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+                  supervisor_shutdown: S,
+                  admission_timing: F,
+                  on_completion: C,
+                  on_rejection: R,
+                  on_admission_failure: E,
+              ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+              where
+                  P: PolicyEvaluator + Send + Sync + 'static,
+                  D: CapabilityDispatcher + Send + 'static,
+                  T: FnMut() -> u64 + Send + 'static,
+                  S: Future<Output = ()> + Send,
+                  F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+                  C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+                  R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+                  E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+              {
+                  let result = self.drive_repeated_real_remote_admission_collection(
+                      max_active_workers,
+                      transport_runtime,
+                      authority,
+                      session_authentication,
+                      expected_requests,
+                      supervisor_shutdown,
+                      admission_timing,
+                      on_completion,
+                      on_rejection,
+                      on_admission_failure,
+                  );
+
+                  finish_remote_endpoint_shutdown(
+                      self,
+                      result,
+                      |code, reason| transport_runtime.close(code, reason),
+                      transport_runtime.wait_idle(),
+                  )
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'impl-end anchor count != 1: {text.count(anchor)}')
+          text = text.replace(anchor, wrapper, 1)
+
+          old = '''        use std::{
+                      cell::Cell,
+                      collections::HashMap,
+          '''
+          new = '''        use std::{
+                      cell::{Cell, RefCell},
+                      collections::HashMap,
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'test cell import anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''            ActiveRemoteWorkers, InFlightAdmissionEvent,
+                      RemoteSessionExpectedDeviceAdmissionRejectionReason,
+                      RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentWorkerEntry,
+                      RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+                      RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
+                      drain_registered_workers, poll_shutdown_or_expected_request,
+                      poll_shutdown_or_inflight_admission, prepare_expected_request,
+                      remote_session_worker_cancellation_pair, request_all_worker_cancellations,
+          '''
+          new = '''            ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,
+                      REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,
+                      RemoteSessionExpectedDeviceAdmissionRejectionReason,
+                      RemoteSessionExpectedDeviceAdmissionRequest,
+                      RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
+                      RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+                      RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
+                      drain_registered_workers, finish_remote_endpoint_shutdown,
+                      poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
+                      prepare_expected_request, remote_session_worker_cancellation_pair,
+                      request_all_worker_cancellations,
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'test super import anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          anchor = '''        fn test_timing() -> RemoteSessionRealAdmissionTiming {
+                      RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
+                  }
+
+                  struct TrackedReadyFuture {
+          '''
+          replacement = '''        fn test_timing() -> RemoteSessionRealAdmissionTiming {
+                      RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
+                  }
+
+                  #[test]
+                  fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
+                      let mut executor = RemoteSessionExecutorRuntime::new()
+                          .expect("test current-thread executor constructs");
+                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+                      let close_events = Rc::clone(&events);
+                      let idle_events = Rc::clone(&events);
+                      let original = Err(
+                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+                      );
+
+                      let result = finish_remote_endpoint_shutdown(
+                          &mut executor,
+                          original,
+                          move |code, reason| {
+                              assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
+                              assert_eq!(code, 0);
+                              assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
+                              assert_eq!(reason, b"remote endpoint shutdown");
+                              close_events.borrow_mut().push("close");
+                          },
+                          async move {
+                              idle_events.borrow_mut().push("idle");
+                          },
+                      );
+
+                      assert_eq!(
+                          result,
+                          Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+                      );
+                      assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
+                  }
+
+                  struct TrackedReadyFuture {
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'test insertion anchor count != 1: {text.count(anchor)}')
+          text = text.replace(anchor, replacement, 1)
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          git rm .github/workflows/c03e-an-endpoint-lifecycle-materialization-temporary.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+          git commit -m 'Phase 152 C03e-AN: materialize endpoint shutdown lifecycle source'
+          git push origin HEAD:phase-152-c03e-an-remote-endpoint-supervisor-shutdown-lifecycle-source-materialization-staging
