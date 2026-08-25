@@ -34,56 +34,64 @@ jobs:
               raise SystemExit(f'executor parameter anchor count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
-          /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
-          #[expect(
-          '''
-          new = '''        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
-          /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
-          ///
-          /// # Errors
-          ///
-          /// Returns the existing persistent-collection configuration error unchanged after the
-          /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
-          /// capacity configuration.
-          #[expect(
-          '''
+          old = (
+              '        /// This domain-specific seam uses only sequential private runtime drives. It exposes no\n'
+              '        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.\n'
+              '        #[expect(\n'
+          )
+          new = (
+              '        /// This domain-specific seam uses only sequential private runtime drives. It exposes no\n'
+              '        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.\n'
+              '        ///\n'
+              '        /// # Errors\n'
+              '        ///\n'
+              '        /// Returns the existing persistent-collection configuration error unchanged after the\n'
+              '        /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker\n'
+              '        /// capacity configuration.\n'
+              '        #[expect(\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'errors-doc anchor count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''            let mut executor = RemoteSessionExecutorRuntime::new()
-                          .expect("test current-thread executor constructs");
-                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
-          '''
-          new = '''            let executor = RemoteSessionExecutorRuntime::new()
-                          .expect("test current-thread executor constructs");
-                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
-          '''
+          old = (
+              '            let mut executor = RemoteSessionExecutorRuntime::new()\n'
+              '                .expect("test current-thread executor constructs");\n'
+              '            let events = Rc::new(RefCell::new(Vec::<&\'static str>::new()));\n'
+          )
+          new = (
+              '            let executor = RemoteSessionExecutorRuntime::new()\n'
+              '                .expect("test current-thread executor constructs");\n'
+              '            let events = Rc::new(RefCell::new(Vec::<&\'static str>::new()));\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'test executor mutability anchor count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''            let original = Err(
-                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-                      );
-          '''
-          new = '''            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
-                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-                      );
-          '''
+          old = (
+              '            let original = Err(\n'
+              '                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,\n'
+              '            );\n'
+          )
+          new = (
+              '            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(\n'
+              '                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,\n'
+              '            );\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'test Result anchor count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''                &mut executor,
-                          original,
-                          move |code, reason| {
-          '''
-          new = '''                &executor,
-                          original,
-                          move |code, reason| {
-          '''
+          old = (
+              '                &mut executor,\n'
+              '                original,\n'
+              '                move |code, reason| {\n'
+          )
+          new = (
+              '                &executor,\n'
+              '                original,\n'
+              '                move |code, reason| {\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'test executor borrow anchor count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
@@ -93,7 +101,6 @@ jobs:
 
           cargo fmt --all
           git diff --check
-
           changed="$(git diff --name-only | sort)"
           test "$changed" = 'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
 
