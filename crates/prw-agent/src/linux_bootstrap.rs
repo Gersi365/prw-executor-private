@@ -440,9 +440,8 @@ where
     F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
 {
     with_initial_runtime_inputs(|inputs| {
-        run_with_remote_process_companion_inputs(inputs, operation).map(|(local, remote)| {
-            LinuxAgentBootstrapWithRemoteReport { local, remote }
-        })
+        run_with_remote_process_companion_inputs(inputs, operation)
+            .map(|(local, remote)| LinuxAgentBootstrapWithRemoteReport { local, remote })
     })
 }
 
@@ -790,14 +789,17 @@ mod tests {
         fn assert_signature(
             entry: fn(
                 fn(LinuxAgentRemoteSupervisorShutdownPublisher),
-            ) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>,
+            ) -> Result<
+                LinuxAgentBootstrapWithRemoteReport,
+                LinuxAgentBootstrapStartFailure,
+            >,
         ) {
             let _ = entry;
         }
 
-        assert_signature(run_with_remote_process_companion::<
-            fn(LinuxAgentRemoteSupervisorShutdownPublisher),
-        >);
+        assert_signature(
+            run_with_remote_process_companion::<fn(LinuxAgentRemoteSupervisorShutdownPublisher)>,
+        );
         let _ = operation;
     }
 
