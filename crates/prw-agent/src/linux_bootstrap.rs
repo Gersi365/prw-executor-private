@@ -5,11 +5,18 @@
 //! bounded startup/terminal classifications, and one call into the already-
 //! validated Phase 098 signal-aware runtime.
 
-use std::num::{NonZeroU16, NonZeroUsize};
-use std::time::Duration;
+use std::{
+    net::SocketAddr,
+    num::{NonZeroU16, NonZeroUsize},
+    time::Duration,
+};
 
+use prw_core::DeviceId;
 use prw_network::PrivateDnsConfig;
-use prw_policy::BoundedLocalReadPolicy;
+use prw_policy::{BoundedLocalReadPolicy, PolicyEvaluator};
+use prw_remote_bridge::CapabilityDispatcher;
+use prw_session::SessionAuthenticationService;
+use tokio::sync::mpsc;
 
 use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
 use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
@@ -31,7 +38,11 @@ use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instan
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
 use crate::remote_session_capability_runtime::{
-    RemoteSessionSupervisorShutdownController,
+    RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
+    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
+    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+    RemoteSessionRepeatedAdmissionFailure, RemoteSessionSupervisorShutdownController,
+    SharedCurrentCapabilityAuthority,
     remote_session_process_lifecycle_control::{
         RemoteSessionProcessControllerFinalization, RemoteSessionProcessLifecycleFinalization,
         RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
@@ -325,6 +336,144 @@ impl LinuxAgentRemoteSupervisorShutdownPublisher {
         controller: RemoteSessionSupervisorShutdownController,
     ) -> LinuxAgentRemoteSupervisorShutdownPublish {
         map_remote_shutdown_publish(self.publisher.publish(controller))
+    }
+}
+
+fn run_remote_process_operation_composition<
+    Executor,
+    Authority,
+    Endpoint,
+    Controller,
+    Publication,
+    ExecutorError,
+    BootstrapError,
+    EndpointError,
+>(
+    construct_executor: impl FnOnce() -> Result<Executor, ExecutorError>,
+    bootstrap_authority: impl FnOnce(&Executor) -> Result<Authority, BootstrapError>,
+    start_endpoint: impl FnOnce(Executor, Authority) -> Result<(Endpoint, Controller), EndpointError>,
+    publish_controller: impl FnOnce(Controller) -> Publication,
+    drive_lifecycle: impl FnOnce(Endpoint, Publication),
+) -> bool {
+    let Ok(executor) = construct_executor() else {
+        return false;
+    };
+    let Ok(authority) = bootstrap_authority(&executor) else {
+        return false;
+    };
+    let Ok((endpoint, controller)) = start_endpoint(executor, authority) else {
+        return false;
+    };
+    let publication = publish_controller(controller);
+    drive_lifecycle(endpoint, publication);
+    true
+}
+
+/// Injected values required to build one library-owned remote process operation.
+///
+/// Construction owns only already-typed inputs. It performs no credential read, provider I/O,
+/// endpoint bind, authentication, authorization, task spawn, readiness publication or process
+/// lifecycle mutation. The owner is intentionally non-cloneable.
+pub struct LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    bind_addr: SocketAddr,
+    max_active_workers: NonZeroUsize,
+    capability_authority: SharedCurrentCapabilityAuthority<P>,
+    session_authentication: SessionAuthenticationService,
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+}
+
+impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    /// Consumes the exact injected remote-operation values without starting remote work.
+    #[must_use]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-AZ keeps the selected injected remote-operation inputs explicit and typed"
+    )]
+    pub const fn new(
+        bind_addr: SocketAddr,
+        max_active_workers: NonZeroUsize,
+        capability_authority: SharedCurrentCapabilityAuthority<P>,
+        session_authentication: SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Self {
+        Self {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        }
+    }
+}
+
+/// Builds one side-effect-free injected remote operation compatible with the AX bootstrap facade.
+///
+/// Factory construction performs ownership composition only. Remote credential/provider I/O and
+/// endpoint startup occur only if a caller later invokes the returned closure. The operation uses
+/// one exact private executor for reachability bootstrap and the complete endpoint/session lifecycle.
+/// It does not select a production bind-address source, expected-device producer, dispatcher,
+/// registry/policy source, timing source, readiness policy or executable process-exit policy.
+pub fn linux_agent_remote_process_operation<P, D, T, F, C, R, E>(
+    inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    move |publisher| {
+        let LinuxAgentRemoteProcessOperationInputs {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            mut session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        } = inputs;
+
+        let _ = run_remote_process_operation_composition(
+            RemoteSessionExecutorRuntime::new,
+            RemoteSessionExecutorRuntime::bootstrap_reachability_authority_from_systemd_credentials,
+            move |executor, authority_owner| {
+                RemoteSessionEndpointLifecycleRuntime::bind_with_executor_from_systemd_credentials(
+                    executor,
+                    authority_owner,
+                    bind_addr,
+                )
+            },
+            move |controller| publisher.publish(controller),
+            move |lifecycle, _publication| {
+                let _ = lifecycle.drive_repeated_real_remote_admission_endpoint_lifecycle(
+                    max_active_workers,
+                    &capability_authority,
+                    &mut session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                );
+            },
+        );
     }
 }
 
@@ -670,28 +819,83 @@ const fn map_lifecycle_start_kind(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        cell::{Cell, RefCell},
+        net::SocketAddr,
+        num::NonZeroUsize,
+    };
+
+    use prw_core::DeviceId;
     use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
+    use prw_registry::WorkspaceDeviceRegistry;
+    use prw_remote_bridge::{AuthorizedCapabilityRequest, CapabilityDispatcher};
+    use prw_session::SessionAuthenticationService;
+    use tokio::sync::mpsc;
 
     use super::{
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
         LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteProcessCompanionFinalization,
-        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessThreadFinalization,
-        LinuxAgentRemoteSupervisorShutdownPublish, LinuxAgentRemoteSupervisorShutdownPublisher,
-        finalize_remote_process_companion, initial_runtime_config, map_lifecycle_start_kind,
-        map_remote_shutdown_publish, run, run_with_remote_process_companion,
+        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
+        LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
+        LinuxAgentRemoteSupervisorShutdownPublisher, finalize_remote_process_companion,
+        initial_runtime_config, linux_agent_remote_process_operation, map_lifecycle_start_kind,
+        map_remote_shutdown_publish, run, run_remote_process_operation_composition,
+        run_with_remote_process_companion,
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
     use crate::remote_session_capability_runtime::{
-        RemoteSessionSupervisorShutdownController,
+        RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
+        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+        RemoteSessionRepeatedAdmissionFailure, RemoteSessionSupervisorShutdownController,
+        SharedCurrentCapabilityAuthority,
         remote_session_process_lifecycle_control::{
             RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
             RemoteSessionSupervisorShutdownPublish,
         },
     };
+
+    struct TestDispatcher;
+
+    impl CapabilityDispatcher for TestDispatcher {
+        type Error = ();
+
+        fn dispatch(
+            &mut self,
+            _request: &AuthorizedCapabilityRequest,
+        ) -> Result<Vec<u8>, Self::Error> {
+            Ok(Vec::new())
+        }
+    }
+
+    type TestExpectedRequest =
+        RemoteSessionExpectedDeviceAdmissionRequest<TestDispatcher, fn() -> u64>;
+    type TestExpectedRejection =
+        RemoteSessionExpectedDeviceAdmissionRejection<TestDispatcher, fn() -> u64>;
+
+    fn test_verifier_time() -> u64 {
+        1
+    }
+
+    fn test_admission_timing(_device_id: &DeviceId) -> RemoteSessionRealAdmissionTiming {
+        RemoteSessionRealAdmissionTiming::new(1..2, 1, 1..2)
+    }
+
+    fn test_completion(_completion: RemoteSessionRegisteredWorkerCompletion) {}
+
+    fn test_rejection(_rejection: TestExpectedRejection) {}
+
+    fn test_admission_failure(_failure: RemoteSessionRepeatedAdmissionFailure) {}
+
+    fn assert_remote_operation_shape<F>(operation: F)
+    where
+        F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
+    {
+        drop(operation);
+    }
 
     #[test]
     fn initial_profile_matches_phase_101_lock() {
@@ -814,6 +1018,147 @@ mod tests {
         }
 
         assert_signature(LinuxAgentRemoteSupervisorShutdownPublisher::publish);
+    }
+
+    #[test]
+    fn injected_operation_factory_construction_is_side_effect_free_and_send_static() {
+        let (_sender, receiver) = mpsc::channel::<TestExpectedRequest>(1);
+        let inputs = LinuxAgentRemoteProcessOperationInputs::new(
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            NonZeroUsize::new(1).expect("nonzero test worker bound"),
+            SharedCurrentCapabilityAuthority::new(
+                WorkspaceDeviceRegistry::new(),
+                BoundedLocalReadPolicy::allow_local_reads(),
+            ),
+            SessionAuthenticationService::new(),
+            receiver,
+            test_admission_timing as fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            test_completion as fn(RemoteSessionRegisteredWorkerCompletion),
+            test_rejection as fn(TestExpectedRejection),
+            test_admission_failure as fn(RemoteSessionRepeatedAdmissionFailure),
+        );
+
+        let operation = linux_agent_remote_process_operation(inputs);
+        assert_remote_operation_shape(operation);
+        let _ = test_verifier_time as fn() -> u64;
+    }
+
+    #[test]
+    fn synthetic_composition_preserves_same_executor_and_exact_stage_order() {
+        let events = RefCell::new(Vec::new());
+
+        let completed = run_remote_process_operation_composition(
+            || {
+                events.borrow_mut().push("executor");
+                Ok::<_, ()>(31_u8)
+            },
+            |executor| {
+                events.borrow_mut().push("bootstrap");
+                assert_eq!(*executor, 31);
+                Ok::<_, ()>(37_u8)
+            },
+            |executor, authority| {
+                events.borrow_mut().push("endpoint");
+                assert_eq!(executor, 31);
+                assert_eq!(authority, 37);
+                Ok::<_, ()>((41_u8, 43_u8))
+            },
+            |controller| {
+                events.borrow_mut().push("publish");
+                assert_eq!(controller, 43);
+                LinuxAgentRemoteSupervisorShutdownPublish::Published
+            },
+            |endpoint, publication| {
+                events.borrow_mut().push("lifecycle");
+                assert_eq!(endpoint, 41);
+                assert_eq!(
+                    publication,
+                    LinuxAgentRemoteSupervisorShutdownPublish::Published
+                );
+            },
+        );
+
+        assert!(completed);
+        assert_eq!(
+            *events.borrow(),
+            ["executor", "bootstrap", "endpoint", "publish", "lifecycle"]
+        );
+    }
+
+    #[test]
+    fn synthetic_failures_suppress_all_later_stages() {
+        let later = Cell::new(0_u8);
+        let completed = run_remote_process_operation_composition(
+            || Err::<u8, _>(()),
+            |_executor| {
+                later.set(later.get() + 1);
+                Ok::<_, ()>(2_u8)
+            },
+            |_executor, _authority| {
+                later.set(later.get() + 1);
+                Ok::<_, ()>((3_u8, 4_u8))
+            },
+            |_controller| {
+                later.set(later.get() + 1);
+                5_u8
+            },
+            |_endpoint, _publication| later.set(later.get() + 1),
+        );
+        assert!(!completed);
+        assert_eq!(later.get(), 0);
+
+        let later = Cell::new(0_u8);
+        let completed = run_remote_process_operation_composition(
+            || Ok::<_, ()>(1_u8),
+            |_executor| Err::<u8, _>(()),
+            |_executor, _authority| {
+                later.set(later.get() + 1);
+                Ok::<_, ()>((3_u8, 4_u8))
+            },
+            |_controller| {
+                later.set(later.get() + 1);
+                5_u8
+            },
+            |_endpoint, _publication| later.set(later.get() + 1),
+        );
+        assert!(!completed);
+        assert_eq!(later.get(), 0);
+
+        let later = Cell::new(0_u8);
+        let completed = run_remote_process_operation_composition(
+            || Ok::<_, ()>(1_u8),
+            |_executor| Ok::<_, ()>(2_u8),
+            |_executor, _authority| Err::<(u8, u8), _>(()),
+            |_controller| {
+                later.set(later.get() + 1);
+                5_u8
+            },
+            |_endpoint, _publication| later.set(later.get() + 1),
+        );
+        assert!(!completed);
+        assert_eq!(later.get(), 0);
+    }
+
+    #[test]
+    fn receiver_gone_publication_equivalent_still_drives_same_lifecycle_stage() {
+        let lifecycle_called = Cell::new(false);
+
+        let completed = run_remote_process_operation_composition(
+            || Ok::<_, ()>(1_u8),
+            |_executor| Ok::<_, ()>(2_u8),
+            |_executor, _authority| Ok::<_, ()>((3_u8, 4_u8)),
+            |_controller| LinuxAgentRemoteSupervisorShutdownPublish::ReceiverGoneShutdownRequested,
+            |_endpoint, publication| {
+                assert_eq!(
+                    publication,
+                    LinuxAgentRemoteSupervisorShutdownPublish::ReceiverGoneShutdownRequested
+                );
+                lifecycle_called.set(true);
+            },
+        );
+
+        assert!(completed);
+        assert!(lifecycle_called.get());
     }
 
     #[test]
