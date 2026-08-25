@@ -60,13 +60,8 @@ fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, Trans
     authority: Authority,
     construct_executor: impl FnOnce() -> Result<Executor, ExecutorError>,
     bind_transport: impl FnOnce(Authority) -> Result<Transport, (Box<Authority>, TransportError)>,
-) -> EndpointStartupCompositionResult<
-    Authority,
-    Executor,
-    Transport,
-    ExecutorError,
-    TransportError,
-> {
+) -> EndpointStartupCompositionResult<Authority, Executor, Transport, ExecutorError, TransportError>
+{
     let executor = match construct_executor() {
         Ok(executor) => executor,
         Err(error) => {
