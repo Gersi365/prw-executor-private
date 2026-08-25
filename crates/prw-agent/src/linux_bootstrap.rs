@@ -785,9 +785,11 @@ mod tests {
 
     #[test]
     fn public_remote_companion_facade_has_exact_injected_operation_shape() {
-        type RemoteCompanionEntry = fn(
-            fn(LinuxAgentRemoteSupervisorShutdownPublisher),
-        ) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
+        type RemoteCompanionEntry =
+            fn(
+                fn(LinuxAgentRemoteSupervisorShutdownPublisher),
+            )
+                -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
 
         fn operation(_: LinuxAgentRemoteSupervisorShutdownPublisher) {}
         fn assert_signature(entry: RemoteCompanionEntry) {
