@@ -6,12 +6,15 @@
 //! owner, C03e-AB adds one lexically-contained spawned-and-joined worker seam, and C03e-AD adds one
 //! single-worker orderly cancellation pair. C03e-AH adds the first pre-listener persistent
 //! current-thread worker collection seam, C03e-AJ adds one bounded expected-device real remote
-//! admission transaction, and C03e-AL composes repeated expected-device admission with that
-//! persistent collection under the same private current-thread runtime. This module still does not
-//! wire the Agent binary, publish readiness, or activate a production listener lifecycle.
+//! admission transaction, C03e-AL composes repeated expected-device admission with that persistent
+//! collection under the same private current-thread runtime, and C03e-AP adds the AO-selected
+//! executor-before-bind endpoint lifecycle startup plus explicit remote-supervisor shutdown control.
+//! This module still does not wire the Agent binary, publish readiness, or activate a production
+//! listener lifecycle.
 
 mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
+mod remote_session_endpoint_lifecycle_runtime;
 mod remote_session_executor_runtime;
 mod remote_session_worker_cancellation;
 mod shared_current_capability_authority;
@@ -19,6 +22,10 @@ mod shared_current_capability_authority;
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use real_remote_admission_transaction::{
     RemoteSessionRealAdmissionError, admit_expected_remote_device_session,
+};
+pub use remote_session_endpoint_lifecycle_runtime::{
+    RemoteSessionEndpointLifecycleRuntime, RemoteSessionEndpointLifecycleStartupError,
+    RemoteSessionEndpointLifecycleStartupFailure, RemoteSessionSupervisorShutdownController,
 };
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
