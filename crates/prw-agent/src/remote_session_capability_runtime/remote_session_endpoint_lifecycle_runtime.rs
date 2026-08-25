@@ -40,25 +40,24 @@ enum EndpointStartupCompositionError<ExecutorError, TransportError> {
     Transport(TransportError),
 }
 
-#[expect(
-    clippy::type_complexity,
-    reason = "C03e-AP keeps executor/bind failure custody explicit for the private ordering helper"
-)]
 fn compose_endpoint_startup<Authority, Executor, Transport, ExecutorError, TransportError>(
     authority: Authority,
     construct_executor: impl FnOnce() -> Result<Executor, ExecutorError>,
-    bind_transport: impl FnOnce(Authority) -> Result<Transport, (Authority, TransportError)>,
+    bind_transport: impl FnOnce(Authority) -> Result<Transport, (Box<Authority>, TransportError)>,
 ) -> Result<
     (Executor, Transport),
     (
-        Authority,
+        Box<Authority>,
         EndpointStartupCompositionError<ExecutorError, TransportError>,
     ),
 > {
     let executor = match construct_executor() {
         Ok(executor) => executor,
         Err(error) => {
-            return Err((authority, EndpointStartupCompositionError::Executor(error)));
+            return Err((
+                Box::new(authority),
+                EndpointStartupCompositionError::Executor(error),
+            ));
         }
     };
 
@@ -132,11 +131,11 @@ impl std::error::Error for RemoteSessionEndpointLifecycleStartupFailure {
 
 impl RemoteSessionEndpointLifecycleStartupFailure {
     fn new(
-        authority_owner: ReachabilityAuthorityRuntimeOwner,
+        authority_owner: Box<ReachabilityAuthorityRuntimeOwner>,
         error: RemoteSessionEndpointLifecycleStartupError,
     ) -> Self {
         Self {
-            authority_owner: Box::new(authority_owner),
+            authority_owner,
             error,
         }
     }
@@ -243,7 +242,7 @@ impl RemoteSessionEndpointLifecycleRuntime {
                 .map_err(|failure| {
                     let error = failure.error();
                     let authority_owner = failure.into_authority_owner();
-                    (authority_owner, error)
+                    (Box::new(authority_owner), error)
                 })
             },
         );
@@ -467,7 +466,7 @@ mod tests {
             },
             |authority| {
                 events.borrow_mut().push("bind");
-                Ok::<_, (u8, &'static str)>((authority, 13_u8))
+                Ok::<_, (Box<u8>, &'static str)>((authority, 13_u8))
             },
         );
 
@@ -484,7 +483,7 @@ mod tests {
             || Err::<u8, _>("executor failed"),
             |authority| {
                 bind_called.set(true);
-                Ok::<_, (u8, &'static str)>((authority, 19_u8))
+                Ok::<_, (Box<u8>, &'static str)>((authority, 19_u8))
             },
         );
 
@@ -492,7 +491,7 @@ mod tests {
         assert_eq!(
             result,
             Err((
-                17_u8,
+                Box::new(17_u8),
                 EndpointStartupCompositionError::Executor("executor failed")
             ))
         );
@@ -507,7 +506,7 @@ mod tests {
             || Ok::<_, &'static str>(29_u8),
             |authority| {
                 bind_calls.set(bind_calls.get() + 1);
-                Err::<(u8, u8), _>((authority, "bind failed"))
+                Err::<(u8, u8), _>((Box::new(authority), "bind failed"))
             },
         );
 
@@ -515,7 +514,7 @@ mod tests {
         assert_eq!(
             result,
             Err((
-                23_u8,
+                Box::new(23_u8),
                 EndpointStartupCompositionError::Transport("bind failed")
             ))
         );
