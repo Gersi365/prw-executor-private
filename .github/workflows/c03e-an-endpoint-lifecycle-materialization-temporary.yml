@@ -22,19 +22,13 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
           text = path.read_text()
 
-          anchor = '''    type ActiveRemoteWorkers =
-              HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
-
-          /// One bounded pre-authentication request for the repeated real-admission supervisor.
-          '''
-          replacement = '''    type ActiveRemoteWorkers =
-              HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
-
-          const REMOTE_ENDPOINT_SHUTDOWN_CODE: u32 = 0;
+          marker = '    /// One bounded pre-authentication request for the repeated real-admission supervisor.\n'
+          insertion = '''    const REMOTE_ENDPOINT_SHUTDOWN_CODE: u32 = 0;
           const REMOTE_ENDPOINT_SHUTDOWN_REASON: &[u8] = b"remote endpoint shutdown";
 
           fn finish_remote_endpoint_shutdown<R, C, W>(
@@ -55,23 +49,12 @@ jobs:
               result
           }
 
-          /// One bounded pre-authentication request for the repeated real-admission supervisor.
           '''
-          if text.count(anchor) != 1:
-              raise SystemExit(f'active-worker anchor count != 1: {text.count(anchor)}')
-          text = text.replace(anchor, replacement, 1)
+          if text.count(marker) != 1:
+              raise SystemExit(f'pre-auth marker count != 1: {text.count(marker)}')
+          text = text.replace(marker, insertion + marker, 1)
 
-          anchor = '''            Ok(())
-              }
-          }
-
-          #[cfg(test)]
-          mod tests {
-          '''
-          wrapper = '''            Ok(())
-              }
-
-              /// Drives the repeated remote-session supervisor and then deterministically closes and
+          wrapper = '''    /// Drives the repeated remote-session supervisor and then deterministically closes and
               /// drains the already-bound remote endpoint on the same private current-thread runtime.
               ///
               /// The existing C03e-AL supervisor is driven to full return before whole-endpoint close.
@@ -130,100 +113,77 @@ jobs:
                       transport_runtime.wait_idle(),
                   )
               }
-          }
+          '''
+          pattern = re.compile(
+              r'(            Ok\(\(\)\)\n        \}\n)(    \}\n\n    #\[cfg\(test\)\]\n    mod tests \{\n        use std::\{\n            cell::Cell,\n            collections::HashMap,)'
+          )
+          text, count = pattern.subn(lambda match: match.group(1) + wrapper + match.group(2), text, count=1)
+          if count != 1:
+              raise SystemExit(f'AL impl/test boundary match count != 1: {count}')
 
-          #[cfg(test)]
-          mod tests {
-          '''
-          if text.count(anchor) != 1:
-              raise SystemExit(f'impl-end anchor count != 1: {text.count(anchor)}')
-          text = text.replace(anchor, wrapper, 1)
-
-          old = '''        use std::{
-                      cell::Cell,
-                      collections::HashMap,
-          '''
-          new = '''        use std::{
-                      cell::{Cell, RefCell},
-                      collections::HashMap,
-          '''
+          old = '            cell::Cell,\n            collections::HashMap,\n'
+          new = '            cell::{Cell, RefCell},\n            collections::HashMap,\n'
           if text.count(old) != 1:
-              raise SystemExit(f'test cell import anchor count != 1: {text.count(old)}')
+              raise SystemExit(f'test cell import count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''            ActiveRemoteWorkers, InFlightAdmissionEvent,
-                      RemoteSessionExpectedDeviceAdmissionRejectionReason,
-                      RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentWorkerEntry,
-                      RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-                      RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
-                      drain_registered_workers, poll_shutdown_or_expected_request,
-                      poll_shutdown_or_inflight_admission, prepare_expected_request,
-                      remote_session_worker_cancellation_pair, request_all_worker_cancellations,
-          '''
-          new = '''            ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,
-                      REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,
-                      RemoteSessionExpectedDeviceAdmissionRejectionReason,
-                      RemoteSessionExpectedDeviceAdmissionRequest,
-                      RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
-                      RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-                      RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
-                      drain_registered_workers, finish_remote_endpoint_shutdown,
-                      poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
-                      prepare_expected_request, remote_session_worker_cancellation_pair,
-                      request_all_worker_cancellations,
-          '''
+          old = '            ActiveRemoteWorkers, InFlightAdmissionEvent,\n'
+          new = (
+              '            ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,\n'
+              '            REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,\n'
+              '            RemoteSessionPersistentCollectionConfigError,\n'
+          )
           if text.count(old) != 1:
-              raise SystemExit(f'test super import anchor count != 1: {text.count(old)}')
+              raise SystemExit(f'test super head import count != 1: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          anchor = '''        fn test_timing() -> RemoteSessionRealAdmissionTiming {
-                      RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
-                  }
+          old = '            drain_registered_workers, poll_shutdown_or_expected_request,\n'
+          new = (
+              '            drain_registered_workers, finish_remote_endpoint_shutdown,\n'
+              '            poll_shutdown_or_expected_request,\n'
+          )
+          if text.count(old) != 1:
+              raise SystemExit(f'test helper import count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
 
-                  struct TrackedReadyFuture {
+          test_marker = '        struct TrackedReadyFuture {\n'
+          test = '''        #[test]
+              fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
+                  let mut executor = RemoteSessionExecutorRuntime::new()
+                      .expect("test current-thread executor constructs");
+                  let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+                  let close_events = Rc::clone(&events);
+                  let idle_events = Rc::clone(&events);
+                  let original = Err(
+                      RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+                  );
+
+                  let result = finish_remote_endpoint_shutdown(
+                      &mut executor,
+                      original,
+                      move |code, reason| {
+                          assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
+                          assert_eq!(code, 0);
+                          assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
+                          assert_eq!(reason, b"remote endpoint shutdown");
+                          close_events.borrow_mut().push("close");
+                      },
+                      async move {
+                          idle_events.borrow_mut().push("idle");
+                      },
+                  );
+
+                  assert_eq!(
+                      result,
+                      Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+                  );
+                  assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
+              }
+
           '''
-          replacement = '''        fn test_timing() -> RemoteSessionRealAdmissionTiming {
-                      RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
-                  }
-
-                  #[test]
-                  fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
-                      let mut executor = RemoteSessionExecutorRuntime::new()
-                          .expect("test current-thread executor constructs");
-                      let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
-                      let close_events = Rc::clone(&events);
-                      let idle_events = Rc::clone(&events);
-                      let original = Err(
-                          RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-                      );
-
-                      let result = finish_remote_endpoint_shutdown(
-                          &mut executor,
-                          original,
-                          move |code, reason| {
-                              assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
-                              assert_eq!(code, 0);
-                              assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
-                              assert_eq!(reason, b"remote endpoint shutdown");
-                              close_events.borrow_mut().push("close");
-                          },
-                          async move {
-                              idle_events.borrow_mut().push("idle");
-                          },
-                      );
-
-                      assert_eq!(
-                          result,
-                          Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-                      );
-                      assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
-                  }
-
-                  struct TrackedReadyFuture {
-          '''
-          if text.count(anchor) != 1:
-              raise SystemExit(f'test insertion anchor count != 1: {text.count(anchor)}')
-          text = text.replace(anchor, replacement, 1)
+          if text.count(test_marker) != 1:
+              raise SystemExit(f'tracked future marker count != 1: {text.count(test_marker)}')
+          text = text.replace(test_marker, test + test_marker, 1)
 
           path.write_text(text)
           PY
