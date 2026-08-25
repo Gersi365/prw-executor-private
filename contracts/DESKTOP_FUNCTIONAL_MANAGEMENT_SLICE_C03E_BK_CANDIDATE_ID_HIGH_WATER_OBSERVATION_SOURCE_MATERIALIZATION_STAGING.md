@@ -25,11 +25,11 @@ Predecessor source blob:
 `bdefd6302fde130330be0c51073aa07345501249`
 
 BK source blob:
-`2ca071988d9e6aa90bb6b77957e27f4a95bfac12`
+`68635ae87735e6abb055cda21f8232f39b81a63e`
 
-The source diff is additive only: `+91/-0`.
+The final source diff is additive only: `+87/-0`.
 
-No existing source line was removed or rewritten by the source commit.
+No existing source line was removed or rewritten relative to closed BJ. One staged test expression was reformatted before final validation to the exact `cargo fmt` layout; no semantic source behavior changed.
 
 ## 3. Materialized accessor
 
