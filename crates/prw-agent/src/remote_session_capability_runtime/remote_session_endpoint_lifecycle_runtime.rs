@@ -65,11 +65,7 @@ fn compose_endpoint_bind_with_executor<Authority, Executor, Transport, Transport
     authority: Authority,
     bind_transport: impl FnOnce(Authority) -> Result<Transport, (Box<Authority>, TransportError)>,
 ) -> EndpointBindCompositionResult<Authority, Executor, Transport, TransportError> {
-    let transport = match bind_transport(authority) {
-        Ok(transport) => transport,
-        Err(failure) => return Err(failure),
-    };
-
+    let transport = bind_transport(authority)?;
     Ok((executor, transport))
 }
 
@@ -481,6 +477,10 @@ mod tests {
         let _ = constructor;
     }
 
+    #[expect(
+        clippy::type_complexity,
+        reason = "C03e-AR test intentionally states the exact Agent-internal same-executor constructor shape"
+    )]
     fn assert_same_executor_constructor_signature(
         constructor: fn(
             RemoteSessionExecutorRuntime,
@@ -499,7 +499,7 @@ mod tests {
 
     fn assert_reachability_bootstrap_signature(
         bootstrap: fn(
-            &mut RemoteSessionExecutorRuntime,
+            &RemoteSessionExecutorRuntime,
         ) -> Result<
             ReachabilityAuthorityRuntimeOwner,
             ReachabilityAuthorityCustodyBootstrapError,
