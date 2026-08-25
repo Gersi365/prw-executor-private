@@ -75,9 +75,7 @@ impl std::fmt::Display for LinuxAgentRemoteBindAddressSourceError {
             Self::Unavailable => "remote bind-address configuration unavailable",
             Self::EncodingInvalid => "remote bind-address configuration encoding invalid",
             Self::SocketAddressInvalid => "remote bind-address socket address invalid",
-            Self::AddressNotBindAdvertisable => {
-                "remote bind-address is not bind-advertisable"
-            }
+            Self::AddressNotBindAdvertisable => "remote bind-address is not bind-advertisable",
         })
     }
 }
@@ -122,7 +120,8 @@ fn parse_linux_agent_remote_bind_addr_value(
 /// Fails closed when the fixed configuration is absent/empty, non-Unicode, malformed, unspecified,
 /// multicast, or IPv4 limited broadcast. The error classification does not expose the configured
 /// value.
-pub fn load_linux_agent_remote_bind_addr_from_env() -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
+pub fn load_linux_agent_remote_bind_addr_from_env()
+-> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
     parse_linux_agent_remote_bind_addr_value(std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV))
 }
 
@@ -916,10 +915,11 @@ mod tests {
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
         LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteBindAddressSourceError,
-        LinuxAgentRemoteProcessCompanionFinalization, LinuxAgentRemoteProcessControllerFinalization,
-        LinuxAgentRemoteProcessOperationInputs, LinuxAgentRemoteProcessThreadFinalization,
-        LinuxAgentRemoteSupervisorShutdownPublish, LinuxAgentRemoteSupervisorShutdownPublisher,
-        PRW_REMOTE_BIND_ADDR_ENV, finalize_remote_process_companion, initial_runtime_config,
+        LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
+        LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
+        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
+        finalize_remote_process_companion, initial_runtime_config,
         linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
         map_lifecycle_start_kind, map_remote_shutdown_publish,
         parse_linux_agent_remote_bind_addr_value, run, run_remote_process_operation_composition,
@@ -1023,10 +1023,7 @@ mod tests {
             Ok(ipv4)
         );
 
-        let ipv6 = SocketAddr::from((
-            Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 10),
-            4434,
-        ));
+        let ipv6 = SocketAddr::from((Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 10), 4434));
         assert_eq!(
             parse_linux_agent_remote_bind_addr_value(Some(OsString::from(ipv6.to_string()))),
             Ok(ipv6)
