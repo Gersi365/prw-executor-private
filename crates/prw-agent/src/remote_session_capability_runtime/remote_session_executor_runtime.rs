@@ -1009,6 +1009,27 @@ mod repeated_real_admission_supervisor {
     type ActiveRemoteWorkers =
         HashMap<DeviceId, RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>>;
 
+    const REMOTE_ENDPOINT_SHUTDOWN_CODE: u32 = 0;
+    const REMOTE_ENDPOINT_SHUTDOWN_REASON: &[u8] = b"remote endpoint shutdown";
+
+    fn finish_remote_endpoint_shutdown<R, C, W>(
+        executor: &mut RemoteSessionExecutorRuntime,
+        result: R,
+        close_endpoint: C,
+        wait_idle: W,
+    ) -> R
+    where
+        C: FnOnce(u32, &[u8]),
+        W: Future<Output = ()>,
+    {
+        close_endpoint(
+            REMOTE_ENDPOINT_SHUTDOWN_CODE,
+            REMOTE_ENDPOINT_SHUTDOWN_REASON,
+        );
+        executor.runtime.block_on(wait_idle);
+        result
+    }
+
     /// One bounded pre-authentication request for the repeated real-admission supervisor.
     pub struct RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
         expected_device_id: DeviceId,
@@ -1504,12 +1525,69 @@ mod repeated_real_admission_supervisor {
 
             Ok(())
         }
+        /// Drives the repeated remote-session supervisor and then deterministically closes and
+        /// drains the already-bound remote endpoint on the same private current-thread runtime.
+        ///
+        /// The existing C03e-AL supervisor is driven to full return before whole-endpoint close.
+        /// Its result is captured without early propagation so even pre-drive configuration
+        /// failure still closes the endpoint once and drives `wait_idle()` before the exact
+        /// original result is returned.
+        ///
+        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
+        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "C03e-AN composes the exact existing C03e-AL inputs with endpoint teardown"
+        )]
+        pub fn drive_repeated_real_remote_admission_endpoint_lifecycle<P, D, T, S, F, C, R, E>(
+            &mut self,
+            max_active_workers: NonZeroUsize,
+            transport_runtime: &AgentRemoteTransportRuntime,
+            authority: &SharedCurrentCapabilityAuthority<P>,
+            session_authentication: &mut SessionAuthenticationService,
+            expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+            supervisor_shutdown: S,
+            admission_timing: F,
+            on_completion: C,
+            on_rejection: R,
+            on_admission_failure: E,
+        ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+        where
+            P: PolicyEvaluator + Send + Sync + 'static,
+            D: CapabilityDispatcher + Send + 'static,
+            T: FnMut() -> u64 + Send + 'static,
+            S: Future<Output = ()> + Send,
+            F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+            R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+            E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+        {
+            let result = self.drive_repeated_real_remote_admission_collection(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            );
+
+            finish_remote_endpoint_shutdown(
+                self,
+                result,
+                |code, reason| transport_runtime.close(code, reason),
+                transport_runtime.wait_idle(),
+            )
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use std::{
-            cell::Cell,
+            cell::{Cell, RefCell},
             collections::HashMap,
             future::{Future, pending, ready},
             pin::Pin,
@@ -1522,14 +1600,17 @@ mod repeated_real_admission_supervisor {
         use tokio::{runtime::Builder, sync::mpsc};
 
         use super::{
-            ActiveRemoteWorkers, InFlightAdmissionEvent,
+            ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,
+            REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,
             RemoteSessionExpectedDeviceAdmissionRejectionReason,
-            RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentWorkerEntry,
+            RemoteSessionExpectedDeviceAdmissionRequest,
+            RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
             RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
             RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
-            drain_registered_workers, poll_shutdown_or_expected_request,
-            poll_shutdown_or_inflight_admission, prepare_expected_request,
-            remote_session_worker_cancellation_pair, request_all_worker_cancellations,
+            drain_registered_workers, finish_remote_endpoint_shutdown,
+            poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
+            prepare_expected_request, remote_session_worker_cancellation_pair,
+            request_all_worker_cancellations,
         };
         use crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionWorkerStop;
 
@@ -1543,6 +1624,39 @@ mod repeated_real_admission_supervisor {
 
         fn test_timing() -> RemoteSessionRealAdmissionTiming {
             RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
+        }
+
+        #[test]
+        fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
+            let mut executor = RemoteSessionExecutorRuntime::new()
+                .expect("test current-thread executor constructs");
+            let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+            let close_events = Rc::clone(&events);
+            let idle_events = Rc::clone(&events);
+            let original = Err(
+                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+            );
+
+            let result = finish_remote_endpoint_shutdown(
+                &mut executor,
+                original,
+                move |code, reason| {
+                    assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
+                    assert_eq!(code, 0);
+                    assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
+                    assert_eq!(reason, b"remote endpoint shutdown");
+                    close_events.borrow_mut().push("close");
+                },
+                async move {
+                    idle_events.borrow_mut().push("idle");
+                },
+            );
+
+            assert_eq!(
+            result,
+            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+        );
+            assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
         struct TrackedReadyFuture {
