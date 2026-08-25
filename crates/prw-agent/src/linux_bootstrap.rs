@@ -1071,7 +1071,10 @@ mod tests {
             |endpoint, publication| {
                 events.borrow_mut().push("lifecycle");
                 assert_eq!(endpoint, 41);
-                assert_eq!(publication, LinuxAgentRemoteSupervisorShutdownPublish::Published);
+                assert_eq!(
+                    publication,
+                    LinuxAgentRemoteSupervisorShutdownPublish::Published
+                );
             },
         );
 
