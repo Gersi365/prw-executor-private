@@ -1910,3 +1910,33 @@ mod repeated_real_admission_supervisor {
         }
     }
 }
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives one existing reachability-authority admission transaction on this private executor.
+    ///
+    /// The existing async custody/provider bootstrap seam is executed exactly once inside the
+    /// already-owned current-thread Tokio runtime. Success is immediately converted into the
+    /// existing opaque Agent-owned runtime owner. No runtime handle, generic future driver,
+    /// provider client or secret material is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing reachability custody/provider bootstrap error unchanged. No retry,
+    /// endpoint bind, readiness publication or local-runtime shutdown is performed.
+    #[allow(
+        dead_code,
+        reason = "C03e-AR materializes the AQ-selected source seam for a separately gated process consumer"
+    )]
+    pub(crate) fn bootstrap_reachability_authority_from_systemd_credentials(
+        &mut self,
+    ) -> Result<
+        crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
+        crate::reachability_authority_custody_bootstrap::ReachabilityAuthorityCustodyBootstrapError,
+    > {
+        self.runtime
+            .block_on(
+                crate::reachability_authority_admission::bootstrap_and_admit_reachability_live_owner_authority_from_systemd_credentials(),
+            )
+            .map(crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner::new)
+    }
+}
