@@ -8,8 +8,8 @@
 use std::{fmt, net::SocketAddr};
 
 use prw_connectivity::{
-    ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError, PeerConnectivityIdentity,
-    PeerConnectivityPlan, TransportIdentity,
+    CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
+    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, TransportIdentity,
 };
 use prw_registry::{RegistryError, WorkspaceDeviceRegistry};
 use prw_session::AuthenticatedDeviceSession;
@@ -30,6 +30,22 @@ pub fn project_observed_socket_addr_to_connectivity_endpoint(
     observed: SocketAddr,
 ) -> Result<ConnectivityEndpoint, ConnectivityError> {
     ConnectivityEndpoint::new(observed.ip(), observed.port())
+}
+
+/// Assembles one connectivity candidate from already-typed explicit components.
+///
+/// This adapter does not allocate a candidate identifier, infer or rewrite a path kind, discover
+/// an endpoint, mutate a connectivity plan, publish a candidate, or perform network I/O. The
+/// caller remains responsible for the separately gated provenance of the supplied candidate ID
+/// and path kind. The existing [`ConnectivityCandidate::new`] constructor remains authoritative
+/// for the typed composition itself.
+#[must_use]
+pub const fn assemble_explicit_connectivity_candidate(
+    candidate_id: CandidateId,
+    path_kind: ConnectivityPathKind,
+    endpoint: ConnectivityEndpoint,
+) -> ConnectivityCandidate {
+    ConnectivityCandidate::new(candidate_id, path_kind, endpoint)
 }
 
 /// Stable source-level failure classification for candidate publication/admission.
@@ -220,14 +236,30 @@ pub fn refresh_from_authenticated_publication(
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-    use prw_connectivity::{ConnectivityEndpoint, ConnectivityError};
+    use prw_connectivity::{
+        CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
+        ConnectivityPathKind,
+    };
 
-    use super::project_observed_socket_addr_to_connectivity_endpoint;
+    use super::{
+        assemble_explicit_connectivity_candidate,
+        project_observed_socket_addr_to_connectivity_endpoint,
+    };
 
     fn assert_projection_signature(
         projection: fn(SocketAddr) -> Result<ConnectivityEndpoint, ConnectivityError>,
     ) {
         let _ = projection;
+    }
+
+    fn assert_assembly_signature(
+        assembly: fn(
+            CandidateId,
+            ConnectivityPathKind,
+            ConnectivityEndpoint,
+        ) -> ConnectivityCandidate,
+    ) {
+        let _ = assembly;
     }
 
     #[test]
@@ -303,5 +335,46 @@ mod tests {
             project_observed_socket_addr_to_connectivity_endpoint(observed),
             Err(ConnectivityError::InvalidEndpointAddress)
         );
+    }
+
+    #[test]
+    fn explicit_candidate_assembly_has_exact_selected_shape() {
+        assert_assembly_signature(assemble_explicit_connectivity_candidate);
+    }
+
+    #[test]
+    fn explicit_candidate_assembly_preserves_candidate_id_and_endpoint() {
+        let candidate_id = CandidateId::new(73).expect("non-zero candidate id");
+        let endpoint = ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 73)), 43_273)
+            .expect("documentation endpoint is valid");
+
+        let candidate = assemble_explicit_connectivity_candidate(
+            candidate_id,
+            ConnectivityPathKind::LocalDirect,
+            endpoint,
+        );
+
+        assert_eq!(candidate.id(), candidate_id);
+        assert_eq!(candidate.endpoint(), endpoint);
+    }
+
+    #[test]
+    fn explicit_candidate_assembly_preserves_each_explicit_path_kind() {
+        let candidate_id = CandidateId::new(74).expect("non-zero candidate id");
+        let endpoint = ConnectivityEndpoint::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 43_274)
+            .expect("loopback endpoint is valid for typed disposable validation");
+
+        for path_kind in [
+            ConnectivityPathKind::LocalDirect,
+            ConnectivityPathKind::InternetDirect,
+            ConnectivityPathKind::Relay,
+        ] {
+            let candidate =
+                assemble_explicit_connectivity_candidate(candidate_id, path_kind, endpoint);
+
+            assert_eq!(candidate.id(), candidate_id);
+            assert_eq!(candidate.kind(), path_kind);
+            assert_eq!(candidate.endpoint(), endpoint);
+        }
     }
 }
