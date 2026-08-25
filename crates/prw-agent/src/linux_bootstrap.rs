@@ -30,9 +30,14 @@ use crate::linux_identity::termination_signal::{
 use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
-use crate::remote_session_capability_runtime::remote_session_process_lifecycle_control::{
-    RemoteSessionProcessLifecycleFinalization, RemoteSessionProcessLifecycleOwner,
-    RemoteSessionProcessLifecycleSpawnError, RemoteSessionSupervisorShutdownPublisher,
+use crate::remote_session_capability_runtime::{
+    RemoteSessionSupervisorShutdownController,
+    remote_session_process_lifecycle_control::{
+        RemoteSessionProcessControllerFinalization, RemoteSessionProcessLifecycleFinalization,
+        RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
+        RemoteSessionProcessThreadFinalization, RemoteSessionSupervisorShutdownPublish,
+        RemoteSessionSupervisorShutdownPublisher,
+    },
 };
 
 /// Stable high-level terminal class exposed to the Agent binary.
@@ -298,17 +303,89 @@ impl LinuxAgentBootstrapStartFailure {
     }
 }
 
-/// Runs the fixed initial standalone Linux Agent bootstrap profile.
-///
-/// The facade builds only the Phase 101 locked immutable profile and delegates
-/// to the already-validated Phase 098 signal-aware runtime. It performs no
-/// systemd installation/activation and opens no public or remote listener.
-///
-/// # Errors
-///
-/// Returns a bounded startup failure when snapshot construction, safe signal
-/// setup, or descriptor-anchored local lifecycle assembly cannot complete.
-pub fn run() -> Result<LinuxAgentBootstrapReport, LinuxAgentBootstrapStartFailure> {
+/// Bounded result of publishing the existing one-shot remote supervisor shutdown controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentRemoteSupervisorShutdownPublish {
+    /// The exact controller moved to process-side ownership.
+    Published,
+    /// Process-side ownership disappeared and orderly shutdown was requested on the recovered controller.
+    ReceiverGoneShutdownRequested,
+}
+
+/// Non-cloneable bootstrap-facing one-shot publisher for the existing remote shutdown controller.
+pub struct LinuxAgentRemoteSupervisorShutdownPublisher {
+    publisher: RemoteSessionSupervisorShutdownPublisher,
+}
+
+impl LinuxAgentRemoteSupervisorShutdownPublisher {
+    /// Consumes this wrapper and publishes the exact existing remote supervisor shutdown controller.
+    #[must_use]
+    pub fn publish(
+        self,
+        controller: RemoteSessionSupervisorShutdownController,
+    ) -> LinuxAgentRemoteSupervisorShutdownPublish {
+        map_remote_shutdown_publish(self.publisher.publish(controller))
+    }
+}
+
+/// Bounded process-side controller finalization evidence for the injected remote companion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentRemoteProcessControllerFinalization {
+    /// The handed-off controller received the orderly shutdown request.
+    ShutdownRequested,
+    /// The remote lane ended before publishing a shutdown controller.
+    UnavailableBeforeEndpointStartup,
+}
+
+/// Bounded OS-thread finalization evidence for the injected remote companion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentRemoteProcessThreadFinalization {
+    /// The exact join-owned remote thread returned normally.
+    Joined,
+    /// The exact join-owned remote thread panicked; payload and thread identity were discarded.
+    Panicked,
+}
+
+/// Secondary bounded finalization evidence for the injected remote process companion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentRemoteProcessCompanionFinalization {
+    /// The remote process thread could not be created; local bootstrap semantics remain primary.
+    SpawnFailed,
+    /// The existing AT process owner finalized the controller handoff and exact join-owned thread.
+    Finalized {
+        /// Bounded process-side controller finalization evidence.
+        controller: LinuxAgentRemoteProcessControllerFinalization,
+        /// Bounded exact-thread join evidence.
+        thread: LinuxAgentRemoteProcessThreadFinalization,
+    },
+}
+
+/// Existing local bootstrap report plus secondary injected-remote-companion evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LinuxAgentBootstrapWithRemoteReport {
+    local: LinuxAgentBootstrapReport,
+    remote: LinuxAgentRemoteProcessCompanionFinalization,
+}
+
+impl LinuxAgentBootstrapWithRemoteReport {
+    /// Returns the existing primary local bootstrap report unchanged.
+    #[must_use]
+    pub const fn local(self) -> LinuxAgentBootstrapReport {
+        self.local
+    }
+
+    /// Returns bounded secondary remote companion finalization evidence.
+    #[must_use]
+    pub const fn remote(self) -> LinuxAgentRemoteProcessCompanionFinalization {
+        self.remote
+    }
+}
+
+fn with_initial_runtime_inputs<R>(
+    operation: impl FnOnce(
+        LocalLinuxProductionRuntimeInputs<'_>,
+    ) -> Result<R, LinuxAgentBootstrapStartFailure>,
+) -> Result<R, LinuxAgentBootstrapStartFailure> {
     let private_dns_config = PrivateDnsConfig::default();
     let private_dns_snapshot = LocalPrivateDnsSnapshot::try_from_config(&private_dns_config)
         .map_err(|_| {
@@ -325,39 +402,50 @@ pub fn run() -> Result<LinuxAgentBootstrapReport, LinuxAgentBootstrapStartFailur
         &private_dns_snapshot,
     );
 
-    run_signal_aware_linux_production_runtime_from_env(inputs, |_| {})
-        .map(|report| map_terminal_report(&report))
-        .map_err(map_start_failure)
+    operation(inputs)
 }
 
-#[allow(
-    dead_code,
-    reason = "C03e-AV retains secondary remote-process evidence for a separately gated consumer"
-)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LinuxAgentRemoteProcessCompanionFinalization {
-    SpawnFailed(RemoteSessionProcessLifecycleSpawnError),
-    Finalized(RemoteSessionProcessLifecycleFinalization),
+/// Runs the fixed initial standalone Linux Agent bootstrap profile.
+///
+/// The facade builds only the Phase 101 locked immutable profile and delegates
+/// to the already-validated Phase 098 signal-aware runtime. It performs no
+/// systemd installation/activation and opens no public or remote listener.
+///
+/// # Errors
+///
+/// Returns a bounded startup failure when snapshot construction, safe signal
+/// setup, or descriptor-anchored local lifecycle assembly cannot complete.
+pub fn run() -> Result<LinuxAgentBootstrapReport, LinuxAgentBootstrapStartFailure> {
+    with_initial_runtime_inputs(|inputs| {
+        run_signal_aware_linux_production_runtime_from_env(inputs, |_| {})
+            .map(|report| map_terminal_report(&report))
+            .map_err(map_start_failure)
+    })
 }
 
-#[allow(
-    dead_code,
-    reason = "C03e-AV finalizes only the separately gated injected process companion"
-)]
-fn finalize_remote_process_companion(
-    companion: Result<RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError>,
-) -> LinuxAgentRemoteProcessCompanionFinalization {
-    match companion {
-        Ok(owner) => LinuxAgentRemoteProcessCompanionFinalization::Finalized(owner.finalize()),
-        Err(error) => LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed(error),
-    }
+/// Runs the same fixed initial Linux Agent profile with one injected remote process companion.
+///
+/// The remote operation remains caller-supplied. This facade creates no production remote inputs,
+/// selects no bind address, performs no reachability bootstrap, and does not define executable exit
+/// policy for the returned secondary remote evidence.
+///
+/// # Errors
+///
+/// Returns the existing local bootstrap startup failure unchanged. Remote process-thread spawn
+/// failure remains secondary evidence on successful local lifecycle completion.
+pub fn run_with_remote_process_companion<F>(
+    operation: F,
+) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+where
+    F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
+{
+    with_initial_runtime_inputs(|inputs| {
+        run_with_remote_process_companion_inputs(inputs, operation)
+            .map(|(local, remote)| LinuxAgentBootstrapWithRemoteReport { local, remote })
+    })
 }
 
-#[allow(
-    dead_code,
-    reason = "C03e-AV materializes a private injected seam; executable activation is separately gated"
-)]
-fn run_with_remote_process_companion<F>(
+fn run_with_remote_process_companion_inputs<F>(
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
     operation: F,
 ) -> Result<
@@ -368,13 +456,17 @@ fn run_with_remote_process_companion<F>(
     LinuxAgentBootstrapStartFailure,
 >
 where
-    F: FnOnce(RemoteSessionSupervisorShutdownPublisher) + Send + 'static,
+    F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
 {
     let mut remote_finalization = None;
     let report = run_signal_aware_linux_production_runtime_from_env_with_companion(
         inputs,
         |_| {},
-        || RemoteSessionProcessLifecycleOwner::spawn(operation),
+        || {
+            RemoteSessionProcessLifecycleOwner::spawn(move |publisher| {
+                operation(LinuxAgentRemoteSupervisorShutdownPublisher { publisher });
+            })
+        },
         |companion| {
             remote_finalization = Some(finalize_remote_process_companion(companion));
         },
@@ -385,6 +477,63 @@ where
         .expect("signal-aware companion finalizer runs before successful bootstrap return");
 
     Ok((map_terminal_report(&report), remote_finalization))
+}
+
+const fn map_remote_shutdown_publish(
+    publish: RemoteSessionSupervisorShutdownPublish,
+) -> LinuxAgentRemoteSupervisorShutdownPublish {
+    match publish {
+        RemoteSessionSupervisorShutdownPublish::Published => {
+            LinuxAgentRemoteSupervisorShutdownPublish::Published
+        }
+        RemoteSessionSupervisorShutdownPublish::ReceiverGoneShutdownRequested => {
+            LinuxAgentRemoteSupervisorShutdownPublish::ReceiverGoneShutdownRequested
+        }
+    }
+}
+
+const fn map_remote_process_controller_finalization(
+    controller: RemoteSessionProcessControllerFinalization,
+) -> LinuxAgentRemoteProcessControllerFinalization {
+    match controller {
+        RemoteSessionProcessControllerFinalization::ShutdownRequested => {
+            LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested
+        }
+        RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup => {
+            LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup
+        }
+    }
+}
+
+const fn map_remote_process_thread_finalization(
+    thread: RemoteSessionProcessThreadFinalization,
+) -> LinuxAgentRemoteProcessThreadFinalization {
+    match thread {
+        RemoteSessionProcessThreadFinalization::Joined => {
+            LinuxAgentRemoteProcessThreadFinalization::Joined
+        }
+        RemoteSessionProcessThreadFinalization::Panicked => {
+            LinuxAgentRemoteProcessThreadFinalization::Panicked
+        }
+    }
+}
+
+const fn map_remote_process_finalization(
+    finalization: RemoteSessionProcessLifecycleFinalization,
+) -> LinuxAgentRemoteProcessCompanionFinalization {
+    LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+        controller: map_remote_process_controller_finalization(finalization.controller()),
+        thread: map_remote_process_thread_finalization(finalization.thread()),
+    }
+}
+
+fn finalize_remote_process_companion(
+    companion: Result<RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError>,
+) -> LinuxAgentRemoteProcessCompanionFinalization {
+    companion.map_or(
+        LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed,
+        |owner| map_remote_process_finalization(owner.finalize()),
+    )
 }
 
 fn initial_runtime_config() -> LocalLinuxProductionRuntimeConfig {
@@ -527,15 +676,21 @@ mod tests {
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
-        LinuxAgentRemoteProcessCompanionFinalization, finalize_remote_process_companion,
-        initial_runtime_config, map_lifecycle_start_kind, run,
+        LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessThreadFinalization,
+        LinuxAgentRemoteSupervisorShutdownPublish, LinuxAgentRemoteSupervisorShutdownPublisher,
+        finalize_remote_process_companion, initial_runtime_config, map_lifecycle_start_kind,
+        map_remote_shutdown_publish, run, run_with_remote_process_companion,
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
-    use crate::remote_session_capability_runtime::remote_session_process_lifecycle_control::{
-        RemoteSessionProcessControllerFinalization, RemoteSessionProcessLifecycleOwner,
-        RemoteSessionProcessLifecycleSpawnError, RemoteSessionProcessThreadFinalization,
+    use crate::remote_session_capability_runtime::{
+        RemoteSessionSupervisorShutdownController,
+        remote_session_process_lifecycle_control::{
+            RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
+            RemoteSessionSupervisorShutdownPublish,
+        },
     };
 
     #[test]
@@ -629,33 +784,72 @@ mod tests {
     }
 
     #[test]
-    fn synthetic_remote_process_spawn_failure_remains_secondary_evidence() {
-        assert_eq!(
-            finalize_remote_process_companion(Err(RemoteSessionProcessLifecycleSpawnError)),
-            LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed(
-                RemoteSessionProcessLifecycleSpawnError
+    fn public_remote_companion_facade_has_exact_injected_operation_shape() {
+        type RemoteCompanionEntry =
+            fn(
+                fn(LinuxAgentRemoteSupervisorShutdownPublisher),
             )
+                -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
+
+        fn operation(_: LinuxAgentRemoteSupervisorShutdownPublisher) {}
+        fn assert_signature(entry: RemoteCompanionEntry) {
+            let _ = entry;
+        }
+
+        assert_signature(
+            run_with_remote_process_companion::<fn(LinuxAgentRemoteSupervisorShutdownPublisher)>,
+        );
+        let _ = operation;
+    }
+
+    #[test]
+    fn public_shutdown_publisher_has_exact_consuming_method_shape() {
+        fn assert_signature(
+            publish: fn(
+                LinuxAgentRemoteSupervisorShutdownPublisher,
+                RemoteSessionSupervisorShutdownController,
+            ) -> LinuxAgentRemoteSupervisorShutdownPublish,
+        ) {
+            let _ = publish;
+        }
+
+        assert_signature(LinuxAgentRemoteSupervisorShutdownPublisher::publish);
+    }
+
+    #[test]
+    fn internal_publication_outcomes_map_to_bounded_public_classes() {
+        assert_eq!(
+            map_remote_shutdown_publish(RemoteSessionSupervisorShutdownPublish::Published),
+            LinuxAgentRemoteSupervisorShutdownPublish::Published
+        );
+        assert_eq!(
+            map_remote_shutdown_publish(
+                RemoteSessionSupervisorShutdownPublish::ReceiverGoneShutdownRequested
+            ),
+            LinuxAgentRemoteSupervisorShutdownPublish::ReceiverGoneShutdownRequested
         );
     }
 
     #[test]
-    fn injected_remote_process_owner_is_explicitly_finalized_and_joined() {
+    fn synthetic_remote_process_spawn_failure_remains_secondary_evidence() {
+        assert_eq!(
+            finalize_remote_process_companion(Err(RemoteSessionProcessLifecycleSpawnError)),
+            LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed
+        );
+    }
+
+    #[test]
+    fn injected_remote_process_owner_maps_to_bounded_public_join_evidence() {
         let owner = RemoteSessionProcessLifecycleOwner::spawn(drop)
             .expect("injected non-networking remote process thread spawns");
 
-        let LinuxAgentRemoteProcessCompanionFinalization::Finalized(finalization) =
-            finalize_remote_process_companion(Ok(owner))
-        else {
-            panic!("successful owner must finalize");
-        };
-
         assert_eq!(
-            finalization.controller(),
-            RemoteSessionProcessControllerFinalization::UnavailableBeforeEndpointStartup
-        );
-        assert_eq!(
-            finalization.thread(),
-            RemoteSessionProcessThreadFinalization::Joined
+            finalize_remote_process_companion(Ok(owner)),
+            LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+                controller:
+                    LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            }
         );
     }
 }
