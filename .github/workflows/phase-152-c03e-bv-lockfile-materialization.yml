@@ -33,7 +33,7 @@ jobs:
           rustup toolchain install 1.97.1 --profile minimal
           cargo +1.97.1 --version
 
-      - name: Materialize only the root lockfile edge with Cargo
+      - name: Materialize root lockfile with Cargo
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -47,17 +47,62 @@ jobs:
           cd apps/android/native
           cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
 
-      - name: Prove exact lockfile-only root delta
+      - name: Prove semantic root lockfile delta and print raw diff
         shell: bash
         run: |
           set -Eeuo pipefail
           changed="$(git diff --name-only)"
           test "$changed" = "Cargo.lock"
-          numstat="$(git diff --numstat -- Cargo.lock)"
-          test "$numstat" = $'1\t0\tCargo.lock'
-          git diff --unified=0 -- Cargo.lock | grep -Fq '+ "prw-control-transport",'
-          ! git diff --unified=0 -- Cargo.lock | grep -E '^-[^-]'
-          echo phase152_c03e_bv_root_lock_delta=pass
+          echo '--- Cargo.lock numstat ---'
+          git diff --numstat -- Cargo.lock
+          echo '--- Cargo.lock raw diff ---'
+          git diff -- Cargo.lock
+          python3 - <<'PY'
+          import copy
+          import pathlib
+          import subprocess
+          import tomllib
+          from collections import Counter
+
+          before = tomllib.loads(subprocess.check_output(["git", "show", "HEAD:Cargo.lock"], text=True))
+          after = tomllib.loads(pathlib.Path("Cargo.lock").read_text())
+
+          before_top = {key: value for key, value in before.items() if key != "package"}
+          after_top = {key: value for key, value in after.items() if key != "package"}
+          assert before_top == after_top, "Cargo.lock top-level metadata changed"
+
+          before_packages = before.get("package", [])
+          after_packages = after.get("package", [])
+          assert len(before_packages) == len(after_packages), "Cargo.lock package count changed"
+
+          def package_key(package):
+              return (package.get("name"), package.get("version"), package.get("source"))
+
+          before_by_key = {package_key(package): package for package in before_packages}
+          after_by_key = {package_key(package): package for package in after_packages}
+          assert before_by_key.keys() == after_by_key.keys(), "Cargo.lock package identity set changed"
+
+          targets = [key for key in before_by_key if key[0] == "prw-remote-bridge"]
+          assert len(targets) == 1, "expected exactly one prw-remote-bridge package"
+          target = targets[0]
+
+          for key in before_by_key:
+              if key != target:
+                  assert before_by_key[key] == after_by_key[key], f"unrelated package changed: {key}"
+
+          before_target = copy.deepcopy(before_by_key[target])
+          after_target = copy.deepcopy(after_by_key[target])
+          before_dependencies = before_target.pop("dependencies", [])
+          after_dependencies = after_target.pop("dependencies", [])
+          assert before_target == after_target, "prw-remote-bridge non-dependency fields changed"
+          assert "prw-control-transport" not in before_dependencies, "edge already existed in preimage"
+          expected = Counter(before_dependencies)
+          expected["prw-control-transport"] += 1
+          assert Counter(after_dependencies) == expected, "unexpected prw-remote-bridge dependency delta"
+          assert len(after_dependencies) == len(before_dependencies) + 1, "dependency cardinality changed unexpectedly"
+
+          print("phase152_c03e_bv_root_lock_semantic_delta=pass")
+          PY
 
       - name: Commit Cargo-generated root lockfile
         shell: bash
