@@ -83,12 +83,8 @@ pub fn encode_candidate_publication_control_frame(
     submission: &CandidatePublicationWireSubmission,
     request_id: u64,
 ) -> Result<ControlFrame, CandidatePublicationControlFrameError> {
-    ControlFrame::new(
-        ControlMessageKind::Command,
-        request_id,
-        submission.encode(),
-    )
-    .map_err(Into::into)
+    ControlFrame::new(ControlMessageKind::Command, request_id, submission.encode())
+        .map_err(Into::into)
 }
 
 /// Decodes one already-parsed Phase 129 frame as a candidate-publication Command.
