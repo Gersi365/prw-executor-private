@@ -1,5 +1,4 @@
 # Phase 149 materialized-source validation trigger; workflow semantics unchanged.
-# Temporary C03e-BV lockfile materializer is branch-scoped and removed before final compare.
 name: PRW Android Validation
 
 on:
@@ -24,38 +23,6 @@ permissions:
   contents: read
 
 jobs:
-  bv_lockfile_materialize:
-    if: github.event_name == 'push' && github.ref_name == 'phase-152-c03e-bv-candidate-publication-prwp-prwc-pure-adapter-source-materialization-staging'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Materialize exact BV root lockfile edge
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rustup toolchain install 1.97.1 --profile minimal
-          cargo +1.97.1 metadata --no-deps --format-version 1 >/dev/null
-          cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
-          (cd apps/android/native && cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null)
-          if git diff --quiet -- Cargo.lock; then
-            echo phase152_c03e_bv_root_lock_already_canonical=pass
-            exit 0
-          fi
-          test "$(git diff --name-only)" = "Cargo.lock"
-          test "$(git diff --numstat -- Cargo.lock)" = $'1\t0\tCargo.lock'
-          git diff --unified=0 -- Cargo.lock | grep -Fq '+ "prw-control-transport",'
-          ! git diff --unified=0 -- Cargo.lock | grep -E '^-[^-]'
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "Phase 152 C03e-BV: materialize Cargo-generated root lockfile edge"
-          git push origin HEAD:"$GITHUB_REF_NAME"
-
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
