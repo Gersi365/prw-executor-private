@@ -383,11 +383,17 @@ mod tests {
         let encoded = typed.encode();
 
         assert_eq!(encoded.len(), 132);
-        assert_eq!(u64::from_be_bytes(encoded[80..88].try_into().expect("id")), 7);
+        assert_eq!(
+            u64::from_be_bytes(encoded[80..88].try_into().expect("id")),
+            7
+        );
         assert_eq!(u16::from_be_bytes([encoded[88], encoded[89]]), 2);
         assert_eq!(u16::from_be_bytes([encoded[90], encoded[91]]), 1);
         assert_eq!(u16::from_be_bytes([encoded[94], encoded[95]]), 0);
-        assert_eq!(u64::from_be_bytes(encoded[100..108].try_into().expect("id")), 9);
+        assert_eq!(
+            u64::from_be_bytes(encoded[100..108].try_into().expect("id")),
+            9
+        );
         assert_eq!(u16::from_be_bytes([encoded[108], encoded[109]]), 3);
         assert_eq!(u16::from_be_bytes([encoded[110], encoded[111]]), 2);
         assert_eq!(
