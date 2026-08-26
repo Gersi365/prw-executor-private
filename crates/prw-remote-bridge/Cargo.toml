@@ -11,6 +11,7 @@ path = "src/root.rs"
 [dependencies]
 prw-connectivity = { path = "../prw-connectivity" }
 prw-control-plane = { path = "../prw-control-plane" }
+prw-control-transport = { path = "../prw-control-transport" }
 prw-file-service = { path = "../prw-file-service" }
 prw-file-transfer = { path = "../prw-file-transfer" }
 prw-forwarding = { path = "../prw-forwarding" }
