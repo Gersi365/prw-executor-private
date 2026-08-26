@@ -12,6 +12,7 @@ path = "src/root.rs"
 prw-connectivity = { path = "../prw-connectivity" }
 prw-control-plane = { path = "../prw-control-plane" }
 prw-control-transport = { path = "../prw-control-transport" }
+prw-core = { path = "../prw-core" }
 prw-file-service = { path = "../prw-file-service" }
 prw-file-transfer = { path = "../prw-file-transfer" }
 prw-forwarding = { path = "../prw-forwarding" }
@@ -24,7 +25,6 @@ prw-terminal = { path = "../prw-terminal" }
 
 [dev-dependencies]
 aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
-prw-core = { path = "../prw-core" }
 prw-device-identity-signer = { path = "../prw-device-identity-signer" }
 
 [lints]
