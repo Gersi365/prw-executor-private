@@ -15,6 +15,7 @@ pub use legacy_bridge::*;
 
 pub mod authorized_request_dispatch;
 pub mod candidate_publication_freshness;
+pub mod candidate_publication_wire;
 pub mod candidate_reachability;
 pub mod capability_request_wire;
 pub mod reachability_freshness_wire;
