@@ -1,0 +1,69 @@
+name: Phase 152 C03e-BV Lockfile Materialization
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-bv-candidate-publication-prwp-prwc-pure-adapter-source-materialization-staging
+    paths:
+      - '.github/workflows/phase-152-c03e-bv-lockfile-materialization.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-152-c03e-bv-lockfile-materialization-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact BV branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify expected branch and toolchain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF_NAME" = "phase-152-c03e-bv-candidate-publication-prwp-prwc-pure-adapter-source-materialization-staging"
+          rustup toolchain install 1.97.1 --profile minimal
+          cargo +1.97.1 --version
+
+      - name: Materialize only the root lockfile edge with Cargo
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo +1.97.1 metadata --no-deps --format-version 1 >/dev/null
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Verify Android lockfile is already canonical and locked
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Prove exact lockfile-only root delta
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          changed="$(git diff --name-only)"
+          test "$changed" = "Cargo.lock"
+          numstat="$(git diff --numstat -- Cargo.lock)"
+          test "$numstat" = $'1\t0\tCargo.lock'
+          git diff --unified=0 -- Cargo.lock | grep -Fq '+ "prw-control-transport",'
+          ! git diff --unified=0 -- Cargo.lock | grep -E '^-[^-]'
+          echo phase152_c03e_bv_root_lock_delta=pass
+
+      - name: Commit Cargo-generated root lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "Phase 152 C03e-BV: materialize Cargo-generated root lockfile edge"
+          git push origin HEAD:"$GITHUB_REF_NAME"
