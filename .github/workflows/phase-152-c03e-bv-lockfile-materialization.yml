@@ -1,3 +1,4 @@
+# Temporary deterministic lockfile materializer; removed after canonical Cargo output is committed.
 name: Phase 152 C03e-BV Lockfile Materialization
 
 on:
