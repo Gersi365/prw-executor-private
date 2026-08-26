@@ -2763,6 +2763,7 @@ dependencies = [
  "aws-lc-rs",
  "prw-connectivity",
  "prw-control-plane",
+ "prw-control-transport",
  "prw-core",
  "prw-device-identity-signer",
  "prw-file-service",

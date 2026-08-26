@@ -2130,6 +2130,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-control-transport"
+version = "0.1.0"
+dependencies = [
+ "rustls",
+]
+
+[[package]]
 name = "prw-core"
 version = "0.1.0"
 
@@ -2210,6 +2217,7 @@ version = "0.1.0"
 dependencies = [
  "prw-connectivity",
  "prw-control-plane",
+ "prw-control-transport",
  "prw-file-service",
  "prw-file-transfer",
  "prw-forwarding",
