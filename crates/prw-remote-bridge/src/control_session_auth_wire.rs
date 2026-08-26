@@ -339,8 +339,8 @@ fn push_identifier(
     if len == 0 || len > MAX_SESSION_AUTH_IDENTIFIER_BYTES || value.trim().is_empty() {
         return Err(ControlSessionAuthenticationWireError::InvalidPayload);
     }
-    let len = u16::try_from(len)
-        .map_err(|_| ControlSessionAuthenticationWireError::InvalidPayload)?;
+    let len =
+        u16::try_from(len).map_err(|_| ControlSessionAuthenticationWireError::InvalidPayload)?;
     output.extend_from_slice(&len.to_be_bytes());
     output.extend_from_slice(value.as_bytes());
     Ok(())
@@ -377,10 +377,7 @@ impl<'a> Decoder<'a> {
         Self { input, position: 0 }
     }
 
-    fn take(
-        &mut self,
-        len: usize,
-    ) -> Result<&'a [u8], ControlSessionAuthenticationWireError> {
+    fn take(&mut self, len: usize) -> Result<&'a [u8], ControlSessionAuthenticationWireError> {
         let end = self
             .position
             .checked_add(len)
@@ -585,7 +582,10 @@ mod tests {
             device_id: DeviceId::new(device).expect("max device id"),
         };
         let begin_frame = encode_control_session_authentication_frame(2, &begin).expect("begin");
-        assert_eq!(begin_frame.payload().len(), MAX_CONTROL_SESSION_AUTH_BEGIN_BYTES);
+        assert_eq!(
+            begin_frame.payload().len(),
+            MAX_CONTROL_SESSION_AUTH_BEGIN_BYTES
+        );
         assert_eq!(
             decode_control_session_authentication_frame(&begin_frame).expect("begin decode"),
             begin
@@ -598,7 +598,10 @@ mod tests {
             signature: signature(vec![0x30; MAX_CONTROL_SESSION_AUTH_SIGNATURE_BYTES]),
         };
         let proof_frame = encode_control_session_authentication_frame(3, &proof).expect("proof");
-        assert_eq!(proof_frame.payload().len(), MAX_CONTROL_SESSION_AUTH_PROOF_BYTES);
+        assert_eq!(
+            proof_frame.payload().len(),
+            MAX_CONTROL_SESSION_AUTH_PROOF_BYTES
+        );
         assert_eq!(
             decode_control_session_authentication_frame(&proof_frame).expect("proof decode"),
             proof
@@ -648,12 +651,9 @@ mod tests {
         let algorithm_offset = CONTROL_SESSION_AUTH_HEADER_BYTES + 2 + 1 + 32;
         unsupported_payload[algorithm_offset..algorithm_offset + 2]
             .copy_from_slice(&2_u16.to_be_bytes());
-        let unsupported = ControlFrame::new(
-            ControlMessageKind::Authentication,
-            5,
-            unsupported_payload,
-        )
-        .expect("frame");
+        let unsupported =
+            ControlFrame::new(ControlMessageKind::Authentication, 5, unsupported_payload)
+                .expect("frame");
         assert_eq!(
             decode_control_session_authentication_frame(&unsupported),
             Err(ControlSessionAuthenticationWireError::UnsupportedSignatureProfile)
