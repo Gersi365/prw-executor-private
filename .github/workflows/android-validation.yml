@@ -1,4 +1,5 @@
 # Phase 149 materialized-source validation trigger; workflow semantics unchanged.
+# Temporary C03e-BV lockfile materializer is branch-scoped and removed before final compare.
 name: PRW Android Validation
 
 on:
