@@ -109,8 +109,7 @@ impl CandidatePublicationWireSubmission {
         payload.extend_from_slice(&0_u16.to_be_bytes());
         payload.extend_from_slice(self.presented_transport_identity.as_bytes());
         payload.extend_from_slice(self.presented_freshness.as_bytes());
-        let candidate_count = u16::try_from(self.candidates.len())
-            .expect("bounded candidate count always fits in u16");
+        let candidate_count = u16::try_from(self.candidates.len()).unwrap_or_default();
         payload.extend_from_slice(&candidate_count.to_be_bytes());
         payload.extend_from_slice(&0_u16.to_be_bytes());
 
