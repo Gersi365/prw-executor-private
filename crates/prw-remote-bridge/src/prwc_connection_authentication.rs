@@ -1284,18 +1284,15 @@ mod tests {
 
         #[test]
         fn public_write_signature_accepts_only_an_already_completed_semantic_result() {
-            fn assert_signature(
-                function: fn(
-                    &mut AuthenticatedPrwcConnection,
-                    &CandidatePublicationControlFrame,
-                    Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
-                )
-                    -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>,
-            ) {
-                let _ = function;
-            }
+            type CandidatePublicationResultWriteFn = fn(
+                &mut AuthenticatedPrwcConnection,
+                &CandidatePublicationControlFrame,
+                Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+            ) -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>;
 
-            assert_signature(AuthenticatedPrwcConnection::write_candidate_publication_result);
+            let function: CandidatePublicationResultWriteFn =
+                AuthenticatedPrwcConnection::write_candidate_publication_result;
+            let _ = function;
         }
     }
 }
