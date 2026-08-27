@@ -20,6 +20,7 @@ pub mod candidate_publication_wire;
 pub mod candidate_reachability;
 pub mod capability_request_wire;
 pub mod control_session_auth_wire;
+pub mod prwc_connection_authentication;
 pub mod prwc_request_id_lifecycle;
 pub mod reachability_freshness_wire;
 pub mod reachability_live_owner;
