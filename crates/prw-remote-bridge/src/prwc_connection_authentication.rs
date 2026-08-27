@@ -395,10 +395,7 @@ mod tests {
         rand::SystemRandom,
         signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
     };
-    use prw_control_plane::{
-        DeviceIdentityBinding,
-        session_auth::SessionAuthChallengeState,
-    };
+    use prw_control_plane::{DeviceIdentityBinding, session_auth::SessionAuthChallengeState};
     use prw_control_transport::{ControlFrame, ControlFrameError};
     use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
     use prw_device_identity_signer::UbuntuEnrollmentSigner;
