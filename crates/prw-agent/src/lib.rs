@@ -78,7 +78,7 @@ pub struct LocalIpcContract {
     pub authorization: LocalPeerAuthorization,
     /// Required Unix mode for the PRW runtime subdirectory.
     pub runtime_directory_mode: u32,
-    /// Required Unix mode for the filesystem-backed Agent socket.
+    /// Required Unix mode for the Agent socket filesystem entry.
     pub socket_mode: u32,
 }
 
