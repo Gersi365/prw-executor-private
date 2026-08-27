@@ -52,7 +52,9 @@ impl fmt::Display for RequesterRendezvousLifecycleError {
             Self::CapacityExhausted => "requester rendezvous provider capacity is exhausted",
             Self::RecordAlreadyExists => "requester rendezvous authority record already exists",
             Self::RecordUnknown => "requester rendezvous authority record is unknown",
-            Self::RecordAlreadyRetired => "requester rendezvous authority record is already retired",
+            Self::RecordAlreadyRetired => {
+                "requester rendezvous authority record is already retired"
+            }
             Self::CurrentRecordCannotBeRemoved => {
                 "current requester rendezvous authority record cannot be removed as retired"
             }
@@ -104,10 +106,12 @@ impl InMemoryRequesterRendezvousAuthorityProvider {
         requester_session: AuthenticatedDeviceSession,
         expected_publisher_device_id: DeviceId,
     ) -> Result<(), RequesterRendezvousLifecycleError> {
-        if self.record_index(
-            requester_session.session_id(),
-            &expected_publisher_device_id,
-        ).is_some()
+        if self
+            .record_index(
+                requester_session.session_id(),
+                &expected_publisher_device_id,
+            )
+            .is_some()
         {
             return Err(RequesterRendezvousLifecycleError::RecordAlreadyExists);
         }
@@ -357,9 +361,12 @@ mod tests {
             Err(RequesterRendezvousAuthorityError::Ambiguous)
         );
         assert_eq!(provider.records.len(), 2);
-        assert!(provider.records.iter().all(|record| {
-            record.lifecycle == RequesterRendezvousRecordLifecycle::Current
-        }));
+        assert!(
+            provider
+                .records
+                .iter()
+                .all(|record| { record.lifecycle == RequesterRendezvousRecordLifecycle::Current })
+        );
     }
 
     #[test]
@@ -446,9 +453,11 @@ mod tests {
             provider.authorize_current_for_publisher(&first_publisher),
             Err(RequesterRendezvousAuthorityError::StaleOrRetired)
         );
-        assert!(provider
-            .authorize_current_for_publisher(&second_publisher)
-            .is_ok());
+        assert!(
+            provider
+                .authorize_current_for_publisher(&second_publisher)
+                .is_ok()
+        );
     }
 
     #[test]
