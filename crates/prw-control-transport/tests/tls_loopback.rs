@@ -105,9 +105,12 @@ fn production_server_tls13_expected_alpn_round_trips_frames() {
         assert_eq!(request.request_id(), 77);
         assert_eq!(request.payload(), b"begin");
 
-        let response =
-            ControlFrame::new(ControlMessageKind::Response, request.request_id(), b"ok".to_vec())
-                .expect("response frame");
+        let response = ControlFrame::new(
+            ControlMessageKind::Response,
+            request.request_id(),
+            b"ok".to_vec(),
+        )
+        .expect("response frame");
         stream.write_frame(&response).expect("server write frame");
     });
 

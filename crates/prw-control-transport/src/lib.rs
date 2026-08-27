@@ -520,8 +520,7 @@ impl ControlTlsServerConfig {
     ///
     /// Returns [`ControlTransportError::TcpBind`] when the explicit bind fails.
     pub fn bind(&self, bind_addr: SocketAddr) -> Result<ControlTlsListener, ControlTransportError> {
-        let listener =
-            TcpListener::bind(bind_addr).map_err(|_| ControlTransportError::TcpBind)?;
+        let listener = TcpListener::bind(bind_addr).map_err(|_| ControlTransportError::TcpBind)?;
         Ok(ControlTlsListener {
             listener,
             tls_config: self.tls_config.clone(),
