@@ -4,6 +4,7 @@
 //! records bounded stream framing and protocol-version metadata. The local IPC
 //! contract surface itself performs no socket I/O and creates no filesystem objects.
 
+pub mod candidate_publication_requester_rendezvous_runtime;
 pub mod frame_codec;
 pub mod frame_object;
 #[cfg(target_os = "linux")]
