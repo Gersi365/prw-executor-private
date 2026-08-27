@@ -358,8 +358,8 @@ where
         return Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Terminal);
     }
 
-    let frame = compose()
-        .map_err(AuthenticatedPrwcCandidatePublicationResultWriteError::Composition)?;
+    let frame =
+        compose().map_err(AuthenticatedPrwcCandidatePublicationResultWriteError::Composition)?;
     if let Err(error) = io.write_frame(&frame) {
         *state = CandidatePublicationReceiveState::Terminal;
         return Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(error));
@@ -1087,10 +1087,11 @@ mod tests {
         };
 
         use super::super::{
-            AuthenticatedPrwcCandidatePublicationResultWriteError, AuthenticatedPrwcCommandReceiveError,
-            AuthenticatedPrwcConnection, CandidatePublicationReceiveState,
-            PrwcCandidatePublicationFrameIo, PrwcCandidatePublicationResultFrameIo,
-            receive_candidate_publication_command_from_io, write_candidate_publication_result_to_io,
+            AuthenticatedPrwcCandidatePublicationResultWriteError,
+            AuthenticatedPrwcCommandReceiveError, AuthenticatedPrwcConnection,
+            CandidatePublicationReceiveState, PrwcCandidatePublicationFrameIo,
+            PrwcCandidatePublicationResultFrameIo, receive_candidate_publication_command_from_io,
+            write_candidate_publication_result_to_io,
         };
 
         #[derive(Default)]
@@ -1126,8 +1127,7 @@ mod tests {
         fn submission() -> CandidatePublicationWireSubmission {
             CandidatePublicationWireSubmission::new(
                 TransportIdentity::new([0x51; 32]).expect("non-zero CX transport identity"),
-                CandidatePublicationFreshnessToken::new([0x52; 32])
-                    .expect("non-zero CX freshness"),
+                CandidatePublicationFreshnessToken::new([0x52; 32]).expect("non-zero CX freshness"),
                 Vec::new(),
             )
             .expect("empty CX candidate set remains bounded")
@@ -1195,9 +1195,13 @@ mod tests {
                         ControlFrameError::ZeroRequestId,
                     ))
                 }),
-                Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Composition(
-                    CandidatePublicationResultWireError::Frame(ControlFrameError::ZeroRequestId)
-                ))
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Composition(
+                        CandidatePublicationResultWireError::Frame(
+                            ControlFrameError::ZeroRequestId
+                        )
+                    )
+                )
             );
             assert_eq!(io.writes, 0);
             assert!(io.written.is_empty());
@@ -1222,9 +1226,11 @@ mod tests {
                         Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
                     )
                 }),
-                Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
-                    ControlFrameError::WriteIo
-                ))
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
+                        ControlFrameError::WriteIo
+                    )
+                )
             );
             assert_eq!(compositions.get(), 1);
             assert_eq!(io.writes, 1);
@@ -1261,9 +1267,11 @@ mod tests {
                         Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
                     )
                 }),
-                Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
-                    ControlFrameError::WriteIo
-                ))
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
+                        ControlFrameError::WriteIo
+                    )
+                )
             );
 
             let mut read_io = CountingReadIo::default();
@@ -1281,7 +1289,8 @@ mod tests {
                     &mut AuthenticatedPrwcConnection,
                     &CandidatePublicationControlFrame,
                     Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
-                ) -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>,
+                )
+                    -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>,
             ) {
                 let _ = function;
             }
