@@ -242,10 +242,10 @@ mod tests {
     };
 
     use super::{
-        CANDIDATE_PUBLICATION_ACCEPTED_RESULT_BYTES,
-        CANDIDATE_PUBLICATION_REJECTED_RESULT_BYTES, CandidatePublicationResultMessage,
-        CandidatePublicationResultWireError, OP_PUBLISHER_CANDIDATE_SET_ACCEPTED,
-        OP_PUBLISHER_CANDIDATE_SET_REJECTED, decode_candidate_publication_result_frame,
+        CANDIDATE_PUBLICATION_ACCEPTED_RESULT_BYTES, CANDIDATE_PUBLICATION_REJECTED_RESULT_BYTES,
+        CandidatePublicationResultMessage, CandidatePublicationResultWireError,
+        OP_PUBLISHER_CANDIDATE_SET_ACCEPTED, OP_PUBLISHER_CANDIDATE_SET_REJECTED,
+        decode_candidate_publication_result_frame,
         encode_candidate_publication_execution_result_frame,
         encode_candidate_publication_result_frame, project_candidate_publication_execution_result,
     };
