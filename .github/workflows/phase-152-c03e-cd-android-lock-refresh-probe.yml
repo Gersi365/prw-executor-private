@@ -26,12 +26,12 @@ jobs:
           git merge-base --is-ancestor fa670d799bfd8cfe5b380a033d38a5f78cd58f87 HEAD
           test "$(git rev-parse HEAD^{tree})" = "1c32f3e866b28e953972c1305388b8e943f74e11"
 
-      - name: Refresh Android native lock with Cargo
+      - name: Refresh stale Android native lock resolution with Cargo metadata
         shell: bash
         run: |
           set -Eeuo pipefail
           cd apps/android/native
-          cargo generate-lockfile
+          cargo metadata --format-version 1 >/dev/null
           cd ../../..
           git restore -- target || true
 
