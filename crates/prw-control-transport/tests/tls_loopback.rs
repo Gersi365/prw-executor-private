@@ -1,9 +1,12 @@
 use std::{io::Write, net::TcpListener, sync::Arc, thread, time::Duration};
 
-use prw_control_transport::{CONTROL_ALPN, ControlTlsClientConfig, ControlTransportError};
+use prw_control_transport::{
+    CONTROL_ALPN, ControlFrame, ControlMessageKind, ControlTlsClientConfig, ControlTlsServerConfig,
+    ControlTransportError,
+};
 use rustls::{
     ServerConfig, ServerConnection,
-    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, pem::PemObject},
 };
 
 const CA_PEM: &[u8] = include_bytes!("fixtures/phase129-ca.pem");
@@ -15,6 +18,23 @@ fn disposable_root_der() -> Vec<u8> {
         .expect("parse disposable test CA")
         .as_ref()
         .to_vec()
+}
+
+fn disposable_server_credentials() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
+    let cert = CertificateDer::from_pem_slice(SERVER_CERT_PEM).expect("parse server cert");
+    let key = PrivateKeyDer::from_pem_slice(SERVER_KEY_PEM).expect("parse server key");
+    (vec![cert], key)
+}
+
+fn production_server_config() -> ControlTlsServerConfig {
+    let (certificates, private_key) = disposable_server_credentials();
+    ControlTlsServerConfig::new(
+        certificates,
+        private_key,
+        Duration::from_secs(3),
+        Duration::from_secs(3),
+    )
+    .expect("valid production server primitive config")
 }
 
 fn server_config(tls13: bool, alpn: &[u8]) -> Arc<ServerConfig> {
@@ -72,11 +92,78 @@ fn client_config(
 }
 
 #[test]
-fn tls13_expected_name_and_alpn_establishes_transport() {
-    let (addr, server) = spawn_tls_server(server_config(true, CONTROL_ALPN));
-    let config = client_config(addr, "control.test").expect("valid client config");
-    let _stream = config.connect().expect("TLS 1.3 control transport");
+fn production_server_tls13_expected_alpn_round_trips_frames() {
+    let listener = production_server_config()
+        .bind("127.0.0.1:0".parse().expect("loopback bind"))
+        .expect("bind production server primitive");
+    let addr = listener.local_addr().expect("bound address");
+
+    let server = thread::spawn(move || {
+        let mut stream = listener.accept().expect("accept production TLS stream");
+        let request = stream.read_frame().expect("server read frame");
+        assert_eq!(request.kind(), ControlMessageKind::Authentication);
+        assert_eq!(request.request_id(), 77);
+        assert_eq!(request.payload(), b"begin");
+
+        let response = ControlFrame::new(
+            ControlMessageKind::Response,
+            request.request_id(),
+            b"ok".to_vec(),
+        )
+        .expect("response frame");
+        stream.write_frame(&response).expect("server write frame");
+    });
+
+    let mut client = client_config(addr, "control.test")
+        .expect("valid client config")
+        .connect()
+        .expect("TLS 1.3 control transport");
+    let request = ControlFrame::new(ControlMessageKind::Authentication, 77, b"begin".to_vec())
+        .expect("request frame");
+    client.write_frame(&request).expect("client write frame");
+    let response = client.read_frame().expect("client read frame");
+    assert_eq!(response.kind(), ControlMessageKind::Response);
+    assert_eq!(response.request_id(), 77);
+    assert_eq!(response.payload(), b"ok");
+
     server.join().expect("server thread");
+}
+
+#[test]
+fn production_server_config_rejects_empty_credentials_and_timeout() {
+    let (_, private_key) = disposable_server_credentials();
+    assert!(matches!(
+        ControlTlsServerConfig::new(
+            Vec::new(),
+            private_key,
+            Duration::from_secs(1),
+            Duration::from_secs(1)
+        ),
+        Err(ControlTransportError::InvalidServerCredentials)
+    ));
+
+    let cert = CertificateDer::from_pem_slice(SERVER_CERT_PEM).expect("parse server cert");
+    let empty_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(Vec::new()));
+    assert!(matches!(
+        ControlTlsServerConfig::new(
+            vec![cert],
+            empty_key,
+            Duration::from_secs(1),
+            Duration::from_secs(1)
+        ),
+        Err(ControlTransportError::InvalidServerCredentials)
+    ));
+
+    let (certificates, private_key) = disposable_server_credentials();
+    assert!(matches!(
+        ControlTlsServerConfig::new(
+            certificates,
+            private_key,
+            Duration::ZERO,
+            Duration::from_secs(1)
+        ),
+        Err(ControlTransportError::InvalidTimeout)
+    ));
 }
 
 #[test]
