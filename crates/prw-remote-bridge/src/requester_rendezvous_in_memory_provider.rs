@@ -81,7 +81,7 @@ impl InMemoryRequesterRendezvousAuthorityProvider {
     /// # Errors
     ///
     /// Returns [`RequesterRendezvousLifecycleError::InvalidCapacity`] when `max_records` is zero.
-    pub fn new(max_records: usize) -> Result<Self, RequesterRendezvousLifecycleError> {
+    pub const fn new(max_records: usize) -> Result<Self, RequesterRendezvousLifecycleError> {
         if max_records == 0 {
             return Err(RequesterRendezvousLifecycleError::InvalidCapacity);
         }
