@@ -45,16 +45,25 @@ impl fmt::Display for CandidatePublicationExecutionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Candidate(error) => {
-                write!(formatter, "candidate publication construction failed: {error}")
+                write!(
+                    formatter,
+                    "candidate publication construction failed: {error}"
+                )
             }
             Self::RequesterAuthority(error) => {
-                write!(formatter, "requester rendezvous authorization failed: {error}")
+                write!(
+                    formatter,
+                    "requester rendezvous authorization failed: {error}"
+                )
             }
             Self::ExpectedPublisherMismatch => formatter.write_str(
                 "requester rendezvous authority selected a different candidate publisher",
             ),
             Self::Reachability(error) => {
-                write!(formatter, "candidate publication reachability commit failed: {error}")
+                write!(
+                    formatter,
+                    "candidate publication reachability commit failed: {error}"
+                )
             }
         }
     }
@@ -302,9 +311,7 @@ mod tests {
         calls: usize,
         selected_publishers: Vec<DeviceId>,
         order: Rc<RefCell<Vec<&'static str>>>,
-        result: Option<
-            Result<AuthorizedRequesterRendezvous, RequesterRendezvousAuthorityError>,
-        >,
+        result: Option<Result<AuthorizedRequesterRendezvous, RequesterRendezvousAuthorityError>>,
     }
 
     impl RequesterRendezvousAuthorityProvider for FakeAuthorityProvider {
