@@ -4,6 +4,7 @@
 //! records bounded stream framing and protocol-version metadata. The local IPC
 //! contract surface itself performs no socket I/O and creates no filesystem objects.
 
+pub mod candidate_publication_requester_rendezvous_runtime;
 pub mod frame_codec;
 pub mod frame_object;
 #[cfg(target_os = "linux")]
@@ -77,7 +78,7 @@ pub struct LocalIpcContract {
     pub authorization: LocalPeerAuthorization,
     /// Required Unix mode for the PRW runtime subdirectory.
     pub runtime_directory_mode: u32,
-    /// Required Unix mode for the Agent socket filesystem entry.
+    /// Required Unix mode for the filesystem-backed Agent socket.
     pub socket_mode: u32,
 }
 
