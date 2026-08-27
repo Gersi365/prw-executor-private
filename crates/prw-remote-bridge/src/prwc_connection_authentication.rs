@@ -395,7 +395,10 @@ mod tests {
         rand::SystemRandom,
         signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair},
     };
-    use prw_control_plane::{DeviceIdentityBinding, session_auth::SessionAuthChallengeState};
+    use prw_control_plane::{
+        DeviceIdentityBinding,
+        session_auth::SessionAuthChallengeState,
+    };
     use prw_control_transport::{ControlFrame, ControlFrameError};
     use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
     use prw_device_identity_signer::UbuntuEnrollmentSigner;
@@ -509,8 +512,8 @@ mod tests {
         }
 
         fn write_frame(&mut self, frame: &ControlFrame) -> Result<(), ControlFrameError> {
-            let message =
-                decode_control_session_authentication_frame(frame).expect("valid bridge PRWA write");
+            let message = decode_control_session_authentication_frame(frame)
+                .expect("valid bridge PRWA write");
             match &message {
                 ControlSessionAuthenticationMessage::Challenge {
                     session_id,
@@ -600,7 +603,11 @@ mod tests {
         assert_eq!(sessions.pending_count(), 0);
         assert_eq!(sessions.authenticated_count(), 1);
         assert_eq!(io.written.len(), 2);
-        assert!(io.written.iter().all(|frame| frame.request_id() == request_id));
+        assert!(
+            io.written
+                .iter()
+                .all(|frame| frame.request_id() == request_id)
+        );
         assert!(matches!(
             io.messages().as_slice(),
             [
@@ -709,10 +716,11 @@ mod tests {
         );
         assert_eq!(sessions.pending_count(), 0);
         assert_eq!(sessions.authenticated_count(), 1);
-        assert!(!io
-            .messages()
-            .iter()
-            .any(|message| matches!(message, ControlSessionAuthenticationMessage::Rejected)));
+        assert!(
+            !io.messages()
+                .iter()
+                .any(|message| matches!(message, ControlSessionAuthenticationMessage::Rejected))
+        );
     }
 
     #[test]
