@@ -23,11 +23,16 @@ use crate::{
         CandidatePublicationControlFrame, CandidatePublicationControlFrameError,
         decode_candidate_publication_control_frame,
     },
+    candidate_publication_execution::CandidatePublicationExecutionError,
+    candidate_publication_result_wire::{
+        CandidatePublicationResultWireError, encode_candidate_publication_execution_result_frame,
+    },
     control_session_auth_wire::{
         ControlSessionAuthenticationMessage, ControlSessionAuthenticationWireError,
         decode_control_session_authentication_frame, encode_control_session_authentication_frame,
     },
     prwc_request_id_lifecycle::PrwcRequestIdLifecycle,
+    reachability_owner::ReachabilityCommitOutcome,
 };
 
 /// Fail-closed bridge classification for one pre-mesh PRWA connection transaction.
@@ -99,7 +104,7 @@ pub enum AuthenticatedPrwcCommandReceiveError {
     Frame(ControlFrameError),
     /// The received frame was not a valid candidate-publication Command.
     Command(CandidatePublicationControlFrameError),
-    /// A prior frame/protocol failure already terminalized this receive side.
+    /// Candidate-publication I/O was already terminal before this receive attempt.
     Terminal,
 }
 
@@ -108,7 +113,7 @@ impl fmt::Display for AuthenticatedPrwcCommandReceiveError {
         formatter.write_str(match self {
             Self::Frame(_) => "post-authenticated PRWC Command frame read failed",
             Self::Command(_) => "post-authenticated candidate-publication Command decode failed",
-            Self::Terminal => "post-authenticated candidate-publication receive side is terminal",
+            Self::Terminal => "post-authenticated candidate-publication I/O is terminal",
         })
     }
 }
@@ -118,6 +123,38 @@ impl std::error::Error for AuthenticatedPrwcCommandReceiveError {
         match self {
             Self::Frame(error) => Some(error),
             Self::Command(error) => Some(error),
+            Self::Terminal => None,
+        }
+    }
+}
+
+/// Fail-closed one-shot candidate-publication terminal-result write failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AuthenticatedPrwcCandidatePublicationResultWriteError {
+    /// Pure C03e-CV result projection/frame construction failed before stream I/O.
+    Composition(CandidatePublicationResultWireError),
+    /// The existing bounded PRWC frame write failed and terminalized candidate-publication I/O.
+    Frame(ControlFrameError),
+    /// Candidate-publication I/O was already terminal before composition or stream I/O.
+    Terminal,
+}
+
+impl fmt::Display for AuthenticatedPrwcCandidatePublicationResultWriteError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Composition(_) => "candidate-publication result frame composition failed",
+            Self::Frame(_) => "candidate-publication result frame write failed",
+            Self::Terminal => "post-authenticated candidate-publication I/O is terminal",
+        })
+    }
+}
+
+impl std::error::Error for AuthenticatedPrwcCandidatePublicationResultWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Composition(error) => Some(error),
+            Self::Frame(error) => Some(error),
             Self::Terminal => None,
         }
     }
@@ -216,21 +253,49 @@ impl AuthenticatedPrwcConnection {
     /// Peer-originated request correlation is preserved by the existing frame adapter and never
     /// enters the locally-originated request-ID lifecycle.
     ///
-    /// Any frame or candidate-publication decode failure terminalizes this private receive side.
-    /// Later calls then fail immediately without another frame read. This method writes no
-    /// response, performs no retry/loop, consults no requester/rendezvous provider, and mutates no
-    /// reachability state.
+    /// Any frame or candidate-publication decode failure terminalizes candidate-publication I/O.
+    /// Later reads or result writes then fail immediately without another stream operation. This
+    /// method writes no response, performs no retry/loop, consults no requester/rendezvous
+    /// provider, and mutates no reachability state.
     ///
     /// # Errors
     ///
     /// Returns [`AuthenticatedPrwcCommandReceiveError`] for frame read failure, strict Command
-    /// decode failure, or an already-terminal receive side.
+    /// decode failure, or already-terminal candidate-publication I/O.
     pub fn receive_candidate_publication_command(
         &mut self,
     ) -> Result<CandidatePublicationControlFrame, AuthenticatedPrwcCommandReceiveError> {
         receive_candidate_publication_command_from_io(
             &mut self.stream,
             &mut self.candidate_publication_receive_state,
+        )
+    }
+
+    /// Writes exactly one terminal result for an already-completed candidate-publication execution.
+    ///
+    /// The C03e-CV helper first projects the completed semantic result and composes the exact
+    /// peer-correlated `Response`/`Error` frame. A pure composition failure occurs before stream
+    /// I/O and leaves candidate-publication I/O ready. The private server stream is then written
+    /// exactly once. An actual write failure terminalizes candidate-publication I/O before return;
+    /// later candidate-publication reads and writes fail before another stream operation.
+    ///
+    /// This method allocates/registers no local request ID, performs no candidate semantic
+    /// execution, retries nothing, starts no loop/task, and exposes no raw stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthenticatedPrwcCandidatePublicationResultWriteError`] for pure result-frame
+    /// composition failure, bounded stream write failure, or already-terminal candidate-publication
+    /// I/O.
+    pub fn write_candidate_publication_result(
+        &mut self,
+        command: &CandidatePublicationControlFrame,
+        result: Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+    ) -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError> {
+        write_candidate_publication_result_to_io(
+            &mut self.stream,
+            &mut self.candidate_publication_receive_state,
+            move || encode_candidate_publication_execution_result_frame(command, result),
         )
     }
 }
@@ -268,6 +333,39 @@ fn receive_candidate_publication_command_from_io<I: PrwcCandidatePublicationFram
             Err(AuthenticatedPrwcCommandReceiveError::Command(error))
         }
     }
+}
+
+trait PrwcCandidatePublicationResultFrameIo {
+    fn write_frame(&mut self, frame: &ControlFrame) -> Result<(), ControlFrameError>;
+}
+
+impl PrwcCandidatePublicationResultFrameIo for ControlTlsServerStream {
+    fn write_frame(&mut self, frame: &ControlFrame) -> Result<(), ControlFrameError> {
+        Self::write_frame(self, frame)
+    }
+}
+
+fn write_candidate_publication_result_to_io<I, F>(
+    io: &mut I,
+    state: &mut CandidatePublicationReceiveState,
+    compose: F,
+) -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>
+where
+    I: PrwcCandidatePublicationResultFrameIo,
+    F: FnOnce() -> Result<ControlFrame, CandidatePublicationResultWireError>,
+{
+    if *state == CandidatePublicationReceiveState::Terminal {
+        return Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Terminal);
+    }
+
+    let frame =
+        compose().map_err(AuthenticatedPrwcCandidatePublicationResultWriteError::Composition)?;
+    if let Err(error) = io.write_frame(&frame) {
+        *state = CandidatePublicationReceiveState::Terminal;
+        return Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(error));
+    }
+
+    Ok(())
 }
 
 trait PrwcAuthenticationFrameIo {
@@ -963,6 +1061,240 @@ mod tests {
             );
             assert_eq!(io.reads, 1);
             assert_eq!(io.frames.len(), 1);
+        }
+    }
+
+    mod candidate_publication_result_write_tests {
+        use std::cell::Cell;
+
+        use prw_connectivity::TransportIdentity;
+        use prw_control_transport::{ControlFrame, ControlFrameError, ControlMessageKind};
+
+        use crate::{
+            candidate_publication_control_frame::{
+                CandidatePublicationControlFrame, decode_candidate_publication_control_frame,
+                encode_candidate_publication_control_frame,
+            },
+            candidate_publication_execution::CandidatePublicationExecutionError,
+            candidate_publication_freshness::CandidatePublicationFreshnessToken,
+            candidate_publication_result_wire::{
+                CandidatePublicationResultMessage, CandidatePublicationResultWireError,
+                decode_candidate_publication_result_frame,
+                encode_candidate_publication_execution_result_frame,
+            },
+            candidate_publication_wire::CandidatePublicationWireSubmission,
+            reachability_owner::ReachabilityCommitOutcome,
+        };
+
+        use super::super::{
+            AuthenticatedPrwcCandidatePublicationResultWriteError,
+            AuthenticatedPrwcCommandReceiveError, AuthenticatedPrwcConnection,
+            CandidatePublicationReceiveState, PrwcCandidatePublicationFrameIo,
+            PrwcCandidatePublicationResultFrameIo, receive_candidate_publication_command_from_io,
+            write_candidate_publication_result_to_io,
+        };
+
+        #[derive(Default)]
+        struct FakeWriteIo {
+            written: Vec<ControlFrame>,
+            writes: usize,
+            fail_write: bool,
+        }
+
+        impl PrwcCandidatePublicationResultFrameIo for FakeWriteIo {
+            fn write_frame(&mut self, frame: &ControlFrame) -> Result<(), ControlFrameError> {
+                self.writes += 1;
+                if self.fail_write {
+                    return Err(ControlFrameError::WriteIo);
+                }
+                self.written.push(frame.clone());
+                Ok(())
+            }
+        }
+
+        #[derive(Default)]
+        struct CountingReadIo {
+            reads: usize,
+        }
+
+        impl PrwcCandidatePublicationFrameIo for CountingReadIo {
+            fn read_frame(&mut self) -> Result<ControlFrame, ControlFrameError> {
+                self.reads += 1;
+                Err(ControlFrameError::ReadIo)
+            }
+        }
+
+        fn submission() -> CandidatePublicationWireSubmission {
+            CandidatePublicationWireSubmission::new(
+                TransportIdentity::new([0x51; 32]).expect("non-zero CX transport identity"),
+                CandidatePublicationFreshnessToken::new([0x52; 32]).expect("non-zero CX freshness"),
+                Vec::new(),
+            )
+            .expect("empty CX candidate set remains bounded")
+        }
+
+        fn command(request_id: u64) -> CandidatePublicationControlFrame {
+            let frame = encode_candidate_publication_control_frame(&submission(), request_id)
+                .expect("encode CX candidate-publication Command");
+            decode_candidate_publication_control_frame(&frame)
+                .expect("decode CX candidate-publication Command")
+        }
+
+        #[test]
+        fn successful_result_write_writes_exactly_once_and_preserves_command_request_id() {
+            let command = command(81);
+            let mut io = FakeWriteIo::default();
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            write_candidate_publication_result_to_io(&mut io, &mut state, || {
+                encode_candidate_publication_execution_result_frame(
+                    &command,
+                    Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
+                )
+            })
+            .expect("generic rejection result must write");
+
+            assert_eq!(io.writes, 1);
+            assert_eq!(io.written.len(), 1);
+            assert_eq!(io.written[0].request_id(), 81);
+            assert_eq!(io.written[0].kind(), ControlMessageKind::Error);
+            assert_eq!(
+                decode_candidate_publication_result_frame(&io.written[0]),
+                Ok(CandidatePublicationResultMessage::Rejected)
+            );
+            assert_eq!(state, CandidatePublicationReceiveState::Ready);
+        }
+
+        #[test]
+        fn terminal_state_blocks_composition_and_write_before_io() {
+            let mut io = FakeWriteIo::default();
+            let mut state = CandidatePublicationReceiveState::Terminal;
+            let compositions = Cell::new(0);
+
+            assert_eq!(
+                write_candidate_publication_result_to_io(&mut io, &mut state, || {
+                    compositions.set(compositions.get() + 1);
+                    ControlFrame::new(ControlMessageKind::Error, 82, Vec::new())
+                        .map_err(CandidatePublicationResultWireError::Frame)
+                }),
+                Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Terminal)
+            );
+            assert_eq!(compositions.get(), 0);
+            assert_eq!(io.writes, 0);
+            assert_eq!(state, CandidatePublicationReceiveState::Terminal);
+        }
+
+        #[test]
+        fn pure_composition_failure_performs_zero_writes_and_leaves_state_ready() {
+            let mut io = FakeWriteIo::default();
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            assert_eq!(
+                write_candidate_publication_result_to_io(&mut io, &mut state, || {
+                    Err(CandidatePublicationResultWireError::Frame(
+                        ControlFrameError::ZeroRequestId,
+                    ))
+                }),
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Composition(
+                        CandidatePublicationResultWireError::Frame(
+                            ControlFrameError::ZeroRequestId
+                        )
+                    )
+                )
+            );
+            assert_eq!(io.writes, 0);
+            assert!(io.written.is_empty());
+            assert_eq!(state, CandidatePublicationReceiveState::Ready);
+        }
+
+        #[test]
+        fn write_failure_terminalizes_and_blocks_later_write_before_composition() {
+            let command = command(83);
+            let mut io = FakeWriteIo {
+                fail_write: true,
+                ..FakeWriteIo::default()
+            };
+            let mut state = CandidatePublicationReceiveState::Ready;
+            let compositions = Cell::new(0);
+
+            assert_eq!(
+                write_candidate_publication_result_to_io(&mut io, &mut state, || {
+                    compositions.set(compositions.get() + 1);
+                    encode_candidate_publication_execution_result_frame(
+                        &command,
+                        Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
+                    )
+                }),
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
+                        ControlFrameError::WriteIo
+                    )
+                )
+            );
+            assert_eq!(compositions.get(), 1);
+            assert_eq!(io.writes, 1);
+            assert_eq!(state, CandidatePublicationReceiveState::Terminal);
+
+            io.fail_write = false;
+            assert_eq!(
+                write_candidate_publication_result_to_io(&mut io, &mut state, || {
+                    compositions.set(compositions.get() + 1);
+                    encode_candidate_publication_execution_result_frame(
+                        &command,
+                        Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
+                    )
+                }),
+                Err(AuthenticatedPrwcCandidatePublicationResultWriteError::Terminal)
+            );
+            assert_eq!(compositions.get(), 1);
+            assert_eq!(io.writes, 1);
+        }
+
+        #[test]
+        fn write_failure_terminal_state_blocks_later_receive_before_read_io() {
+            let command = command(84);
+            let mut write_io = FakeWriteIo {
+                fail_write: true,
+                ..FakeWriteIo::default()
+            };
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            assert_eq!(
+                write_candidate_publication_result_to_io(&mut write_io, &mut state, || {
+                    encode_candidate_publication_execution_result_frame(
+                        &command,
+                        Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch),
+                    )
+                }),
+                Err(
+                    AuthenticatedPrwcCandidatePublicationResultWriteError::Frame(
+                        ControlFrameError::WriteIo
+                    )
+                )
+            );
+
+            let mut read_io = CountingReadIo::default();
+            assert_eq!(
+                receive_candidate_publication_command_from_io(&mut read_io, &mut state),
+                Err(AuthenticatedPrwcCommandReceiveError::Terminal)
+            );
+            assert_eq!(read_io.reads, 0);
+        }
+
+        #[test]
+        fn public_write_signature_accepts_only_an_already_completed_semantic_result() {
+            type CandidatePublicationResultWriteFn =
+                fn(
+                    &mut AuthenticatedPrwcConnection,
+                    &CandidatePublicationControlFrame,
+                    Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+                )
+                    -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>;
+
+            let function: CandidatePublicationResultWriteFn =
+                AuthenticatedPrwcConnection::write_candidate_publication_result;
+            let _ = function;
         }
     }
 }
