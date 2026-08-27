@@ -139,7 +139,7 @@ where
         publication: &AuthenticatedCandidatePublication,
         presented_freshness: CandidatePublicationFreshnessToken,
     ) -> Result<ReachabilityCommitOutcome, ReachabilityOwnerError> {
-        ProductionReachabilityOwner::commit_candidate_publication(
+        Self::commit_candidate_publication(
             self,
             registry,
             requester_session,
@@ -490,7 +490,7 @@ mod tests {
         assert_eq!(authority.calls, 1);
         assert_eq!(
             authority.selected_publishers.as_slice(),
-            &[fixture.publisher_device_id.clone()]
+            std::slice::from_ref(&fixture.publisher_device_id)
         );
         assert_eq!(commit.calls, 1);
         assert_eq!(commit.observed_publisher, Some(fixture.publisher_device_id));
