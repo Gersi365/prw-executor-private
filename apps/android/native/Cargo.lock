@@ -2218,6 +2218,7 @@ dependencies = [
  "prw-connectivity",
  "prw-control-plane",
  "prw-control-transport",
+ "prw-core",
  "prw-file-service",
  "prw-file-transfer",
  "prw-forwarding",
