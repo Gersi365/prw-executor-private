@@ -1,0 +1,72 @@
+name: Phase 152 C03e-CD Android Lock Refresh Probe
+
+on:
+  pull_request:
+    branches:
+      - probe/c03e-cd-android-lock-refresh-base
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'probe/c03e-cd-android-lock-refresh'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact probe source
+        uses: actions/checkout@v4
+        with:
+          ref: probe/c03e-cd-android-lock-refresh
+          fetch-depth: 0
+
+      - name: Verify blocked-CB source lineage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "fa670d799bfd8cfe5b380a033d38a5f78cd58f87"
+          test "$(git rev-parse HEAD^{tree})" = "1c32f3e866b28e953972c1305388b8e943f74e11"
+
+      - name: Refresh only the stale Android native lock resolution
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo metadata --no-deps --format-version 1 >/dev/null
+          cd ../../..
+          git restore -- target || true
+
+      - name: Verify exact lockfile scope and semantic delta
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --name-only | sort > /tmp/changed.txt
+          cat /tmp/changed.txt
+          test "$(wc -l < /tmp/changed.txt)" -eq 1
+          grep -qx 'apps/android/native/Cargo.lock' /tmp/changed.txt
+
+          git diff --unified=0 -- apps/android/native/Cargo.lock > /tmp/android-lock.diff
+          cat /tmp/android-lock.diff
+
+          test "$(grep -E '^[+-]' /tmp/android-lock.diff | grep -Ev '^(---|\+\+\+)' | wc -l)" -eq 1
+          grep -Fx '+ "prw-core",' /tmp/android-lock.diff
+          test "$(git diff --numstat -- apps/android/native/Cargo.lock | awk '{print $1}')" -eq 1
+          test "$(git diff --numstat -- apps/android/native/Cargo.lock | awk '{print $2}')" -eq 0
+
+      - name: Verify refreshed lock is accepted
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd apps/android/native
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Commit Cargo-authored Android lock only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/android/native/Cargo.lock
+          test "$(git diff --cached --name-only | wc -l)" -eq 1
+          git diff --cached --name-only | grep -qx 'apps/android/native/Cargo.lock'
+          git commit -m 'probe c03e-cd: refresh Android native lock for PRWA codec'
+          git push origin HEAD:probe/c03e-cd-android-lock-refresh
