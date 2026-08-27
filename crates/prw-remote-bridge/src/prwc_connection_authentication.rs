@@ -1284,11 +1284,13 @@ mod tests {
 
         #[test]
         fn public_write_signature_accepts_only_an_already_completed_semantic_result() {
-            type CandidatePublicationResultWriteFn = fn(
-                &mut AuthenticatedPrwcConnection,
-                &CandidatePublicationControlFrame,
-                Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
-            ) -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>;
+            type CandidatePublicationResultWriteFn =
+                fn(
+                    &mut AuthenticatedPrwcConnection,
+                    &CandidatePublicationControlFrame,
+                    Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+                )
+                    -> Result<(), AuthenticatedPrwcCandidatePublicationResultWriteError>;
 
             let function: CandidatePublicationResultWriteFn =
                 AuthenticatedPrwcConnection::write_candidate_publication_result;
