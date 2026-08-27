@@ -20,6 +20,11 @@ jobs:
           ref: probe/c03e-ck-clippy-fix
           fetch-depth: 0
 
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
       - name: Apply exact CK Clippy diagnostics
         shell: bash
         run: |
