@@ -1,0 +1,71 @@
+name: C03e-CI rustfmt probe
+
+on:
+  push:
+    branches:
+      - probe/c03e-ci-rustfmt-correction
+
+permissions:
+  contents: write
+
+jobs:
+  rustfmt-probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout probe branch
+        uses: actions/checkout@v4
+        with:
+          ref: probe/c03e-ci-rustfmt-correction
+          fetch-depth: 1
+
+      - name: Install exact rustfmt
+        run: |
+          set -Eeuo pipefail
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+
+      - name: Apply and guard canonical rustfmt delta
+        run: |
+          set -Eeuo pipefail
+          cargo +1.97.1 fmt --all
+
+          mapfile -t changed < <(git diff --name-only | LC_ALL=C sort)
+          expected=(
+            "crates/prw-control-transport/src/lib.rs"
+            "crates/prw-control-transport/tests/tls_loopback.rs"
+          )
+          if [[ "${#changed[@]}" -ne "${#expected[@]}" ]]; then
+            printf 'Unexpected rustfmt path count: %s\n' "${#changed[@]}" >&2
+            printf 'Changed paths:\n%s\n' "${changed[*]}" >&2
+            exit 1
+          fi
+          for i in "${!expected[@]}"; do
+            [[ "${changed[$i]}" == "${expected[$i]}" ]] || {
+              printf 'Unexpected rustfmt path at %s: %s\n' "$i" "${changed[$i]}" >&2
+              exit 1
+            }
+          done
+
+          lib_blob="$(git hash-object crates/prw-control-transport/src/lib.rs)"
+          test_blob="$(git hash-object crates/prw-control-transport/tests/tls_loopback.rs)"
+          [[ "$lib_blob" == "88f70e187e865119ff6401d05019cdac7b5392ad" ]] || {
+            printf 'Unexpected formatted lib.rs blob: %s\n' "$lib_blob" >&2
+            exit 1
+          }
+          [[ "$test_blob" == "b55c4cb946a8a00e46d84162bc1fa2130b83bc5f" ]] || {
+            printf 'Unexpected formatted tls_loopback.rs blob: %s\n' "$test_blob" >&2
+            exit 1
+          }
+          git diff --check
+
+      - name: Commit exact guarded formatting delta
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- crates/prw-control-transport/src/lib.rs crates/prw-control-transport/tests/tls_loopback.rs
+          mapfile -t staged < <(git diff --cached --name-only | LC_ALL=C sort)
+          [[ "${#staged[@]}" -eq 2 ]]
+          [[ "${staged[0]}" == "crates/prw-control-transport/src/lib.rs" ]]
+          [[ "${staged[1]}" == "crates/prw-control-transport/tests/tls_loopback.rs" ]]
+          git commit -m "Probe: apply canonical rustfmt for C03e-CI"
+          git push origin HEAD:probe/c03e-ci-rustfmt-correction
