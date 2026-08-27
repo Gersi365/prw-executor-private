@@ -1,0 +1,88 @@
+name: Phase 152 C03e-CK Clippy Fix Probe
+
+on:
+  push:
+    branches:
+      - probe/c03e-ck-clippy-fix
+    paths:
+      - .github/workflows/phase-152-c03e-ck-clippy-fix-probe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout probe branch
+        uses: actions/checkout@v4
+        with:
+          ref: probe/c03e-ck-clippy-fix
+          fetch-depth: 0
+
+      - name: Apply exact CK Clippy diagnostics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-remote-bridge/src/prwc_connection_authentication.rs')
+          text = path.read_text()
+          replacements = [
+              (
+                  '            Self::Session(error) => Some(error),\n            Self::Registry(error) => Some(error),\n            Self::PendingCleanup(error) => Some(error),',
+                  '            Self::Session(error) | Self::PendingCleanup(error) => Some(error),\n            Self::Registry(error) => Some(error),',
+              ),
+              (
+                  '    pub fn new(stream: ControlTlsServerStream) -> Self {',
+                  '    pub const fn new(stream: ControlTlsServerStream) -> Self {',
+              ),
+              (
+                  '        ControlTlsServerStream::read_frame(self)',
+                  '        Self::read_frame(self)',
+              ),
+              (
+                  '        ControlTlsServerStream::write_frame(self, frame)',
+                  '        Self::write_frame(self, frame)',
+              ),
+              (
+                  'fn execute_authentication_transaction<I: PrwcAuthenticationFrameIo>(',
+                  '#[allow(clippy::too_many_lines)]\nfn execute_authentication_transaction<I: PrwcAuthenticationFrameIo>(',
+              ),
+              (
+                  '    let device_id = match begin {\n        ControlSessionAuthenticationMessage::Begin { device_id } => device_id,\n        _ => {\n            reject_best_effort(io, request_id);\n            return Err(PrwcConnectionAuthenticationError::ProtocolOrder);\n        }\n    };',
+                  '    let ControlSessionAuthenticationMessage::Begin { device_id } = begin else {\n        reject_best_effort(io, request_id);\n        return Err(PrwcConnectionAuthenticationError::ProtocolOrder);\n    };',
+              ),
+              (
+                  '    let (proof_session_id, nonce, signature) = match proof_message {\n        ControlSessionAuthenticationMessage::Proof {\n            session_id,\n            nonce,\n            signature,\n        } => (session_id, nonce, signature),\n        _ => {\n            return fail_with_pending_cleanup(\n                io,\n                sessions,\n                &pending_session_id,\n                request_id,\n                PrwcConnectionAuthenticationError::ProtocolOrder,\n            );\n        }\n    };',
+                  '    let ControlSessionAuthenticationMessage::Proof {\n        session_id: proof_session_id,\n        nonce,\n        signature,\n    } = proof_message\n    else {\n        return fail_with_pending_cleanup(\n            io,\n            sessions,\n            &pending_session_id,\n            request_id,\n            PrwcConnectionAuthenticationError::ProtocolOrder,\n        );\n    };',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one replacement target, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Canonical rustfmt
+        run: cargo fmt --all
+
+      - name: Guard exact one-path delta
+        shell: bash
+        run: |
+          test "$(git diff --name-only)" = "crates/prw-remote-bridge/src/prwc_connection_authentication.rs"
+          cargo fmt --all -- --check
+
+      - name: Focused Clippy validation
+        run: cargo clippy --locked -p prw-remote-bridge --all-targets --all-features -- -D warnings
+
+      - name: Commit validated source only
+        shell: bash
+        run: |
+          test "$(git diff --name-only)" = "crates/prw-remote-bridge/src/prwc_connection_authentication.rs"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/prw-remote-bridge/src/prwc_connection_authentication.rs
+          git commit -m "Probe C03e-CK canonical Clippy correction"
+          git push origin HEAD:probe/c03e-ck-clippy-fix
