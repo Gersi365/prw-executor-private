@@ -55,7 +55,7 @@ impl PrwaVerifierSessionContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PrwaVerifierSourceError {
-    /// The OS-backed cryptographic provider could not produce SessionId randomness.
+    /// The OS-backed cryptographic provider could not produce `SessionId` randomness.
     SessionIdRandomness,
     /// The generated opaque hexadecimal value could not become a typed `SessionId`.
     SessionIdConstruction,
@@ -79,7 +79,7 @@ impl fmt::Display for PrwaVerifierSourceError {
 
 impl std::error::Error for PrwaVerifierSourceError {}
 
-/// Creates one fresh server-local SessionId and exact verifier-owned challenge window.
+/// Creates one fresh server-local `SessionId` and exact verifier-owned challenge window.
 ///
 /// This function performs exactly one randomness acquisition. It contains no collision
 /// retry loop; duplicate-session rejection remains with `SessionAuthenticationService`
@@ -87,7 +87,7 @@ impl std::error::Error for PrwaVerifierSourceError {}
 ///
 /// # Errors
 ///
-/// Fails closed on cryptographic randomness failure, typed SessionId construction
+/// Fails closed on cryptographic randomness failure, typed `SessionId` construction
 /// failure, non-representable verifier time, or checked expiry overflow.
 pub fn new_prwa_verifier_session_context()
 -> Result<PrwaVerifierSessionContext, PrwaVerifierSourceError> {
