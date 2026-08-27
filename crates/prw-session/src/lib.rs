@@ -5,6 +5,8 @@
 //! not select a network transport, persist registry state, authenticate accounts, or
 //! grant file, terminal, forwarding, networking, DNS, or administrative capabilities.
 
+pub mod prwa_verifier_source;
+
 use std::{collections::HashMap, fmt};
 
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
