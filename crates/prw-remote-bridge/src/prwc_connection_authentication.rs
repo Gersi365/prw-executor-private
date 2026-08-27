@@ -77,9 +77,8 @@ impl std::error::Error for PrwcConnectionAuthenticationError {
             Self::Frame(error) => Some(error),
             Self::Wire(error) => Some(error),
             Self::VerifierSource(error) => Some(error),
-            Self::Session(error) => Some(error),
+            Self::Session(error) | Self::PendingCleanup(error) => Some(error),
             Self::Registry(error) => Some(error),
-            Self::PendingCleanup(error) => Some(error),
             Self::ProtocolOrder
             | Self::RequestIdMismatch
             | Self::SessionIdMismatch
@@ -102,7 +101,7 @@ pub struct UnauthenticatedPrwcConnection {
 impl UnauthenticatedPrwcConnection {
     /// Takes ownership of one already-accepted generic Phase 129 server stream.
     #[must_use]
-    pub fn new(stream: ControlTlsServerStream) -> Self {
+    pub const fn new(stream: ControlTlsServerStream) -> Self {
         Self {
             stream,
             request_ids: PrwcRequestIdLifecycle::new(),
@@ -174,14 +173,15 @@ trait PrwcAuthenticationFrameIo {
 
 impl PrwcAuthenticationFrameIo for ControlTlsServerStream {
     fn read_frame(&mut self) -> Result<ControlFrame, ControlFrameError> {
-        ControlTlsServerStream::read_frame(self)
+        Self::read_frame(self)
     }
 
     fn write_frame(&mut self, frame: &ControlFrame) -> Result<(), ControlFrameError> {
-        ControlTlsServerStream::write_frame(self, frame)
+        Self::write_frame(self, frame)
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn execute_authentication_transaction<I: PrwcAuthenticationFrameIo>(
     io: &mut I,
     sessions: &mut SessionAuthenticationService,
@@ -198,12 +198,9 @@ fn execute_authentication_transaction<I: PrwcAuthenticationFrameIo>(
             return Err(PrwcConnectionAuthenticationError::Wire(error));
         }
     };
-    let device_id = match begin {
-        ControlSessionAuthenticationMessage::Begin { device_id } => device_id,
-        _ => {
-            reject_best_effort(io, request_id);
-            return Err(PrwcConnectionAuthenticationError::ProtocolOrder);
-        }
+    let ControlSessionAuthenticationMessage::Begin { device_id } = begin else {
+        reject_best_effort(io, request_id);
+        return Err(PrwcConnectionAuthenticationError::ProtocolOrder);
     };
 
     let binding = match registry.device(&device_id) {
@@ -298,21 +295,19 @@ fn execute_authentication_transaction<I: PrwcAuthenticationFrameIo>(
             );
         }
     };
-    let (proof_session_id, nonce, signature) = match proof_message {
-        ControlSessionAuthenticationMessage::Proof {
-            session_id,
-            nonce,
-            signature,
-        } => (session_id, nonce, signature),
-        _ => {
-            return fail_with_pending_cleanup(
-                io,
-                sessions,
-                &pending_session_id,
-                request_id,
-                PrwcConnectionAuthenticationError::ProtocolOrder,
-            );
-        }
+    let ControlSessionAuthenticationMessage::Proof {
+        session_id: proof_session_id,
+        nonce,
+        signature,
+    } = proof_message
+    else {
+        return fail_with_pending_cleanup(
+            io,
+            sessions,
+            &pending_session_id,
+            request_id,
+            PrwcConnectionAuthenticationError::ProtocolOrder,
+        );
     };
     if proof_session_id != pending_session_id {
         return fail_with_pending_cleanup(
