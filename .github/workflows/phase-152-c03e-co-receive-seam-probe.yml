@@ -1,0 +1,344 @@
+name: Phase 152 C03e-CO receive seam probe
+
+on:
+  push:
+    branches:
+      - probe/c03e-co-receive-seam
+    paths:
+      - .github/workflows/phase-152-c03e-co-receive-seam-probe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact probe branch
+        uses: actions/checkout@v4
+        with:
+          ref: probe/c03e-co-receive-seam
+          fetch-depth: 0
+
+      - name: Install focused build prerequisite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Apply exact CN-selected receive seam
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-remote-bridge/src/prwc_connection_authentication.rs')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one anchor, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "use crate::{\n    control_session_auth_wire::{",
+              "use crate::{\n    candidate_publication_control_frame::{\n        CandidatePublicationControlFrame, CandidatePublicationControlFrameError,\n        decode_candidate_publication_control_frame,\n    },\n    control_session_auth_wire::{",
+          )
+
+          receive_types = r'''
+/// Fail-closed post-authenticated candidate-publication Command receive failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AuthenticatedPrwcCommandReceiveError {
+    /// The existing bounded PRWC frame read failed.
+    Frame(ControlFrameError),
+    /// The received frame was not a valid candidate-publication Command.
+    Command(CandidatePublicationControlFrameError),
+    /// A prior frame/protocol failure already terminalized this receive side.
+    Terminal,
+}
+
+impl fmt::Display for AuthenticatedPrwcCommandReceiveError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Frame(_) => "post-authenticated PRWC Command frame read failed",
+            Self::Command(_) => "post-authenticated candidate-publication Command decode failed",
+            Self::Terminal => "post-authenticated candidate-publication receive side is terminal",
+        })
+    }
+}
+
+impl std::error::Error for AuthenticatedPrwcCommandReceiveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Frame(error) => Some(error),
+            Self::Command(error) => Some(error),
+            Self::Terminal => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CandidatePublicationReceiveState {
+    Ready,
+    Terminal,
+}
+
+'''
+          replace_once(
+              "/// One newly accepted generic PRWC stream before logical PRWA authentication.\n",
+              receive_types + "/// One newly accepted generic PRWC stream before logical PRWA authentication.\n",
+          )
+
+          replace_once(
+              "            Ok(session) => Ok(AuthenticatedPrwcConnection {\n                _stream: self.stream,\n                request_ids: self.request_ids,\n                session,\n            }),",
+              "            Ok(session) => Ok(AuthenticatedPrwcConnection {\n                stream: self.stream,\n                request_ids: self.request_ids,\n                session,\n                candidate_publication_receive_state: CandidatePublicationReceiveState::Ready,\n            }),",
+          )
+
+          replace_once(
+              "pub struct AuthenticatedPrwcConnection {\n    _stream: ControlTlsServerStream,\n    request_ids: PrwcRequestIdLifecycle,\n    session: AuthenticatedDeviceSession,\n}",
+              "pub struct AuthenticatedPrwcConnection {\n    stream: ControlTlsServerStream,\n    request_ids: PrwcRequestIdLifecycle,\n    session: AuthenticatedDeviceSession,\n    candidate_publication_receive_state: CandidatePublicationReceiveState,\n}",
+          )
+
+          method_anchor = """    pub const fn request_ids(&self) -> &PrwcRequestIdLifecycle {
+        &self.request_ids
+    }
+}"""
+          method_replacement = """    pub const fn request_ids(&self) -> &PrwcRequestIdLifecycle {
+        &self.request_ids
+    }
+
+    /// Receives exactly one post-authenticated candidate-publication Command.
+    ///
+    /// The raw `ControlTlsServerStream` remains private. Each non-terminal call performs exactly
+    /// one existing bounded frame read and then strict candidate-publication Command decoding.
+    /// Peer-originated request correlation is preserved by the existing frame adapter and never
+    /// enters the locally-originated request-ID lifecycle.
+    ///
+    /// Any frame or candidate-publication decode failure terminalizes this private receive side.
+    /// Later calls then fail immediately without another frame read. This method writes no
+    /// response, performs no retry/loop, consults no requester/rendezvous provider, and mutates no
+    /// reachability state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthenticatedPrwcCommandReceiveError`] for frame read failure, strict Command
+    /// decode failure, or an already-terminal receive side.
+    pub fn receive_candidate_publication_command(
+        &mut self,
+    ) -> Result<CandidatePublicationControlFrame, AuthenticatedPrwcCommandReceiveError> {
+        receive_candidate_publication_command_from_io(
+            &mut self.stream,
+            &mut self.candidate_publication_receive_state,
+        )
+    }
+}"""
+          replace_once(method_anchor, method_replacement)
+
+          receive_helper = r'''
+trait PrwcCandidatePublicationFrameIo {
+    fn read_frame(&mut self) -> Result<ControlFrame, ControlFrameError>;
+}
+
+impl PrwcCandidatePublicationFrameIo for ControlTlsServerStream {
+    fn read_frame(&mut self) -> Result<ControlFrame, ControlFrameError> {
+        Self::read_frame(self)
+    }
+}
+
+fn receive_candidate_publication_command_from_io<I: PrwcCandidatePublicationFrameIo>(
+    io: &mut I,
+    state: &mut CandidatePublicationReceiveState,
+) -> Result<CandidatePublicationControlFrame, AuthenticatedPrwcCommandReceiveError> {
+    if *state == CandidatePublicationReceiveState::Terminal {
+        return Err(AuthenticatedPrwcCommandReceiveError::Terminal);
+    }
+
+    let frame = match io.read_frame() {
+        Ok(frame) => frame,
+        Err(error) => {
+            *state = CandidatePublicationReceiveState::Terminal;
+            return Err(AuthenticatedPrwcCommandReceiveError::Frame(error));
+        }
+    };
+
+    match decode_candidate_publication_control_frame(&frame) {
+        Ok(command) => Ok(command),
+        Err(error) => {
+            *state = CandidatePublicationReceiveState::Terminal;
+            Err(AuthenticatedPrwcCommandReceiveError::Command(error))
+        }
+    }
+}
+
+'''
+          replace_once(
+              "trait PrwcAuthenticationFrameIo {\n",
+              receive_helper + "trait PrwcAuthenticationFrameIo {\n",
+          )
+
+          tests = r'''
+
+    mod candidate_publication_receive_tests {
+        use std::collections::VecDeque;
+
+        use prw_connectivity::TransportIdentity;
+        use prw_control_transport::{ControlFrame, ControlFrameError, ControlMessageKind};
+
+        use crate::{
+            candidate_publication_control_frame::{
+                CandidatePublicationControlFrameError, encode_candidate_publication_control_frame,
+            },
+            candidate_publication_freshness::CandidatePublicationFreshnessToken,
+            candidate_publication_wire::CandidatePublicationWireSubmission,
+        };
+
+        use super::super::{
+            AuthenticatedPrwcCommandReceiveError, CandidatePublicationReceiveState,
+            PrwcCandidatePublicationFrameIo, receive_candidate_publication_command_from_io,
+        };
+
+        struct FakeReceiveIo {
+            frames: VecDeque<Result<ControlFrame, ControlFrameError>>,
+            reads: usize,
+        }
+
+        impl FakeReceiveIo {
+            fn new(frames: impl IntoIterator<Item = Result<ControlFrame, ControlFrameError>>) -> Self {
+                Self {
+                    frames: frames.into_iter().collect(),
+                    reads: 0,
+                }
+            }
+        }
+
+        impl PrwcCandidatePublicationFrameIo for FakeReceiveIo {
+            fn read_frame(&mut self) -> Result<ControlFrame, ControlFrameError> {
+                self.reads += 1;
+                self.frames
+                    .pop_front()
+                    .expect("receive test supplies one result per permitted read")
+            }
+        }
+
+        fn submission() -> CandidatePublicationWireSubmission {
+            CandidatePublicationWireSubmission::new(
+                TransportIdentity::new([0x41; 32]).expect("non-zero transport identity"),
+                CandidatePublicationFreshnessToken::new([0x42; 32])
+                    .expect("non-zero freshness token"),
+                Vec::new(),
+            )
+            .expect("empty candidate set remains bounded")
+        }
+
+        #[test]
+        fn successful_receive_reads_exactly_one_frame_and_preserves_outer_request_id() {
+            let frame = encode_candidate_publication_control_frame(&submission(), 71)
+                .expect("valid candidate-publication Command");
+            let mut io = FakeReceiveIo::new([Ok(frame)]);
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            let command = receive_candidate_publication_command_from_io(&mut io, &mut state)
+                .expect("valid Command must decode");
+
+            assert_eq!(command.request_id(), 71);
+            assert_eq!(io.reads, 1);
+            assert_eq!(state, CandidatePublicationReceiveState::Ready);
+            assert!(io.frames.is_empty());
+        }
+
+        #[test]
+        fn frame_failure_terminalizes_and_blocks_later_read() {
+            let later = encode_candidate_publication_control_frame(&submission(), 72)
+                .expect("valid later Command");
+            let mut io = FakeReceiveIo::new([Err(ControlFrameError::ReadIo), Ok(later)]);
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            assert_eq!(
+                receive_candidate_publication_command_from_io(&mut io, &mut state),
+                Err(AuthenticatedPrwcCommandReceiveError::Frame(
+                    ControlFrameError::ReadIo
+                ))
+            );
+            assert_eq!(state, CandidatePublicationReceiveState::Terminal);
+            assert_eq!(io.reads, 1);
+            assert_eq!(io.frames.len(), 1);
+
+            assert_eq!(
+                receive_candidate_publication_command_from_io(&mut io, &mut state),
+                Err(AuthenticatedPrwcCommandReceiveError::Terminal)
+            );
+            assert_eq!(io.reads, 1);
+            assert_eq!(io.frames.len(), 1);
+        }
+
+        #[test]
+        fn command_decode_failure_terminalizes_and_blocks_later_read() {
+            let wrong_kind = ControlFrame::new(ControlMessageKind::Event, 73, submission().encode())
+                .expect("generic Event frame is structurally valid");
+            let later = encode_candidate_publication_control_frame(&submission(), 74)
+                .expect("valid later Command");
+            let mut io = FakeReceiveIo::new([Ok(wrong_kind), Ok(later)]);
+            let mut state = CandidatePublicationReceiveState::Ready;
+
+            assert_eq!(
+                receive_candidate_publication_command_from_io(&mut io, &mut state),
+                Err(AuthenticatedPrwcCommandReceiveError::Command(
+                    CandidatePublicationControlFrameError::WrongMessageKind
+                ))
+            );
+            assert_eq!(state, CandidatePublicationReceiveState::Terminal);
+            assert_eq!(io.reads, 1);
+            assert_eq!(io.frames.len(), 1);
+
+            assert_eq!(
+                receive_candidate_publication_command_from_io(&mut io, &mut state),
+                Err(AuthenticatedPrwcCommandReceiveError::Terminal)
+            );
+            assert_eq!(io.reads, 1);
+            assert_eq!(io.frames.len(), 1);
+        }
+    }
+'''
+
+          final_close = text.rfind('\n}')
+          if final_close == -1:
+              raise SystemExit('could not find final tests-module closing brace')
+          text = text[:final_close] + tests + text[final_close:]
+
+          path.write_text(text)
+          PY
+
+      - name: Canonical formatting
+        run: |
+          cargo fmt --all
+          cargo fmt --all -- --check
+
+      - name: Guard exact one-source-path delta
+        shell: bash
+        run: |
+          git diff --check
+          mapfile -t changed < <(git diff --name-only)
+          printf 'changed=%s\n' "${changed[*]}"
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "crates/prw-remote-bridge/src/prwc_connection_authentication.rs"
+
+      - name: Focused Clippy
+        run: cargo clippy -p prw-remote-bridge --all-targets -- -D warnings
+
+      - name: Focused tests
+        run: cargo test -p prw-remote-bridge
+
+      - name: Commit canonical source only
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-remote-bridge/src/prwc_connection_authentication.rs
+          mapfile -t staged < <(git diff --cached --name-only)
+          test "${#staged[@]}" -eq 1
+          test "${staged[0]}" = "crates/prw-remote-bridge/src/prwc_connection_authentication.rs"
+          git commit -m "Probe C03e-CO canonical receive seam source"
+          git push origin HEAD:probe/c03e-co-receive-seam
