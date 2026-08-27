@@ -89,8 +89,8 @@ impl std::error::Error for PrwaVerifierSourceError {}
 ///
 /// Fails closed on cryptographic randomness failure, typed SessionId construction
 /// failure, non-representable verifier time, or checked expiry overflow.
-pub fn new_prwa_verifier_session_context(
-) -> Result<PrwaVerifierSessionContext, PrwaVerifierSourceError> {
+pub fn new_prwa_verifier_session_context()
+-> Result<PrwaVerifierSessionContext, PrwaVerifierSourceError> {
     let mut random_bytes = [0_u8; PRWA_VERIFIER_SESSION_ID_RANDOM_BYTES];
     SystemRandom::new()
         .fill(&mut random_bytes)
