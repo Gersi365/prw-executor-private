@@ -38,4 +38,5 @@ pub mod reachability_live_owner_reconciled_release_execution;
 pub mod reachability_owner;
 pub mod remote_server_transport_runtime;
 pub mod remote_session_binding;
+pub mod requester_rendezvous_authority;
 pub mod session_auth_wire;
