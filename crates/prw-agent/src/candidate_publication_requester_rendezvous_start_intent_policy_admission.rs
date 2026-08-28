@@ -66,10 +66,14 @@ fn requester_rendezvous_start_policy_decision<E: PolicyEvaluator + ?Sized>(
 pub fn policy_authorize_requester_rendezvous_start<E: PolicyEvaluator + ?Sized>(
     registry_validated: RegistryValidatedRequesterRendezvousStart,
     evaluator: &E,
-) -> Result<PolicyAuthorizedRequesterRendezvousStart, RequesterRendezvousStartPolicyAuthorizationError>
-{
+) -> Result<
+    PolicyAuthorizedRequesterRendezvousStart,
+    RequesterRendezvousStartPolicyAuthorizationError,
+> {
     match requester_rendezvous_start_policy_decision(evaluator) {
-        Decision::Allow => Ok(PolicyAuthorizedRequesterRendezvousStart { registry_validated }),
+        Decision::Allow => Ok(PolicyAuthorizedRequesterRendezvousStart {
+            registry_validated,
+        }),
         Decision::Deny => Err(RequesterRendezvousStartPolicyAuthorizationError::Denied),
     }
 }
