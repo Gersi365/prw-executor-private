@@ -51,6 +51,7 @@ pub use remote_session_worker_cancellation::{
 };
 pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 
+use prw_core::DeviceId;
 use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
 use crate::candidate_publication_requester_rendezvous_start_intent::{
@@ -77,6 +78,21 @@ impl RemoteSessionCapabilityRuntimeOwner {
     }
 }
 
+/// Adapts one already-decoded caller-nominated logical target into the existing Agent target intent.
+///
+/// This crate-private helper performs exact by-value typing/ownership transfer only. The target
+/// remains nomination rather than requester authorization or current-registration authority.
+#[must_use]
+#[allow(
+    dead_code,
+    reason = "C03e-EO materializes decoded requester-rendezvous target adaptation before separately gated wire transaction activation"
+)]
+pub(crate) const fn adapt_decoded_requester_rendezvous_target_device_id(
+    target_device_id: DeviceId,
+) -> RequesterRendezvousTargetIntent {
+    RequesterRendezvousTargetIntent::new(target_device_id)
+}
+
 /// Adapts one already-typed caller-nominated target through the exact authenticated-session owner.
 ///
 /// This crate-private caller seam performs ownership/typing composition only. Requester identity
@@ -96,9 +112,13 @@ pub(crate) fn adapt_post_auth_requester_rendezvous_target_intent(
 
 #[cfg(test)]
 mod tests {
+    use prw_core::DeviceId;
     use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
-    use super::RemoteSessionCapabilityRuntimeOwner;
+    use super::{
+        RemoteSessionCapabilityRuntimeOwner,
+        adapt_decoded_requester_rendezvous_target_device_id,
+    };
 
     fn assert_constructor_signature(
         constructor: fn(BoundRemoteSession) -> RemoteSessionCapabilityRuntimeOwner,
@@ -109,5 +129,14 @@ mod tests {
     #[test]
     fn runtime_owner_consumes_exact_bound_remote_session_shape() {
         assert_constructor_signature(RemoteSessionCapabilityRuntimeOwner::new);
+    }
+
+    #[test]
+    fn decoded_target_adaptation_preserves_exact_logical_device_id() {
+        let expected = DeviceId::new("device-target-eo").expect("valid test target");
+        let target_intent =
+            adapt_decoded_requester_rendezvous_target_device_id(expected.clone());
+
+        assert_eq!(target_intent.target_device_id(), &expected);
     }
 }
