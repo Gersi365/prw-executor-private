@@ -69,7 +69,9 @@ pub enum RequesterRendezvousTargetWireError {
 impl fmt::Display for RequesterRendezvousTargetWireError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
-            Self::InvalidOuterKind => "invalid outer PRWM kind for requester rendezvous target request",
+            Self::InvalidOuterKind => {
+                "invalid outer PRWM kind for requester rendezvous target request"
+            }
             Self::InvalidPayload => "invalid requester rendezvous PRWZ target-request payload",
             Self::Frame(_) => "failed to construct requester rendezvous PRWM target request",
         };
@@ -110,8 +112,9 @@ pub fn encode_requester_rendezvous_target_request_frame(
     let target_len = u16::try_from(target.len())
         .map_err(|_| RequesterRendezvousTargetWireError::InvalidPayload)?;
 
-    let mut payload =
-        Vec::with_capacity(REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_HEADER_BYTES + 2 + target.len());
+    let mut payload = Vec::with_capacity(
+        REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_HEADER_BYTES + 2 + target.len(),
+    );
     payload.extend_from_slice(&REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAGIC);
     payload.extend_from_slice(&REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAJOR.to_be_bytes());
     payload.extend_from_slice(&REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MINOR.to_be_bytes());
@@ -220,8 +223,8 @@ mod tests {
 
     use super::{
         MAX_REQUESTER_RENDEZVOUS_TARGET_DEVICE_ID_BYTES,
-        REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAGIC,
-        RequesterRendezvousTargetWireError, decode_requester_rendezvous_target_request_frame,
+        REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAGIC, RequesterRendezvousTargetWireError,
+        decode_requester_rendezvous_target_request_frame,
         encode_requester_rendezvous_target_request_frame,
     };
 
@@ -375,7 +378,8 @@ mod tests {
 
     #[test]
     fn encode_rejects_target_above_wire_bound() {
-        let oversized_target = target(&"x".repeat(MAX_REQUESTER_RENDEZVOUS_TARGET_DEVICE_ID_BYTES + 1));
+        let oversized_target =
+            target(&"x".repeat(MAX_REQUESTER_RENDEZVOUS_TARGET_DEVICE_ID_BYTES + 1));
 
         assert_eq!(
             encode_requester_rendezvous_target_request_frame(17, &oversized_target),
