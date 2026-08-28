@@ -993,7 +993,7 @@ mod tests {
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
-    use crate::linux_identity::xdg_runtime_root::prw_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
     use crate::remote_session_capability_runtime::{
         RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
         RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
