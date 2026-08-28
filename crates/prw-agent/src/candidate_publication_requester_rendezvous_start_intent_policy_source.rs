@@ -182,8 +182,8 @@ impl BoundedRequesterRendezvousStartPolicySource {
         let mut source = Self::default();
 
         for binding in bindings {
-            let at_capacity = source.policies_by_device.len()
-                >= MAX_REQUESTER_RENDEZVOUS_START_POLICY_BINDINGS;
+            let at_capacity =
+                source.policies_by_device.len() >= MAX_REQUESTER_RENDEZVOUS_START_POLICY_BINDINGS;
             let device_id = binding.device_id.clone();
             match source.policies_by_device.entry(device_id) {
                 Entry::Occupied(_) => {
@@ -340,8 +340,7 @@ mod tests {
         }
 
         assert_eq!(
-            RequesterRendezvousStartPolicy::deny()
-                .evaluate(Capability::RequesterRendezvousStart),
+            RequesterRendezvousStartPolicy::deny().evaluate(Capability::RequesterRendezvousStart),
             Decision::Deny
         );
     }
@@ -369,11 +368,7 @@ mod tests {
 
         let absent_device = DeviceId::new("device-absent").expect("device id");
         assert_eq!(
-            source.evaluator_for_authenticated_dimensions(
-                &absent_device,
-                &workspace_id,
-                &user_id
-            ),
+            source.evaluator_for_authenticated_dimensions(&absent_device, &workspace_id, &user_id),
             Err(RequesterRendezvousStartPolicySourceError::Unavailable)
         );
 
