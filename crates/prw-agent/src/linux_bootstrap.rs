@@ -19,6 +19,7 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
+use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::BoundedRequesterRendezvousStartPolicySource;
 use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
 use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
@@ -560,6 +561,7 @@ where
 pub(crate) struct LinuxAgentRequesterRendezvousRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
     remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
     requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+    requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
 }
 
 impl<P, D, T, F, C, R, E>
@@ -574,10 +576,12 @@ impl<P, D, T, F, C, R, E>
     pub(crate) const fn new(
         remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
         requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+        requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
     ) -> Self {
         Self {
             remote_process_inputs,
             requester_rendezvous_start_policy_source,
+            requester_rendezvous_runtime_owner,
         }
     }
 }
@@ -602,10 +606,12 @@ where
     let LinuxAgentRequesterRendezvousRemoteProcessOperationInputs {
         remote_process_inputs,
         requester_rendezvous_start_policy_source,
+        requester_rendezvous_runtime_owner,
     } = inputs;
     let operation = linux_agent_remote_process_operation(remote_process_inputs);
 
     move |publisher| {
+        drop(requester_rendezvous_runtime_owner);
         drop(requester_rendezvous_start_policy_source);
         operation(publisher);
     }
@@ -987,7 +993,7 @@ mod tests {
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
-    use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
+    use crate::linux_identity::xdg_runtime_root::prw_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
     use crate::remote_session_capability_runtime::{
         RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
         RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
