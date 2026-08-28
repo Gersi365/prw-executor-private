@@ -169,7 +169,7 @@ pub fn decode_requester_rendezvous_target_request_frame(
     })
 }
 
-fn validate_target_bytes(target: &[u8]) -> Result<(), RequesterRendezvousTargetWireError> {
+const fn validate_target_bytes(target: &[u8]) -> Result<(), RequesterRendezvousTargetWireError> {
     if target.is_empty() || target.len() > MAX_REQUESTER_RENDEZVOUS_TARGET_DEVICE_ID_BYTES {
         return Err(RequesterRendezvousTargetWireError::InvalidPayload);
     }
