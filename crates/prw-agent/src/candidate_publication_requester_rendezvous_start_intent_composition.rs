@@ -16,7 +16,9 @@ use super::{
         RequesterRendezvousStartPolicyAuthorizationError,
         policy_authorize_requester_rendezvous_start,
     },
-    policy_source::{RequesterRendezvousStartPolicySource, RequesterRendezvousStartPolicySourceError},
+    policy_source::{
+        RequesterRendezvousStartPolicySource, RequesterRendezvousStartPolicySourceError,
+    },
     registry_validation::{
         RequesterRendezvousStartRegistryValidationError,
         validate_current_requester_rendezvous_start_intent,
