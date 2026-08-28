@@ -22,6 +22,8 @@ pub enum Capability {
     FilesDelete,
     /// Create an authorized port forward.
     ForwardingCreate,
+    /// Begin requester-side rendezvous toward one registry-validated logical target.
+    RequesterRendezvousStart,
     /// Manage a device.
     DeviceManage,
     /// Manage authorization policy.
@@ -92,6 +94,7 @@ impl PolicyEvaluator for BoundedLocalReadPolicy {
             | Capability::FilesWrite
             | Capability::FilesDelete
             | Capability::ForwardingCreate
+            | Capability::RequesterRendezvousStart
             | Capability::DeviceManage
             | Capability::PolicyManage => Decision::Deny,
         }
@@ -143,7 +146,8 @@ impl BoundedLocalManagementDecisions {
 /// a caller, create provider authority, wire a runtime, or activate management in the
 /// production Agent. Each capability used by the existing typed `BridgeCommand` surface
 /// has an independent decision. Capabilities with no admitted management command in that
-/// surface (`FilesDelete`, `DeviceManage`, `PolicyManage`) are always denied.
+/// surface (`FilesDelete`, `RequesterRendezvousStart`, `DeviceManage`, `PolicyManage`) are always
+/// denied.
 ///
 /// There is intentionally no `allow_all` constructor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,9 +179,10 @@ impl PolicyEvaluator for BoundedLocalManagementPolicy {
             Capability::FilesRead => self.decisions.files_read,
             Capability::FilesWrite => self.decisions.files_write,
             Capability::ForwardingCreate => self.decisions.forwarding_create,
-            Capability::FilesDelete | Capability::DeviceManage | Capability::PolicyManage => {
-                Decision::Deny
-            }
+            Capability::FilesDelete
+            | Capability::RequesterRendezvousStart
+            | Capability::DeviceManage
+            | Capability::PolicyManage => Decision::Deny,
         }
     }
 }
@@ -211,6 +216,14 @@ mod tests {
         );
         assert_ne!(Capability::AgentStatusRead, Capability::FilesRead);
         assert_ne!(Capability::PrivateDnsConfigRead, Capability::FilesRead);
+        assert_ne!(
+            Capability::RequesterRendezvousStart,
+            Capability::ForwardingCreate
+        );
+        assert_ne!(
+            Capability::RequesterRendezvousStart,
+            Capability::DeviceManage
+        );
     }
 
     #[test]
@@ -247,6 +260,7 @@ mod tests {
             Capability::FilesWrite,
             Capability::FilesDelete,
             Capability::ForwardingCreate,
+            Capability::RequesterRendezvousStart,
             Capability::DeviceManage,
             Capability::PolicyManage,
         ] {
@@ -308,6 +322,10 @@ mod tests {
             policy.evaluate(Capability::ForwardingCreate),
             Decision::Allow
         );
+        assert_eq!(
+            policy.evaluate(Capability::RequesterRendezvousStart),
+            Decision::Deny
+        );
     }
 
     #[test]
@@ -324,6 +342,7 @@ mod tests {
 
         for capability in [
             Capability::FilesDelete,
+            Capability::RequesterRendezvousStart,
             Capability::DeviceManage,
             Capability::PolicyManage,
         ] {
@@ -343,6 +362,7 @@ mod tests {
             Capability::FilesWrite,
             Capability::FilesDelete,
             Capability::ForwardingCreate,
+            Capability::RequesterRendezvousStart,
             Capability::DeviceManage,
             Capability::PolicyManage,
         ] {
