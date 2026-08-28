@@ -606,7 +606,7 @@ where
     let operation = linux_agent_remote_process_operation(remote_process_inputs);
 
     move |publisher| {
-        let _requester_rendezvous_start_policy_source = requester_rendezvous_start_policy_source;
+        drop(requester_rendezvous_start_policy_source);
         operation(publisher);
     }
 }
