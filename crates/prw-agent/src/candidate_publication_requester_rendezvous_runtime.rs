@@ -21,6 +21,10 @@ use crate::candidate_publication_requester_rendezvous_start_intent::policy_admis
 /// persistence, readiness, or networking behavior.
 #[derive(Debug)]
 pub struct CandidatePublicationRequesterRendezvousRuntimeOwner {
+    #[allow(
+        dead_code,
+        reason = "C03e-DN stages private provider mutation before separately gated caller composition"
+    )]
     provider: InMemoryRequesterRendezvousAuthorityProvider,
 }
 
@@ -46,6 +50,10 @@ impl CandidatePublicationRequesterRendezvousRuntimeOwner {
     ///
     /// Propagates the bounded requester/rendezvous provider lifecycle error. Duplicate identity and
     /// capacity exhaustion therefore remain fail-before-mutation outcomes of `register_current`.
+    #[allow(
+        dead_code,
+        reason = "C03e-DN materializes registration before separately gated caller composition"
+    )]
     pub(crate) fn register_policy_authorized_requester_rendezvous_start(
         &mut self,
         authorized: PolicyAuthorizedRequesterRendezvousStart,
@@ -54,8 +62,11 @@ impl CandidatePublicationRequesterRendezvousRuntimeOwner {
         let requester_session = validated.requester_session().clone();
         let target_device_id = validated.target_device_id().clone();
 
-        self.provider
-            .register_current(requester_session, target_device_id)
+        let result = self
+            .provider
+            .register_current(requester_session, target_device_id);
+        drop(authorized);
+        result
     }
 }
 
