@@ -27,6 +27,13 @@ pub mod policy_admission;
 #[path = "candidate_publication_requester_rendezvous_start_intent_policy_source.rs"]
 pub mod policy_source;
 
+#[allow(
+    dead_code,
+    reason = "C03e-DR materializes caller composition before separately gated runtime activation"
+)]
+#[path = "candidate_publication_requester_rendezvous_start_intent_composition.rs"]
+pub mod composition;
+
 use prw_core::DeviceId;
 use prw_session::AuthenticatedDeviceSession;
 
