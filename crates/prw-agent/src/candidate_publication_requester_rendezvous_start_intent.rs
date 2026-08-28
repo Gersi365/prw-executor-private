@@ -42,26 +42,26 @@ use prw_session::AuthenticatedDeviceSession;
 /// This crate-private value carries no requester identity and confers no authorization or current
 /// registration fact. A later separately gated authenticated-session adaptation may consume it
 /// without reinterpreting the exact logical `DeviceId`.
-pub(crate) struct RequesterRendezvousTargetIntent {
+pub struct RequesterRendezvousTargetIntent {
     target_device_id: DeviceId,
 }
 
 impl RequesterRendezvousTargetIntent {
     /// Retains exactly one explicit logical target without validation, authorization, or I/O.
     #[must_use]
-    pub(crate) const fn new(target_device_id: DeviceId) -> Self {
+    pub const fn new(target_device_id: DeviceId) -> Self {
         Self { target_device_id }
     }
 
     /// Returns the exact caller-nominated logical target without deriving any authority from it.
     #[must_use]
-    pub(crate) const fn target_device_id(&self) -> &DeviceId {
+    pub const fn target_device_id(&self) -> &DeviceId {
         &self.target_device_id
     }
 
     /// Transfers ownership of the exact caller-nominated logical target without reinterpretation.
     #[must_use]
-    pub(crate) fn into_target_device_id(self) -> DeviceId {
+    pub fn into_target_device_id(self) -> DeviceId {
         self.target_device_id
     }
 }
