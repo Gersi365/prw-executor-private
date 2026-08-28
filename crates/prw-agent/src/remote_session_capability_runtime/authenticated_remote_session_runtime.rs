@@ -35,7 +35,7 @@ use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthorit
 use crate::{
     candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
     candidate_publication_requester_rendezvous_start_intent::{
-        RequesterRendezvousStartIntent,
+        RequesterRendezvousStartIntent, RequesterRendezvousTargetIntent,
         composition::{
             RequesterRendezvousStartCompositionError,
             validate_authorize_and_register_requester_rendezvous_start,
@@ -177,6 +177,25 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             self.capability_owner.bound_session.session().clone(),
             target_device_id,
         )
+    }
+
+    /// Adapts one typed caller-nominated rendezvous target into the existing authenticated-session
+    /// requester/rendezvous start-intent construction boundary.
+    ///
+    /// The logical target comes only from the consumed `RequesterRendezvousTargetIntent`; requester
+    /// identity continues to come only from this owner's retained authenticated application session
+    /// through the existing C03e-DT helper. This adaptation performs no registry lookup, policy
+    /// evaluation, provider mutation, I/O, synchronization, wire handling, or runtime activation.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-EH materializes typed target-intent authenticated-session adaptation before separately gated caller activation"
+    )]
+    pub(crate) fn requester_rendezvous_start_intent_from_target_intent(
+        &self,
+        target_intent: RequesterRendezvousTargetIntent,
+    ) -> RequesterRendezvousStartIntent {
+        self.requester_rendezvous_start_intent(target_intent.into_target_device_id())
     }
 
     /// Validates and registers one requester/rendezvous start through current registry authority.
@@ -446,7 +465,9 @@ mod tests {
         compose_authenticated_remote_session,
     };
     use crate::{
-        candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent,
+        candidate_publication_requester_rendezvous_start_intent::{
+            RequesterRendezvousStartIntent, RequesterRendezvousTargetIntent,
+        },
         remote_session_capability_runtime::RemoteSessionCapabilityRuntimeOwner,
     };
 
@@ -479,6 +500,15 @@ mod tests {
         let _ = construction;
     }
 
+    fn assert_requester_rendezvous_target_intent_adaptation_signature(
+        adaptation: fn(
+            &AuthenticatedRemoteSessionRuntimeOwner,
+            RequesterRendezvousTargetIntent,
+        ) -> RequesterRendezvousStartIntent,
+    ) {
+        let _ = adaptation;
+    }
+
     #[test]
     fn outer_owner_consumes_exact_peer_and_capability_owner_shape() {
         assert_constructor_signature(AuthenticatedRemoteSessionRuntimeOwner::new);
@@ -493,6 +523,13 @@ mod tests {
     fn requester_rendezvous_start_intent_construction_has_selected_authenticated_owner_shape() {
         assert_requester_rendezvous_start_intent_signature(
             AuthenticatedRemoteSessionRuntimeOwner::requester_rendezvous_start_intent,
+        );
+    }
+
+    #[test]
+    fn requester_rendezvous_target_intent_adaptation_has_selected_authenticated_owner_shape() {
+        assert_requester_rendezvous_target_intent_adaptation_signature(
+            AuthenticatedRemoteSessionRuntimeOwner::requester_rendezvous_start_intent_from_target_intent,
         );
     }
 
