@@ -186,8 +186,7 @@ mod tests {
     use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
 
     use super::{
-        RegistryValidatedRequesterRendezvousStart,
-        RequesterRendezvousStartRegistryValidationError,
+        RegistryValidatedRequesterRendezvousStart, RequesterRendezvousStartRegistryValidationError,
         validate_current_requester_rendezvous_start_intent, validate_current_target,
     };
 
