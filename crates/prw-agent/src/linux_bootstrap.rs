@@ -162,7 +162,7 @@ impl LinuxAgentBootstrapTerminal {
     }
 }
 
-/// Listener/socket cleanup class exposed by the bootstrap facade.
+/// Listener/socket cleanup class exposed to the Agent binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentBootstrapCleanup {
     /// Exact validated listener/socket cleanup completed.
