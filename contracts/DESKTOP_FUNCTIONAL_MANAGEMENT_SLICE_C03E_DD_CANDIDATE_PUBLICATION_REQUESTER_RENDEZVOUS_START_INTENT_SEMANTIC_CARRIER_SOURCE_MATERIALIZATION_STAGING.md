@@ -50,7 +50,7 @@ The materialized type is:
 
 `RequesterRendezvousStartIntent`
 
-The type is `pub(crate)` and lives only inside `prw-agent`.
+The item is declared `pub` only inside the `pub(crate)` module `candidate_publication_requester_rendezvous_start_intent`. Its effective visibility therefore remains crate-internal to `prw-agent`; the `pub` spelling is only the canonical Clippy-compatible form inside that crate-private module and does not create a cross-crate public API.
 
 It owns exactly two fields by value:
 
@@ -108,7 +108,7 @@ This is a property of the operation envelope only and does not change cloneabili
 
 ## Constructor boundary
 
-The only materialized constructor is crate-internal:
+The only materialized constructor is crate-internal through the crate-private module boundary:
 
 `RequesterRendezvousStartIntent::new(AuthenticatedDeviceSession, DeviceId) -> RequesterRendezvousStartIntent`
 
@@ -132,7 +132,7 @@ Successful construction is therefore not described as authorization or current-r
 
 ## Read-only observation boundary
 
-The materialized carrier exposes crate-internal read-only accessors only:
+The materialized carrier exposes only read-only accessors, reachable only through the crate-private module boundary:
 
 - `requester_session(&self) -> &AuthenticatedDeviceSession`;
 - `target_device_id(&self) -> &DeviceId`.
@@ -154,6 +154,8 @@ DD does not add integration tests that exercise provider mutation, registry vali
 `crates/prw-agent/src/lib.rs` registers the new module as `pub(crate)` only.
 
 A narrow `dead_code` allowance documents that the carrier is materialized before its separately gated consumer exists.
+
+Items declared `pub` inside that module remain effectively crate-internal because the containing module is not publicly exported outside `prw-agent`.
 
 No public re-export or cross-crate API is introduced.
 
@@ -259,7 +261,7 @@ DD may close only if:
 
 1. C03e-DC remains the exact merge base and predecessor;
 2. final DC -> DD diff is restricted to exactly the carrier module, minimal `lib.rs` module registration, and this DD contract;
-3. the carrier fields/visibility/constructor/accessors remain exactly within DC-selected semantics;
+3. the carrier fields/effective visibility/constructor/accessors remain exactly within DC-selected semantics;
 4. no registry, policy, provider mutation, wire/command, retirement, synchronization, runtime/networking, deployment, or unrelated source is added;
 5. required manifest/lock blobs remain exact;
 6. all automatically triggered canonical validations on the exact final head reach terminal non-failing verdicts;
