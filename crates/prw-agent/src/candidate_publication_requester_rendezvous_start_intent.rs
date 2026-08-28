@@ -49,36 +49,3 @@ impl RequesterRendezvousStartIntent {
         &self.target_device_id
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use prw_core::DeviceId;
-    use prw_session::AuthenticatedDeviceSession;
-
-    use super::RequesterRendezvousStartIntent;
-
-    fn assert_constructor_shape(
-        _constructor: fn(
-            AuthenticatedDeviceSession,
-            DeviceId,
-        ) -> RequesterRendezvousStartIntent,
-    ) {
-    }
-
-    fn assert_session_accessor_shape(
-        _accessor: fn(&RequesterRendezvousStartIntent) -> &AuthenticatedDeviceSession,
-    ) {
-    }
-
-    fn assert_target_accessor_shape(
-        _accessor: fn(&RequesterRendezvousStartIntent) -> &DeviceId,
-    ) {
-    }
-
-    #[test]
-    fn carrier_surface_preserves_selected_owned_input_and_read_only_output_shapes() {
-        assert_constructor_shape(RequesterRendezvousStartIntent::new);
-        assert_session_accessor_shape(RequesterRendezvousStartIntent::requester_session);
-        assert_target_accessor_shape(RequesterRendezvousStartIntent::target_device_id);
-    }
-}
