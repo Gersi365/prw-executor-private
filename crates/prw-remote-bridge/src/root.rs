@@ -42,4 +42,5 @@ pub mod remote_server_transport_runtime;
 pub mod remote_session_binding;
 pub mod requester_rendezvous_authority;
 pub mod requester_rendezvous_in_memory_provider;
+pub mod requester_rendezvous_target_request_wire;
 pub mod session_auth_wire;
