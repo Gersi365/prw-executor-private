@@ -236,14 +236,21 @@ DI adds no:
 
 DI source-materialization lineage begins from exact closed DH and contains only the validation-source materialization/canonical formatting plus this staging contract.
 
-Candidate source commits before final closure:
+Corrective source lineage before final closure:
 
 1. `29680b252c02b6ab28ed9303748911f1da425c29` — materialize validated rendezvous provenance carrier and consuming validation;
-2. `2bc56c6d64aa2480d1385e61387fb7895abd2320` — canonical formatter-sensitive function-signature layout only.
+2. `2bc56c6d64aa2480d1385e61387fb7895abd2320` — canonical formatter-sensitive function-signature layout only;
+3. `1ec3ab118af11bb4ff3170e110a0839eadc2cfc4` — exact canonical rustfmt test-import grouping after Rust #1206 identified the remaining formatter-only diff.
 
-Current validation source blob after the canonical layout correction:
+Current validation source blob after exact canonical formatter output:
 
-`48eeaa3a729f93e3ed6571653a03d5f985b46e30`
+`1c021bc95a3d674722bfd70559156fa75e07e578`
+
+Pre-final candidate validation note:
+
+- Rust #1206 on head `adb41b17cda82fec26eecfc5e68fe1fe23602831` reached locked dependency graph SUCCESS and failed only at rustfmt on the test `use super` grouping;
+- Clippy/tests/build were skipped, so #1206 is not a semantic/compiler verdict;
+- exact-final-head validation must supersede this pre-final candidate run.
 
 ## Dependency and lock guards
 
