@@ -32,7 +32,17 @@ use prw_remote_bridge::{
 use prw_session::AuthenticatedDeviceSession;
 
 use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthority};
-use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
+use crate::{
+    candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
+    candidate_publication_requester_rendezvous_start_intent::{
+        RequesterRendezvousStartIntent,
+        composition::{
+            RequesterRendezvousStartCompositionError,
+            validate_authorize_and_register_requester_rendezvous_start,
+        },
+        policy_source::RequesterRendezvousStartPolicySource,
+    },
+};
 
 #[allow(
     dead_code,
@@ -167,6 +177,49 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             self.capability_owner.bound_session.session().clone(),
             target_device_id,
         )
+    }
+
+    /// Validates and registers one requester/rendezvous start through current registry authority.
+    ///
+    /// The requester is derived only through the existing authenticated-session start-intent helper.
+    /// Current registry authority is borrowed only through one existing
+    /// [`SharedCurrentCapabilityAuthority::with_current_authority`] read. The principal-agnostic
+    /// capability policy yielded by that owner is deliberately ignored for requester/rendezvous
+    /// policy; the separately supplied requester-aware source remains the sole DP policy source.
+    ///
+    /// The shared-current read guard spans only one synchronous DR composition call. This method
+    /// performs no network I/O, dispatcher execution, cancellation wait, task lifecycle work,
+    /// blocking storage operation or external process interaction while that guard is held.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing [`RequesterRendezvousStartCompositionError`] unchanged. No retry,
+    /// fallback, replacement, suppression, translation or fabricated success is performed.
+    #[allow(
+        dead_code,
+        reason = "C03e-DV materializes authenticated-session current-authority caller composition before separately gated runtime activation"
+    )]
+    pub(crate) async fn register_requester_rendezvous_start<
+        P: PolicyEvaluator + Send + Sync,
+        S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    >(
+        &self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        policy_source: &S,
+        runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+        target_device_id: DeviceId,
+    ) -> Result<(), RequesterRendezvousStartCompositionError> {
+        let intent = self.requester_rendezvous_start_intent(target_device_id);
+        authority
+            .with_current_authority(|registry, _current_capability_policy| {
+                validate_authorize_and_register_requester_rendezvous_start(
+                    registry,
+                    policy_source,
+                    runtime_owner,
+                    intent,
+                )
+            })
+            .await
     }
 
     /// Processes exactly one capability request on exactly one newly accepted control stream.
