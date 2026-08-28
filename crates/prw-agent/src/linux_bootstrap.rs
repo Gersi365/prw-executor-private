@@ -19,6 +19,7 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
+use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::BoundedRequesterRendezvousStartPolicySource;
 use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
 use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
 use crate::linux_identity::production_runtime_loop::LocalLinuxProductionRuntimeInputs;
@@ -193,7 +194,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -548,6 +549,65 @@ where
                 );
             },
         );
+    }
+}
+
+/// Crate-private process-operation lifetime custody for one concrete requester-aware policy source.
+#[allow(
+    dead_code,
+    reason = "C03e-EB materializes requester-policy custody before separately gated production assembly"
+)]
+pub(crate) struct LinuxAgentRequesterRendezvousRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+}
+
+impl<P, D, T, F, C, R, E>
+    LinuxAgentRequesterRendezvousRemoteProcessOperationInputs<P, D, T, F, C, R, E>
+{
+    /// Owns the existing remote-process inputs and one already-constructed requester-policy source.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-EB materializes requester-policy custody before separately gated production assembly"
+    )]
+    pub(crate) const fn new(
+        remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+        requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+    ) -> Self {
+        Self {
+            remote_process_inputs,
+            requester_rendezvous_start_policy_source,
+        }
+    }
+}
+
+/// Builds one crate-private remote operation that retains requester-policy source custody.
+#[allow(
+    dead_code,
+    reason = "C03e-EB materializes requester-policy custody before separately gated production assembly"
+)]
+pub(crate) fn linux_agent_requester_rendezvous_remote_process_operation<P, D, T, F, C, R, E>(
+    inputs: LinuxAgentRequesterRendezvousRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let LinuxAgentRequesterRendezvousRemoteProcessOperationInputs {
+        remote_process_inputs,
+        requester_rendezvous_start_policy_source,
+    } = inputs;
+    let operation = linux_agent_remote_process_operation(remote_process_inputs);
+
+    move |publisher| {
+        let _requester_rendezvous_start_policy_source = requester_rendezvous_start_policy_source;
+        operation(publisher);
     }
 }
 
