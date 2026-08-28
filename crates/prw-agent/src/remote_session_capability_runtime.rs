@@ -116,8 +116,7 @@ mod tests {
     use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
     use super::{
-        RemoteSessionCapabilityRuntimeOwner,
-        adapt_decoded_requester_rendezvous_target_device_id,
+        RemoteSessionCapabilityRuntimeOwner, adapt_decoded_requester_rendezvous_target_device_id,
     };
 
     fn assert_constructor_signature(
@@ -134,8 +133,7 @@ mod tests {
     #[test]
     fn decoded_target_adaptation_preserves_exact_logical_device_id() {
         let expected = DeviceId::new("device-target-eo").expect("valid test target");
-        let target_intent =
-            adapt_decoded_requester_rendezvous_target_device_id(expected.clone());
+        let target_intent = adapt_decoded_requester_rendezvous_target_device_id(expected.clone());
 
         assert_eq!(target_intent.target_device_id(), &expected);
     }
