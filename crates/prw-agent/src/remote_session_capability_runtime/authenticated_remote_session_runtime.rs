@@ -32,6 +32,7 @@ use prw_remote_bridge::{
 use prw_session::AuthenticatedDeviceSession;
 
 use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthority};
+use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
 
 #[allow(
     dead_code,
@@ -144,6 +145,28 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     #[must_use]
     pub(super) const fn logical_device_id(&self) -> &DeviceId {
         self.capability_owner.bound_session.session().device_id()
+    }
+
+    /// Constructs one non-authoritative requester/rendezvous start intent from this authenticated
+    /// remote-session owner and one caller-nominated logical target `DeviceId`.
+    ///
+    /// Requester identity is derived only from the exact authenticated application session retained
+    /// by the existing `BoundRemoteSession`. The session clone is owned-custody adaptation for the
+    /// existing intent type only; it performs no authentication, registry validation, policy
+    /// evaluation, provider mutation, I/O, synchronization, runtime activation or networking.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-DT materializes authenticated-session start-intent construction before separately gated caller activation"
+    )]
+    pub(crate) fn requester_rendezvous_start_intent(
+        &self,
+        target_device_id: DeviceId,
+    ) -> RequesterRendezvousStartIntent {
+        RequesterRendezvousStartIntent::new(
+            self.capability_owner.bound_session.session().clone(),
+            target_device_id,
+        )
     }
 
     /// Processes exactly one capability request on exactly one newly accepted control stream.
@@ -353,6 +376,7 @@ pub fn compose_authenticated_remote_session(
 mod tests {
     use std::ops::Range;
 
+    use prw_core::DeviceId;
     use prw_remote_bridge::{
         RemoteBridgeError, remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
     };
@@ -368,7 +392,10 @@ mod tests {
         REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
         compose_authenticated_remote_session,
     };
-    use crate::remote_session_capability_runtime::RemoteSessionCapabilityRuntimeOwner;
+    use crate::{
+        candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent,
+        remote_session_capability_runtime::RemoteSessionCapabilityRuntimeOwner,
+    };
 
     fn assert_constructor_signature(
         constructor: fn(
@@ -390,6 +417,15 @@ mod tests {
         let _ = composition;
     }
 
+    fn assert_requester_rendezvous_start_intent_signature(
+        construction: fn(
+            &AuthenticatedRemoteSessionRuntimeOwner,
+            DeviceId,
+        ) -> RequesterRendezvousStartIntent,
+    ) {
+        let _ = construction;
+    }
+
     #[test]
     fn outer_owner_consumes_exact_peer_and_capability_owner_shape() {
         assert_constructor_signature(AuthenticatedRemoteSessionRuntimeOwner::new);
@@ -398,6 +434,13 @@ mod tests {
     #[test]
     fn post_auth_composition_requires_peer_session_and_separate_lease_interval() {
         assert_composition_signature(compose_authenticated_remote_session);
+    }
+
+    #[test]
+    fn requester_rendezvous_start_intent_construction_has_selected_authenticated_owner_shape() {
+        assert_requester_rendezvous_start_intent_signature(
+            AuthenticatedRemoteSessionRuntimeOwner::requester_rendezvous_start_intent,
+        );
     }
 
     #[test]
