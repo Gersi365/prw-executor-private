@@ -20,6 +20,13 @@ pub mod registry_validation;
 #[path = "candidate_publication_requester_rendezvous_start_intent_policy_admission.rs"]
 pub mod policy_admission;
 
+#[allow(
+    dead_code,
+    reason = "C03e-DP materializes requester-aware policy source before separately gated caller composition"
+)]
+#[path = "candidate_publication_requester_rendezvous_start_intent_policy_source.rs"]
+pub mod policy_source;
+
 use prw_core::DeviceId;
 use prw_session::AuthenticatedDeviceSession;
 
