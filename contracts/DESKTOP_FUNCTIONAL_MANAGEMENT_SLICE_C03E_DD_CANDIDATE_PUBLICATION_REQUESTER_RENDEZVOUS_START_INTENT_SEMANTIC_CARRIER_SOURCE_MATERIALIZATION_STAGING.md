@@ -143,9 +143,9 @@ No mutable field accessor, provider getter, raw authority extraction, consuming 
 
 Because `AuthenticatedDeviceSession` has no public arbitrary constructor and is produced through authenticated session proof, DD does not fabricate a fake authenticated identity merely to instantiate the carrier in a unit test.
 
-The DD unit test instead proves the exact constructor/accessor function signatures at compile time.
+DD intentionally adds no carrier-specific runtime unit fixture. Canonical workspace compilation, Clippy, tests, and build validate that the declared constructor/accessor source type-checks while preserving authenticated-session provenance.
 
-This validates the selected owned-input/read-only-output shape without weakening authenticated-session provenance or adding unrelated cryptographic fixture orchestration.
+This avoids introducing unrelated cryptographic/session fixture orchestration solely to exercise a non-authoritative data envelope.
 
 DD does not add integration tests that exercise provider mutation, registry validation, policy, wire, runtime, or networking.
 
