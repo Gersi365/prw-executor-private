@@ -6,6 +6,13 @@
 //! This module performs no validation, authorization, provider mutation, wire handling, I/O,
 //! synchronization, task/listener activation, networking, readiness publication, or deployment.
 
+#[allow(
+    dead_code,
+    reason = "C03e-DF materializes current-registry validation before separately gated consumers"
+)]
+#[path = "candidate_publication_requester_rendezvous_start_intent_registry_validation.rs"]
+pub mod registry_validation;
+
 use prw_core::DeviceId;
 use prw_session::AuthenticatedDeviceSession;
 
