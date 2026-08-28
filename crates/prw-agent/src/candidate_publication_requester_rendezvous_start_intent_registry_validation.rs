@@ -1,14 +1,16 @@
 //! Agent-internal current-registry validation for requester/rendezvous start intent.
 //!
-//! C03e-DF materializes only the C03e-DE-selected fail-closed registry composition. It does not
-//! select or evaluate policy, derive provider authority, mutate requester/rendezvous state, handle
-//! wire commands, inspect target transport readiness, perform I/O, activate runtime behavior, or
-//! deploy anything.
+//! C03e-DI materializes only the C03e-DG/DH-selected post-registry-validation provenance carrier
+//! and ownership transfer after the existing C03e-DF fail-closed registry composition succeeds. It
+//! does not select or evaluate policy, derive provider authority, mutate requester/rendezvous state,
+//! handle wire commands, inspect target transport readiness, perform I/O, activate runtime behavior,
+//! or deploy anything.
 
 use std::fmt;
 
 use prw_core::{DeviceId, DeviceLifecycle, WorkspaceId};
 use prw_registry::{MembershipLifecycle, RegistryError, WorkspaceDeviceRegistry};
+use prw_session::AuthenticatedDeviceSession;
 
 use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
 
@@ -52,21 +54,51 @@ impl std::error::Error for RequesterRendezvousStartRegistryValidationError {
     }
 }
 
+/// One exact requester/target pair that passed the full current-registry validation chain.
+///
+/// This owned value proves only point-in-time registry eligibility. It is deliberately neither
+/// `Copy` nor `Clone`, has no constructor from arbitrary identity values, and is not policy
+/// authorization, requester/rendezvous provider registration authority, transport readiness,
+/// live-owner authority, candidate-publication authority, or a lease/currentness guarantee.
+pub struct RegistryValidatedRequesterRendezvousStart {
+    requester_session: AuthenticatedDeviceSession,
+    target_device_id: DeviceId,
+}
+
+impl RegistryValidatedRequesterRendezvousStart {
+    /// Returns the exact server-held requester session that passed current-registry validation.
+    #[must_use]
+    pub const fn requester_session(&self) -> &AuthenticatedDeviceSession {
+        &self.requester_session
+    }
+
+    /// Returns the exact logical target device that passed current-registry validation.
+    #[must_use]
+    pub const fn target_device_id(&self) -> &DeviceId {
+        &self.target_device_id
+    }
+}
+
 /// Revalidates one unvalidated requester/rendezvous start intent against current registry state.
 ///
 /// Validation order is fixed: requester session currentness, exact target lookup, target device
 /// lifecycle, target membership lifecycle, same-workspace equality, then exact target preservation.
-/// Successful return proves only current registry eligibility. It is not policy authorization and
-/// does not mutate requester/rendezvous provider state.
+/// The input intent is consumed, but its owned identity values are moved into the returned validated
+/// provenance carrier only after every current-registry check succeeds. Successful return proves
+/// only current registry eligibility. It is not policy authorization and does not mutate
+/// requester/rendezvous provider state.
 ///
 /// # Errors
 ///
 /// Fails closed on stale requester state, unknown/ineligible target state, cross-workspace intent,
-/// or any structural target-identity mismatch.
+/// or any structural target-identity mismatch. Failure produces no validated carrier.
 pub fn validate_current_requester_rendezvous_start_intent(
     registry: &WorkspaceDeviceRegistry,
-    intent: &RequesterRendezvousStartIntent,
-) -> Result<(), RequesterRendezvousStartRegistryValidationError> {
+    intent: RequesterRendezvousStartIntent,
+) -> Result<
+    RegistryValidatedRequesterRendezvousStart,
+    RequesterRendezvousStartRegistryValidationError,
+> {
     let requester = registry
         .validate_authenticated_session(intent.requester_session())
         .map_err(RequesterRendezvousStartRegistryValidationError::Registry)?;
@@ -75,7 +107,17 @@ pub fn validate_current_requester_rendezvous_start_intent(
         registry,
         requester.workspace_id(),
         intent.target_device_id(),
-    )
+    )?;
+
+    let RequesterRendezvousStartIntent {
+        requester_session,
+        target_device_id,
+    } = intent;
+
+    Ok(RegistryValidatedRequesterRendezvousStart {
+        requester_session,
+        target_device_id,
+    })
 }
 
 fn validate_current_target(
@@ -144,7 +186,7 @@ mod tests {
     use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
 
     use super::{
-        RequesterRendezvousStartRegistryValidationError,
+        RegistryValidatedRequesterRendezvousStart, RequesterRendezvousStartRegistryValidationError,
         validate_current_requester_rendezvous_start_intent, validate_current_target,
     };
 
@@ -186,14 +228,17 @@ mod tests {
     fn assert_validation_signature(
         validation: fn(
             &WorkspaceDeviceRegistry,
-            &RequesterRendezvousStartIntent,
-        ) -> Result<(), RequesterRendezvousStartRegistryValidationError>,
+            RequesterRendezvousStartIntent,
+        ) -> Result<
+            RegistryValidatedRequesterRendezvousStart,
+            RequesterRendezvousStartRegistryValidationError,
+        >,
     ) {
         let _ = validation;
     }
 
     #[test]
-    fn validation_surface_has_selected_borrowed_input_shape() {
+    fn validation_surface_has_selected_consuming_carrier_shape() {
         assert_validation_signature(validate_current_requester_rendezvous_start_intent);
     }
 
