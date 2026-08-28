@@ -53,6 +53,10 @@ pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 
 use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
 
+use crate::candidate_publication_requester_rendezvous_start_intent::{
+    RequesterRendezvousStartIntent, RequesterRendezvousTargetIntent,
+};
+
 /// Agent-owned lifetime boundary for one already-bound remote session.
 ///
 /// Construction performs ownership composition only. The retained binding remains private until a
@@ -71,6 +75,23 @@ impl RemoteSessionCapabilityRuntimeOwner {
     pub const fn new(bound_session: BoundRemoteSession) -> Self {
         Self { bound_session }
     }
+}
+
+/// Adapts one already-typed caller-nominated target through the exact authenticated-session owner.
+///
+/// This crate-private caller seam performs ownership/typing composition only. Requester identity
+/// remains sourced exclusively by the existing C03e-EH adapter from the retained authenticated
+/// application session; target identity remains exactly the consumed target intent.
+#[must_use]
+#[allow(
+    dead_code,
+    reason = "C03e-EJ materializes requester-specific post-auth target-intent caller ingress before separately gated control/wire activation"
+)]
+pub(crate) fn adapt_post_auth_requester_rendezvous_target_intent(
+    session_owner: &AuthenticatedRemoteSessionRuntimeOwner,
+    target_intent: RequesterRendezvousTargetIntent,
+) -> RequesterRendezvousStartIntent {
+    session_owner.requester_rendezvous_start_intent_from_target_intent(target_intent)
 }
 
 #[cfg(test)]
