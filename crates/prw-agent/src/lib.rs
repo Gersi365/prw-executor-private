@@ -5,6 +5,11 @@
 //! contract surface itself performs no socket I/O and creates no filesystem objects.
 
 pub mod candidate_publication_requester_rendezvous_runtime;
+#[allow(
+    dead_code,
+    reason = "C03e-DD materializes start-intent carrier for separately gated validation"
+)]
+pub(crate) mod candidate_publication_requester_rendezvous_start_intent;
 pub mod frame_codec;
 pub mod frame_object;
 #[cfg(target_os = "linux")]
