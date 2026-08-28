@@ -65,9 +65,7 @@ mod tests {
     use prw_policy::{Capability, Decision, PolicyEvaluator};
     use prw_session::AuthenticatedDeviceSession;
 
-    use super::{
-        RequesterRendezvousStartPolicySource, RequesterRendezvousStartPolicySourceError,
-    };
+    use super::{RequesterRendezvousStartPolicySource, RequesterRendezvousStartPolicySourceError};
 
     struct SignatureOnlyEvaluator;
 
