@@ -57,10 +57,8 @@ mod tests {
 
     use super::RequesterRendezvousStartIntent;
 
-    type IntentCtor =
-        fn(AuthenticatedDeviceSession, DeviceId) -> RequesterRendezvousStartIntent;
-    type SessionAccessor =
-        fn(&RequesterRendezvousStartIntent) -> &AuthenticatedDeviceSession;
+    type IntentCtor = fn(AuthenticatedDeviceSession, DeviceId) -> RequesterRendezvousStartIntent;
+    type SessionAccessor = fn(&RequesterRendezvousStartIntent) -> &AuthenticatedDeviceSession;
     type TargetAccessor = fn(&RequesterRendezvousStartIntent) -> &DeviceId;
 
     #[test]
