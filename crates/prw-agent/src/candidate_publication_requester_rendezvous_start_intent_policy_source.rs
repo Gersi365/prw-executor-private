@@ -13,7 +13,7 @@ use prw_session::AuthenticatedDeviceSession;
 /// Stable fail-closed failure while resolving the policy evaluator for one exact requester.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum RequesterRendezvousStartPolicySourceError {
+pub enum RequesterRendezvousStartPolicySourceError {
     /// No authoritative requester policy is currently available.
     Unavailable,
     /// The authoritative requester policy cannot be resolved deterministically.
@@ -44,7 +44,7 @@ impl std::error::Error for RequesterRendezvousStartPolicySourceError {}
 /// This trait selects policy source only. It does not evaluate a capability, create
 /// `PolicyAuthorizedRequesterRendezvousStart`, mutate requester/rendezvous provider state, or grant
 /// reusable registration authority.
-pub(crate) trait RequesterRendezvousStartPolicySource {
+pub trait RequesterRendezvousStartPolicySource {
     /// Existing policy evaluator type resolved by this source.
     type Evaluator: PolicyEvaluator + ?Sized;
 
