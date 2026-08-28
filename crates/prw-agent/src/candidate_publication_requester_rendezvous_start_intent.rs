@@ -37,6 +37,35 @@ pub mod composition;
 use prw_core::DeviceId;
 use prw_session::AuthenticatedDeviceSession;
 
+/// One unvalidated requester-nominated logical rendezvous target.
+///
+/// This crate-private value carries no requester identity and confers no authorization or current
+/// registration fact. A later separately gated authenticated-session adaptation may consume it
+/// without reinterpreting the exact logical `DeviceId`.
+pub struct RequesterRendezvousTargetIntent {
+    target_device_id: DeviceId,
+}
+
+impl RequesterRendezvousTargetIntent {
+    /// Retains exactly one explicit logical target without validation, authorization, or I/O.
+    #[must_use]
+    pub const fn new(target_device_id: DeviceId) -> Self {
+        Self { target_device_id }
+    }
+
+    /// Returns the exact caller-nominated logical target without deriving any authority from it.
+    #[must_use]
+    pub const fn target_device_id(&self) -> &DeviceId {
+        &self.target_device_id
+    }
+
+    /// Transfers ownership of the exact caller-nominated logical target without reinterpretation.
+    #[must_use]
+    pub fn into_target_device_id(self) -> DeviceId {
+        self.target_device_id
+    }
+}
+
 /// One unvalidated requester-side intent to begin rendezvous toward one logical target device.
 ///
 /// This value is deliberately neither `Copy` nor `Clone`. Possession is not authorization or a
