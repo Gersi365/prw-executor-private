@@ -115,7 +115,7 @@ pub struct RequesterRendezvousStartPolicyBinding {
 impl RequesterRendezvousStartPolicyBinding {
     /// Creates one construction-time logical requester policy binding.
     #[must_use]
-    pub fn new(
+    pub const fn new(
         workspace_id: WorkspaceId,
         user_id: UserId,
         device_id: DeviceId,
