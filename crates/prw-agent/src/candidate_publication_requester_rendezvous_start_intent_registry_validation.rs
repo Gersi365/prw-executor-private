@@ -95,8 +95,10 @@ impl RegistryValidatedRequesterRendezvousStart {
 pub fn validate_current_requester_rendezvous_start_intent(
     registry: &WorkspaceDeviceRegistry,
     intent: RequesterRendezvousStartIntent,
-) -> Result<RegistryValidatedRequesterRendezvousStart, RequesterRendezvousStartRegistryValidationError>
-{
+) -> Result<
+    RegistryValidatedRequesterRendezvousStart,
+    RequesterRendezvousStartRegistryValidationError,
+> {
     let requester = registry
         .validate_authenticated_session(intent.requester_session())
         .map_err(RequesterRendezvousStartRegistryValidationError::Registry)?;
