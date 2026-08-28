@@ -15,7 +15,7 @@ use prw_session::AuthenticatedDeviceSession;
 /// current-registration fact; later composition must separately establish requester currentness,
 /// target eligibility, workspace relationship, and the exact policy decision before provider
 /// mutation can be considered.
-pub(crate) struct RequesterRendezvousStartIntent {
+pub struct RequesterRendezvousStartIntent {
     requester_session: AuthenticatedDeviceSession,
     target_device_id: DeviceId,
 }
@@ -27,7 +27,7 @@ impl RequesterRendezvousStartIntent {
     /// evaluate policy, mutate requester/rendezvous authority, inspect transport identity, or
     /// perform I/O.
     #[must_use]
-    pub(crate) const fn new(
+    pub const fn new(
         requester_session: AuthenticatedDeviceSession,
         target_device_id: DeviceId,
     ) -> Self {
@@ -39,13 +39,13 @@ impl RequesterRendezvousStartIntent {
 
     /// Returns the already-authenticated requester session carried by this unvalidated intent.
     #[must_use]
-    pub(crate) const fn requester_session(&self) -> &AuthenticatedDeviceSession {
+    pub const fn requester_session(&self) -> &AuthenticatedDeviceSession {
         &self.requester_session
     }
 
     /// Returns the requester-nominated logical target, which is not yet registration authority.
     #[must_use]
-    pub(crate) const fn target_device_id(&self) -> &DeviceId {
+    pub const fn target_device_id(&self) -> &DeviceId {
         &self.target_device_id
     }
 }
