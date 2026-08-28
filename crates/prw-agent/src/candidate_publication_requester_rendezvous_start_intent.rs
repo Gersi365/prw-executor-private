@@ -13,6 +13,13 @@
 #[path = "candidate_publication_requester_rendezvous_start_intent_registry_validation.rs"]
 pub mod registry_validation;
 
+#[allow(
+    dead_code,
+    reason = "C03e-DK materializes policy admission before separately gated provider composition"
+)]
+#[path = "candidate_publication_requester_rendezvous_start_intent_policy_admission.rs"]
+pub mod policy_admission;
+
 use prw_core::DeviceId;
 use prw_session::AuthenticatedDeviceSession;
 
