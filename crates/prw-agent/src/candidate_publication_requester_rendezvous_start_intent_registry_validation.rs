@@ -28,7 +28,10 @@ impl fmt::Display for RequesterRendezvousStartRegistryValidationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Registry(error) => {
-                write!(formatter, "requester rendezvous registry validation failed: {error}")
+                write!(
+                    formatter,
+                    "requester rendezvous registry validation failed: {error}"
+                )
             }
             Self::WorkspaceMismatch => {
                 formatter.write_str("requester rendezvous target workspace mismatch")
@@ -141,8 +144,8 @@ mod tests {
     use crate::candidate_publication_requester_rendezvous_start_intent::RequesterRendezvousStartIntent;
 
     use super::{
-        RequesterRendezvousStartRegistryValidationError, validate_current_requester_rendezvous_start_intent,
-        validate_current_target,
+        RequesterRendezvousStartRegistryValidationError,
+        validate_current_requester_rendezvous_start_intent, validate_current_target,
     };
 
     fn public_identity(seed: u8) -> PublicIdentityMaterial {
@@ -197,8 +200,12 @@ mod tests {
     #[test]
     fn current_enrolled_active_same_workspace_target_passes() {
         let mut registry = WorkspaceDeviceRegistry::new();
-        let (workspace_id, _user_id, target_device_id) =
-            add_current_target(&mut registry, "workspace-df", "target-user-df", "target-device-df");
+        let (workspace_id, _user_id, target_device_id) = add_current_target(
+            &mut registry,
+            "workspace-df",
+            "target-user-df",
+            "target-device-df",
+        );
 
         assert_eq!(
             validate_current_target(&registry, &workspace_id, &target_device_id),
@@ -223,8 +230,12 @@ mod tests {
     #[test]
     fn revoked_target_fails_closed() {
         let mut registry = WorkspaceDeviceRegistry::new();
-        let (workspace_id, _user_id, target_device_id) =
-            add_current_target(&mut registry, "workspace-df", "target-user-df", "target-device-df");
+        let (workspace_id, _user_id, target_device_id) = add_current_target(
+            &mut registry,
+            "workspace-df",
+            "target-user-df",
+            "target-device-df",
+        );
         registry
             .revoke_device(&target_device_id)
             .expect("revoke target");
@@ -240,8 +251,12 @@ mod tests {
     #[test]
     fn suspended_target_membership_fails_before_workspace_comparison() {
         let mut registry = WorkspaceDeviceRegistry::new();
-        let (target_workspace_id, target_user_id, target_device_id) =
-            add_current_target(&mut registry, "target-workspace-df", "target-user-df", "target-device-df");
+        let (target_workspace_id, target_user_id, target_device_id) = add_current_target(
+            &mut registry,
+            "target-workspace-df",
+            "target-user-df",
+            "target-device-df",
+        );
         registry
             .suspend_membership(&target_workspace_id, &target_user_id)
             .expect("suspend target membership");
@@ -259,8 +274,12 @@ mod tests {
     #[test]
     fn removed_target_membership_fails_closed() {
         let mut registry = WorkspaceDeviceRegistry::new();
-        let (workspace_id, target_user_id, target_device_id) =
-            add_current_target(&mut registry, "workspace-df", "target-user-df", "target-device-df");
+        let (workspace_id, target_user_id, target_device_id) = add_current_target(
+            &mut registry,
+            "workspace-df",
+            "target-user-df",
+            "target-device-df",
+        );
         registry
             .remove_membership(&workspace_id, &target_user_id)
             .expect("remove target membership");
@@ -276,8 +295,12 @@ mod tests {
     #[test]
     fn active_cross_workspace_target_fails_closed() {
         let mut registry = WorkspaceDeviceRegistry::new();
-        let (_target_workspace_id, _target_user_id, target_device_id) =
-            add_current_target(&mut registry, "target-workspace-df", "target-user-df", "target-device-df");
+        let (_target_workspace_id, _target_user_id, target_device_id) = add_current_target(
+            &mut registry,
+            "target-workspace-df",
+            "target-user-df",
+            "target-device-df",
+        );
         let requester_workspace_id =
             WorkspaceId::new("requester-workspace-df").expect("workspace id");
 
