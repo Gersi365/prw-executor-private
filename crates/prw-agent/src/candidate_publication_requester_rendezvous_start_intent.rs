@@ -57,17 +57,17 @@ mod tests {
 
     use super::RequesterRendezvousStartIntent;
 
+    type IntentCtor =
+        fn(AuthenticatedDeviceSession, DeviceId) -> RequesterRendezvousStartIntent;
+    type SessionAccessor =
+        fn(&RequesterRendezvousStartIntent) -> &AuthenticatedDeviceSession;
+    type TargetAccessor = fn(&RequesterRendezvousStartIntent) -> &DeviceId;
+
     #[test]
     fn carrier_surface_preserves_selected_owned_input_and_read_only_output_shapes() {
-        let constructor: fn(
-            AuthenticatedDeviceSession,
-            DeviceId,
-        ) -> RequesterRendezvousStartIntent = RequesterRendezvousStartIntent::new;
-        let requester_session: fn(
-            &RequesterRendezvousStartIntent,
-        ) -> &AuthenticatedDeviceSession = RequesterRendezvousStartIntent::requester_session;
-        let target_device_id: fn(&RequesterRendezvousStartIntent) -> &DeviceId =
-            RequesterRendezvousStartIntent::target_device_id;
+        let constructor: IntentCtor = RequesterRendezvousStartIntent::new;
+        let requester_session: SessionAccessor = RequesterRendezvousStartIntent::requester_session;
+        let target_device_id: TargetAccessor = RequesterRendezvousStartIntent::target_device_id;
 
         let _ = (constructor, requester_session, target_device_id);
     }
