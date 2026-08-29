@@ -3,12 +3,15 @@
 //! C03e-FQ materializes only the C03e-FO-selected bounded spawned ownership seam. One exact
 //! authenticated-session owner remains inside a supervisor-retained `Arc<TokioMutex<Option<_>>>`
 //! cell while one spawned task borrows that owner mutably for exact FL execution. After normal or
-//! abnormal join, the supervisor recovers the exact owner by value. This module does not activate
-//! the persistent collection, close or reuse a peer, clean requester records, select reachability,
-//! dial targets, publish readiness, deploy, restart/recover the process, or merge.
+//! abnormal join, the supervisor recovers the exact owner by value. C03e-FS adds the recoverable
+//! persistent entry/completion custody, and C03e-FU adds only the separately selected repeated
+//! real-admission requester-aware integration. This module does not close or reuse a peer, clean
+//! requester records, select reachability, dial targets, publish readiness, deploy, restart/recover
+//! the process, or merge.
 
 use std::{future::Future, sync::Arc};
 
+use prw_core::DeviceId;
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::CapabilityDispatcher;
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -82,6 +85,81 @@ impl RecoverableSpawnedRequesterRendezvousWorkerCompletion {
         >,
     ) {
         (self.session_owner, self.result)
+    }
+}
+
+/// Ownership-bearing completion published by the FU repeated real-admission requester-aware path.
+///
+/// The authenticated logical `DeviceId`, exact recovered session owner, and exact FL/join terminal
+/// result remain one custody value. This envelope performs no peer disposition, requester cleanup,
+/// candidate/reachability continuation, dialing, retry, replacement worker, or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-FU materializes the FT-selected owner-bearing repeated-admission completion before separately gated higher-owner consumption"
+)]
+pub(super) struct RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion {
+    device_id: DeviceId,
+    session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+    result: Result<
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-FU retains exact requester-aware completion custody for separately gated higher-owner handling"
+)]
+impl RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion {
+    pub(super) const fn new(
+        device_id: DeviceId,
+        session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+        result: Result<
+            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) -> Self {
+        Self {
+            device_id,
+            session_owner,
+            result,
+        }
+    }
+
+    /// Returns the authenticated logical `DeviceId` that keyed the detached active entry.
+    #[must_use]
+    pub(super) const fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
+    /// Borrows the exact recovered authenticated-session owner.
+    #[must_use]
+    pub(super) const fn session_owner(&self) -> &AuthenticatedRemoteSessionRuntimeOwner {
+        &self.session_owner
+    }
+
+    /// Returns the exact requester-aware FL stop or existing bounded abnormal-join result.
+    pub(super) const fn result(
+        &self,
+    ) -> Result<
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    > {
+        self.result
+    }
+
+    /// Transfers the complete authenticated identity, owner and exact terminal result by value.
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        DeviceId,
+        AuthenticatedRemoteSessionRuntimeOwner,
+        Result<
+            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) {
+        (self.device_id, self.session_owner, self.result)
     }
 }
 
@@ -245,3 +323,8 @@ mod tests {
 }
 
 mod recoverable_persistent_requester_rendezvous_worker;
+#[allow(
+    dead_code,
+    reason = "C03e-FU materializes FT-selected repeated real-admission requester-aware persistent FL integration before separately gated higher-owner consumption"
+)]
+mod repeated_real_admission_requester_aware_persistent_fl_integration;
