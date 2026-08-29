@@ -41,7 +41,6 @@ impl RequesterRendezvousRetainedCustodyDrContinuation {
     }
 
     /// Borrows the exact terminal DR result without translating or flattening its failure class.
-    #[must_use]
     pub(super) const fn dr_result(&self) -> &Result<(), RequesterRendezvousStartCompositionError> {
         &self.dr_result
     }
@@ -49,7 +48,6 @@ impl RequesterRendezvousRetainedCustodyDrContinuation {
     /// Transfers the exact requester transaction and exact terminal DR result by value.
     ///
     /// This is custody transfer only and performs no stream I/O or response construction.
-    #[must_use]
     pub(super) fn into_parts(
         self,
     ) -> (
