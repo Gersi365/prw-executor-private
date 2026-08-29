@@ -24,6 +24,11 @@ mod remote_session_executor_runtime;
 )]
 pub(crate) mod remote_session_process_lifecycle_control;
 mod remote_session_worker_cancellation;
+#[allow(
+    dead_code,
+    reason = "C03e-FB materializes retained-custody DR continuation before separately gated response mapping"
+)]
+mod requester_rendezvous_retained_custody_dr_continuation;
 mod shared_current_capability_authority;
 
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
