@@ -1,0 +1,119 @@
+name: C03e-FP Source Patch Helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fp-source-patch-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Phase 152 C03e-FP: helper apply source patches'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact FP source patches
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              observed = text.count(old)
+              assert observed == count, f"{path}: expected {count} occurrences, found {observed} for {old!r}"
+              text = text.replace(old, new)
+              p.write_text(text)
+
+          parent = 'crates/prw-agent/src/remote_session_capability_runtime.rs'
+          replace_exact(
+              parent,
+              'mod requester_rendezvous_retained_custody_dr_continuation;\nmod shared_current_capability_authority;\n',
+              'mod requester_rendezvous_retained_custody_dr_continuation;\n#[allow(\n    dead_code,\n    reason = "C03e-FP materializes shared requester/rendezvous authority before separately gated spawned/persistent custody"\n)]\nmod shared_requester_rendezvous_authority;\nmod shared_current_capability_authority;\n',
+          )
+          replace_exact(
+              parent,
+              'pub use remote_session_worker_cancellation::{\n    RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,\n    remote_session_worker_cancellation_pair,\n};\npub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;\n',
+              'pub use remote_session_worker_cancellation::{\n    RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,\n    remote_session_worker_cancellation_pair,\n};\npub(crate) use shared_requester_rendezvous_authority::SharedRequesterRendezvousAuthority;\npub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;\n',
+          )
+
+          lifecycle = 'crates/prw-agent/src/remote_session_capability_runtime/requester_rendezvous_retained_custody_dr_continuation.rs'
+          replace_exact(
+              lifecycle,
+              'use super::{\n    AuthenticatedRemoteSessionPostAuthIngressTransactionError,\n    AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,\n    SharedCurrentCapabilityAuthority,\n};\n',
+              'use super::{\n    AuthenticatedRemoteSessionPostAuthIngressTransactionError,\n    AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,\n    SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,\n};\n',
+          )
+          replace_exact(
+              lifecycle,
+              'use crate::{\n    candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,\n    candidate_publication_requester_rendezvous_start_intent::{\n        composition::{\n            RequesterRendezvousStartCompositionError,\n            validate_authorize_and_register_requester_rendezvous_start,\n        },\n',
+              'use crate::candidate_publication_requester_rendezvous_start_intent::{\n    composition::RequesterRendezvousStartCompositionError,\n',
+          )
+          replace_exact(
+              lifecycle,
+              '        policy_source::RequesterRendezvousStartPolicySource,\n    },\n};\n',
+              '    policy_source::RequesterRendezvousStartPolicySource,\n};\n',
+          )
+          replace_exact(
+              lifecycle,
+              '    runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,\n',
+              '    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,\n',
+              count=1,
+          )
+          replace_exact(
+              lifecycle,
+              '    let dr_result = authority\n        .with_current_authority(|registry, _current_capability_policy| {\n            validate_authorize_and_register_requester_rendezvous_start(\n                registry,\n                policy_source,\n                runtime_owner,\n                start_intent,\n            )\n        })\n        .await;\n',
+              '    let dr_result = requester_rendezvous_authority\n        .validate_authorize_and_register_requester_rendezvous_start(\n            authority,\n            policy_source,\n            start_intent,\n        )\n        .await;\n',
+          )
+          replace_exact(
+              lifecycle,
+              '    requester_rendezvous_runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,\n',
+              '    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,\n',
+              count=2,
+          )
+          replace_exact(
+              lifecycle,
+              '            requester_rendezvous_runtime_owner,\n',
+              '            requester_rendezvous_authority,\n',
+              count=2,
+          )
+
+          executor = 'crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+          replace_exact(
+              executor,
+              '        requester_rendezvous_runtime_owner: &mut crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,\n',
+              '        requester_rendezvous_authority: &super::SharedRequesterRendezvousAuthority,\n',
+          )
+          replace_exact(
+              executor,
+              '                requester_rendezvous_runtime_owner,\n',
+              '                requester_rendezvous_authority,\n',
+              count=1,
+          )
+          replace_exact(
+              executor,
+              '    /// Both the authenticated-session owner and the process-local requester/rendezvous runtime\n    /// owner remain mutably borrowed caller custody for the entire synchronous drive. The exact FL\n',
+              '    /// The authenticated-session owner remains mutable caller custody while the shared\n    /// requester/rendezvous authority handle is borrowed for the entire synchronous drive. The exact FL\n',
+          )
+          replace_exact(
+              executor,
+              '        reason = "C03e-FN materializes the FM-selected borrowed executor seam before separately gated caller activation"\n',
+              '        reason = "C03e-FP adapts the FN borrowed executor seam to the FO-selected shared requester/rendezvous authority"\n',
+          )
+          print('FP_PATCH_ASSERTIONS_PASS')
+          PY
+      - name: Commit helper source patches
+        shell: bash
+        run: |
+          git config user.name Gersi365
+          git config user.email Gersi365@outlook.com
+          git add crates/prw-agent/src/remote_session_capability_runtime.rs \
+                  crates/prw-agent/src/remote_session_capability_runtime/requester_rendezvous_retained_custody_dr_continuation.rs \
+                  crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+          git diff --cached --check
+          git commit -m 'Phase 152 C03e-FP: helper apply source patches'
+          git push origin HEAD:phase-152-c03e-fp-source-patch-helper-noncanonical
