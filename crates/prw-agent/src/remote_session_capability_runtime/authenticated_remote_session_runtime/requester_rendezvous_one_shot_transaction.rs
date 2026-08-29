@@ -8,12 +8,12 @@
 
 use prw_remote_bridge::requester_rendezvous_target_request_io::receive_requester_rendezvous_target_request;
 
-use super::AuthenticatedRemoteSessionRuntimeOwner;
 use super::super::{
     RequesterRendezvousCorrelatedStartIntent, RequesterRendezvousOneShotTransactionError,
     adapt_decoded_requester_rendezvous_target_device_id,
     adapt_post_auth_requester_rendezvous_target_intent,
 };
+use super::AuthenticatedRemoteSessionRuntimeOwner;
 
 impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Receives and composes exactly one requester/rendezvous target request on one new stream.
@@ -45,16 +45,13 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     )]
     pub(crate) async fn receive_requester_rendezvous_start_intent_once(
         &mut self,
-    ) -> Result<
-        RequesterRendezvousCorrelatedStartIntent,
-        RequesterRendezvousOneShotTransactionError,
-    > {
+    ) -> Result<RequesterRendezvousCorrelatedStartIntent, RequesterRendezvousOneShotTransactionError>
+    {
         let mut stream = self.peer.accept_control_stream().await?;
         let request = receive_requester_rendezvous_target_request(&mut stream).await?;
         let request_id = request.request_id();
-        let target_intent = adapt_decoded_requester_rendezvous_target_device_id(
-            request.into_target_device_id(),
-        );
+        let target_intent =
+            adapt_decoded_requester_rendezvous_target_device_id(request.into_target_device_id());
         let start_intent = adapt_post_auth_requester_rendezvous_target_intent(self, target_intent);
         Ok((request_id, start_intent))
     }
