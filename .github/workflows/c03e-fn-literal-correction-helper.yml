@@ -1,0 +1,48 @@
+name: C03e-FN literal correction helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fn-literal-correction-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-152-c03e-fn-literal-correction-helper-noncanonical
+      - name: Apply exactly two audited literal replacements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          data = path.read_text(encoding='utf-8')
+
+          old_doc = '/// Returns the untouched rejected admission item by reference.'
+          new_doc = '/// Returns the untouched rejected admission item.'
+          old_fmt = ') -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {'
+          new_fmt = ') -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop{'
+
+          assert data.count(old_doc) == 1, data.count(old_doc)
+          assert data.count(old_fmt) == 1, data.count(old_fmt)
+
+          corrected = data.replace(old_doc, new_doc).replace(old_fmt, new_fmt)
+          path.write_text(corrected, encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          git diff -- crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+      - name: Commit corrected executor blob on helper branch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+          git commit -m 'Noncanonical helper: exact FN literal corrections'
+          git push origin HEAD:phase-152-c03e-fn-literal-correction-helper-noncanonical
