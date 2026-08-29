@@ -31,7 +31,7 @@ use crate::{
 /// Clones share only the outer [`Arc`]. The existing runtime owner and its provider state are never
 /// cloned or snapshotted. Operation callers cannot obtain the raw mutex, guard, runtime owner, or
 /// provider.
-pub(crate) struct SharedRequesterRendezvousAuthority {
+pub struct SharedRequesterRendezvousAuthority {
     runtime_owner: Arc<Mutex<CandidatePublicationRequesterRendezvousRuntimeOwner>>,
 }
 
@@ -49,7 +49,7 @@ impl SharedRequesterRendezvousAuthority {
     /// Construction performs no registration, authorization, I/O, task creation, readiness
     /// publication, peer disposition, or provider cloning.
     #[must_use]
-    pub(crate) fn new(runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner) -> Self {
+    pub fn new(runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner) -> Self {
         Self {
             runtime_owner: Arc::new(Mutex::new(runtime_owner)),
         }
@@ -68,7 +68,7 @@ impl SharedRequesterRendezvousAuthority {
     ///
     /// Returns the exact existing requester/rendezvous start composition error without translation,
     /// retry, fallback, replacement registration, provider reset, or peer close.
-    pub(crate) async fn validate_authorize_and_register_requester_rendezvous_start<
+    pub async fn validate_authorize_and_register_requester_rendezvous_start<
         P: PolicyEvaluator + Send + Sync,
         S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
     >(
