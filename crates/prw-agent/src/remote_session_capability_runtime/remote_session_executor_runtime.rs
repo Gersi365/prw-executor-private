@@ -1991,3 +1991,5 @@ impl RemoteSessionExecutorRuntime {
         )
     }
 }
+
+mod recoverable_spawned_requester_rendezvous_worker;
