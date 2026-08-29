@@ -55,6 +55,8 @@ use std::fmt;
 
 use prw_core::DeviceId;
 use prw_remote_bridge::{
+    RemoteBridgeError, capability_request_wire::CapabilityRequestWireError,
+    post_auth_control_stream_ingress::PostAuthControlStreamIngressError,
     remote_server_transport_runtime::RemoteServerTransportRuntimeError,
     remote_session_binding::BoundRemoteSession,
     requester_rendezvous_target_request_io::RequesterRendezvousTargetRequestIoError,
@@ -86,6 +88,86 @@ impl RemoteSessionCapabilityRuntimeOwner {
 
 /// Correlation remains separate from the authenticated requester/rendezvous start intent.
 pub(crate) type RequesterRendezvousCorrelatedStartIntent = (u64, RequesterRendezvousStartIntent);
+
+/// Typed successful result of one C03e-EV post-authenticated ingress transaction.
+#[allow(
+    dead_code,
+    reason = "C03e-EV materializes the one-transaction outcome before separately gated combined-loop integration"
+)]
+pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressOutcome {
+    /// Existing capability authorization, dispatch and same-stream response completed successfully.
+    CapabilityProcessed,
+    /// One strict requester/rendezvous target was composed only into the existing start intent.
+    RequesterRendezvous(RequesterRendezvousCorrelatedStartIntent),
+}
+
+/// Failure while processing exactly one C03e-EV post-authenticated ingress transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressTransactionError {
+    /// Accepting exactly one control stream from the retained authenticated peer failed.
+    Accept(RemoteServerTransportRuntimeError),
+    /// C03e-ET one-read ingress or strict requester/rendezvous wire handling failed.
+    Ingress(PostAuthControlStreamIngressError),
+    /// Existing capability authorization or typed dispatch failed.
+    Bridge(RemoteBridgeError),
+    /// Existing same-stream capability response I/O failed.
+    CapabilityResponse(CapabilityRequestWireError),
+}
+
+impl fmt::Display for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Accept(_) => "post-authenticated control-stream acceptance failed",
+            Self::Ingress(_) => "post-authenticated control-stream ingress failed",
+            Self::Bridge(_) => "post-authenticated capability bridge transaction failed",
+            Self::CapabilityResponse(_) => {
+                "post-authenticated capability response transmission failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Accept(error) => Some(error),
+            Self::Ingress(error) => Some(error),
+            Self::Bridge(error) => Some(error),
+            Self::CapabilityResponse(error) => Some(error),
+        }
+    }
+}
+
+impl From<RemoteServerTransportRuntimeError>
+    for AuthenticatedRemoteSessionPostAuthIngressTransactionError
+{
+    fn from(error: RemoteServerTransportRuntimeError) -> Self {
+        Self::Accept(error)
+    }
+}
+
+impl From<PostAuthControlStreamIngressError>
+    for AuthenticatedRemoteSessionPostAuthIngressTransactionError
+{
+    fn from(error: PostAuthControlStreamIngressError) -> Self {
+        Self::Ingress(error)
+    }
+}
+
+impl From<RemoteBridgeError> for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
+    fn from(error: RemoteBridgeError) -> Self {
+        Self::Bridge(error)
+    }
+}
+
+impl From<CapabilityRequestWireError>
+    for AuthenticatedRemoteSessionPostAuthIngressTransactionError
+{
+    fn from(error: CapabilityRequestWireError) -> Self {
+        Self::CapabilityResponse(error)
+    }
+}
 
 /// Failure while composing exactly one requester/rendezvous target request through an authenticated owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
