@@ -5,10 +5,11 @@
 //! exact `PRWZ` payload prefix through the existing strict requester/rendezvous decoder, and preserves
 //! every other frame plus the same stream as capability transaction custody. C03e-EZ extends only the
 //! requester/rendezvous typed outcome so the strict decoded request retains the exact same stream for
-//! a separately gated later response transaction. This module does not accept another stream,
-//! authenticate a session, authorize a capability, execute requester policy or provider logic, select
-//! candidates, define requester/rendezvous response semantics, retry I/O, close a peer, dial traffic,
-//! activate a loop/listener, or deploy anything.
+//! separately gated requester continuation. C03e-FF adds only the C03e-FE-selected consuming
+//! same-stream send surface for one already-constructed requester/rendezvous DR acknowledgement.
+//! This module does not accept another stream, authenticate a session, authorize a capability,
+//! execute requester policy or provider logic, construct requester response semantics, retry I/O,
+//! close a peer, select candidates, dial traffic, resume a loop/listener, or deploy anything.
 
 use std::fmt;
 
@@ -31,6 +32,38 @@ pub struct PostAuthRequesterRendezvousTransaction {
     stream: MeshControlStream,
 }
 
+/// Failure while sending one already-constructed requester/rendezvous DR acknowledgement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RequesterRendezvousDrAcknowledgementResponseIoError {
+    /// Existing bounded PRWM stream write or send-direction finish failed.
+    Runtime(MeshQuicRuntimeError),
+}
+
+impl fmt::Display for RequesterRendezvousDrAcknowledgementResponseIoError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Runtime(_) => {
+                formatter.write_str("requester rendezvous DR acknowledgement response I/O failed")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RequesterRendezvousDrAcknowledgementResponseIoError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Runtime(error) => Some(error),
+        }
+    }
+}
+
+impl From<MeshQuicRuntimeError> for RequesterRendezvousDrAcknowledgementResponseIoError {
+    fn from(error: MeshQuicRuntimeError) -> Self {
+        Self::Runtime(error)
+    }
+}
+
 impl PostAuthRequesterRendezvousTransaction {
     /// Borrows the exact strict requester/rendezvous request decoded from this retained stream.
     #[must_use]
@@ -45,6 +78,30 @@ impl PostAuthRequesterRendezvousTransaction {
     #[must_use]
     pub fn into_parts(self) -> (RequesterRendezvousTargetWireRequest, MeshControlStream) {
         (self.request, self.stream)
+    }
+
+    /// Consumes this requester/rendezvous custody envelope and sends exactly one already-constructed
+    /// DR acknowledgement frame on the exact same retained control stream.
+    ///
+    /// The caller must supply the frame already materialized by the requester/rendezvous DR
+    /// acknowledgement framing boundary. This method does not inspect or reconstruct DR semantics,
+    /// alter correlation, validate a second request, retry, return stream custody, close the peer, or
+    /// resume repeated ingress. The lower stream write finishes the QUIC send direction.
+    ///
+    /// # Errors
+    ///
+    /// Preserves the existing bounded stream write/finish/timeout failure under the requester-specific
+    /// response-I/O classification. A failure consumes this local transaction custody and is not a
+    /// semantic requester rejection.
+    pub async fn send_dr_acknowledgement_frame(
+        self,
+        acknowledgement_frame: &ControlFrame,
+    ) -> Result<(), RequesterRendezvousDrAcknowledgementResponseIoError> {
+        let Self { mut stream, .. } = self;
+        stream
+            .send_frame(acknowledgement_frame)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -138,14 +195,14 @@ impl From<RequesterRendezvousTargetWireError> for PostAuthControlStreamIngressEr
 /// The stream is consumed by value so lower transport custody cannot remain simultaneously with the
 /// caller. A capability outcome retains the exact already-read frame and that exact stream for the
 /// existing same-stream response. A requester/rendezvous outcome retains the exact strict decoded
-/// request and that exact stream by value for a separately gated later response transaction.
+/// request and that exact stream by value for the separately selected consuming response transaction.
 ///
 /// # Errors
 ///
 /// Preserves one bounded stream receive failure as [`PostAuthControlStreamIngressError::Runtime`].
 /// If and only if the exact `PRWZ` prefix selects requester/rendezvous, strict decoder failure is
 /// preserved as [`PostAuthControlStreamIngressError::RequesterRendezvousWire`]. No fallback decode,
-/// retry, second read, response write or peer close is performed.
+/// retry, second read, response write or peer close is performed by this receive operation.
 pub async fn receive_post_auth_control_stream_ingress(
     mut stream: MeshControlStream,
 ) -> Result<PostAuthControlStreamIngress, PostAuthControlStreamIngressError> {
@@ -173,10 +230,14 @@ fn is_requester_rendezvous_family(frame: &ControlFrame) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use prw_remote_transport::{ControlFrame, ControlMessageKind, runtime::MeshControlStream};
+    use prw_remote_transport::{
+        ControlFrame, ControlMessageKind,
+        runtime::{MeshControlStream, MeshQuicRuntimeError},
+    };
 
     use super::{
-        PostAuthRequesterRendezvousTransaction, is_requester_rendezvous_family,
+        PostAuthRequesterRendezvousTransaction,
+        RequesterRendezvousDrAcknowledgementResponseIoError, is_requester_rendezvous_family,
         receive_post_auth_control_stream_ingress,
     };
     use crate::requester_rendezvous_target_request_wire::{
@@ -201,6 +262,16 @@ mod tests {
         let _ = receive_post_auth_control_stream_ingress;
         assert_requester_custody_transfer_signature(
             PostAuthRequesterRendezvousTransaction::into_parts,
+        );
+    }
+
+    #[test]
+    fn requester_dr_acknowledgement_send_surface_is_consuming_and_requester_specific() {
+        let _ = PostAuthRequesterRendezvousTransaction::send_dr_acknowledgement_frame;
+        let error = MeshQuicRuntimeError::WriteFrame;
+        assert_eq!(
+            RequesterRendezvousDrAcknowledgementResponseIoError::from(error),
+            RequesterRendezvousDrAcknowledgementResponseIoError::Runtime(error)
         );
     }
 
