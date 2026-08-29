@@ -1,0 +1,81 @@
+name: C03e-FS Clippy Correction Helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fs-clippy-correction-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact lint-only corrections
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs")
+          text = path.read_text()
+          old_import = '''use crate::remote_session_capability_runtime::{\n    RemoteSessionPersistentCollectionConfigError, RemoteSessionWorkerAdmissionRejectionReason,\n    RemoteSessionWorkerCancellationController, remote_session_worker_cancellation_pair,\n};'''
+          new_import = '''use crate::remote_session_capability_runtime::{\n    RemoteSessionPersistentCollectionConfigError, RemoteSessionWorkerAdmissionRejectionReason,\n    RemoteSessionWorkerCancellationController,\n};'''
+          if old_import in text:
+              if text.count(old_import) != 1:
+                  raise SystemExit("unexpected top-level cancellation import count")
+              text = text.replace(old_import, new_import, 1)
+          elif new_import not in text:
+              raise SystemExit("expected top-level import block not found")
+          old_test_import = '''    use super::{\n        RecoverablePersistentWorkerEntry, RemoteSessionSpawnedWorkerJoinError,\n        RemoteSessionWorkerAdmissionRejectionReason, reap_ready_recoverable_workers,\n        remote_session_worker_cancellation_pair, run_recoverable_persistent_worker_collection,\n    };'''
+          new_test_import = '''    use super::{\n        RecoverablePersistentWorkerEntry, RemoteSessionSpawnedWorkerJoinError,\n        RemoteSessionWorkerAdmissionRejectionReason, reap_ready_recoverable_workers,\n        run_recoverable_persistent_worker_collection,\n    };\n    use crate::remote_session_capability_runtime::remote_session_worker_cancellation_pair;'''
+          if old_test_import in text:
+              if text.count(old_test_import) != 1:
+                  raise SystemExit("unexpected test import count")
+              text = text.replace(old_test_import, new_test_import, 1)
+          elif new_test_import not in text:
+              raise SystemExit("expected test import block not found")
+          old_result = '''    #[must_use]\n    pub(super) const fn result(&self) -> &Result<T, RemoteSessionSpawnedWorkerJoinError> {'''
+          new_result = '''    pub(super) const fn result(&self) -> &Result<T, RemoteSessionSpawnedWorkerJoinError> {'''
+          if old_result in text:
+              if text.count(old_result) != 1:
+                  raise SystemExit("unexpected result accessor count")
+              text = text.replace(old_result, new_result, 1)
+          elif new_result not in text:
+              raise SystemExit("expected result accessor not found")
+          old_parts = '''    #[must_use]\n    pub(super) fn into_parts(self) -> (K, O, Result<T, RemoteSessionSpawnedWorkerJoinError>) {'''
+          new_parts = '''    pub(super) fn into_parts(self) -> (K, O, Result<T, RemoteSessionSpawnedWorkerJoinError>) {'''
+          if old_parts in text:
+              if text.count(old_parts) != 1:
+                  raise SystemExit("unexpected into_parts count")
+              text = text.replace(old_parts, new_parts, 1)
+          elif new_parts not in text:
+              raise SystemExit("expected into_parts accessor not found")
+          path.write_text(text)
+      - name: Run rustfmt
+        shell: bash
+        run: cargo fmt --all
+      - name: Guard correction scope
+        shell: python
+        run: |
+          import subprocess
+          allowed = {"crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs"}
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected corrected paths: {sorted(unexpected)}")
+          print("changed paths:", sorted(changed))
+      - name: Commit helper correction when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No helper correction needed"
+            exit 0
+          fi
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs
+          git commit -m "Phase 152 C03e-FS helper: normalize Clippy boundaries"
+          git push
