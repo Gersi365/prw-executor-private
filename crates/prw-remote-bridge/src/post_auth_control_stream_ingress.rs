@@ -3,10 +3,12 @@
 //! C03e-ET materializes only the C03e-ES-selected one-read family-custody boundary on one already
 //! accepted authenticated control stream. The bridge reads exactly one bounded PRWM frame, routes an
 //! exact `PRWZ` payload prefix through the existing strict requester/rendezvous decoder, and preserves
-//! every other frame plus the same stream as capability transaction custody. This module does not
-//! accept another stream, authenticate a session, authorize a capability, execute requester policy or
-//! provider logic, select candidates, define requester/rendezvous response semantics, retry I/O,
-//! close a peer, dial traffic, activate a loop/listener, or deploy anything.
+//! every other frame plus the same stream as capability transaction custody. C03e-EZ extends only the
+//! requester/rendezvous typed outcome so the strict decoded request retains the exact same stream for
+//! a separately gated later response transaction. This module does not accept another stream,
+//! authenticate a session, authorize a capability, execute requester policy or provider logic, select
+//! candidates, define requester/rendezvous response semantics, retry I/O, close a peer, dial traffic,
+//! activate a loop/listener, or deploy anything.
 
 use std::fmt;
 
@@ -22,6 +24,29 @@ use crate::{
         RequesterRendezvousTargetWireRequest, decode_requester_rendezvous_target_request_frame,
     },
 };
+
+/// One strict requester/rendezvous transaction retaining exact same-stream response custody.
+pub struct PostAuthRequesterRendezvousTransaction {
+    request: RequesterRendezvousTargetWireRequest,
+    stream: MeshControlStream,
+}
+
+impl PostAuthRequesterRendezvousTransaction {
+    /// Borrows the exact strict requester/rendezvous request decoded from this retained stream.
+    #[must_use]
+    pub const fn request(&self) -> &RequesterRendezvousTargetWireRequest {
+        &self.request
+    }
+
+    /// Transfers the exact strict decoded request and exact same already-accepted stream by value.
+    ///
+    /// This is custody transfer only. It performs no response construction/write, second read,
+    /// retry, close, requester/provider authority, target resolution, candidate selection or dialing.
+    #[must_use]
+    pub fn into_parts(self) -> (RequesterRendezvousTargetWireRequest, MeshControlStream) {
+        (self.request, self.stream)
+    }
+}
 
 /// One already-read capability transaction that retains same-stream response custody.
 pub struct PostAuthCapabilityTransaction {
@@ -53,8 +78,8 @@ impl PostAuthCapabilityTransaction {
 
 /// Typed result of one bridge-owned post-authenticated control-stream read and family selection.
 pub enum PostAuthControlStreamIngress {
-    /// Exact `PRWZ` prefix was observed and the existing strict requester/rendezvous decoder passed.
-    RequesterRendezvous(RequesterRendezvousTargetWireRequest),
+    /// Exact `PRWZ` prefix was observed, strict decode passed, and same-stream custody is retained.
+    RequesterRendezvous(PostAuthRequesterRendezvousTransaction),
     /// Any non-`PRWZ` frame remains on the legacy capability path with same-stream custody retained.
     Capability(PostAuthCapabilityTransaction),
 }
@@ -112,8 +137,8 @@ impl From<RequesterRendezvousTargetWireError> for PostAuthControlStreamIngressEr
 ///
 /// The stream is consumed by value so lower transport custody cannot remain simultaneously with the
 /// caller. A capability outcome retains the exact already-read frame and that exact stream for the
-/// existing same-stream response. A requester/rendezvous outcome returns only the strict decoded
-/// request; no requester response semantics are introduced here.
+/// existing same-stream response. A requester/rendezvous outcome retains the exact strict decoded
+/// request and that exact stream by value for a separately gated later response transaction.
 ///
 /// # Errors
 ///
@@ -127,7 +152,9 @@ pub async fn receive_post_auth_control_stream_ingress(
     let frame = stream.receive_frame().await?;
     if is_requester_rendezvous_family(&frame) {
         let request = decode_requester_rendezvous_target_request_frame(&frame)?;
-        return Ok(PostAuthControlStreamIngress::RequesterRendezvous(request));
+        return Ok(PostAuthControlStreamIngress::RequesterRendezvous(
+            PostAuthRequesterRendezvousTransaction { request, stream },
+        ));
     }
 
     Ok(PostAuthControlStreamIngress::Capability(
@@ -146,20 +173,35 @@ fn is_requester_rendezvous_family(frame: &ControlFrame) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use prw_remote_transport::{ControlFrame, ControlMessageKind};
+    use prw_remote_transport::{ControlFrame, ControlMessageKind, runtime::MeshControlStream};
 
-    use super::{is_requester_rendezvous_family, receive_post_auth_control_stream_ingress};
+    use super::{
+        PostAuthRequesterRendezvousTransaction, is_requester_rendezvous_family,
+        receive_post_auth_control_stream_ingress,
+    };
     use crate::requester_rendezvous_target_request_wire::{
-        RequesterRendezvousTargetWireError, decode_requester_rendezvous_target_request_frame,
+        RequesterRendezvousTargetWireError, RequesterRendezvousTargetWireRequest,
+        decode_requester_rendezvous_target_request_frame,
     };
 
     fn frame(kind: ControlMessageKind, payload: &[u8]) -> ControlFrame {
         ControlFrame::new(kind, 17, payload.to_vec()).expect("bounded test frame must be valid")
     }
 
+    fn assert_requester_custody_transfer_signature(
+        transfer: fn(
+            PostAuthRequesterRendezvousTransaction,
+        ) -> (RequesterRendezvousTargetWireRequest, MeshControlStream),
+    ) {
+        let _ = transfer;
+    }
+
     #[test]
     fn ingress_surface_exposes_only_one_stream_consuming_receive_operation() {
         let _ = receive_post_auth_control_stream_ingress;
+        assert_requester_custody_transfer_signature(
+            PostAuthRequesterRendezvousTransaction::into_parts,
+        );
     }
 
     #[test]

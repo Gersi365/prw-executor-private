@@ -5,9 +5,11 @@
 //! selected single-owner one-transaction post-authenticated ingress seam while leaving the ER method
 //! itself unchanged and uninvoked. C03e-EX adds the isolated C03e-EW-selected repeated ingress loop
 //! and executor-neutral cancellation-aware worker seam without integrating either into active runtime
-//! ownership. The existing capability loop and worker do not invoke these seams. None of these seams
-//! activates requester/rendezvous authority/provider execution, requester response semantics, retry,
-//! peer-close policy, dialing, readiness publication, or runtime activation.
+//! ownership. C03e-EZ threads the C03e-EY-selected exact requester response-stream custody only
+//! through the ET -> EV -> EX handoff while keeping the continuation uninvoked. The existing
+//! capability loop and worker do not invoke these seams. None of these seams activates
+//! requester/rendezvous authority/provider execution, requester response semantics, retry, peer-close
+//! policy, dialing, readiness publication, or runtime activation.
 
 use std::{
     future::{Future, poll_fn},
@@ -28,7 +30,8 @@ use super::super::{
     AuthenticatedRemoteSessionPostAuthIngressOutcome,
     AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     RequesterRendezvousCorrelatedStartIntent, RequesterRendezvousOneShotTransactionError,
-    SharedCurrentCapabilityAuthority, adapt_decoded_requester_rendezvous_target_device_id,
+    RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority,
+    adapt_decoded_requester_rendezvous_target_device_id,
     adapt_post_auth_requester_rendezvous_target_intent,
 };
 use super::AuthenticatedRemoteSessionRuntimeOwner;
@@ -46,11 +49,12 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// stream retained by the bridge custody envelope for response I/O. No request re-read or stream
     /// replacement occurs.
     ///
-    /// Requester/rendezvous-family processing preserves outer `request_id` only as correlation,
-    /// consumes the strict decoded logical target `DeviceId`, composes it through the existing C03e-EO
-    /// then C03e-EJ helpers, and returns the existing correlated non-authoritative start-intent shape.
-    /// It stops before C03e-DV, registry/requester-policy/provider execution, candidate selection,
-    /// requester response construction/write, or dialing.
+    /// Requester/rendezvous-family processing keeps the strict decoded request together with the exact
+    /// same ET stream, reads the nominated logical target only from that request, composes it through
+    /// the existing C03e-EO then C03e-EJ helpers, and returns one C03e-EZ response-stream custody
+    /// handoff. The request's outer `request_id` remains correlation only inside the retained strict
+    /// request. Processing stops before C03e-DV, registry/requester-policy/provider execution,
+    /// candidate selection, requester response construction/write, or dialing.
     ///
     /// The method performs one transaction only. It does not replace or invoke the existing
     /// capability loop/worker, does not invoke the isolated C03e-ER accept seam, and does not create a
@@ -100,18 +104,19 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
                 transaction.send_response_frame(&response).await?;
                 Ok(AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed)
             }
-            PostAuthControlStreamIngress::RequesterRendezvous(request) => {
-                let request_id = request.request_id();
+            PostAuthControlStreamIngress::RequesterRendezvous(transaction) => {
                 let target_intent = adapt_decoded_requester_rendezvous_target_device_id(
-                    request.into_target_device_id(),
+                    transaction.request().target_device_id().clone(),
                 );
                 let start_intent =
                     adapt_post_auth_requester_rendezvous_target_intent(self, target_intent);
                 Ok(
-                    AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous((
-                        request_id,
-                        start_intent,
-                    )),
+                    AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(
+                        Box::new(RequesterRendezvousResponseStreamCustodyHandoff::new(
+                            transaction,
+                            start_intent,
+                        )),
+                    ),
                 )
             }
         }
@@ -121,9 +126,9 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     ///
     /// Exactly one C03e-EV transaction is in flight per iteration. Verifier time is sampled once
     /// immediately before each EV invocation. Capability success is the only outcome that reaches the
-    /// next iteration. One requester/rendezvous result is a typed handoff barrier and returns the
-    /// existing correlated non-authoritative start intent without accepting another stream. The first
-    /// EV transaction failure terminates the loop unchanged.
+    /// next iteration. One requester/rendezvous result is a typed C03e-EZ handoff barrier retaining
+    /// the strict request, exact response stream and session-derived start intent without accepting
+    /// another stream. The first EV transaction failure terminates the loop unchanged.
     ///
     /// This method never calls `accept_control_stream()` directly and never invokes the historical
     /// capability-only `process_one_capability_request(...)` path. It therefore introduces no second
@@ -149,7 +154,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         mut verifier_time_unix_seconds: T,
         dispatcher: &mut D,
     ) -> Result<
-        RequesterRendezvousCorrelatedStartIntent,
+        RequesterRendezvousResponseStreamCustodyHandoff,
         AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     > {
         loop {
@@ -164,7 +169,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             {
                 AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed => {}
                 AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(handoff) => {
-                    return Ok(handoff);
+                    return Ok(*handoff);
                 }
             }
         }
@@ -180,7 +185,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     ///
     /// Return classes are intentionally minimal and distinguishable:
     ///
-    /// - `Ok(Some(handoff))` is the requester/rendezvous handoff barrier;
+    /// - `Ok(Some(handoff))` is the requester/rendezvous response-stream custody handoff barrier;
     /// - `Ok(None)` is caller-owned cancellation;
     /// - `Err(error)` is the first unchanged C03e-EV transaction failure.
     ///
@@ -208,7 +213,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         dispatcher: &mut D,
         cancellation: C,
     ) -> Result<
-        Option<RequesterRendezvousCorrelatedStartIntent>,
+        Option<RequesterRendezvousResponseStreamCustodyHandoff>,
         AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     > {
         {
