@@ -1,18 +1,22 @@
-//! Agent-owned retained-custody requester/rendezvous DR continuation and terminal response composition.
+//! Agent-owned retained-custody requester/rendezvous DR continuation, terminal response composition,
+//! and isolated post-terminal serial lifecycle.
 //!
 //! C03e-FB materializes the C03e-FA-selected continuation from one exact C03e-EZ response-stream
 //! custody handoff through the existing shared-current authority read and existing C03e-DR
 //! DI -> DP -> DK -> DN composition. The exact bridge requester transaction survives both DR success
 //! and DR failure. C03e-FH adds only the C03e-FG-selected Agent-owned terminal composition from that
 //! exact retained DR result through the existing C03e-FD pure acknowledgement framing boundary into
-//! the existing C03e-FF consuming same-stream send surface. This module still performs no second
-//! read, loop resume, peer-close policy, candidate/reachability selection, dialing, runtime
+//! the existing C03e-FF consuming same-stream send surface. C03e-FJ adds only the C03e-FI-selected
+//! isolated serial lifecycle that resumes the existing EV/EX mixed-family ingress after FH success
+//! and fail-stops on existing ingress or requester-response failure. This module still performs no
+//! automatic peer close, cancellation widening, candidate/reachability selection, dialing, runtime
 //! activation, deployment or merge.
 
 use std::fmt;
 
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
+    CapabilityDispatcher,
     post_auth_control_stream_ingress::{
         PostAuthRequesterRendezvousTransaction, RequesterRendezvousDrAcknowledgementResponseIoError,
     },
@@ -22,7 +26,10 @@ use prw_remote_bridge::{
     },
 };
 
-use super::{RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority};
+use super::{
+    AuthenticatedRemoteSessionPostAuthIngressTransactionError, AuthenticatedRemoteSessionRuntimeOwner,
+    RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority,
+};
 use crate::{
     candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
     candidate_publication_requester_rendezvous_start_intent::{
@@ -114,6 +121,50 @@ impl From<RequesterRendezvousDrAcknowledgementResponseIoError>
     }
 }
 
+/// Failure while running the isolated C03e-FI-selected serial post-terminal requester lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum RequesterRendezvousPostTerminalResponseSerialLifecycleError {
+    /// Existing EV/EX mixed-family ingress failed before a requester response transaction completed.
+    Ingress(AuthenticatedRemoteSessionPostAuthIngressTransactionError),
+    /// Existing FH requester terminal response composition failed after one requester handoff.
+    RequesterResponse(RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError),
+}
+
+impl fmt::Display for RequesterRendezvousPostTerminalResponseSerialLifecycleError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Ingress(_) => "post-authenticated mixed-family ingress failed",
+            Self::RequesterResponse(_) => "requester rendezvous terminal response failed",
+        })
+    }
+}
+
+impl std::error::Error for RequesterRendezvousPostTerminalResponseSerialLifecycleError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Ingress(error) => Some(error),
+            Self::RequesterResponse(error) => Some(error),
+        }
+    }
+}
+
+impl From<AuthenticatedRemoteSessionPostAuthIngressTransactionError>
+    for RequesterRendezvousPostTerminalResponseSerialLifecycleError
+{
+    fn from(error: AuthenticatedRemoteSessionPostAuthIngressTransactionError) -> Self {
+        Self::Ingress(error)
+    }
+}
+
+impl From<RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>
+    for RequesterRendezvousPostTerminalResponseSerialLifecycleError
+{
+    fn from(error: RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError) -> Self {
+        Self::RequesterResponse(error)
+    }
+}
+
 /// Consumes one exact retained DR continuation and completes exactly one terminal acknowledgement
 /// response through the existing FD framing and FF same-stream send boundaries.
 ///
@@ -190,6 +241,60 @@ pub(super) async fn continue_requester_rendezvous_retained_custody_through_dr<
     }
 }
 
+/// Runs the isolated C03e-FI-selected requester-aware serial post-authenticated lifecycle.
+///
+/// The existing EV/EX mixed-family ingress remains the only stream-accept/read loop. It runs until
+/// either the first ingress failure or one requester/rendezvous handoff. A requester handoff is
+/// consumed exactly once by existing FB DR continuation and then exactly once by existing FH terminal
+/// acknowledgement composition. Only FH success reaches the next EV/EX cycle. A successfully sent
+/// generic rejected acknowledgement is therefore transaction-complete and also resumes serial
+/// ingress. No EV/EX cycle overlaps requester DR/response custody.
+///
+/// This seam creates no second acceptor, task, channel, queue, retry, resend, replacement stream,
+/// duplicate acknowledgement, automatic peer close, cancellation race, candidate/reachability
+/// continuation, target dial, runtime/listener activation, deployment or merge behavior.
+///
+/// # Errors
+///
+/// Returns [`RequesterRendezvousPostTerminalResponseSerialLifecycleError::Ingress`] for the exact
+/// first existing EV/EX ingress failure. Returns
+/// [`RequesterRendezvousPostTerminalResponseSerialLifecycleError::RequesterResponse`] for the exact
+/// existing FH `Frame` or `ResponseIo` failure. Either failure stops this serial lifecycle before
+/// another EV/EX ingress cycle begins.
+pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifecycle<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> u64 + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+) -> Result<(), RequesterRendezvousPostTerminalResponseSerialLifecycleError> {
+    loop {
+        let handoff = session_owner
+            .run_repeated_post_auth_control_stream_ingress(
+                authority,
+                &mut verifier_time_unix_seconds,
+                dispatcher,
+            )
+            .await?;
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            authority,
+            policy_source,
+            requester_rendezvous_runtime_owner,
+            handoff,
+        )
+        .await;
+
+        complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await?;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use prw_remote_bridge::{
@@ -198,9 +303,11 @@ mod tests {
     };
 
     use super::{
+        RequesterRendezvousPostTerminalResponseSerialLifecycleError,
         RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
         complete_requester_rendezvous_terminal_dr_acknowledgement_response,
     };
+    use crate::remote_session_capability_runtime::AuthenticatedRemoteSessionPostAuthIngressTransactionError;
 
     fn assert_frame_error_conversion(
         conversion: fn(
@@ -220,6 +327,22 @@ mod tests {
         let _ = conversion;
     }
 
+    fn assert_ingress_lifecycle_error_conversion(
+        conversion: fn(
+            AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+        ) -> RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+    ) {
+        let _ = conversion;
+    }
+
+    fn assert_requester_response_lifecycle_error_conversion(
+        conversion: fn(
+            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+        ) -> RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+    ) {
+        let _ = conversion;
+    }
+
     #[test]
     fn terminal_dr_acknowledgement_response_composition_surface_is_materialized() {
         let _ = complete_requester_rendezvous_terminal_dr_acknowledgement_response;
@@ -232,6 +355,16 @@ mod tests {
         );
         assert_response_io_error_conversion(
             RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::from,
+        );
+    }
+
+    #[test]
+    fn serial_lifecycle_error_family_preserves_ingress_and_requester_response_categories() {
+        assert_ingress_lifecycle_error_conversion(
+            RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
+        );
+        assert_requester_response_lifecycle_error_conversion(
+            RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
         );
     }
 }
