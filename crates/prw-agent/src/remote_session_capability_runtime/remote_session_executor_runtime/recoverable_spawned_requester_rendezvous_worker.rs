@@ -163,6 +163,71 @@ impl RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-FW materializes the FV-selected two-branch peer-disposition classifier before a separately gated runtime consumer invokes it"
+)]
+enum RecoverableRequesterAwarePeerDisposition {
+    OrderlyShutdown,
+    TerminalFailure,
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-FW materializes the FV-selected exact terminal-class partition for the higher-owner completion consumer"
+)]
+fn select_recoverable_requester_aware_peer_disposition(
+    result: &Result<
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RecoverableRequesterAwarePeerDisposition {
+    match result {
+        Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled) => {
+            RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
+        }
+        Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(_)) | Err(_) => {
+            RecoverableRequesterAwarePeerDisposition::TerminalFailure
+        }
+    }
+}
+
+/// Consumes one exact FU completion through the C03e-FV-selected terminal peer disposition.
+///
+/// Cancellation reuses the existing consuming orderly-shutdown code-4 close seam. Typed FL failure
+/// and abnormal join consume the recovered owner through the dedicated requester-aware code-6
+/// terminal-failure close seam. The authenticated `DeviceId` and exact unchanged FL/join result are
+/// returned only after owner disposition. No peer/owner, requester cleanup authority, restart token,
+/// candidate/reachability state, dial target, retry, reconnect, deployment, or merge capability is
+/// returned or created.
+#[allow(
+    dead_code,
+    reason = "C03e-FW materializes the FV-selected higher-owner completion consumer before separately gated runtime integration"
+)]
+pub(super) fn dispose_recoverable_repeated_real_admission_requester_aware_worker_completion(
+    completion: RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
+) -> (
+    DeviceId,
+    Result<
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) {
+    let (device_id, session_owner, result) = completion.into_parts();
+
+    match select_recoverable_requester_aware_peer_disposition(&result) {
+        RecoverableRequesterAwarePeerDisposition::OrderlyShutdown => {
+            session_owner.close_for_orderly_shutdown();
+        }
+        RecoverableRequesterAwarePeerDisposition::TerminalFailure => {
+            session_owner.close_for_requester_aware_terminal_failure();
+        }
+    }
+
+    (device_id, result)
+}
+
 async fn join_and_recover_owned_value<T, W>(
     owner_cell: Arc<Mutex<Option<T>>>,
     worker_handle: JoinHandle<W>,
@@ -263,9 +328,80 @@ impl RemoteSessionExecutorRuntime {
 mod tests {
     use std::sync::Arc;
 
+    use prw_core::DeviceId;
+    use prw_remote_bridge::RemoteBridgeError;
     use tokio::{runtime::Builder, sync::Mutex};
 
-    use super::{RemoteSessionSpawnedWorkerJoinError, join_and_recover_owned_value};
+    use super::{
+        RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
+        RecoverableRequesterAwarePeerDisposition,
+        RemoteSessionSpawnedWorkerJoinError,
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
+        join_and_recover_owned_value, select_recoverable_requester_aware_peer_disposition,
+    };
+    use crate::remote_session_capability_runtime::{
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+        requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+    };
+
+    fn assert_completion_disposer_signature(
+        disposer: fn(
+            RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
+        ) -> (
+            DeviceId,
+            Result<
+                RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ),
+    ) {
+        let _ = disposer;
+    }
+
+    #[test]
+    fn completion_disposer_consumes_exact_fu_completion_shape() {
+        assert_completion_disposer_signature(
+            dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
+        );
+    }
+
+    #[test]
+    fn cancellation_selects_orderly_shutdown_peer_disposition() {
+        let result = Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled);
+
+        assert_eq!(
+            select_recoverable_requester_aware_peer_disposition(&result),
+            RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
+        );
+    }
+
+    #[test]
+    fn typed_fl_failure_selects_terminal_failure_peer_disposition() {
+        let failure = RequesterRendezvousPostTerminalResponseSerialLifecycleError::Ingress(
+            AuthenticatedRemoteSessionPostAuthIngressTransactionError::Bridge(
+                RemoteBridgeError::SessionExpired,
+            ),
+        );
+        let result = Ok(
+            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(failure),
+        );
+
+        assert_eq!(
+            select_recoverable_requester_aware_peer_disposition(&result),
+            RecoverableRequesterAwarePeerDisposition::TerminalFailure
+        );
+    }
+
+    #[test]
+    fn abnormal_join_selects_terminal_failure_peer_disposition() {
+        let result = Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion);
+
+        assert_eq!(
+            select_recoverable_requester_aware_peer_disposition(&result),
+            RecoverableRequesterAwarePeerDisposition::TerminalFailure
+        );
+    }
 
     #[test]
     fn retained_cell_recovers_exact_owner_after_normal_join() {
