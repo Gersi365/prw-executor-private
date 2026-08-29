@@ -98,6 +98,74 @@ impl CandidatePublicationPostCommitRequesterCleanupOutcome {
     }
 }
 
+/// Agent-side projection of one completed FY candidate-publication attempt.
+///
+/// `semantic_result` is exactly the provider-neutral bridge input used by the existing terminal
+/// result codec. `cleanup` is present only after a definite durable commit and remains internal;
+/// its failure cannot rewrite the semantic result into `Rejected`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CandidatePublicationTerminalResultProjection {
+    semantic_result: Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+    cleanup: Option<Result<(), RequesterRendezvousLifecycleError>>,
+}
+
+impl CandidatePublicationTerminalResultProjection {
+    /// Returns the exact bridge-compatible candidate-publication semantic result.
+    pub(crate) const fn semantic_result(
+        self,
+    ) -> Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError> {
+        self.semantic_result
+    }
+
+    /// Returns post-commit requester cleanup disposition when a durable commit occurred.
+    pub(crate) const fn cleanup_result(
+        self,
+    ) -> Option<Result<(), RequesterRendezvousLifecycleError>> {
+        self.cleanup
+    }
+
+    /// Transfers both projection channels without flattening either classification.
+    pub(crate) const fn into_parts(
+        self,
+    ) -> (
+        Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
+        Option<Result<(), RequesterRendezvousLifecycleError>>,
+    ) {
+        (self.semantic_result, self.cleanup)
+    }
+}
+
+fn project_candidate_publication_terminal_parts<T, E, C>(
+    result: Result<(T, C), E>,
+) -> (Result<T, E>, Option<C>) {
+    match result {
+        Ok((committed, cleanup)) => (Ok(committed), Some(cleanup)),
+        Err(error) => (Err(error), None),
+    }
+}
+
+/// Projects one completed FY execution into the existing bridge semantic result plus independent
+/// post-commit cleanup disposition.
+///
+/// This helper performs no frame encoding or I/O, requester mutation, reachability mutation, retry,
+/// task/runtime drive, activation, or dialing. A successful FY outcome always remains bridge
+/// semantic success even when its exact post-commit cleanup disposition is an error.
+pub(crate) fn project_candidate_publication_terminal_result(
+    result: Result<
+        CandidatePublicationPostCommitRequesterCleanupOutcome,
+        CandidatePublicationExecutionError,
+    >,
+) -> CandidatePublicationTerminalResultProjection {
+    let (semantic_result, cleanup) = project_candidate_publication_terminal_parts(
+        result.map(CandidatePublicationPostCommitRequesterCleanupOutcome::into_parts),
+    );
+
+    CandidatePublicationTerminalResultProjection {
+        semantic_result,
+        cleanup,
+    }
+}
+
 /// Cloneable handle to exactly one process-local requester/rendezvous runtime owner.
 ///
 /// Clones share only the outer [`Arc`]. The existing runtime owner and its provider state are never
@@ -118,8 +186,9 @@ impl Clone for SharedRequesterRendezvousAuthority {
 impl SharedRequesterRendezvousAuthority {
     /// Takes by-value custody of the exact existing requester/rendezvous runtime owner.
     ///
-    /// Construction performs no registration, authorization, I/O, task creation, readiness
-    /// publication, peer disposition, or provider cloning.
+    /// Construction performs ownership composition only. The retained provider remains private and
+    /// no requester/rendezvous registration, authorization, response, retry or runtime activation
+    /// occurs here.
     #[must_use]
     pub fn new(runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner) -> Self {
         Self {
@@ -293,6 +362,7 @@ mod tests {
 
     use prw_core::{DeviceId, SessionId};
     use prw_remote_bridge::{
+        candidate_publication_execution::CandidatePublicationExecutionError,
         requester_rendezvous_authority::RequesterRendezvousAuthorityError,
         requester_rendezvous_in_memory_provider::{
             InMemoryRequesterRendezvousAuthorityProvider, RequesterRendezvousLifecycleError,
@@ -300,7 +370,12 @@ mod tests {
     };
     use tokio::runtime::Builder;
 
-    use super::{RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority};
+    use super::{
+        CandidatePublicationPostCommitRequesterCleanupOutcome,
+        CandidatePublicationTerminalResultProjection, RequesterRendezvousCommittedCleanupIdentity,
+        SharedRequesterRendezvousAuthority, project_candidate_publication_terminal_parts,
+        project_candidate_publication_terminal_result,
+    };
     use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 
     fn block_on<F: Future>(future: F) -> F::Output {
@@ -384,5 +459,59 @@ mod tests {
 
         assert_eq!(result, Err("commit failed"));
         assert!(authority.runtime_owner.try_lock().is_ok());
+    }
+
+    #[test]
+    fn terminal_projection_preserves_pre_commit_error_and_absent_cleanup() {
+        let result: Result<
+            (u8, Result<(), RequesterRendezvousLifecycleError>),
+            CandidatePublicationExecutionError,
+        > = Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch);
+
+        let (semantic_result, cleanup) = project_candidate_publication_terminal_parts(result);
+
+        assert_eq!(
+            semantic_result,
+            Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch)
+        );
+        assert_eq!(cleanup, None);
+    }
+
+    #[test]
+    fn terminal_projection_preserves_committed_success_and_cleanup_success() {
+        let result: Result<
+            (u8, Result<(), RequesterRendezvousLifecycleError>),
+            CandidatePublicationExecutionError,
+        > = Ok((7, Ok(())));
+
+        let (semantic_result, cleanup) = project_candidate_publication_terminal_parts(result);
+
+        assert_eq!(semantic_result, Ok(7));
+        assert_eq!(cleanup, Some(Ok(())));
+    }
+
+    #[test]
+    fn terminal_projection_cleanup_failure_cannot_rewrite_committed_success() {
+        let cleanup_error = RequesterRendezvousLifecycleError::RecordUnknown;
+        let result: Result<
+            (u8, Result<(), RequesterRendezvousLifecycleError>),
+            CandidatePublicationExecutionError,
+        > = Ok((11, Err(cleanup_error)));
+
+        let (semantic_result, cleanup) = project_candidate_publication_terminal_parts(result);
+
+        assert_eq!(semantic_result, Ok(11));
+        assert_eq!(cleanup, Some(Err(cleanup_error)));
+    }
+
+    #[test]
+    fn real_terminal_projection_adapter_has_exact_fy_to_bridge_signature() {
+        let _adapter: fn(
+            Result<
+                CandidatePublicationPostCommitRequesterCleanupOutcome,
+                CandidatePublicationExecutionError,
+            >,
+        ) -> CandidatePublicationTerminalResultProjection =
+            project_candidate_publication_terminal_result;
     }
 }
