@@ -353,13 +353,12 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
             Option<RequesterRendezvousResponseStreamCustodyHandoff>,
             AuthenticatedRemoteSessionPostAuthIngressTransactionError,
         > = {
-            let mut ingress = Box::pin(
-                session_owner.run_repeated_post_auth_control_stream_ingress(
+            let mut ingress =
+                Box::pin(session_owner.run_repeated_post_auth_control_stream_ingress(
                     authority,
                     &mut verifier_time_unix_seconds,
                     dispatcher,
-                ),
-            );
+                ));
 
             poll_fn(|context| {
                 match ingress.as_mut().poll(context) {
