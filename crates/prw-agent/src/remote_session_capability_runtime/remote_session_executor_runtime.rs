@@ -140,7 +140,7 @@ impl<D, T> RemoteSessionWorkerAdmissionRejection<D, T> {
         self.reason
     }
 
-    /// Returns the untouched rejected admission item.
+    /// Returns the untouched rejected admission item by reference.
     #[must_use]
     pub const fn admission(&self) -> &RemoteSessionWorkerAdmission<D, T> {
         &self.admission
@@ -1198,17 +1198,15 @@ mod repeated_real_admission_supervisor {
         S: Future<Output = ()>,
     {
         if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-            return Poll::Ready(RemoteSessionPersistentSupervisorEvent::Shutdown);
+            return Poll::Ready(RepeatedSupervisorEvent::Shutdown);
         }
 
         if *request_source_open && active_len < max_active_workers {
-            match Pin::new(&mut admissions).poll_recv(context) {
-                Poll::Ready(Some(candidate)) => {
-                    return Poll::Ready(RemoteSessionPersistentSupervisorEvent::Admission(
-                        candidate,
-                    ));
+            match Pin::new(requests).poll_recv(context) {
+                Poll::Ready(Some(request)) => {
+                    return Poll::Ready(RepeatedSupervisorEvent::Request(request));
                 }
-                Poll::Ready(None) => admission_open = false,
+                Poll::Ready(None) => *request_source_open = false,
                 Poll::Pending => {}
             }
         }
@@ -1222,7 +1220,7 @@ mod repeated_real_admission_supervisor {
         context: &mut Context<'_>,
     ) -> Poll<InFlightAdmissionEvent<A::Output>>
     where
-        S: Future,
+        S: Future<Output = ()>,
         A: Future,
     {
         if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
@@ -1661,9 +1659,9 @@ mod repeated_real_admission_supervisor {
             );
 
             assert_eq!(
-                result,
-                Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-            );
+            result,
+            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+        );
             assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
@@ -1978,7 +1976,7 @@ impl RemoteSessionExecutorRuntime {
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
-    ) -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop{
+    ) -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
         self.runtime.block_on(
             super::requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
                 session_owner,
