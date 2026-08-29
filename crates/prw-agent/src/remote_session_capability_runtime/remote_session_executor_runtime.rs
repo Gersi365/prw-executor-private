@@ -140,7 +140,7 @@ impl<D, T> RemoteSessionWorkerAdmissionRejection<D, T> {
         self.reason
     }
 
-    /// Returns the untouched rejected admission item.
+    /// Returns the untouched rejected admission item by reference.
     #[must_use]
     pub const fn admission(&self) -> &RemoteSessionWorkerAdmission<D, T> {
         &self.admission
@@ -1938,5 +1938,55 @@ impl RemoteSessionExecutorRuntime {
                 crate::reachability_authority_admission::bootstrap_and_admit_reachability_live_owner_authority_from_systemd_credentials(),
             )
             .map(crate::reachability_authority_admission::ReachabilityAuthorityRuntimeOwner::new)
+    }
+}
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives exactly one existing C03e-FL requester-aware cancellation-aware serial lifecycle
+    /// worker on this already-owned private current-thread executor.
+    ///
+    /// Both the authenticated-session owner and the process-local requester/rendezvous runtime
+    /// owner remain mutably borrowed caller custody for the entire synchronous drive. The exact FL
+    /// worker remains the sole authority for cancellation ordering and terminal stop classification.
+    /// This seam performs no peer close, owner drop, restart/reuse, task spawn, cancellation-pair
+    /// construction, persistent-collection mutation, requester-authority synchronization,
+    /// candidate/reachability continuation, target dialing, listener activation or readiness.
+    #[allow(
+        dead_code,
+        reason = "C03e-FN materializes the FM-selected borrowed executor seam before separately gated caller activation"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-FN preserves the exact explicit FL authority and borrowed-custody inputs"
+    )]
+    pub(super) fn drive_requester_rendezvous_post_terminal_response_serial_lifecycle_worker<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+        S: crate::candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource
+            + Sync
+            + ?Sized,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        policy_source: &S,
+        requester_rendezvous_runtime_owner: &mut crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
+        self.runtime.block_on(
+            super::requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
+                session_owner,
+                authority,
+                policy_source,
+                requester_rendezvous_runtime_owner,
+                verifier_time_unix_seconds,
+                dispatcher,
+                cancellation,
+            ),
+        )
     }
 }
