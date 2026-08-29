@@ -25,15 +25,8 @@ jobs:
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
           data = path.read_text(encoding='utf-8')
 
-          old = '''    #[expect(
-        clippy::too_many_arguments,
-        reason = "C03e-FN preserves the exact explicit FL authority and borrowed-custody inputs"
-    )]'''
-          new = '''    #[expect(
-        clippy::needless_pass_by_ref_mut,
-        clippy::too_many_arguments,
-        reason = "C03e-FN preserves the FM-selected mutable executor custody boundary and exact FL input surface"
-    )]'''
+          old = "    #[expect(\n        clippy::too_many_arguments,\n        reason = \"C03e-FN preserves the exact explicit FL authority and borrowed-custody inputs\"\n    )]"
+          new = "    #[expect(\n        clippy::needless_pass_by_ref_mut,\n        clippy::too_many_arguments,\n        reason = \"C03e-FN preserves the FM-selected mutable executor custody boundary and exact FL input surface\"\n    )]"
 
           assert data.count(old) == 1, data.count(old)
           corrected = data.replace(old, new)
