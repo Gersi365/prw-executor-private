@@ -58,7 +58,8 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// requester/rendezvous response frame.
     #[allow(
         dead_code,
-        reason = "C03e-EV materializes the selected one-transaction ingress seam before separately gated combined-loop integration"
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-EV intentionally preserves the C03e-EU-selected exclusive mutable-owner transaction custody before separately gated combined-loop integration"
     )]
     pub(crate) async fn process_one_post_auth_control_stream_ingress<
         P: PolicyEvaluator + Send + Sync,
