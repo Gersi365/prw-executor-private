@@ -1,14 +1,27 @@
-//! Agent-owned retained-custody requester/rendezvous DR continuation.
+//! Agent-owned retained-custody requester/rendezvous DR continuation and terminal response composition.
 //!
-//! C03e-FB materializes only the C03e-FA-selected continuation from one exact C03e-EZ
-//! response-stream custody handoff through the existing shared-current authority read and existing
-//! C03e-DR DI -> DP -> DK -> DN composition. The exact bridge requester transaction survives both
-//! DR success and DR failure for separately gated response mapping. This module performs no response
-//! construction/write, second read, loop resume, candidate selection, dialing, runtime activation,
-//! deployment or merge.
+//! C03e-FB materializes the C03e-FA-selected continuation from one exact C03e-EZ response-stream
+//! custody handoff through the existing shared-current authority read and existing C03e-DR
+//! DI -> DP -> DK -> DN composition. The exact bridge requester transaction survives both DR success
+//! and DR failure. C03e-FH adds only the C03e-FG-selected Agent-owned terminal composition from that
+//! exact retained DR result through the existing C03e-FD pure acknowledgement framing boundary into
+//! the existing C03e-FF consuming same-stream send surface. This module still performs no second
+//! read, loop resume, peer-close policy, candidate/reachability selection, dialing, runtime
+//! activation, deployment or merge.
+
+use std::fmt;
 
 use prw_policy::PolicyEvaluator;
-use prw_remote_bridge::post_auth_control_stream_ingress::PostAuthRequesterRendezvousTransaction;
+use prw_remote_bridge::{
+    post_auth_control_stream_ingress::{
+        PostAuthRequesterRendezvousTransaction,
+        RequesterRendezvousDrAcknowledgementResponseIoError,
+    },
+    requester_rendezvous_dr_acknowledgement_wire::{
+        RequesterRendezvousDrAcknowledgementWireError,
+        encode_requester_rendezvous_dr_result_for_transaction,
+    },
+};
 
 use super::{RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority};
 use crate::{
@@ -58,6 +71,85 @@ impl RequesterRendezvousRetainedCustodyDrContinuation {
     }
 }
 
+/// Failure while completing one exact retained requester/rendezvous DR acknowledgement response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError {
+    /// Existing C03e-FD pure acknowledgement framing failed before any response write attempt.
+    Frame(RequesterRendezvousDrAcknowledgementWireError),
+    /// Existing C03e-FF exact same-stream response write or send-direction finish failed.
+    ResponseIo(RequesterRendezvousDrAcknowledgementResponseIoError),
+}
+
+impl fmt::Display for RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Frame(_) => "requester rendezvous DR acknowledgement framing failed",
+            Self::ResponseIo(_) => "requester rendezvous DR acknowledgement response I/O failed",
+        })
+    }
+}
+
+impl std::error::Error for RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Frame(error) => Some(error),
+            Self::ResponseIo(error) => Some(error),
+        }
+    }
+}
+
+impl From<RequesterRendezvousDrAcknowledgementWireError>
+    for RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError
+{
+    fn from(error: RequesterRendezvousDrAcknowledgementWireError) -> Self {
+        Self::Frame(error)
+    }
+}
+
+impl From<RequesterRendezvousDrAcknowledgementResponseIoError>
+    for RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError
+{
+    fn from(error: RequesterRendezvousDrAcknowledgementResponseIoError) -> Self {
+        Self::ResponseIo(error)
+    }
+}
+
+/// Consumes one exact retained DR continuation and completes exactly one terminal acknowledgement
+/// response through the existing FD framing and FF same-stream send boundaries.
+///
+/// The continuation is borrowed only long enough for FD to project the exact already-completed DR
+/// result and echo the exact original PRWM request correlation. A semantic DR `Err(_)` therefore
+/// remains one valid generic rejected acknowledgement rather than becoming a composition failure.
+/// After successful framing, the continuation is consumed by value and exact requester transaction
+/// custody is transferred exactly once into FF. No result path returns retry-capable continuation,
+/// transaction or raw-stream custody.
+///
+/// # Errors
+///
+/// Returns [`RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::Frame`] if the
+/// existing FD framing boundary fails. No response write is attempted on that path and the consumed
+/// continuation is not returned for retry.
+///
+/// Returns [`RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::ResponseIo`] if
+/// the existing FF same-stream write/finish fails. FF consumes exact requester transaction custody;
+/// no retry, resend, replacement stream or duplicate acknowledgement is attempted.
+pub(super) async fn complete_requester_rendezvous_terminal_dr_acknowledgement_response(
+    continuation: RequesterRendezvousRetainedCustodyDrContinuation,
+) -> Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError> {
+    let acknowledgement_frame = encode_requester_rendezvous_dr_result_for_transaction(
+        continuation.requester_transaction(),
+        continuation.dr_result(),
+    )?;
+
+    let (requester_transaction, _) = continuation.into_parts();
+    requester_transaction
+        .send_dr_acknowledgement_frame(&acknowledgement_frame)
+        .await?;
+
+    Ok(())
+}
+
 /// Consumes one exact EZ handoff and runs exactly one existing DR composition under current authority.
 ///
 /// The exact EZ `RequesterRendezvousStartIntent` is consumed directly; this seam does not extract a
@@ -96,5 +188,49 @@ pub(super) async fn continue_requester_rendezvous_retained_custody_through_dr<
     RequesterRendezvousRetainedCustodyDrContinuation {
         requester_transaction,
         dr_result,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use prw_remote_bridge::{
+        post_auth_control_stream_ingress::RequesterRendezvousDrAcknowledgementResponseIoError,
+        requester_rendezvous_dr_acknowledgement_wire::RequesterRendezvousDrAcknowledgementWireError,
+    };
+
+    use super::{
+        RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+        complete_requester_rendezvous_terminal_dr_acknowledgement_response,
+    };
+
+    fn assert_frame_error_conversion(
+        conversion: fn(
+            RequesterRendezvousDrAcknowledgementWireError,
+        ) -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+    ) {
+        let _ = conversion;
+    }
+
+    fn assert_response_io_error_conversion(
+        conversion: fn(
+            RequesterRendezvousDrAcknowledgementResponseIoError,
+        ) -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+    ) {
+        let _ = conversion;
+    }
+
+    #[test]
+    fn terminal_dr_acknowledgement_response_composition_surface_is_materialized() {
+        let _ = complete_requester_rendezvous_terminal_dr_acknowledgement_response;
+    }
+
+    #[test]
+    fn terminal_response_error_family_preserves_exact_two_lower_categories() {
+        assert_frame_error_conversion(
+            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::from,
+        );
+        assert_response_io_error_conversion(
+            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::from,
+        );
     }
 }
