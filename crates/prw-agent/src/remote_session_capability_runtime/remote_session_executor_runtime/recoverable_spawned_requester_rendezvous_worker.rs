@@ -243,3 +243,5 @@ mod tests {
         );
     }
 }
+
+mod recoverable_persistent_requester_rendezvous_worker;
