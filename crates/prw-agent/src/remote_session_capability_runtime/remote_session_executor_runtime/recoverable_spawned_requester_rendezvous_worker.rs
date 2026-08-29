@@ -187,9 +187,8 @@ fn select_recoverable_requester_aware_peer_disposition(
         Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled) => {
             RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
         }
-        Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(_)) | Err(_) => {
-            RecoverableRequesterAwarePeerDisposition::TerminalFailure
-        }
+        Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(_))
+        | Err(_) => RecoverableRequesterAwarePeerDisposition::TerminalFailure,
     }
 }
 
@@ -334,8 +333,7 @@ mod tests {
 
     use super::{
         RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
-        RecoverableRequesterAwarePeerDisposition,
-        RemoteSessionSpawnedWorkerJoinError,
+        RecoverableRequesterAwarePeerDisposition, RemoteSessionSpawnedWorkerJoinError,
         RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
         dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
         join_and_recover_owned_value, select_recoverable_requester_aware_peer_disposition,
@@ -368,7 +366,8 @@ mod tests {
 
     #[test]
     fn cancellation_selects_orderly_shutdown_peer_disposition() {
-        let result = Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled);
+        let result =
+            Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled);
 
         assert_eq!(
             select_recoverable_requester_aware_peer_disposition(&result),
@@ -383,9 +382,8 @@ mod tests {
                 RemoteBridgeError::SessionExpired,
             ),
         );
-        let result = Ok(
-            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(failure),
-        );
+        let result =
+            Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(failure));
 
         assert_eq!(
             select_recoverable_requester_aware_peer_disposition(&result),
