@@ -55,8 +55,7 @@ use std::fmt;
 
 use prw_core::DeviceId;
 use prw_remote_bridge::{
-    RemoteBridgeError,
-    capability_request_wire::CapabilityRequestWireError,
+    RemoteBridgeError, capability_request_wire::CapabilityRequestWireError,
     post_auth_control_stream_ingress::PostAuthControlStreamIngressError,
     remote_server_transport_runtime::RemoteServerTransportRuntimeError,
     remote_session_binding::BoundRemoteSession,
