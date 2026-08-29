@@ -34,17 +34,11 @@ use prw_remote_bridge::{
 use super::{
     AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,
-    SharedCurrentCapabilityAuthority,
+    SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
 };
-use crate::{
-    candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
-    candidate_publication_requester_rendezvous_start_intent::{
-        composition::{
-            RequesterRendezvousStartCompositionError,
-            validate_authorize_and_register_requester_rendezvous_start,
-        },
-        policy_source::RequesterRendezvousStartPolicySource,
-    },
+use crate::candidate_publication_requester_rendezvous_start_intent::{
+    composition::RequesterRendezvousStartCompositionError,
+    policy_source::RequesterRendezvousStartPolicySource,
 };
 
 /// Terminal C03e-FB custody after exactly one existing DR authority composition.
@@ -232,7 +226,7 @@ pub(super) async fn continue_requester_rendezvous_retained_custody_through_dr<
 >(
     authority: &SharedCurrentCapabilityAuthority<P>,
     policy_source: &S,
-    runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
     handoff: RequesterRendezvousResponseStreamCustodyHandoff,
 ) -> RequesterRendezvousRetainedCustodyDrContinuation {
     let RequesterRendezvousResponseStreamCustodyHandoff {
@@ -240,15 +234,12 @@ pub(super) async fn continue_requester_rendezvous_retained_custody_through_dr<
         start_intent,
     } = handoff;
 
-    let dr_result = authority
-        .with_current_authority(|registry, _current_capability_policy| {
-            validate_authorize_and_register_requester_rendezvous_start(
-                registry,
-                policy_source,
-                runtime_owner,
-                start_intent,
-            )
-        })
+    let dr_result = requester_rendezvous_authority
+        .validate_authorize_and_register_requester_rendezvous_start(
+            authority,
+            policy_source,
+            start_intent,
+        )
         .await;
 
     RequesterRendezvousRetainedCustodyDrContinuation {
@@ -286,7 +277,7 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
     authority: &SharedCurrentCapabilityAuthority<P>,
     policy_source: &S,
-    requester_rendezvous_runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
     mut verifier_time_unix_seconds: T,
     dispatcher: &mut D,
 ) -> Result<(), RequesterRendezvousPostTerminalResponseSerialLifecycleError> {
@@ -302,7 +293,7 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
         let continuation = continue_requester_rendezvous_retained_custody_through_dr(
             authority,
             policy_source,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
             handoff,
         )
         .await;
@@ -341,7 +332,7 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
     authority: &SharedCurrentCapabilityAuthority<P>,
     policy_source: &S,
-    requester_rendezvous_runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
     mut verifier_time_unix_seconds: T,
     dispatcher: &mut D,
     cancellation: C,
@@ -390,7 +381,7 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
         let continuation = continue_requester_rendezvous_retained_custody_through_dr(
             authority,
             policy_source,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
             handoff,
         )
         .await;
