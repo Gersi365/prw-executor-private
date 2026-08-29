@@ -1,5 +1,5 @@
 //! Agent-owned retained-custody requester/rendezvous DR continuation, terminal response composition,
-//! and isolated post-terminal serial lifecycle.
+//! isolated post-terminal serial lifecycle, and cancellation-aware higher-owner worker.
 //!
 //! C03e-FB materializes the C03e-FA-selected continuation from one exact C03e-EZ response-stream
 //! custody handoff through the existing shared-current authority read and existing C03e-DR
@@ -8,11 +8,16 @@
 //! exact retained DR result through the existing C03e-FD pure acknowledgement framing boundary into
 //! the existing C03e-FF consuming same-stream send surface. C03e-FJ adds only the C03e-FI-selected
 //! isolated serial lifecycle that resumes the existing EV/EX mixed-family ingress after FH success
-//! and fail-stops on existing ingress or requester-response failure. This module still performs no
-//! automatic peer close, cancellation widening, candidate/reachability selection, dialing, runtime
-//! activation, deployment or merge.
+//! and fail-stops on existing ingress or requester-response failure. C03e-FL adds only the
+//! C03e-FK-selected cancellation-aware higher-owner worker around those exact serial transaction
+//! boundaries. This module still performs no automatic peer close, candidate/reachability selection,
+//! dialing, runtime activation, deployment or merge.
 
-use std::fmt;
+use std::{
+    fmt,
+    future::{Future, poll_fn},
+    task::Poll,
+};
 
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
@@ -166,6 +171,16 @@ impl From<RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>
     }
 }
 
+/// Terminal higher-owner result of the C03e-FK-selected cancellation-aware serial lifecycle worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
+    /// Caller-owned cancellation won at one selected cancellation-safe lifecycle boundary.
+    Cancelled,
+    /// Existing FJ lifecycle semantics reached one exact typed ingress or requester-response failure.
+    Failed(RequesterRendezvousPostTerminalResponseSerialLifecycleError),
+}
+
 /// Consumes one exact retained DR continuation and completes exactly one terminal acknowledgement
 /// response through the existing FD framing and FF same-stream send boundaries.
 ///
@@ -296,6 +311,113 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     }
 }
 
+/// Runs one cancellation-aware higher-owner worker over the existing requester-aware serial lifecycle.
+///
+/// Before requester handoff, the exact EX repeated-ingress future is polled first and caller
+/// cancellation is polled second. Therefore an already-ready requester handoff or ingress failure
+/// preserves the existing EX classification; cancellation wins only while ingress remains pending.
+///
+/// Once one requester handoff exists, cancellation is deliberately not polled while exact FB DR
+/// continuation and exact FH terminal acknowledgement response composition run to one typed terminal
+/// result. This prevents caller cancellation from becoming a new response-abandonment path after
+/// requester authorization/registration may already have committed. Existing bounded transport
+/// timeouts remain authoritative inside FH.
+///
+/// After FH success, cancellation is polled once before another EX cycle can begin. If cancellation
+/// became ready during FB/FH, this worker returns `Cancelled` before the next verifier-time sample,
+/// stream accept or frame receive. Otherwise the next serial EX cycle begins normally.
+///
+/// No path closes the authenticated peer, retries ingress/DR/response work, allocates a replacement
+/// stream, duplicates an acknowledgement, widens capability close codes, starts a task/channel/queue,
+/// selects candidate/reachability state, dials target traffic, activates a runtime/listener, deploys,
+/// or merges anything.
+pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> u64 + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    C: Future<Output = ()> + Send,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_runtime_owner: &mut CandidatePublicationRequesterRendezvousRuntimeOwner,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+    cancellation: C,
+) -> RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
+    let mut cancellation = Box::pin(cancellation);
+
+    loop {
+        let ingress_result: Result<
+            Option<RequesterRendezvousResponseStreamCustodyHandoff>,
+            AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+        > = {
+            let mut ingress = Box::pin(
+                session_owner.run_repeated_post_auth_control_stream_ingress(
+                    authority,
+                    &mut verifier_time_unix_seconds,
+                    dispatcher,
+                ),
+            );
+
+            poll_fn(|context| {
+                match ingress.as_mut().poll(context) {
+                    Poll::Ready(Ok(handoff)) => return Poll::Ready(Ok(Some(handoff))),
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Pending => {}
+                }
+
+                match cancellation.as_mut().poll(context) {
+                    Poll::Ready(()) => Poll::Ready(Ok(None)),
+                    Poll::Pending => Poll::Pending,
+                }
+            })
+            .await
+        };
+
+        let handoff = match ingress_result {
+            Ok(Some(handoff)) => handoff,
+            Ok(None) => {
+                return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+            }
+            Err(error) => {
+                return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+        };
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            authority,
+            policy_source,
+            requester_rendezvous_runtime_owner,
+            handoff,
+        )
+        .await;
+
+        if let Err(error) =
+            complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await
+        {
+            return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                error.into(),
+            );
+        }
+
+        let cancellation_ready = poll_fn(|context| {
+            Poll::Ready(matches!(
+                cancellation.as_mut().poll(context),
+                Poll::Ready(())
+            ))
+        })
+        .await;
+
+        if cancellation_ready {
+            return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use prw_remote_bridge::{
@@ -305,6 +427,7 @@ mod tests {
 
     use super::{
         RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+        RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
         RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
         complete_requester_rendezvous_terminal_dr_acknowledgement_response,
     };
@@ -366,6 +489,14 @@ mod tests {
         );
         assert_requester_response_lifecycle_error_conversion(
             RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
+        );
+    }
+
+    #[test]
+    fn cancellation_aware_worker_stop_exposes_local_cancelled_class() {
+        assert_eq!(
+            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled,
+            RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled
         );
     }
 }
