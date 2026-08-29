@@ -23,6 +23,12 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::{Mutex, mpsc};
 
+use super::super::{
+    RemoteSessionExecutorRuntime, RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
+    RemoteSessionRealAdmissionTiming, RemoteSessionWorkerAdmission,
+    validate_persistent_worker_capacity,
+};
 use super::{
     RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
     recoverable_persistent_requester_rendezvous_worker::{
@@ -30,12 +36,6 @@ use super::{
         RecoverableRequesterAwareWorkerEntry, drain_recoverable_workers,
         reap_ready_recoverable_workers, request_all_recoverable_worker_cancellations,
     },
-};
-use super::super::{
-    RemoteSessionExecutorRuntime, RemoteSessionExpectedDeviceAdmissionRejectionReason,
-    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
-    RemoteSessionRealAdmissionTiming, RemoteSessionWorkerAdmission,
-    validate_persistent_worker_capacity,
 };
 use crate::{
     candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
@@ -144,11 +144,13 @@ fn publish_recoverable_completion<C>(
     C: FnMut(RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion),
 {
     let (device_id, session_owner, result) = completion.into_parts();
-    on_completion(RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion::new(
-        device_id,
-        session_owner,
-        result,
-    ));
+    on_completion(
+        RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion::new(
+            device_id,
+            session_owner,
+            result,
+        ),
+    );
 }
 
 fn reap_requester_aware_workers<C>(
@@ -212,14 +214,13 @@ where
     let (session_owner, mut dispatcher, verifier_time_unix_seconds) = admission.into_parts();
     let owner_cell = Arc::new(Mutex::new(Some(session_owner)));
     let worker_owner_cell = Arc::clone(&owner_cell);
-    let (cancellation_controller, cancellation_signal) =
-        remote_session_worker_cancellation_pair();
+    let (cancellation_controller, cancellation_signal) = remote_session_worker_cancellation_pair();
 
     let worker_handle = tokio::spawn(async move {
         let mut owner_guard = worker_owner_cell.lock().await;
-        let session_owner = owner_guard
-            .as_mut()
-            .expect("persistent requester-aware worker must borrow retained authenticated-session owner");
+        let session_owner = owner_guard.as_mut().expect(
+            "persistent requester-aware worker must borrow retained authenticated-session owner",
+        );
         let result = run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
             session_owner,
             &authority,
@@ -234,11 +235,7 @@ where
         result
     });
 
-    RecoverablePersistentWorkerEntry::new(
-        owner_cell,
-        cancellation_controller,
-        worker_handle,
-    )
+    RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
 }
 
 impl RemoteSessionExecutorRuntime {
@@ -465,7 +462,10 @@ mod tests {
         DeviceId::new(value).expect("test device id")
     }
 
-    fn test_request(device: &str, value: u8) -> RemoteSessionExpectedDeviceAdmissionRequest<u8, u8> {
+    fn test_request(
+        device: &str,
+        value: u8,
+    ) -> RemoteSessionExpectedDeviceAdmissionRequest<u8, u8> {
         RemoteSessionExpectedDeviceAdmissionRequest::new(
             device_id(device),
             SessionId::new(format!("session-{value}")).expect("test session id"),
@@ -532,8 +532,9 @@ mod tests {
         )
         .expect("vacant request prepares");
 
-        let (device_id, _session_id, request_id, dispatcher, verifier) = prepared.into_parts();
-        assert_eq!(device_id, device_id("device-fu-vacant"));
+        let (prepared_device_id, _session_id, request_id, dispatcher, verifier) =
+            prepared.into_parts();
+        assert_eq!(prepared_device_id, device_id("device-fu-vacant"));
         assert_eq!(request_id, 9);
         assert_eq!(dispatcher, 9);
         assert_eq!(verifier, 9);
