@@ -14,8 +14,7 @@ use std::fmt;
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
     post_auth_control_stream_ingress::{
-        PostAuthRequesterRendezvousTransaction,
-        RequesterRendezvousDrAcknowledgementResponseIoError,
+        PostAuthRequesterRendezvousTransaction, RequesterRendezvousDrAcknowledgementResponseIoError,
     },
     requester_rendezvous_dr_acknowledgement_wire::{
         RequesterRendezvousDrAcknowledgementWireError,
@@ -206,7 +205,8 @@ mod tests {
     fn assert_frame_error_conversion(
         conversion: fn(
             RequesterRendezvousDrAcknowledgementWireError,
-        ) -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+        )
+            -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
     ) {
         let _ = conversion;
     }
@@ -214,7 +214,8 @@ mod tests {
     fn assert_response_io_error_conversion(
         conversion: fn(
             RequesterRendezvousDrAcknowledgementResponseIoError,
-        ) -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+        )
+            -> RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
     ) {
         let _ = conversion;
     }
