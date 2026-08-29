@@ -186,9 +186,8 @@ impl Clone for SharedRequesterRendezvousAuthority {
 impl SharedRequesterRendezvousAuthority {
     /// Takes by-value custody of the exact existing requester/rendezvous runtime owner.
     ///
-    /// Construction performs ownership composition only. The retained provider remains private and
-    /// no requester/rendezvous registration, authorization, response, retry or runtime activation
-    /// occurs here.
+    /// Construction performs no registration, authorization, I/O, task creation, readiness
+    /// publication, peer disposition, or provider cloning.
     #[must_use]
     pub fn new(runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner) -> Self {
         Self {
