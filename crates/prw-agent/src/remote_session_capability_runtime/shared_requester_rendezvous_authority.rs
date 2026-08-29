@@ -70,7 +70,7 @@ impl RequesterRendezvousCommittedCleanupIdentity {
 /// [`CandidatePublicationExecutionError`]. Callers can project the exact successful reachability
 /// outcome for existing Accepted response framing while handling cleanup disposition separately.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CandidatePublicationPostCommitRequesterCleanupOutcome {
+pub struct CandidatePublicationPostCommitRequesterCleanupOutcome {
     reachability_commit: ReachabilityCommitOutcome,
     cleanup: Result<(), RequesterRendezvousLifecycleError>,
 }
@@ -83,13 +83,11 @@ impl CandidatePublicationPostCommitRequesterCleanupOutcome {
     }
 
     /// Returns the independent exact-record cleanup disposition.
-    #[must_use]
     pub(crate) const fn cleanup_result(self) -> Result<(), RequesterRendezvousLifecycleError> {
         self.cleanup
     }
 
     /// Transfers both post-commit result components without flattening either classification.
-    #[must_use]
     pub(crate) const fn into_parts(
         self,
     ) -> (
