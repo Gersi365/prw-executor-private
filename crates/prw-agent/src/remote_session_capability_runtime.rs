@@ -51,8 +51,14 @@ pub use remote_session_worker_cancellation::{
 };
 pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 
+use std::fmt;
+
 use prw_core::DeviceId;
-use prw_remote_bridge::remote_session_binding::BoundRemoteSession;
+use prw_remote_bridge::{
+    remote_server_transport_runtime::RemoteServerTransportRuntimeError,
+    remote_session_binding::BoundRemoteSession,
+    requester_rendezvous_target_request_io::RequesterRendezvousTargetRequestIoError,
+};
 
 use crate::candidate_publication_requester_rendezvous_start_intent::{
     RequesterRendezvousStartIntent, RequesterRendezvousTargetIntent,
@@ -75,6 +81,49 @@ impl RemoteSessionCapabilityRuntimeOwner {
     #[must_use]
     pub const fn new(bound_session: BoundRemoteSession) -> Self {
         Self { bound_session }
+    }
+}
+
+/// Correlation remains separate from the authenticated requester/rendezvous start intent.
+pub(crate) type RequesterRendezvousCorrelatedStartIntent = (u64, RequesterRendezvousStartIntent);
+
+/// Failure while composing exactly one requester/rendezvous target request through an authenticated owner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(crate) enum RequesterRendezvousOneShotTransactionError {
+    /// Accepting one bounded control stream from the retained authenticated peer failed.
+    Accept(RemoteServerTransportRuntimeError),
+    /// Receiving or strictly decoding the requester/rendezvous target request failed.
+    Wire(RequesterRendezvousTargetRequestIoError),
+}
+
+impl fmt::Display for RequesterRendezvousOneShotTransactionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Accept(_) => "requester rendezvous control-stream acceptance failed",
+            Self::Wire(_) => "requester rendezvous target-request receive/decode failed",
+        })
+    }
+}
+
+impl std::error::Error for RequesterRendezvousOneShotTransactionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Accept(error) => Some(error),
+            Self::Wire(error) => Some(error),
+        }
+    }
+}
+
+impl From<RemoteServerTransportRuntimeError> for RequesterRendezvousOneShotTransactionError {
+    fn from(error: RemoteServerTransportRuntimeError) -> Self {
+        Self::Accept(error)
+    }
+}
+
+impl From<RequesterRendezvousTargetRequestIoError> for RequesterRendezvousOneShotTransactionError {
+    fn from(error: RequesterRendezvousTargetRequestIoError) -> Self {
+        Self::Wire(error)
     }
 }
 

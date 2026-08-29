@@ -615,3 +615,5 @@ mod orderly_shutdown_close_tests {
         );
     }
 }
+
+mod requester_rendezvous_one_shot_transaction;
