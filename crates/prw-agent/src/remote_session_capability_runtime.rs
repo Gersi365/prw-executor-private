@@ -29,12 +29,12 @@ mod remote_session_worker_cancellation;
     reason = "C03e-FB materializes retained-custody DR continuation before separately gated response mapping"
 )]
 mod requester_rendezvous_retained_custody_dr_continuation;
+mod shared_current_capability_authority;
 #[allow(
     dead_code,
     reason = "C03e-FP materializes shared requester/rendezvous authority before separately gated spawned/persistent custody"
 )]
 mod shared_requester_rendezvous_authority;
-mod shared_current_capability_authority;
 
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use real_remote_admission_transaction::{
@@ -59,8 +59,8 @@ pub use remote_session_worker_cancellation::{
     RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,
     remote_session_worker_cancellation_pair,
 };
-pub(crate) use shared_requester_rendezvous_authority::SharedRequesterRendezvousAuthority;
 pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
+pub(crate) use shared_requester_rendezvous_authority::SharedRequesterRendezvousAuthority;
 
 use std::fmt;
 
