@@ -24,12 +24,11 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{
-    AuthenticatedRemoteSessionRuntimeOwner,
-    RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
-    RemoteSessionSpawnedWorkerJoinError,
-};
 use super::super::{map_worker_join_result, validate_persistent_worker_capacity};
+use super::{
+    AuthenticatedRemoteSessionRuntimeOwner, RemoteSessionSpawnedWorkerJoinError,
+    RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+};
 use crate::remote_session_capability_runtime::{
     RemoteSessionPersistentCollectionConfigError, RemoteSessionWorkerAdmissionRejectionReason,
     RemoteSessionWorkerCancellationController, remote_session_worker_cancellation_pair,
@@ -102,9 +101,7 @@ impl<K, O, T> RecoverablePersistentWorkerCompletion<K, O, T> {
     }
 
     #[must_use]
-    pub(super) fn into_parts(
-        self,
-    ) -> (K, O, Result<T, RemoteSessionSpawnedWorkerJoinError>) {
+    pub(super) fn into_parts(self) -> (K, O, Result<T, RemoteSessionSpawnedWorkerJoinError>) {
         (self.key, self.owner, self.result)
     }
 }
@@ -311,7 +308,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{future::pending, num::NonZeroUsize, sync::Arc};
+    use std::{future::poll_fn, num::NonZeroUsize, sync::Arc, task::Poll};
 
     use tokio::{
         runtime::Builder,
@@ -371,11 +368,7 @@ mod tests {
             }
         });
 
-        RecoverablePersistentWorkerEntry::new(
-            owner_cell,
-            cancellation_controller,
-            worker_handle,
-        )
+        RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
     }
 
     fn test_runtime() -> tokio::runtime::Runtime {
@@ -456,8 +449,24 @@ mod tests {
 
         let (spawn_count, rejected, completions) = runtime.block_on(async {
             let (sender, receiver) = mpsc::channel(4);
-            assert!(sender.try_send(TestAdmission { key: 3, owner: 61, result: 11 }).is_ok());
-            assert!(sender.try_send(TestAdmission { key: 3, owner: 62, result: 12 }).is_ok());
+            assert!(
+                sender
+                    .try_send(TestAdmission {
+                        key: 3,
+                        owner: 61,
+                        result: 11
+                    })
+                    .is_ok()
+            );
+            assert!(
+                sender
+                    .try_send(TestAdmission {
+                        key: 3,
+                        owner: 62,
+                        result: 12
+                    })
+                    .is_ok()
+            );
             drop(sender);
 
             let (shutdown_sender, shutdown_receiver) = oneshot::channel();
@@ -497,7 +506,10 @@ mod tests {
         assert_eq!(spawn_count, 1);
         assert_eq!(
             rejected,
-            vec![(RemoteSessionWorkerAdmissionRejectionReason::DuplicateActiveDevice, 62)]
+            vec![(
+                RemoteSessionWorkerAdmissionRejectionReason::DuplicateActiveDevice,
+                62
+            )]
         );
         assert_eq!(completions, vec![(3, 61, Ok(11))]);
     }
@@ -508,7 +520,15 @@ mod tests {
 
         let completions = runtime.block_on(async {
             let (sender, receiver) = mpsc::channel(1);
-            assert!(sender.try_send(TestAdmission { key: 4, owner: 71, result: 21 }).is_ok());
+            assert!(
+                sender
+                    .try_send(TestAdmission {
+                        key: 4,
+                        owner: 71,
+                        result: 21
+                    })
+                    .is_ok()
+            );
             drop(sender);
 
             let (shutdown_sender, shutdown_receiver) = oneshot::channel();
@@ -547,8 +567,24 @@ mod tests {
 
         let mut completions = runtime.block_on(async {
             let (sender, receiver) = mpsc::channel(4);
-            assert!(sender.try_send(TestAdmission { key: 5, owner: 81, result: 31 }).is_ok());
-            assert!(sender.try_send(TestAdmission { key: 6, owner: 82, result: 32 }).is_ok());
+            assert!(
+                sender
+                    .try_send(TestAdmission {
+                        key: 5,
+                        owner: 81,
+                        result: 31
+                    })
+                    .is_ok()
+            );
+            assert!(
+                sender
+                    .try_send(TestAdmission {
+                        key: 6,
+                        owner: 82,
+                        result: 32
+                    })
+                    .is_ok()
+            );
             drop(sender);
 
             let (shutdown_sender, shutdown_receiver) = oneshot::channel();
@@ -625,11 +661,5 @@ mod tests {
         let maximum = NonZeroUsize::new(prw_registry::MAX_REGISTERED_DEVICES)
             .expect("registered-device limit is nonzero");
         assert!(super::validate_persistent_worker_capacity(maximum).is_ok());
-    }
-
-    #[test]
-    fn pending_future_import_remains_available_for_shutdown_test_surface() {
-        let future = pending::<()>();
-        drop(future);
     }
 }
