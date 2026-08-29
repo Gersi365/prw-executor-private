@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: phase-152-c03e-fn-literal-correction-helper-noncanonical
-      - name: Apply exactly two audited literal replacements
+      - name: Apply exact scoped Clippy custody expectation
         shell: bash
         run: |
           python - <<'PY'
@@ -25,15 +25,18 @@ jobs:
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
           data = path.read_text(encoding='utf-8')
 
-          old_doc = '/// Returns the untouched rejected admission item by reference.'
-          new_doc = '/// Returns the untouched rejected admission item.'
-          old_fmt = ') -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {'
-          new_fmt = ') -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop{'
+          old = '''    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-FN preserves the exact explicit FL authority and borrowed-custody inputs"
+    )]'''
+          new = '''    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        clippy::too_many_arguments,
+        reason = "C03e-FN preserves the FM-selected mutable executor custody boundary and exact FL input surface"
+    )]'''
 
-          assert data.count(old_doc) == 1, data.count(old_doc)
-          assert data.count(old_fmt) == 1, data.count(old_fmt)
-
-          corrected = data.replace(old_doc, new_doc).replace(old_fmt, new_fmt)
+          assert data.count(old) == 1, data.count(old)
+          corrected = data.replace(old, new)
           path.write_text(corrected, encoding='utf-8', newline='\n')
           PY
           git diff --check
@@ -44,5 +47,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
-          git commit -m 'Noncanonical helper: exact FN literal corrections'
+          git commit -m 'Noncanonical helper: scope FN mutable-executor Clippy expectation'
           git push origin HEAD:phase-152-c03e-fn-literal-correction-helper-noncanonical
