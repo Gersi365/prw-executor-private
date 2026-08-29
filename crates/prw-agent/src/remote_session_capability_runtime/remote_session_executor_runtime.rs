@@ -1956,8 +1956,9 @@ impl RemoteSessionExecutorRuntime {
         reason = "C03e-FN materializes the FM-selected borrowed executor seam before separately gated caller activation"
     )]
     #[expect(
+        clippy::needless_pass_by_ref_mut,
         clippy::too_many_arguments,
-        reason = "C03e-FN preserves the exact explicit FL authority and borrowed-custody inputs"
+        reason = "C03e-FN preserves the FM-selected mutable executor custody boundary and exact FL input surface"
     )]
     pub(super) fn drive_requester_rendezvous_post_terminal_response_serial_lifecycle_worker<
         P: PolicyEvaluator + Send + Sync,
