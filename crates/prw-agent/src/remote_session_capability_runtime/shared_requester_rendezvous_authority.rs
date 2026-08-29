@@ -8,7 +8,9 @@
 //! candidate-publication grant/commit/cleanup custody split: candidate admission occurs before the
 //! requester lock, one grant is selected under the lock, the lock is released before durable
 //! reachability commit, and exact record cleanup reacquires the lock only after definite commit
-//! success. It exposes no raw provider, mutex, or guard and activates no listener/network runtime.
+//! success. C03e-GC adds only pure terminal frame composition over the existing bridge codec while
+//! preserving post-commit cleanup disposition separately. It exposes no raw provider, mutex, or
+//! guard and activates no listener/network runtime.
 
 use std::sync::Arc;
 
@@ -18,6 +20,10 @@ use prw_registry::WorkspaceDeviceRegistry;
 use prw_remote_bridge::{
     candidate_publication_control_frame::CandidatePublicationControlFrame,
     candidate_publication_execution::CandidatePublicationExecutionError,
+    candidate_publication_result_wire::{
+        CandidatePublicationResultFrameComposition,
+        encode_candidate_publication_execution_result_frame,
+    },
     candidate_reachability::publish_current_candidates,
     prwc_connection_authentication::AuthenticatedPrwcConnection,
     reachability_owner::{
@@ -135,6 +141,16 @@ impl CandidatePublicationTerminalResultProjection {
     }
 }
 
+/// Agent-owned pure composition of an existing candidate-publication frame result and the exact
+/// optional post-commit requester cleanup disposition.
+///
+/// The bridge-owned generic carrier owns the concrete control-frame type, so Agent does not add a
+/// direct transport dependency merely to name that type. The disposition remains opaque to bridge
+/// framing and is never serialized.
+pub type CandidatePublicationTerminalFrameComposition = CandidatePublicationResultFrameComposition<
+    Option<Result<(), RequesterRendezvousLifecycleError>>,
+>;
+
 fn project_candidate_publication_terminal_parts<T, E, C>(
     result: Result<(T, C), E>,
 ) -> (Result<T, E>, Option<C>) {
@@ -164,6 +180,25 @@ pub fn project_candidate_publication_terminal_result(
         semantic_result,
         cleanup,
     }
+}
+
+/// Constructs one terminal candidate-publication frame through the existing bridge codec while
+/// preserving the exact GA cleanup channel beside the local frame-construction result.
+///
+/// The exact decoded command remains the sole request-correlation source. Cleanup disposition is
+/// transferred unchanged into the bridge-owned generic carrier and cannot affect Accepted/Rejected
+/// framing. This helper performs no frame write, stream custody, semantic execution, requester or
+/// reachability mutation, retry, runtime drive, activation, or dialing.
+#[must_use]
+pub fn compose_candidate_publication_terminal_result_frame(
+    command: &CandidatePublicationControlFrame,
+    projection: CandidatePublicationTerminalResultProjection,
+) -> CandidatePublicationTerminalFrameComposition {
+    let (semantic_result, cleanup) = projection.into_parts();
+    CandidatePublicationResultFrameComposition::new(
+        encode_candidate_publication_execution_result_frame(command, semantic_result),
+        cleanup,
+    )
 }
 
 /// Cloneable handle to exactly one process-local requester/rendezvous runtime owner.
@@ -362,6 +397,7 @@ mod tests {
     use prw_core::{DeviceId, SessionId};
     use prw_remote_bridge::{
         candidate_publication_execution::CandidatePublicationExecutionError,
+        candidate_publication_result_wire::CandidatePublicationResultWireError,
         requester_rendezvous_authority::RequesterRendezvousAuthorityError,
         requester_rendezvous_in_memory_provider::{
             InMemoryRequesterRendezvousAuthorityProvider, RequesterRendezvousLifecycleError,
@@ -371,9 +407,10 @@ mod tests {
 
     use super::{
         CandidatePublicationPostCommitRequesterCleanupOutcome,
+        CandidatePublicationTerminalFrameComposition,
         CandidatePublicationTerminalResultProjection, RequesterRendezvousCommittedCleanupIdentity,
-        SharedRequesterRendezvousAuthority, project_candidate_publication_terminal_parts,
-        project_candidate_publication_terminal_result,
+        SharedRequesterRendezvousAuthority, compose_candidate_publication_terminal_result_frame,
+        project_candidate_publication_terminal_parts, project_candidate_publication_terminal_result,
     };
     use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 
@@ -512,6 +549,34 @@ mod tests {
             >,
         ) -> CandidatePublicationTerminalResultProjection =
             project_candidate_publication_terminal_result;
+
+        std::hint::black_box(adapter);
+    }
+
+    #[test]
+    fn terminal_frame_composition_preserves_typed_cleanup_when_frame_construction_failed() {
+        let cleanup_error = RequesterRendezvousLifecycleError::RecordUnknown;
+        let composition = CandidatePublicationTerminalFrameComposition::new(
+            Err(CandidatePublicationResultWireError::InvalidPayload),
+            Some(Err(cleanup_error)),
+        );
+
+        let (frame_result, cleanup) = composition.into_parts();
+
+        assert!(matches!(
+            frame_result,
+            Err(CandidatePublicationResultWireError::InvalidPayload)
+        ));
+        assert_eq!(cleanup, Some(Err(cleanup_error)));
+    }
+
+    #[test]
+    fn real_terminal_frame_composition_adapter_has_exact_command_projection_shape() {
+        let adapter: fn(
+            &prw_remote_bridge::candidate_publication_control_frame::CandidatePublicationControlFrame,
+            CandidatePublicationTerminalResultProjection,
+        ) -> CandidatePublicationTerminalFrameComposition =
+            compose_candidate_publication_terminal_result_frame;
 
         std::hint::black_box(adapter);
     }
