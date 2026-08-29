@@ -31,7 +31,7 @@ use super::{
 };
 use crate::remote_session_capability_runtime::{
     RemoteSessionPersistentCollectionConfigError, RemoteSessionWorkerAdmissionRejectionReason,
-    RemoteSessionWorkerCancellationController, remote_session_worker_cancellation_pair,
+    RemoteSessionWorkerCancellationController,
 };
 
 type RecoverableOwnerCell<O> = Arc<Mutex<Option<O>>>;
@@ -95,12 +95,10 @@ impl<K, O, T> RecoverablePersistentWorkerCompletion<K, O, T> {
         &self.owner
     }
 
-    #[must_use]
     pub(super) const fn result(&self) -> &Result<T, RemoteSessionSpawnedWorkerJoinError> {
         &self.result
     }
 
-    #[must_use]
     pub(super) fn into_parts(self) -> (K, O, Result<T, RemoteSessionSpawnedWorkerJoinError>) {
         (self.key, self.owner, self.result)
     }
@@ -318,8 +316,9 @@ mod tests {
     use super::{
         RecoverablePersistentWorkerEntry, RemoteSessionSpawnedWorkerJoinError,
         RemoteSessionWorkerAdmissionRejectionReason, reap_ready_recoverable_workers,
-        remote_session_worker_cancellation_pair, run_recoverable_persistent_worker_collection,
+        run_recoverable_persistent_worker_collection,
     };
+    use crate::remote_session_capability_runtime::remote_session_worker_cancellation_pair;
 
     #[derive(Debug)]
     struct TestAdmission {
