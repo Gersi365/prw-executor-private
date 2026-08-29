@@ -10,9 +10,7 @@
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::post_auth_control_stream_ingress::PostAuthRequesterRendezvousTransaction;
 
-use super::{
-    RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority,
-};
+use super::{RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority};
 use crate::{
     candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
     candidate_publication_requester_rendezvous_start_intent::{
@@ -44,9 +42,7 @@ impl RequesterRendezvousRetainedCustodyDrContinuation {
 
     /// Borrows the exact terminal DR result without translating or flattening its failure class.
     #[must_use]
-    pub(super) const fn dr_result(
-        &self,
-    ) -> &Result<(), RequesterRendezvousStartCompositionError> {
+    pub(super) const fn dr_result(&self) -> &Result<(), RequesterRendezvousStartCompositionError> {
         &self.dr_result
     }
 
