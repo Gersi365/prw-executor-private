@@ -162,7 +162,9 @@ impl From<RemoteBridgeError> for AuthenticatedRemoteSessionPostAuthIngressTransa
     }
 }
 
-impl From<CapabilityRequestWireError> for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
+impl From<CapabilityRequestWireError>
+    for AuthenticatedRemoteSessionPostAuthIngressTransactionError
+{
     fn from(error: CapabilityRequestWireError) -> Self {
         Self::CapabilityResponse(error)
     }
