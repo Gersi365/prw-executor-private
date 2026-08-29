@@ -1,0 +1,42 @@
+name: C03e-FS Parent Registration Helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fs-parent-registration-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact module registration
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker.rs")
+          text = path.read_text()
+          marker = "mod recoverable_persistent_requester_rendezvous_worker;\n"
+          if marker in text:
+              print("registration already present")
+          else:
+              if not text.endswith("}\n"):
+                  raise SystemExit("unexpected parent module ending")
+              path.write_text(text + "\n" + marker)
+      - name: Commit helper patch when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No helper patch needed"
+            exit 0
+          fi
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker.rs
+          git commit -m "Phase 152 C03e-FS helper: register persistent requester-aware custody module"
+          git push
