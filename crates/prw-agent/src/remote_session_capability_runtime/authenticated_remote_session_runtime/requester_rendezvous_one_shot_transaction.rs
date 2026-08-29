@@ -44,7 +44,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         reason = "C03e-ER materializes the isolated one-shot transaction before separately gated deterministic stream demultiplexing/runtime invocation"
     )]
     pub(crate) async fn receive_requester_rendezvous_start_intent_once(
-        &mut self,
+        &self,
     ) -> Result<RequesterRendezvousCorrelatedStartIntent, RequesterRendezvousOneShotTransactionError>
     {
         let mut stream = self.peer.accept_control_stream().await?;
