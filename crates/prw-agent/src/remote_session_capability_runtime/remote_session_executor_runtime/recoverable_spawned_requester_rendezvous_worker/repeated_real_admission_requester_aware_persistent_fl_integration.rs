@@ -40,9 +40,9 @@ use super::{
 use crate::{
     candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
     remote_session_capability_runtime::{
-        AuthenticatedRemoteSessionRuntimeOwner, RemoteSessionRealAdmissionError,
-        SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
-        admit_expected_remote_device_session, remote_session_worker_cancellation_pair,
+        RemoteSessionRealAdmissionError, SharedCurrentCapabilityAuthority,
+        SharedRequesterRendezvousAuthority, admit_expected_remote_device_session,
+        remote_session_worker_cancellation_pair,
         requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
     },
     remote_transport_runtime::AgentRemoteTransportRuntime,
@@ -263,9 +263,11 @@ impl RemoteSessionExecutorRuntime {
     /// Returns the existing persistent collection configuration error before runtime work when the
     /// requested active-worker bound exceeds the registered-device ceiling.
     #[expect(
+        clippy::needless_pass_by_ref_mut,
+        clippy::needless_pass_by_value,
         clippy::too_many_arguments,
         clippy::too_many_lines,
-        reason = "C03e-FU materializes the FT-selected explicit repeated-AJ requester-aware integration surface without introducing an aggregate runtime context"
+        reason = "C03e-FU preserves exclusive executor custody and supervisor-owned shared policy lifetime while materializing the FT-selected explicit repeated-AJ integration surface"
     )]
     pub(in super::super) fn drive_recoverable_repeated_real_remote_admission_collection<
         P,
@@ -482,7 +484,7 @@ mod tests {
     #[test]
     fn duplicate_expected_device_is_rejected_before_timing_sampling() {
         let mut active = HashMap::new();
-        active.insert(device_id("device-fu"), ());
+        active.insert(device_id("device-fu"), 1_u8);
         let request = test_request("device-fu", 7);
         let mut timing_samples = 0_usize;
         let mut rejection = None;
@@ -516,7 +518,7 @@ mod tests {
 
     #[test]
     fn vacant_expected_device_samples_timing_once_and_preserves_request() {
-        let active = HashMap::<DeviceId, ()>::new();
+        let active = HashMap::<DeviceId, u8>::new();
         let request = test_request("device-fu-vacant", 9);
         let mut timing_samples = 0_usize;
         let mut rejection_count = 0_usize;
