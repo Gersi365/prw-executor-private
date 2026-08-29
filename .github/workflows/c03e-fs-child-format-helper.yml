@@ -1,0 +1,66 @@
+name: C03e-FS Child Format Helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fs-child-format-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact FS test import cleanup
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs")
+          text = path.read_text()
+          old = "use std::{future::pending, num::NonZeroUsize, sync::Arc};"
+          new = "use std::{future::poll_fn, num::NonZeroUsize, sync::Arc, task::Poll};"
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit("unexpected FS test import occurrence count")
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit("expected FS test import not found")
+          obsolete = '''\n    #[test]\n    fn pending_future_import_remains_available_for_shutdown_test_surface() {\n        let future = pending::<()>();\n        drop(future);\n    }\n'''
+          if obsolete in text:
+              if text.count(obsolete) != 1:
+                  raise SystemExit("unexpected obsolete FS test occurrence count")
+              text = text.replace(obsolete, "", 1)
+          path.write_text(text)
+      - name: Run rustfmt
+        shell: bash
+        run: cargo fmt --all
+      - name: Guard formatted scope
+        shell: python
+        run: |
+          import subprocess
+          allowed = {
+              "crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker.rs",
+              "crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs",
+          }
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected rustfmt paths: {sorted(unexpected)}")
+          print("changed paths:", sorted(changed))
+      - name: Commit helper correction when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No helper correction needed"
+            exit 0
+          fi
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker.rs
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime/recoverable_spawned_requester_rendezvous_worker/recoverable_persistent_requester_rendezvous_worker.rs
+          git commit -m "Phase 152 C03e-FS helper: normalize persistent requester-aware custody source"
+          git push
