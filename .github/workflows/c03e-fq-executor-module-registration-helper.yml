@@ -1,0 +1,37 @@
+name: C03e-FQ executor module registration helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-fq-executor-module-registration-helper-noncanonical
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[fq-helper-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply exact executor child-module registration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = path.read_text(encoding='utf-8')
+          declaration = '\nmod recoverable_spawned_requester_rendezvous_worker;\n'
+          assert declaration.strip() not in text, 'FQ child-module registration already present'
+          assert text.endswith('\n'), 'executor source must end with newline'
+          path.write_text(text + declaration, encoding='utf-8', newline='\n')
+      - name: Commit helper patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Gersi365"
+          git config user.email "Gersi365@outlook.com"
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs
+          git diff --cached --check
+          git commit -m "Phase 152 C03e-FQ: register recoverable spawned worker module [fq-helper-patched]"
+          git push
