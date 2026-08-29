@@ -177,8 +177,8 @@ enum RecoverableRequesterAwarePeerDisposition {
     dead_code,
     reason = "C03e-FW materializes the FV-selected exact terminal-class partition for the higher-owner completion consumer"
 )]
-fn select_recoverable_requester_aware_peer_disposition(
-    result: &Result<
+const fn select_recoverable_requester_aware_peer_disposition(
+    result: Result<
         RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
         RemoteSessionSpawnedWorkerJoinError,
     >,
@@ -215,7 +215,7 @@ pub(super) fn dispose_recoverable_repeated_real_admission_requester_aware_worker
 ) {
     let (device_id, session_owner, result) = completion.into_parts();
 
-    match select_recoverable_requester_aware_peer_disposition(&result) {
+    match select_recoverable_requester_aware_peer_disposition(result) {
         RecoverableRequesterAwarePeerDisposition::OrderlyShutdown => {
             session_owner.close_for_orderly_shutdown();
         }
@@ -370,7 +370,7 @@ mod tests {
             Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled);
 
         assert_eq!(
-            select_recoverable_requester_aware_peer_disposition(&result),
+            select_recoverable_requester_aware_peer_disposition(result),
             RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
         );
     }
@@ -386,7 +386,7 @@ mod tests {
             Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(failure));
 
         assert_eq!(
-            select_recoverable_requester_aware_peer_disposition(&result),
+            select_recoverable_requester_aware_peer_disposition(result),
             RecoverableRequesterAwarePeerDisposition::TerminalFailure
         );
     }
@@ -396,7 +396,7 @@ mod tests {
         let result = Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion);
 
         assert_eq!(
-            select_recoverable_requester_aware_peer_disposition(&result),
+            select_recoverable_requester_aware_peer_disposition(result),
             RecoverableRequesterAwarePeerDisposition::TerminalFailure
         );
     }
