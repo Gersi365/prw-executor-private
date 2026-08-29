@@ -56,7 +56,9 @@ use std::fmt;
 use prw_core::DeviceId;
 use prw_remote_bridge::{
     RemoteBridgeError, capability_request_wire::CapabilityRequestWireError,
-    post_auth_control_stream_ingress::PostAuthControlStreamIngressError,
+    post_auth_control_stream_ingress::{
+        PostAuthControlStreamIngressError, PostAuthRequesterRendezvousTransaction,
+    },
     remote_server_transport_runtime::RemoteServerTransportRuntimeError,
     remote_session_binding::BoundRemoteSession,
     requester_rendezvous_target_request_io::RequesterRendezvousTargetRequestIoError,
@@ -86,8 +88,38 @@ impl RemoteSessionCapabilityRuntimeOwner {
     }
 }
 
-/// Correlation remains separate from the authenticated requester/rendezvous start intent.
+/// Historical ER correlation remains separate from the authenticated requester/rendezvous intent.
 pub(crate) type RequesterRendezvousCorrelatedStartIntent = (u64, RequesterRendezvousStartIntent);
+
+/// One C03e-EZ requester handoff retaining the strict ET transaction and session-derived intent.
+///
+/// The retained ET transaction owns both the exact strict requester request, whose outer request ID
+/// remains correlation only, and the exact same already-accepted control stream. `start_intent`
+/// derives requester identity only from the authenticated PRW application session. This carrier
+/// performs no C03e-DV invocation, provider mutation, response construction/write, second read,
+/// retry, close, candidate selection, dialing or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-EZ materializes response-stream custody before separately gated requester continuation and response semantics"
+)]
+pub(crate) struct RequesterRendezvousResponseStreamCustodyHandoff {
+    requester_transaction: PostAuthRequesterRendezvousTransaction,
+    start_intent: RequesterRendezvousStartIntent,
+}
+
+impl RequesterRendezvousResponseStreamCustodyHandoff {
+    /// Composes exact ET requester/stream custody with the existing session-derived start intent.
+    #[must_use]
+    pub(crate) const fn new(
+        requester_transaction: PostAuthRequesterRendezvousTransaction,
+        start_intent: RequesterRendezvousStartIntent,
+    ) -> Self {
+        Self {
+            requester_transaction,
+            start_intent,
+        }
+    }
+}
 
 /// Typed successful result of one C03e-EV post-authenticated ingress transaction.
 #[allow(
@@ -97,8 +129,8 @@ pub(crate) type RequesterRendezvousCorrelatedStartIntent = (u64, RequesterRendez
 pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressOutcome {
     /// Existing capability authorization, dispatch and same-stream response completed successfully.
     CapabilityProcessed,
-    /// One strict requester/rendezvous target was composed only into the existing start intent.
-    RequesterRendezvous(RequesterRendezvousCorrelatedStartIntent),
+    /// One strict requester/rendezvous target plus exact same-stream custody reached the handoff.
+    RequesterRendezvous(RequesterRendezvousResponseStreamCustodyHandoff),
 }
 
 /// Failure while processing exactly one C03e-EV post-authenticated ingress transaction.
