@@ -131,7 +131,7 @@ pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressOutcome {
     /// Existing capability authorization, dispatch and same-stream response completed successfully.
     CapabilityProcessed,
     /// One strict requester/rendezvous target plus exact same-stream custody reached the handoff.
-    RequesterRendezvous(RequesterRendezvousResponseStreamCustodyHandoff),
+    RequesterRendezvous(Box<RequesterRendezvousResponseStreamCustodyHandoff>),
 }
 
 /// Failure while processing exactly one C03e-EV post-authenticated ingress transaction.
