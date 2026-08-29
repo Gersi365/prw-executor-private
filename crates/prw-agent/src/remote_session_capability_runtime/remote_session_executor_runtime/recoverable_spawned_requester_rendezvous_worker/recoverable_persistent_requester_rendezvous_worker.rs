@@ -141,7 +141,7 @@ fn recover_owner_after_terminal_join<O>(owner_cell: &RecoverableOwnerCell<O>) ->
     owner
 }
 
-fn reap_ready_recoverable_workers<K, O, T, C>(
+pub(super) fn reap_ready_recoverable_workers<K, O, T, C>(
     active: &mut HashMap<K, RecoverablePersistentWorkerEntry<O, T>>,
     context: &mut Context<'_>,
     on_completion: &mut C,
@@ -167,7 +167,7 @@ fn reap_ready_recoverable_workers<K, O, T, C>(
     }
 }
 
-fn request_all_recoverable_worker_cancellations<K, O, T>(
+pub(super) fn request_all_recoverable_worker_cancellations<K, O, T>(
     active: &HashMap<K, RecoverablePersistentWorkerEntry<O, T>>,
 ) {
     for entry in active.values() {
@@ -175,7 +175,7 @@ fn request_all_recoverable_worker_cancellations<K, O, T>(
     }
 }
 
-async fn drain_recoverable_workers<K, O, T, C>(
+pub(super) async fn drain_recoverable_workers<K, O, T, C>(
     active: &mut HashMap<K, RecoverablePersistentWorkerEntry<O, T>>,
     on_completion: &mut C,
 ) where
