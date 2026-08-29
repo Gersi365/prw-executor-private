@@ -111,12 +111,12 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
                 let start_intent =
                     adapt_post_auth_requester_rendezvous_target_intent(self, target_intent);
                 Ok(
-                    AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(
+                    AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(Box::new(
                         RequesterRendezvousResponseStreamCustodyHandoff::new(
                             transaction,
                             start_intent,
                         ),
-                    ),
+                    )),
                 )
             }
         }
@@ -169,7 +169,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             {
                 AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed => {}
                 AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(handoff) => {
-                    return Ok(handoff);
+                    return Ok(*handoff);
                 }
             }
         }
