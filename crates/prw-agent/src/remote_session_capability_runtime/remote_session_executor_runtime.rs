@@ -1945,15 +1945,15 @@ impl RemoteSessionExecutorRuntime {
     /// Drives exactly one existing C03e-FL requester-aware cancellation-aware serial lifecycle
     /// worker on this already-owned private current-thread executor.
     ///
-    /// Both the authenticated-session owner and the process-local requester/rendezvous runtime
-    /// owner remain mutably borrowed caller custody for the entire synchronous drive. The exact FL
+    /// The authenticated-session owner remains mutable caller custody while the shared
+    /// requester/rendezvous authority handle is borrowed for the entire synchronous drive. The exact FL
     /// worker remains the sole authority for cancellation ordering and terminal stop classification.
     /// This seam performs no peer close, owner drop, restart/reuse, task spawn, cancellation-pair
     /// construction, persistent-collection mutation, requester-authority synchronization,
     /// candidate/reachability continuation, target dialing, listener activation or readiness.
     #[allow(
         dead_code,
-        reason = "C03e-FN materializes the FM-selected borrowed executor seam before separately gated caller activation"
+        reason = "C03e-FP adapts the FN borrowed executor seam to the FO-selected shared requester/rendezvous authority"
     )]
     #[expect(
         clippy::needless_pass_by_ref_mut,
@@ -1973,7 +1973,7 @@ impl RemoteSessionExecutorRuntime {
         session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
         authority: &SharedCurrentCapabilityAuthority<P>,
         policy_source: &S,
-        requester_rendezvous_runtime_owner: &mut crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
+        requester_rendezvous_authority: &super::SharedRequesterRendezvousAuthority,
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
@@ -1983,7 +1983,7 @@ impl RemoteSessionExecutorRuntime {
                 session_owner,
                 authority,
                 policy_source,
-                requester_rendezvous_runtime_owner,
+                requester_rendezvous_authority,
                 verifier_time_unix_seconds,
                 dispatcher,
                 cancellation,
