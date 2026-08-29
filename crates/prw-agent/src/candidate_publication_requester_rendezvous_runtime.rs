@@ -184,8 +184,8 @@ mod tests {
         let provider = InMemoryRequesterRendezvousAuthorityProvider::new(1)
             .expect("explicit non-zero provider capacity");
         let mut owner = CandidatePublicationRequesterRendezvousRuntimeOwner::new(provider);
-        let requester_session_id = SessionId::new("fy-requester-session-unknown")
-            .expect("valid requester session id");
+        let requester_session_id =
+            SessionId::new("fy-requester-session-unknown").expect("valid requester session id");
         let publisher_device_id =
             DeviceId::new("fy-publisher-device-unknown").expect("valid publisher device id");
 
