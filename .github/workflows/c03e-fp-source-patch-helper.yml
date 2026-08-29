@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message != 'Phase 152 C03e-FP: helper apply source patches'
+    if: "${{ github.event.head_commit.message != 'Phase 152 C03e-FP: helper apply source patches' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
