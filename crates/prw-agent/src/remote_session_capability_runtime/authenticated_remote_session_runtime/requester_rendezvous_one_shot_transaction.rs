@@ -3,9 +3,16 @@
 //! C03e-ER materializes only the C03e-EP-selected one-shot composition after C03e-EQ provided the
 //! bridge-owned requester-specific receive adapter. C03e-EV additionally materializes the separately
 //! selected single-owner one-transaction post-authenticated ingress seam while leaving the ER method
-//! itself unchanged and uninvoked. The existing capability loop and worker do not invoke either seam.
-//! Neither seam activates requester/rendezvous authority/provider execution, a combined loop, retry,
+//! itself unchanged and uninvoked. C03e-EX adds the isolated C03e-EW-selected repeated ingress loop
+//! and executor-neutral cancellation-aware worker seam without integrating either into active runtime
+//! ownership. The existing capability loop and worker do not invoke these seams. None of these seams
+//! activates requester/rendezvous authority/provider execution, requester response semantics, retry,
 //! peer-close policy, dialing, readiness publication, or runtime activation.
+
+use std::{
+    future::{Future, poll_fn},
+    task::Poll,
+};
 
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
@@ -107,6 +114,124 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
                     )),
                 )
             }
+        }
+    }
+
+    /// Runs the isolated C03e-EW-selected repeated post-authenticated ingress loop.
+    ///
+    /// Exactly one C03e-EV transaction is in flight per iteration. Verifier time is sampled once
+    /// immediately before each EV invocation. Capability success is the only outcome that reaches the
+    /// next iteration. One requester/rendezvous result is a typed handoff barrier and returns the
+    /// existing correlated non-authoritative start intent without accepting another stream. The first
+    /// EV transaction failure terminates the loop unchanged.
+    ///
+    /// This method never calls `accept_control_stream()` directly and never invokes the historical
+    /// capability-only `process_one_capability_request(...)` path. It therefore introduces no second
+    /// authenticated acceptor, family-specific queue, speculative pre-accept, concurrent transaction,
+    /// retry, reconnect, provider execution, requester response, peer close, dialing, readiness or
+    /// runtime activation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`AuthenticatedRemoteSessionPostAuthIngressTransactionError`] emitted by the
+    /// exact C03e-EV transaction seam. No retry, fallback, suppression or replacement is performed.
+    #[allow(
+        dead_code,
+        reason = "C03e-EX materializes the isolated EW-selected repeated ingress loop before separately gated runtime integration"
+    )]
+    pub(crate) async fn run_repeated_post_auth_control_stream_ingress<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+    >(
+        &mut self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        mut verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+    ) -> Result<
+        RequesterRendezvousCorrelatedStartIntent,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        loop {
+            let now_unix_seconds = verifier_time_unix_seconds();
+            match self
+                .process_one_post_auth_control_stream_ingress(
+                    authority,
+                    now_unix_seconds,
+                    dispatcher,
+                )
+                .await?
+            {
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed => {}
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(handoff) => {
+                    return Ok(handoff);
+                }
+            }
+        }
+    }
+
+    /// Runs one executor-neutral cancellation-aware C03e-EX worker body without spawning a task.
+    ///
+    /// The worker owns exactly one repeated C03e-EX loop future and one caller-supplied cancellation
+    /// future. The loop is polled first on each wake so an already-ready requester handoff or EV
+    /// failure retains its exact classification. Cancellation wins only while the repeated loop is
+    /// pending. The in-flight loop future is dropped when the lexical race block exits before the
+    /// cancellation result leaves this method, releasing the exclusive mutable owner borrow first.
+    ///
+    /// Return classes are intentionally minimal and distinguishable:
+    ///
+    /// - `Ok(Some(handoff))` is the requester/rendezvous handoff barrier;
+    /// - `Ok(None)` is caller-owned cancellation;
+    /// - `Err(error)` is the first unchanged C03e-EV transaction failure.
+    ///
+    /// Cancellation performs no whole-peer close in this checkpoint. The existing capability-only
+    /// code-4 diagnostic is not widened to mixed-family traffic, and no replacement close code is
+    /// invented. No task, channel, queue, retry, reconnect, provider action, requester response,
+    /// dialing, readiness state, listener activation or deployment is created.
+    ///
+    /// # Errors
+    ///
+    /// Returns the exact first repeated-loop C03e-EV transaction error without reclassification.
+    #[allow(
+        dead_code,
+        reason = "C03e-EX materializes the isolated EW-selected executor-neutral worker before separately gated runtime integration"
+    )]
+    pub(crate) async fn run_repeated_post_auth_control_stream_ingress_worker<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> Result<
+        Option<RequesterRendezvousCorrelatedStartIntent>,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        {
+            let mut ingress_loop = Box::pin(self.run_repeated_post_auth_control_stream_ingress(
+                authority,
+                verifier_time_unix_seconds,
+                dispatcher,
+            ));
+            let mut cancellation = Box::pin(cancellation);
+
+            poll_fn(|context| {
+                match ingress_loop.as_mut().poll(context) {
+                    Poll::Ready(Ok(handoff)) => return Poll::Ready(Ok(Some(handoff))),
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Pending => {}
+                }
+
+                match cancellation.as_mut().poll(context) {
+                    Poll::Ready(()) => Poll::Ready(Ok(None)),
+                    Poll::Pending => Poll::Pending,
+                }
+            })
+            .await
         }
     }
 
