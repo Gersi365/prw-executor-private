@@ -302,9 +302,7 @@ mod tests {
     };
     use tokio::runtime::Builder;
 
-    use super::{
-        RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority,
-    };
+    use super::{RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority};
     use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 
     fn block_on<F: Future>(future: F) -> F::Output {
@@ -371,10 +369,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Ok((
-                7,
-                Err(RequesterRendezvousLifecycleError::RecordUnknown)
-            ))
+            Ok((7, Err(RequesterRendezvousLifecycleError::RecordUnknown)))
         );
         assert!(authority.runtime_owner.try_lock().is_ok());
     }
