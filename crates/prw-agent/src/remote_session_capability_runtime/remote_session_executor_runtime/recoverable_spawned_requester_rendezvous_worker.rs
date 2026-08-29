@@ -38,6 +38,10 @@ type RecoverableAuthenticatedSessionOwnerCell =
 /// bounded spawned-worker join error on abnormal completion. Possession of this value does not
 /// authorize peer reuse, peer close, worker restart, requester-record cleanup, reachability work, or
 /// another ingress cycle.
+#[allow(
+    dead_code,
+    reason = "C03e-FQ materializes completion custody for a separately gated persistent integration consumer"
+)]
 pub(super) struct RecoverableSpawnedRequesterRendezvousWorkerCompletion {
     session_owner: AuthenticatedRemoteSessionRuntimeOwner,
     result: Result<
@@ -46,6 +50,10 @@ pub(super) struct RecoverableSpawnedRequesterRendezvousWorkerCompletion {
     >,
 }
 
+#[allow(
+    dead_code,
+    reason = "C03e-FQ materializes completion accessors for a separately gated persistent integration consumer"
+)]
 impl RecoverableSpawnedRequesterRendezvousWorkerCompletion {
     /// Borrows the exact recovered authenticated-session owner retained after worker join.
     #[must_use]
@@ -54,7 +62,6 @@ impl RecoverableSpawnedRequesterRendezvousWorkerCompletion {
     }
 
     /// Returns the exact FL stop or existing bounded abnormal-join classification.
-    #[must_use]
     pub(super) const fn result(
         &self,
     ) -> Result<
@@ -65,7 +72,6 @@ impl RecoverableSpawnedRequesterRendezvousWorkerCompletion {
     }
 
     /// Transfers the recovered session owner and exact worker/join terminal result by value.
-    #[must_use]
     pub(super) fn into_parts(
         self,
     ) -> (
@@ -138,7 +144,8 @@ impl RemoteSessionExecutorRuntime {
     ) -> RecoverableSpawnedRequesterRendezvousWorkerCompletion {
         let authority = (*authority).clone();
         let requester_rendezvous_authority = requester_rendezvous_authority.clone();
-        let session_owner_cell = Arc::new(Mutex::new(Some(session_owner)));
+        let session_owner_cell: RecoverableAuthenticatedSessionOwnerCell =
+            Arc::new(Mutex::new(Some(session_owner)));
         let worker_session_owner_cell = Arc::clone(&session_owner_cell);
 
         let (session_owner, result) = self.runtime.block_on(async move {
@@ -149,16 +156,19 @@ impl RemoteSessionExecutorRuntime {
                     .expect("spawned FL worker must borrow retained authenticated-session owner");
                 let mut dispatcher = dispatcher;
 
-                run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
-                    session_owner,
-                    &authority,
-                    policy_source.as_ref(),
-                    &requester_rendezvous_authority,
-                    verifier_time_unix_seconds,
-                    &mut dispatcher,
-                    cancellation,
-                )
-                .await
+                let result =
+                    run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
+                        session_owner,
+                        &authority,
+                        policy_source.as_ref(),
+                        &requester_rendezvous_authority,
+                        verifier_time_unix_seconds,
+                        &mut dispatcher,
+                        cancellation,
+                    )
+                    .await;
+                drop(session_owner_guard);
+                result
             });
 
             join_and_recover_owned_value(session_owner_cell, worker_handle).await
@@ -192,6 +202,7 @@ mod tests {
             let worker_handle = tokio::spawn(async move {
                 let owner_guard = worker_owner_cell.lock().await;
                 assert_eq!(owner_guard.as_ref(), Some(&41_u8));
+                drop(owner_guard);
                 7_u8
             });
 
@@ -203,6 +214,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "C03e-FQ intentionally proves panic unwinding releases a held owner-cell guard without removing owner custody"
+    )]
     fn retained_cell_recovers_exact_owner_after_abnormal_join() {
         let runtime = Builder::new_current_thread()
             .enable_all()
