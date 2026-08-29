@@ -104,7 +104,7 @@ impl CandidatePublicationPostCommitRequesterCleanupOutcome {
 /// result codec. `cleanup` is present only after a definite durable commit and remains internal;
 /// its failure cannot rewrite the semantic result into `Rejected`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CandidatePublicationTerminalResultProjection {
+pub struct CandidatePublicationTerminalResultProjection {
     semantic_result: Result<ReachabilityCommitOutcome, CandidatePublicationExecutionError>,
     cleanup: Option<Result<(), RequesterRendezvousLifecycleError>>,
 }
@@ -150,7 +150,7 @@ fn project_candidate_publication_terminal_parts<T, E, C>(
 /// This helper performs no frame encoding or I/O, requester mutation, reachability mutation, retry,
 /// task/runtime drive, activation, or dialing. A successful FY outcome always remains bridge
 /// semantic success even when its exact post-commit cleanup disposition is an error.
-pub(crate) fn project_candidate_publication_terminal_result(
+pub fn project_candidate_publication_terminal_result(
     result: Result<
         CandidatePublicationPostCommitRequesterCleanupOutcome,
         CandidatePublicationExecutionError,
@@ -505,12 +505,14 @@ mod tests {
 
     #[test]
     fn real_terminal_projection_adapter_has_exact_fy_to_bridge_signature() {
-        let _adapter: fn(
+        let adapter: fn(
             Result<
                 CandidatePublicationPostCommitRequesterCleanupOutcome,
                 CandidatePublicationExecutionError,
             >,
         ) -> CandidatePublicationTerminalResultProjection =
             project_candidate_publication_terminal_result;
+
+        std::hint::black_box(adapter);
     }
 }
