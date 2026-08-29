@@ -173,10 +173,7 @@ fn is_requester_rendezvous_family(frame: &ControlFrame) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use prw_remote_transport::{
-        ControlFrame, ControlMessageKind,
-        runtime::MeshControlStream,
-    };
+    use prw_remote_transport::{ControlFrame, ControlMessageKind, runtime::MeshControlStream};
 
     use super::{
         PostAuthRequesterRendezvousTransaction, is_requester_rendezvous_family,
