@@ -140,7 +140,7 @@ impl<D, T> RemoteSessionWorkerAdmissionRejection<D, T> {
         self.reason
     }
 
-    /// Returns the untouched rejected admission item by reference.
+    /// Returns the untouched rejected admission item.
     #[must_use]
     pub const fn admission(&self) -> &RemoteSessionWorkerAdmission<D, T> {
         &self.admission
@@ -1976,7 +1976,7 @@ impl RemoteSessionExecutorRuntime {
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
-    ) -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
+    ) -> super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop{
         self.runtime.block_on(
             super::requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
                 session_owner,
