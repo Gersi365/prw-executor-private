@@ -36,6 +36,10 @@ use super::super::{
 };
 use super::AuthenticatedRemoteSessionRuntimeOwner;
 
+const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE: u32 = 6;
+const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
+    b"remote requester-aware session terminated";
+
 impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Processes exactly one post-authenticated control stream through the C03e-ET family ingress.
     ///
@@ -278,5 +282,47 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
             adapt_decoded_requester_rendezvous_target_device_id(request.into_target_device_id());
         let start_intent = adapt_post_auth_requester_rendezvous_target_intent(self, target_intent);
         Ok((request_id, start_intent))
+    }
+
+    /// Consumes one recovered authenticated owner after requester-aware FL or join failure.
+    ///
+    /// This C03e-FW seam performs terminal peer disposition only. It closes the exact retained peer
+    /// once with the fixed non-secret requester-aware code-6 diagnostic. It performs no requester
+    /// record cleanup, session deletion, retry/reconnect, peer reuse, worker restart, candidate or
+    /// reachability work, target dialing, runtime activation, deployment, or merge.
+    pub(in super::super) fn close_for_requester_aware_terminal_failure(self) {
+        self.peer.close(
+            REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE,
+            REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON,
+        );
+    }
+}
+
+#[cfg(test)]
+mod fw_requester_aware_terminal_close_tests {
+    use super::{
+        AuthenticatedRemoteSessionRuntimeOwner,
+        REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE,
+        REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON,
+    };
+
+    fn assert_consuming_close_signature(close: fn(AuthenticatedRemoteSessionRuntimeOwner)) {
+        let _ = close;
+    }
+
+    #[test]
+    fn requester_aware_terminal_failure_close_is_consuming() {
+        assert_consuming_close_signature(
+            AuthenticatedRemoteSessionRuntimeOwner::close_for_requester_aware_terminal_failure,
+        );
+    }
+
+    #[test]
+    fn requester_aware_terminal_failure_close_uses_fixed_code_six_diagnostic() {
+        assert_eq!(REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE, 6);
+        assert_eq!(
+            REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON,
+            b"remote requester-aware session terminated"
+        );
     }
 }
