@@ -11,8 +11,10 @@
 //! executor-before-bind endpoint lifecycle startup plus explicit remote-supervisor shutdown control,
 //! C03e-AT adds the AS-selected crate-internal one-thread process-lifecycle handoff/join control, and
 //! C03e-BB adds the BA-selected read-only observation of the exact already-bound endpoint address.
-//! This module still does not wire the Agent binary, publish readiness, or activate a production
-//! listener lifecycle.
+//! C03e-GE adds only an explicit fail-closed compatibility classification when the newly typed Mesh
+//! candidate-publication ingress reaches this still-dormant higher-owner seam before any candidate
+//! handoff/execution semantics have been selected. This module still does not wire the Agent binary,
+//! publish readiness, or activate a production listener lifecycle.
 
 mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
@@ -151,12 +153,14 @@ pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressOutcome {
 pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressTransactionError {
     /// Accepting exactly one control stream from the retained authenticated peer failed.
     Accept(RemoteServerTransportRuntimeError),
-    /// C03e-ET one-read ingress or strict requester/rendezvous wire handling failed.
+    /// C03e-ET one-read ingress or strict requester/rendezvous/candidate wire handling failed.
     Ingress(PostAuthControlStreamIngressError),
     /// Existing capability authorization or typed dispatch failed.
     Bridge(RemoteBridgeError),
     /// Existing same-stream capability response I/O failed.
     CapabilityResponse(CapabilityRequestWireError),
+    /// Candidate ingress succeeded, but no Agent candidate handoff/execution semantics are selected.
+    CandidatePublicationHandoffNotSelected,
 }
 
 impl fmt::Display for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
@@ -167,6 +171,9 @@ impl fmt::Display for AuthenticatedRemoteSessionPostAuthIngressTransactionError 
             Self::Bridge(_) => "post-authenticated capability bridge transaction failed",
             Self::CapabilityResponse(_) => {
                 "post-authenticated capability response transmission failed"
+            }
+            Self::CandidatePublicationHandoffNotSelected => {
+                "candidate-publication post-authenticated handoff is not selected"
             }
         })
     }
@@ -179,6 +186,7 @@ impl std::error::Error for AuthenticatedRemoteSessionPostAuthIngressTransactionE
             Self::Ingress(error) => Some(error),
             Self::Bridge(error) => Some(error),
             Self::CapabilityResponse(error) => Some(error),
+            Self::CandidatePublicationHandoffNotSelected => None,
         }
     }
 }
