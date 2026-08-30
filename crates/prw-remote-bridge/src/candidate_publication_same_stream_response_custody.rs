@@ -92,10 +92,7 @@ fn validate_terminal_response_correlation(
 
 #[cfg(test)]
 mod tests {
-    use prw_remote_transport::{
-        ControlFrame, ControlMessageKind,
-        runtime::MeshQuicRuntimeError,
-    };
+    use prw_remote_transport::{ControlFrame, ControlMessageKind, runtime::MeshQuicRuntimeError};
 
     use super::{
         CandidatePublicationTerminalResponseIoError, validate_terminal_response_correlation,
