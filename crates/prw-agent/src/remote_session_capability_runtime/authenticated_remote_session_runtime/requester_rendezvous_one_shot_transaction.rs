@@ -6,10 +6,12 @@
 //! itself unchanged and uninvoked. C03e-EX adds the isolated C03e-EW-selected repeated ingress loop
 //! and executor-neutral cancellation-aware worker seam without integrating either into active runtime
 //! ownership. C03e-EZ threads the C03e-EY-selected exact requester response-stream custody only
-//! through the ET -> EV -> EX handoff while keeping the continuation uninvoked. The existing
-//! capability loop and worker do not invoke these seams. None of these seams activates
-//! requester/rendezvous authority/provider execution, requester response semantics, retry, peer-close
-//! policy, dialing, readiness publication, or runtime activation.
+//! through the ET -> EV -> EX handoff while keeping the continuation uninvoked. C03e-GE adds only an
+//! explicit fail-closed compatibility arm when current-Mesh candidate publication reaches this
+//! still-dormant Agent transaction before any candidate handoff/execution semantics have been selected.
+//! The existing capability loop and worker do not invoke these seams. None of these seams activates
+//! requester/candidate authority/provider execution, candidate or requester response semantics, retry,
+//! peer-close policy, dialing, readiness publication, or runtime activation.
 
 use std::{
     future::{Future, poll_fn},
@@ -60,6 +62,12 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// request. Processing stops before C03e-DV, registry/requester-policy/provider execution,
     /// candidate selection, requester response construction/write, or dialing.
     ///
+    /// Candidate-publication ingress is recognized as a distinct family but C03e-GE selects no Agent
+    /// candidate handoff or execution. This dormant seam therefore fails closed with the explicit
+    /// `CandidatePublicationHandoffNotSelected` classification. It does not reinterpret the request as
+    /// capability/requester traffic, call FY/GA/GC, write a candidate response, or accept another
+    /// stream.
+    ///
     /// The method performs one transaction only. It does not replace or invoke the existing
     /// capability loop/worker, does not invoke the isolated C03e-ER accept seam, and does not create a
     /// repeated combined loop, task, queue, retry, reconnect, fairness policy, backpressure policy,
@@ -67,10 +75,10 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     ///
     /// # Errors
     ///
-    /// Preserves distinguishable failure classes for the one authenticated stream accept, C03e-ET
-    /// ingress/strict PRWZ handling, existing capability authorization/dispatch, and existing
-    /// same-stream capability response I/O. No failure is translated into fabricated success or a
-    /// requester/rendezvous response frame.
+    /// Preserves distinguishable failure classes for one authenticated stream accept, strict typed
+    /// ingress, existing capability authorization/dispatch, same-stream capability response I/O, and
+    /// the explicit unselected candidate-publication higher-owner handoff barrier. No failure is
+    /// translated into fabricated success or a requester/candidate response frame.
     #[allow(
         dead_code,
         clippy::needless_pass_by_ref_mut,
@@ -123,6 +131,9 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
                     ),
                 )
             }
+            PostAuthControlStreamIngress::CandidatePublication(_transaction) => Err(
+                AuthenticatedRemoteSessionPostAuthIngressTransactionError::CandidatePublicationHandoffNotSelected,
+            ),
         }
     }
 
@@ -132,7 +143,8 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// immediately before each EV invocation. Capability success is the only outcome that reaches the
     /// next iteration. One requester/rendezvous result is a typed C03e-EZ handoff barrier retaining
     /// the strict request, exact response stream and session-derived start intent without accepting
-    /// another stream. The first EV transaction failure terminates the loop unchanged.
+    /// another stream. The first EV transaction failure — including the explicit GE unselected
+    /// candidate-publication handoff barrier — terminates the loop unchanged.
     ///
     /// This method never calls `accept_control_stream()` directly and never invokes the historical
     /// capability-only `process_one_capability_request(...)` path. It therefore introduces no second
