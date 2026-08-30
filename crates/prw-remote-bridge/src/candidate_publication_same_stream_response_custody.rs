@@ -80,7 +80,7 @@ impl PostAuthCandidatePublicationTransaction {
     }
 }
 
-fn validate_terminal_response_correlation(
+const fn validate_terminal_response_correlation(
     expected_request_id: u64,
     response_frame: &ControlFrame,
 ) -> Result<(), CandidatePublicationTerminalResponseIoError> {
