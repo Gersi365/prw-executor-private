@@ -178,7 +178,9 @@ pub fn compose_candidate_publication_current_mesh_terminal_result<D, E>(
 
 #[cfg(test)]
 mod tests {
-    use prw_remote_transport::{ControlMessageKind as MeshControlMessageKind, RemoteTransportError};
+    use prw_remote_transport::{
+        ControlMessageKind as MeshControlMessageKind, RemoteTransportError,
+    };
 
     use crate::{
         candidate_publication_freshness::CandidatePublicationFreshnessToken,
