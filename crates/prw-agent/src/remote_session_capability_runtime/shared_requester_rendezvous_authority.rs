@@ -234,7 +234,10 @@ impl fmt::Display for CurrentMeshCandidatePublicationExecutionError {
                 )
             }
             Self::OwnerLookup(error) => {
-                write!(formatter, "current-Mesh candidate owner lookup failed: {error}")
+                write!(
+                    formatter,
+                    "current-Mesh candidate owner lookup failed: {error}"
+                )
             }
         }
     }
@@ -568,8 +571,7 @@ mod tests {
         CandidatePublicationPostCommitRequesterCleanupOutcome,
         CandidatePublicationTerminalFrameComposition, CandidatePublicationTerminalResultProjection,
         CurrentMeshCandidatePublicationExecutionError, RequesterRendezvousCommittedCleanupIdentity,
-        SharedRequesterRendezvousAuthority,
-        compose_candidate_publication_terminal_result_frame,
+        SharedRequesterRendezvousAuthority, compose_candidate_publication_terminal_result_frame,
         project_candidate_publication_terminal_parts,
         project_candidate_publication_terminal_result,
     };
