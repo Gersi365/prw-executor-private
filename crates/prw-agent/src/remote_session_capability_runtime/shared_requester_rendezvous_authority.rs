@@ -9,10 +9,13 @@
 //! requester lock, one grant is selected under the lock, the lock is released before durable
 //! reachability commit, and exact record cleanup reacquires the lock only after definite commit
 //! success. C03e-GC adds only pure terminal frame composition over the existing bridge codec while
-//! preserving post-commit cleanup disposition separately. It exposes no raw provider, mutex, or
-//! guard and activates no listener/network runtime.
+//! preserving post-commit cleanup disposition separately. C03e-GK adds the GJ-selected dormant
+//! envelope-neutral current-Mesh semantic decomposition: initial owned publication admission,
+//! requester grant release, fresh commit-time current-authority read, exact GI owner lookup,
+//! lexical durable commit, and post-commit requester cleanup. It exposes no raw provider, mutex,
+//! guard or production owner and activates no listener/network runtime.
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use prw_core::{DeviceId, SessionId};
 use prw_policy::PolicyEvaluator;
@@ -24,6 +27,7 @@ use prw_remote_bridge::{
         CandidatePublicationResultFrameComposition,
         encode_candidate_publication_execution_result_frame,
     },
+    candidate_publication_wire::CandidatePublicationWireSubmission,
     candidate_reachability::publish_current_candidates,
     prwc_connection_authentication::AuthenticatedPrwcConnection,
     reachability_owner::{
@@ -35,6 +39,7 @@ use prw_remote_bridge::{
     },
     requester_rendezvous_in_memory_provider::RequesterRendezvousLifecycleError,
 };
+use prw_session::AuthenticatedDeviceSession;
 use tokio::sync::Mutex;
 
 use super::SharedCurrentCapabilityAuthority;
@@ -47,6 +52,9 @@ use crate::{
             validate_authorize_and_register_requester_rendezvous_start,
         },
         policy_source::RequesterRendezvousStartPolicySource,
+    },
+    production_reachability_owner_custody::{
+        ProductionReachabilityOwnerCustodyLookupError, ProductionReachabilityOwnerCustodyMap,
     },
 };
 
@@ -201,6 +209,60 @@ pub fn compose_candidate_publication_terminal_result_frame(
     )
 }
 
+/// Agent-local failure while executing the dormant current-Mesh candidate semantic decomposition.
+///
+/// Existing candidate semantic failures remain unchanged under [`Self::Semantic`]. Exact GI
+/// production-owner association failures remain separate under [`Self::OwnerLookup`] and therefore
+/// cannot be flattened into requester authority, reachability commit, or peer-visible result
+/// semantics before a later separately gated response-mapping checkpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CurrentMeshCandidatePublicationExecutionError {
+    /// Existing provider-neutral candidate semantic failure.
+    Semantic(CandidatePublicationExecutionError),
+    /// Exact GI production-owner association lookup failed before commit.
+    OwnerLookup(ProductionReachabilityOwnerCustodyLookupError),
+}
+
+impl fmt::Display for CurrentMeshCandidatePublicationExecutionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Semantic(error) => {
+                write!(
+                    formatter,
+                    "current-Mesh candidate semantic execution failed: {error}"
+                )
+            }
+            Self::OwnerLookup(error) => {
+                write!(formatter, "current-Mesh candidate owner lookup failed: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CurrentMeshCandidatePublicationExecutionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Semantic(error) => Some(error),
+            Self::OwnerLookup(error) => Some(error),
+        }
+    }
+}
+
+impl From<CandidatePublicationExecutionError> for CurrentMeshCandidatePublicationExecutionError {
+    fn from(error: CandidatePublicationExecutionError) -> Self {
+        Self::Semantic(error)
+    }
+}
+
+impl From<ProductionReachabilityOwnerCustodyLookupError>
+    for CurrentMeshCandidatePublicationExecutionError
+{
+    fn from(error: ProductionReachabilityOwnerCustodyLookupError) -> Self {
+        Self::OwnerLookup(error)
+    }
+}
+
 /// Cloneable handle to exactly one process-local requester/rendezvous runtime owner.
 ///
 /// Clones share only the outer [`Arc`]. The existing runtime owner and its provider state are never
@@ -310,6 +372,103 @@ impl SharedRequesterRendezvousAuthority {
         Ok((committed, cleanup))
     }
 
+    /// Executes the GJ-selected dormant envelope-neutral current-Mesh candidate semantic phases.
+    ///
+    /// The method deliberately accepts no historical PRWC connection or historical candidate
+    /// command envelope, no current-Mesh stream and no request ID. Publisher identity comes only
+    /// from `publisher_session`; candidate transport/freshness/candidates come only from the strict
+    /// typed `submission`.
+    ///
+    /// Ordering is exact:
+    ///
+    /// 1. one bounded current-authority read creates an owned registry-current publication;
+    /// 2. that read is released before requester authority selects one exact current grant;
+    /// 3. expected publisher equality is checked after requester lock release;
+    /// 4. a second fresh current-authority read is acquired for commit-time currentness;
+    /// 5. inside that synchronous read, exact GI `publication.peer()` lookup obtains one lexical
+    ///    production-owner mutable borrow and existing durable commit runs synchronously;
+    /// 6. current-authority and production-owner custody are released;
+    /// 7. only definite durable commit success reacquires requester authority for exact cleanup.
+    ///
+    /// The outer custody-map mutable borrow may remain reserved while the second current-authority
+    /// read is awaited, but no inner production-owner borrow crosses an `.await`. This method adds no
+    /// map synchronization, task, response I/O, retry, peer-close behavior, runtime activation,
+    /// traversal or dialing.
+    ///
+    /// # Errors
+    ///
+    /// Existing semantic failures are preserved under
+    /// [`CurrentMeshCandidatePublicationExecutionError::Semantic`]. Exact GI missing/ambiguous
+    /// association failures are preserved under
+    /// [`CurrentMeshCandidatePublicationExecutionError::OwnerLookup`]. No failure is translated into
+    /// a wire result or fallback owner selection.
+    #[allow(
+        dead_code,
+        reason = "C03e-GK materializes dormant current-Mesh semantic decomposition before separately gated higher-owner handoff and response custody"
+    )]
+    pub async fn execute_current_mesh_candidate_publication_with_post_commit_cleanup<P, S, T>(
+        &self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        publisher_session: &AuthenticatedDeviceSession,
+        submission: &CandidatePublicationWireSubmission,
+        owner_map: &mut ProductionReachabilityOwnerCustodyMap<S, T>,
+    ) -> Result<
+        CandidatePublicationPostCommitRequesterCleanupOutcome,
+        CurrentMeshCandidatePublicationExecutionError,
+    >
+    where
+        P: PolicyEvaluator + Send + Sync,
+        S: ReachabilityDurableStore + Send,
+        T: CandidatePublicationFreshnessTokenSource + Send,
+    {
+        let publication = authority
+            .with_current_authority(|registry, _policy| {
+                publish_current_candidates(
+                    registry,
+                    publisher_session,
+                    submission.presented_transport_identity(),
+                    submission.candidates().to_vec(),
+                )
+            })
+            .await
+            .map_err(CandidatePublicationExecutionError::Candidate)?;
+
+        let publisher_device_id = publication.peer().device_id();
+        let grant = self
+            .authorize_current_for_publisher(publisher_device_id)
+            .await
+            .map_err(CandidatePublicationExecutionError::RequesterAuthority)?;
+        if grant.expected_publisher_device_id() != publisher_device_id {
+            return Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch.into());
+        }
+
+        let cleanup_identity = RequesterRendezvousCommittedCleanupIdentity::from_grant(&grant);
+        let commit_result = authority
+            .with_current_authority(|registry, _policy| {
+                owner_map.with_owner_mut_for_peer(publication.peer(), |owner| {
+                    owner
+                        .commit_candidate_publication(
+                            registry,
+                            grant.requester_session(),
+                            &publication,
+                            submission.presented_freshness(),
+                        )
+                        .map_err(CandidatePublicationExecutionError::Reachability)
+                })
+            })
+            .await;
+
+        let reachability_commit = commit_result??;
+        let cleanup = self
+            .cleanup_committed_requester_rendezvous_record(cleanup_identity)
+            .await;
+
+        Ok(CandidatePublicationPostCommitRequesterCleanupOutcome {
+            reachability_commit,
+            cleanup,
+        })
+    }
+
     /// Executes one candidate-publication semantic attempt with FX-selected post-commit cleanup.
     ///
     /// Ordering is exact and fail-closed:
@@ -408,12 +567,16 @@ mod tests {
     use super::{
         CandidatePublicationPostCommitRequesterCleanupOutcome,
         CandidatePublicationTerminalFrameComposition, CandidatePublicationTerminalResultProjection,
-        RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority,
+        CurrentMeshCandidatePublicationExecutionError, RequesterRendezvousCommittedCleanupIdentity,
+        SharedRequesterRendezvousAuthority,
         compose_candidate_publication_terminal_result_frame,
         project_candidate_publication_terminal_parts,
         project_candidate_publication_terminal_result,
     };
-    use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
+    use crate::{
+        candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner,
+        production_reachability_owner_custody::ProductionReachabilityOwnerCustodyLookupError,
+    };
 
     fn block_on<F: Future>(future: F) -> F::Output {
         Builder::new_current_thread()
@@ -496,6 +659,48 @@ mod tests {
 
         assert_eq!(result, Err("commit failed"));
         assert!(authority.runtime_owner.try_lock().is_ok());
+    }
+
+    #[test]
+    fn current_mesh_owner_lookup_missing_remains_separate_from_semantic_error() {
+        let error = CurrentMeshCandidatePublicationExecutionError::from(
+            ProductionReachabilityOwnerCustodyLookupError::Missing,
+        );
+
+        assert_eq!(
+            error,
+            CurrentMeshCandidatePublicationExecutionError::OwnerLookup(
+                ProductionReachabilityOwnerCustodyLookupError::Missing
+            )
+        );
+    }
+
+    #[test]
+    fn current_mesh_owner_lookup_ambiguous_remains_distinguishable() {
+        let error = CurrentMeshCandidatePublicationExecutionError::from(
+            ProductionReachabilityOwnerCustodyLookupError::Ambiguous,
+        );
+
+        assert_eq!(
+            error,
+            CurrentMeshCandidatePublicationExecutionError::OwnerLookup(
+                ProductionReachabilityOwnerCustodyLookupError::Ambiguous
+            )
+        );
+    }
+
+    #[test]
+    fn current_mesh_semantic_error_remains_separate_from_owner_lookup() {
+        let error = CurrentMeshCandidatePublicationExecutionError::from(
+            CandidatePublicationExecutionError::ExpectedPublisherMismatch,
+        );
+
+        assert_eq!(
+            error,
+            CurrentMeshCandidatePublicationExecutionError::Semantic(
+                CandidatePublicationExecutionError::ExpectedPublisherMismatch
+            )
+        );
     }
 
     #[test]
