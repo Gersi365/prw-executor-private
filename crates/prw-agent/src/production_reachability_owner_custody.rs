@@ -8,8 +8,8 @@
 
 use prw_connectivity::PeerConnectivityIdentity;
 use prw_remote_bridge::reachability_owner::{
-    CandidatePublicationFreshnessTokenSource, ProductionReachabilityOwner, ReachabilityDurableStore,
-    ReachabilityOwnerError,
+    CandidatePublicationFreshnessTokenSource, ProductionReachabilityOwner,
+    ReachabilityDurableStore, ReachabilityOwnerError,
 };
 
 /// Agent-owned exclusive custody of one recovered production reachability owner.
@@ -131,11 +131,11 @@ mod tests {
     }
 
     fn established_snapshot(peer: &PeerConnectivityIdentity) -> ReachabilityDurableSnapshot {
-        let plan = PeerConnectivityPlan::new(peer.clone(), Vec::new()).expect("empty plan is valid");
+        let plan =
+            PeerConnectivityPlan::new(peer.clone(), Vec::new()).expect("empty plan is valid");
         let freshness = CandidatePublicationFreshnessRecord::established(
             peer.clone(),
-            CandidatePublicationFreshnessToken::new([0x47; 32])
-                .expect("non-zero freshness token"),
+            CandidatePublicationFreshnessToken::new([0x47; 32]).expect("non-zero freshness token"),
         );
         ReachabilityDurableSnapshot::new(plan, freshness).expect("peer-consistent snapshot")
     }
@@ -200,7 +200,10 @@ mod tests {
             &peer,
         );
 
-        assert!(matches!(result, Err(ReachabilityOwnerError::DurableStateMissing)));
+        assert!(matches!(
+            result,
+            Err(ReachabilityOwnerError::DurableStateMissing)
+        ));
         assert_eq!(load_calls.load(Ordering::SeqCst), 1);
         assert_eq!(commit_calls.load(Ordering::SeqCst), 0);
         assert_eq!(issue_calls.load(Ordering::SeqCst), 0);
