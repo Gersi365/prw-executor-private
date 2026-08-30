@@ -18,16 +18,20 @@ Closed C03e-GD is the authoritative predecessor:
 
 C03e-GE begins exactly from that head and does not amend GD or any prior closed checkpoint.
 
-## 2. Scope
+## 2. Exact materialization scope
 
-C03e-GE source-materializes only the GD-selected current-Mesh candidate-publication family/custody extension inside the existing bridge-owned single-read ingress.
+C03e-GE source-materializes only the GD-selected current-Mesh candidate-publication family/custody extension plus the two minimal Agent compile-compatibility boundaries forced by exhaustive typed ingress matching.
 
-The materialized delta is intentionally bounded to:
+The final authorized path set is exactly:
 
 1. `crates/prw-remote-bridge/src/post_auth_control_stream_ingress.rs`;
-2. this source-materialization contract.
+2. `crates/prw-agent/src/remote_session_capability_runtime.rs`;
+3. `crates/prw-agent/src/remote_session_capability_runtime/authenticated_remote_session_runtime/requester_rendezvous_one_shot_transaction.rs`;
+4. this source-materialization contract.
 
-No Cargo manifest, lockfile, module root, workflow, Kotlin/Gradle, Agent runtime, configuration, deployment, listener, readiness, reachability-owner, or unrelated source path is authorized.
+The two Agent paths do not execute candidate publication. They only preserve exhaustive typed matching with an explicit fail-closed higher-owner barrier because no candidate handoff/execution semantics are selected yet.
+
+No Cargo manifest, lockfile, module root, workflow, Kotlin/Gradle, active runtime wiring, configuration, deployment, listener, readiness, reachability-owner, or unrelated source path is authorized.
 
 ## 3. Existing ingress remains the owner
 
@@ -301,19 +305,46 @@ C03e-GE does not materialize:
 
 GC remains pure historical-frame composition and is not invoked here.
 
-## 19. No runtime activation
+## 19. Explicit dormant Agent compatibility barrier
 
-C03e-GE does not modify any Agent caller to consume the new candidate variant.
+Exact-head compile validation after adding the third typed bridge outcome proved that existing Agent source exhaustively matched only capability and requester/rendezvous ingress families.
 
-Therefore this source exists as a validated bridge-owned ingress/custody capability only.
+C03e-GE therefore adds only the minimal fail-closed compatibility boundary required to preserve exhaustive typed matching without selecting candidate execution.
 
-It does not activate candidate-publication runtime traffic.
+`AuthenticatedRemoteSessionPostAuthIngressTransactionError` gains:
 
-No command loop, listener, readiness, bootstrap, network cutover, traversal, dialing, deployment, restart/recovery, or merge is authorized.
+`CandidatePublicationHandoffNotSelected`
 
-## 20. Focused tests
+and the still-dormant Agent one-transaction ingress adds an explicit arm:
 
-Source includes focused structural tests proving at least:
+- `PostAuthControlStreamIngress::CandidatePublication(...)` -> `Err(CandidatePublicationHandoffNotSelected)`.
+
+This arm intentionally:
+
+- does not use a wildcard;
+- does not treat candidate publication as capability success;
+- does not fabricate requester/rendezvous state;
+- does not invoke FY/GA/GC;
+- does not recover or mutate `ProductionReachabilityOwner<S,T>`;
+- does not write a candidate response;
+- does not accept another stream;
+- does not activate the dormant Agent seam.
+
+The existing repeated ingress loop already returns the first transaction error unchanged, so candidate publication at this still-unselected higher-owner boundary terminates that dormant loop explicitly and fail-closed rather than continuing as capability traffic.
+
+This compatibility barrier is not the future candidate handoff semantics. A fresh successor selection is still required before the Agent may consume the candidate transaction as semantic execution input.
+
+## 20. No runtime activation
+
+GE touches dormant Agent seam source only to make the new typed bridge family exhaustively and explicitly fail closed before a later handoff gate.
+
+It does not wire that seam into active runtime ownership, modify listener/bootstrap/readiness activation, or cause candidate publication to execute.
+
+No command loop activation, network cutover, traversal, dialing, deployment, restart/recovery, or merge is authorized.
+
+## 21. Focused structural validation
+
+Bridge source includes focused structural tests proving at least:
 
 - the single stream-consuming ingress surface remains the only receive operation;
 - requester custody transfer signature remains present;
@@ -324,21 +355,24 @@ Source includes focused structural tests proving at least:
 - exact PRWP prefix alone is insufficient for successful payload decode;
 - valid current-Mesh candidate structural decode preserves exact request ID and decoded submission.
 
+The Agent compatibility source proves exhaustiveness by compilation and uses a distinct typed transaction error rather than a wildcard or success outcome.
+
 No live network test, provider test, reachability commit, or runtime activation test is introduced.
 
-## 21. Exact dependency boundary
+## 22. Exact dependency boundary
 
-C03e-GE uses only types already present in `prw-remote-bridge`:
+C03e-GE uses only types already available in existing crates:
 
 - `CandidatePublicationWireSubmission`;
 - `CandidatePublicationWireError`;
 - `CANDIDATE_PUBLICATION_WIRE_MAGIC`;
 - existing `prw_remote_transport::{ControlFrame, ControlMessageKind}`;
-- existing `MeshControlStream`.
+- existing `MeshControlStream`;
+- existing Agent post-auth ingress transaction error surface.
 
 No dependency or lockfile change is required or authorized.
 
-## 22. Validation history before final candidate
+## 23. Validation history before final candidate
 
 Initial GE candidate:
 
@@ -363,11 +397,24 @@ Rust #1345 / run `33295528406` / job `99214417160`:
 - Clippy/compile: FAIL at the historical-vs-Mesh frame-type incompatibility described in section 5;
 - tests/build: skipped after failure.
 
-Those failures are superseded evidence and are not final GE verdicts.
+Current-Mesh-native compatibility candidate:
 
-## 23. Final validation gate
+`0d4af7208d29f880e002edbd15e8aea462cfc1fc`
 
-Canonical closure requires exact-final-head validation after the current-Mesh compatibility correction and any later strictly mechanical formatter/lint corrections.
+Rust #1347 / run `33295745250` / job `99215072887`:
+
+- locked dependency graph: PASS;
+- rustfmt: PASS;
+- Clippy/compile: FAIL only because the existing dormant Agent one-transaction ingress match did not yet cover the new typed `CandidatePublication(...)` variant;
+- tests/build: skipped after that exhaustiveness error.
+
+At the same superseded head, Android #1139 / run `33295745256` reached at least exact toolchain and native-adapter success before the subsequent Agent compatibility source mutation; it is not final closure evidence after the head moves.
+
+All failures above are superseded evidence and are not final GE verdicts.
+
+## 24. Final validation gate
+
+Canonical closure requires exact-final-head validation after the current-Mesh compatibility correction, explicit Agent fail-closed exhaustiveness barrier, and any later strictly mechanical formatter/lint corrections.
 
 Required Rust verdict:
 
@@ -387,20 +434,20 @@ Because GE changes Rust source and Android validation triggers, exact-final-head
 
 Path-filtered workflows that skip must be recorded as `skipped`, never PASS.
 
-## 24. Durable closure evidence
+## 25. Durable closure evidence
 
 C03e-GE closes only after:
 
 1. exact GD predecessor remains unchanged;
 2. GD...GE compare is ahead-only with exact GD merge base;
-3. only the authorized source + contract paths are present;
+3. exactly the four authorized source/contract paths are present, allowing only mechanical formatter/lint corrections within those paths;
 4. exact-final-head CI is terminal and non-failing;
 5. one immutable GE audit is uploaded to the canonical Private Remote Workspace Drive folder;
 6. raw Drive byte/hash readback passes;
 7. PR body moves from `Status: VALIDATING` to `Status: CLOSED` only after Drive verification;
 8. PR remains draft/open/unmerged.
 
-## 25. Intended canonical closure
+## 26. Intended canonical closure
 
 Closure:
 
@@ -410,7 +457,7 @@ Gate:
 
 `C03E_GE_CANDIDATE_PUBLICATION_MESH_POST_AUTH_CONTROL_STREAM_SAME_STREAM_CUSTODY_SOURCE_MATERIALIZED`
 
-## 26. Successor rule
+## 27. Successor rule
 
 GE does not pre-authorize a specific successor checkpoint.
 
@@ -422,5 +469,7 @@ After exact-head validation and durable GE closure, a fresh prerequisite audit m
 - any still-earlier prerequisite exposed by exact current source topology.
 
 Any successor must preserve the discovered transport-era distinction: current-Mesh request correlation/submission must not be converted into historical transport custody merely to reuse older APIs.
+
+The explicit GE `CandidatePublicationHandoffNotSelected` classification must not be replaced by success until a later semantics-selection checkpoint authorizes an exact candidate handoff/execution boundary.
 
 No successor may jump directly to runtime activation, listener/readiness cutover, traversal/dialing, deployment, restart/recovery, or merge.
