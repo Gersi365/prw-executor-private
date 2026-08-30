@@ -7,18 +7,26 @@
 //! requester/rendezvous typed outcome so the strict decoded request retains the exact same stream for
 //! separately gated requester continuation. C03e-FF adds only the C03e-FE-selected consuming
 //! same-stream send surface for one already-constructed requester/rendezvous DR acknowledgement.
+//! C03e-GE extends only the C03e-GD-selected family/custody boundary: exact `PRWP` payload prefix now
+//! routes through a current-Mesh `Request` adapter backed by the existing pure PRWP payload decoder
+//! and retains the decoded candidate request plus that exact same stream in bridge-owned custody.
 //! This module does not accept another stream, authenticate a session, authorize a capability,
-//! execute requester policy or provider logic, construct requester response semantics, retry I/O,
-//! close a peer, select candidates, dial traffic, resume a loop/listener, or deploy anything.
+//! execute requester or candidate policy/provider logic, construct requester/candidate response
+//! semantics, retry I/O, close a peer, select candidates, mutate reachability, dial traffic, resume a
+//! loop/listener, or deploy anything.
 
 use std::fmt;
 
 use prw_remote_transport::{
-    ControlFrame,
+    ControlFrame, ControlMessageKind,
     runtime::{MeshControlStream, MeshQuicRuntimeError},
 };
 
 use crate::{
+    candidate_publication_wire::{
+        CANDIDATE_PUBLICATION_WIRE_MAGIC, CandidatePublicationWireError,
+        CandidatePublicationWireSubmission,
+    },
     capability_request_wire::{CapabilityRequestWireError, send_capability_response_frame},
     requester_rendezvous_target_request_wire::{
         REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAGIC, RequesterRendezvousTargetWireError,
@@ -105,6 +113,96 @@ impl PostAuthRequesterRendezvousTransaction {
     }
 }
 
+/// Structurally valid current-Mesh candidate-publication request plus exact outer correlation.
+///
+/// This value proves only current-Mesh outer-kind validity plus pure bounded PRWP decoding. It is
+/// not publisher identity, requester authority, freshness currentness, reachability authority, or
+/// durable commit authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CandidatePublicationMeshRequest {
+    request_id: u64,
+    submission: CandidatePublicationWireSubmission,
+}
+
+impl CandidatePublicationMeshRequest {
+    /// Returns the exact non-zero outer PRWM request correlation value.
+    #[must_use]
+    pub const fn request_id(&self) -> u64 {
+        self.request_id
+    }
+
+    /// Borrows the exact pure PRWP submission decoded from this current-Mesh request.
+    #[must_use]
+    pub const fn submission(&self) -> &CandidatePublicationWireSubmission {
+        &self.submission
+    }
+
+    /// Transfers ownership of the exact decoded PRWP submission without reinterpretation.
+    #[must_use]
+    pub fn into_submission(self) -> CandidatePublicationWireSubmission {
+        self.submission
+    }
+}
+
+/// Strict current-Mesh candidate-publication request decoding failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CandidatePublicationMeshRequestError {
+    /// The outer PRWM frame was not the current-Mesh peer-operation `Request` kind.
+    InvalidOuterKind,
+    /// The existing pure bounded PRWP payload decoder rejected the payload.
+    Wire(CandidatePublicationWireError),
+}
+
+impl fmt::Display for CandidatePublicationMeshRequestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidOuterKind => {
+                "invalid outer PRWM kind for current-Mesh candidate publication"
+            }
+            Self::Wire(_) => "invalid current-Mesh candidate-publication PRWP payload",
+        })
+    }
+}
+
+impl std::error::Error for CandidatePublicationMeshRequestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidOuterKind => None,
+            Self::Wire(error) => Some(error),
+        }
+    }
+}
+
+impl From<CandidatePublicationWireError> for CandidatePublicationMeshRequestError {
+    fn from(error: CandidatePublicationWireError) -> Self {
+        Self::Wire(error)
+    }
+}
+
+/// One strict current-Mesh candidate-publication request retaining exact same-stream custody.
+pub struct PostAuthCandidatePublicationTransaction {
+    request: CandidatePublicationMeshRequest,
+    stream: MeshControlStream,
+}
+
+impl PostAuthCandidatePublicationTransaction {
+    /// Borrows the exact strict current-Mesh candidate-publication request decoded from this stream.
+    #[must_use]
+    pub const fn request(&self) -> &CandidatePublicationMeshRequest {
+        &self.request
+    }
+
+    /// Transfers the exact strict decoded request and exact same already-accepted stream by value.
+    ///
+    /// This is custody transfer only. It performs no semantic execution, response composition/write,
+    /// second read, retry, close, requester authority, reachability-owner recovery, commit, or dialing.
+    #[must_use]
+    pub fn into_parts(self) -> (CandidatePublicationMeshRequest, MeshControlStream) {
+        (self.request, self.stream)
+    }
+}
+
 /// One already-read capability transaction that retains same-stream response custody.
 pub struct PostAuthCapabilityTransaction {
     request_frame: ControlFrame,
@@ -137,7 +235,9 @@ impl PostAuthCapabilityTransaction {
 pub enum PostAuthControlStreamIngress {
     /// Exact `PRWZ` prefix was observed, strict decode passed, and same-stream custody is retained.
     RequesterRendezvous(PostAuthRequesterRendezvousTransaction),
-    /// Any non-`PRWZ` frame remains on the legacy capability path with same-stream custody retained.
+    /// Exact `PRWP` prefix was observed, strict Mesh decode passed, and same-stream custody remains.
+    CandidatePublication(PostAuthCandidatePublicationTransaction),
+    /// Any non-`PRWZ`, non-`PRWP` frame remains on capability with same-stream custody retained.
     Capability(PostAuthCapabilityTransaction),
 }
 
@@ -149,6 +249,8 @@ pub enum PostAuthControlStreamIngressError {
     Runtime(MeshQuicRuntimeError),
     /// Exact `PRWZ` prefix selected requester/rendezvous, but strict PRWZ semantics failed.
     RequesterRendezvousWire(RequesterRendezvousTargetWireError),
+    /// Exact `PRWP` prefix selected candidate publication, but strict Mesh/PRWP semantics failed.
+    CandidatePublicationWire(CandidatePublicationMeshRequestError),
 }
 
 impl fmt::Display for PostAuthControlStreamIngressError {
@@ -157,6 +259,9 @@ impl fmt::Display for PostAuthControlStreamIngressError {
             Self::Runtime(_) => "post-authenticated control-stream receive failed",
             Self::RequesterRendezvousWire(_) => {
                 "post-authenticated requester/rendezvous wire decode failed"
+            }
+            Self::CandidatePublicationWire(_) => {
+                "post-authenticated candidate-publication request decode failed"
             }
         })
     }
@@ -167,6 +272,7 @@ impl std::error::Error for PostAuthControlStreamIngressError {
         match self {
             Self::Runtime(error) => Some(error),
             Self::RequesterRendezvousWire(error) => Some(error),
+            Self::CandidatePublicationWire(error) => Some(error),
         }
     }
 }
@@ -183,26 +289,35 @@ impl From<RequesterRendezvousTargetWireError> for PostAuthControlStreamIngressEr
     }
 }
 
+impl From<CandidatePublicationMeshRequestError> for PostAuthControlStreamIngressError {
+    fn from(error: CandidatePublicationMeshRequestError) -> Self {
+        Self::CandidatePublicationWire(error)
+    }
+}
+
 /// Reads exactly one bounded PRWM frame from one already-accepted authenticated control stream and
 /// returns one typed family-custody result.
 ///
-/// Routing is deliberately asymmetric and legacy-preserving: an exact first-four-byte `PRWZ`
-/// payload prefix selects the existing strict requester/rendezvous codec; every other bounded PRWM
-/// frame, including short, unknown, malformed or `PRWC` payloads, remains on the existing capability
-/// path. Prefix recognition is only family selection and grants no authentication, authorization,
-/// target eligibility, provider, reachability, candidate or rendezvous-success authority.
+/// Routing is deliberately ordered and legacy-preserving: exact first-four-byte `PRWZ` selects the
+/// existing strict requester/rendezvous codec; otherwise exact first-four-byte `PRWP` selects the
+/// current-Mesh candidate-publication request adapter; every other bounded PRWM frame, including
+/// short, unknown, malformed or `PRWC` payloads, remains on the existing capability path. Prefix
+/// recognition is only family selection and grants no authentication, authorization, target
+/// eligibility, publisher identity, requester authority, freshness, reachability-owner, commit,
+/// candidate or rendezvous-success authority.
 ///
 /// The stream is consumed by value so lower transport custody cannot remain simultaneously with the
-/// caller. A capability outcome retains the exact already-read frame and that exact stream for the
-/// existing same-stream response. A requester/rendezvous outcome retains the exact strict decoded
-/// request and that exact stream by value for the separately selected consuming response transaction.
+/// caller. Capability, requester/rendezvous, and candidate-publication successful outcomes each retain
+/// the exact same already-accepted stream in exactly one bridge-owned typed custody envelope.
 ///
 /// # Errors
 ///
 /// Preserves one bounded stream receive failure as [`PostAuthControlStreamIngressError::Runtime`].
-/// If and only if the exact `PRWZ` prefix selects requester/rendezvous, strict decoder failure is
-/// preserved as [`PostAuthControlStreamIngressError::RequesterRendezvousWire`]. No fallback decode,
-/// retry, second read, response write or peer close is performed by this receive operation.
+/// Exact `PRWZ` strict-decoder failure is preserved as
+/// [`PostAuthControlStreamIngressError::RequesterRendezvousWire`]. Exact `PRWP` current-Mesh strict
+/// decode failure is preserved as [`PostAuthControlStreamIngressError::CandidatePublicationWire`].
+/// Once either exact prefix selects a family, no fallback decode, retry, second read, response write
+/// or peer close is performed by this receive operation.
 pub async fn receive_post_auth_control_stream_ingress(
     mut stream: MeshControlStream,
 ) -> Result<PostAuthControlStreamIngress, PostAuthControlStreamIngressError> {
@@ -211,6 +326,12 @@ pub async fn receive_post_auth_control_stream_ingress(
         let request = decode_requester_rendezvous_target_request_frame(&frame)?;
         return Ok(PostAuthControlStreamIngress::RequesterRendezvous(
             PostAuthRequesterRendezvousTransaction { request, stream },
+        ));
+    }
+    if is_candidate_publication_family(&frame) {
+        let request = decode_candidate_publication_mesh_request_frame(&frame)?;
+        return Ok(PostAuthControlStreamIngress::CandidatePublication(
+            PostAuthCandidatePublicationTransaction { request, stream },
         ));
     }
 
@@ -222,10 +343,29 @@ pub async fn receive_post_auth_control_stream_ingress(
     ))
 }
 
+fn decode_candidate_publication_mesh_request_frame(
+    frame: &ControlFrame,
+) -> Result<CandidatePublicationMeshRequest, CandidatePublicationMeshRequestError> {
+    if frame.kind() != ControlMessageKind::Request {
+        return Err(CandidatePublicationMeshRequestError::InvalidOuterKind);
+    }
+    let submission = CandidatePublicationWireSubmission::decode(frame.payload())?;
+    Ok(CandidatePublicationMeshRequest {
+        request_id: frame.request_id(),
+        submission,
+    })
+}
+
 fn is_requester_rendezvous_family(frame: &ControlFrame) -> bool {
     frame
         .payload()
         .starts_with(REQUESTER_RENDEZVOUS_TARGET_REQUEST_WIRE_MAGIC.as_slice())
+}
+
+fn is_candidate_publication_family(frame: &ControlFrame) -> bool {
+    frame
+        .payload()
+        .starts_with(CANDIDATE_PUBLICATION_WIRE_MAGIC.as_slice())
 }
 
 #[cfg(test)]
@@ -236,17 +376,38 @@ mod tests {
     };
 
     use super::{
-        PostAuthRequesterRendezvousTransaction,
-        RequesterRendezvousDrAcknowledgementResponseIoError, is_requester_rendezvous_family,
-        receive_post_auth_control_stream_ingress,
+        CandidatePublicationMeshRequest, CandidatePublicationMeshRequestError,
+        PostAuthCandidatePublicationTransaction, PostAuthRequesterRendezvousTransaction,
+        RequesterRendezvousDrAcknowledgementResponseIoError,
+        decode_candidate_publication_mesh_request_frame, is_candidate_publication_family,
+        is_requester_rendezvous_family, receive_post_auth_control_stream_ingress,
     };
-    use crate::requester_rendezvous_target_request_wire::{
-        RequesterRendezvousTargetWireError, RequesterRendezvousTargetWireRequest,
-        decode_requester_rendezvous_target_request_frame,
+    use crate::{
+        candidate_publication_wire::{
+            CANDIDATE_PUBLICATION_WIRE_MAGIC, CandidatePublicationWireError,
+        },
+        requester_rendezvous_target_request_wire::{
+            RequesterRendezvousTargetWireError, RequesterRendezvousTargetWireRequest,
+            decode_requester_rendezvous_target_request_frame,
+        },
     };
 
     fn frame(kind: ControlMessageKind, payload: &[u8]) -> ControlFrame {
         ControlFrame::new(kind, 17, payload.to_vec()).expect("bounded test frame must be valid")
+    }
+
+    fn valid_candidate_payload() -> Vec<u8> {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&CANDIDATE_PUBLICATION_WIRE_MAGIC);
+        payload.extend_from_slice(&1_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&1_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&[0x41; 32]);
+        payload.extend_from_slice(&[0x51; 32]);
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload
     }
 
     fn assert_requester_custody_transfer_signature(
@@ -257,11 +418,22 @@ mod tests {
         let _ = transfer;
     }
 
+    fn assert_candidate_custody_transfer_signature(
+        transfer: fn(
+            PostAuthCandidatePublicationTransaction,
+        ) -> (CandidatePublicationMeshRequest, MeshControlStream),
+    ) {
+        let _ = transfer;
+    }
+
     #[test]
     fn ingress_surface_exposes_only_one_stream_consuming_receive_operation() {
         let _ = receive_post_auth_control_stream_ingress;
         assert_requester_custody_transfer_signature(
             PostAuthRequesterRendezvousTransaction::into_parts,
+        );
+        assert_candidate_custody_transfer_signature(
+            PostAuthCandidatePublicationTransaction::into_parts,
         );
     }
 
@@ -276,32 +448,60 @@ mod tests {
     }
 
     #[test]
-    fn classifier_diverts_only_exact_prwz_prefix() {
-        assert!(is_requester_rendezvous_family(&frame(
-            ControlMessageKind::Request,
-            b"PRWZ"
-        )));
-        assert!(!is_requester_rendezvous_family(&frame(
-            ControlMessageKind::Request,
-            b"PRWC"
-        )));
-        assert!(!is_requester_rendezvous_family(&frame(
-            ControlMessageKind::Request,
-            b"PRW"
-        )));
-        assert!(!is_requester_rendezvous_family(&frame(
-            ControlMessageKind::Request,
-            b"ABCD"
-        )));
+    fn classifier_preserves_prwz_then_prwp_then_capability_partition() {
+        let requester = frame(ControlMessageKind::Request, b"PRWZ");
+        assert!(is_requester_rendezvous_family(&requester));
+        assert!(!is_candidate_publication_family(&requester));
+
+        let candidate = frame(ControlMessageKind::Request, b"PRWP");
+        assert!(!is_requester_rendezvous_family(&candidate));
+        assert!(is_candidate_publication_family(&candidate));
+
+        for payload in [b"PRWC".as_slice(), b"PRW".as_slice(), b"ABCD".as_slice()] {
+            let fallback = frame(ControlMessageKind::Request, payload);
+            assert!(!is_requester_rendezvous_family(&fallback));
+            assert!(!is_candidate_publication_family(&fallback));
+        }
     }
 
     #[test]
-    fn family_recognition_does_not_replace_strict_prwz_validation() {
+    fn requester_family_recognition_does_not_replace_strict_prwz_validation() {
         let candidate = frame(ControlMessageKind::Event, b"PRWZ");
         assert!(is_requester_rendezvous_family(&candidate));
         assert_eq!(
             decode_requester_rendezvous_target_request_frame(&candidate),
             Err(RequesterRendezvousTargetWireError::InvalidOuterKind)
         );
+    }
+
+    #[test]
+    fn candidate_family_recognition_requires_current_mesh_request_kind() {
+        let candidate = frame(ControlMessageKind::Event, b"PRWP");
+        assert!(is_candidate_publication_family(&candidate));
+        assert_eq!(
+            decode_candidate_publication_mesh_request_frame(&candidate),
+            Err(CandidatePublicationMeshRequestError::InvalidOuterKind)
+        );
+    }
+
+    #[test]
+    fn candidate_family_recognition_still_requires_strict_prwp_payload_decode() {
+        let candidate = frame(ControlMessageKind::Request, b"PRWP");
+        assert!(is_candidate_publication_family(&candidate));
+        assert_eq!(
+            decode_candidate_publication_mesh_request_frame(&candidate),
+            Err(CandidatePublicationMeshRequestError::Wire(
+                CandidatePublicationWireError::InvalidPayload
+            ))
+        );
+    }
+
+    #[test]
+    fn current_mesh_candidate_decode_preserves_request_id_and_submission() {
+        let candidate = frame(ControlMessageKind::Request, &valid_candidate_payload());
+        let decoded = decode_candidate_publication_mesh_request_frame(&candidate)
+            .expect("valid current-Mesh candidate request must decode");
+        assert_eq!(decoded.request_id(), 17);
+        assert!(decoded.submission().candidates().is_empty());
     }
 }
