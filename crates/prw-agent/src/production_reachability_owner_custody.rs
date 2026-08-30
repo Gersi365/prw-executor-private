@@ -95,9 +95,7 @@ impl fmt::Display for ProductionReachabilityOwnerCustodyLookupError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Missing => "production reachability-owner custody is missing for exact peer",
-            Self::Ambiguous => {
-                "production reachability-owner custody is ambiguous for exact peer"
-            }
+            Self::Ambiguous => "production reachability-owner custody is ambiguous for exact peer",
         })
     }
 }
@@ -426,18 +424,8 @@ mod tests {
         let absent_transport_peer = test_peer_with_transport(0x33);
         let (first_load, first_commit, first_issue) = counts();
         let (second_load, second_commit, second_issue) = counts();
-        let first = recovered_custody(
-            &first_peer,
-            &first_load,
-            &first_commit,
-            &first_issue,
-        );
-        let second = recovered_custody(
-            &second_peer,
-            &second_load,
-            &second_commit,
-            &second_issue,
-        );
+        let first = recovered_custody(&first_peer, &first_load, &first_commit, &first_issue);
+        let second = recovered_custody(&second_peer, &second_load, &second_commit, &second_issue);
         let mut map = ProductionReachabilityOwnerCustodyMap::try_new(vec![first, second])
             .expect("distinct exact peer keys must compose");
 
