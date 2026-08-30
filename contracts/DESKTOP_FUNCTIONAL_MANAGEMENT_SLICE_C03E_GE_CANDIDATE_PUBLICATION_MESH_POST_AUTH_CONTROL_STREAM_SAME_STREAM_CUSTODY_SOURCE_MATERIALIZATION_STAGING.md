@@ -49,7 +49,7 @@ No second candidate-specific accept/read loop is introduced.
 
 ## 4. Materialized three-way family routing
 
-The ingress now preserves the exact GD ordering:
+The ingress preserves the exact GD routing order:
 
 1. exact payload prefix `PRWZ` -> existing requester/rendezvous path;
 2. otherwise exact payload prefix `PRWP` -> candidate-publication path;
@@ -62,7 +62,133 @@ The existing constants remain authoritative:
 
 No new wire magic or protocol family identifier is created.
 
-## 5. Requester/rendezvous behavior is preserved
+## 5. Exact-head compatibility correction discovered during source validation
+
+The first GE candidate attempted to call historical:
+
+`decode_candidate_publication_control_frame(...)`
+
+directly with the current-Mesh ingress frame.
+
+Exact-head Rust validation proved that this is not a valid source boundary:
+
+- historical `candidate_publication_control_frame.rs` consumes `prw_control_transport::ControlFrame`;
+- current Mesh ingress consumes `prw_remote_transport::ControlFrame`;
+- those are distinct Rust types and are not interchangeable;
+- historical `prw_control_transport::ControlMessageKind` has candidate `Command` semantics;
+- current `prw_remote_transport::ControlMessageKind` has no `Command` variant and represents peer request operations with `Request`.
+
+This is a transport-era compatibility distinction, not authority to reopen or mutate GD.
+
+GE therefore preserves the GD semantic intent — exact PRWP family recognition, strict bounded structural decode, exact outer correlation preservation, and exact same-stream custody — through the current-Mesh-native representation described below.
+
+GE explicitly rejects:
+
+- casting one frame type into the other;
+- fabricating an `AuthenticatedPrwcConnection`;
+- wrapping `MeshControlStream` as historical `ControlTlsServerStream`;
+- importing historical `Command` kind into the current Mesh enum;
+- treating the two transport frame representations as identity-equivalent.
+
+## 6. Current-Mesh candidate strict structural decode
+
+Exact `PRWP` prefix recognition is family selection only.
+
+After recognition, GE performs current-Mesh-native strict decoding with this order:
+
+1. require outer `prw_remote_transport::ControlMessageKind::Request`;
+2. decode the complete payload using existing pure `CandidatePublicationWireSubmission::decode(...)`;
+3. preserve the exact outer `ControlFrame::request_id()` unchanged;
+4. return one typed current-Mesh candidate request carrier.
+
+The existing pure PRWP decoder remains authoritative for:
+
+- PRWP magic;
+- version;
+- operation;
+- reserved fields;
+- transport identity construction;
+- freshness token construction;
+- candidate count/bounds;
+- candidate IDs/path kinds/endpoints;
+- truncation/trailing data.
+
+No candidate semantic authority is inferred from prefix recognition or structural decode.
+
+## 7. Current-Mesh candidate request carrier
+
+C03e-GE materializes bridge-owned:
+
+`CandidatePublicationMeshRequest`
+
+It retains exactly:
+
+1. the exact non-zero peer-originated outer PRWM `request_id`;
+2. one strict decoded `CandidatePublicationWireSubmission`.
+
+It exposes only narrow structural/correlation access:
+
+- `request_id()`;
+- `submission()`;
+- consuming `into_submission()`.
+
+This carrier is not the historical `CandidatePublicationControlFrame` and does not pretend to be one.
+
+It is not publisher identity, requester authority, replay authority, freshness currentness, reachability authority, or durable commit authority.
+
+## 8. Candidate same-stream custody type
+
+C03e-GE materializes bridge-owned:
+
+`PostAuthCandidatePublicationTransaction`
+
+It retains exactly:
+
+1. one strict `CandidatePublicationMeshRequest`;
+2. the exact same already-accepted `MeshControlStream` by value.
+
+It exposes only:
+
+- `request()` — immutable borrow of the strict current-Mesh candidate request;
+- `into_parts()` — consuming transfer of exact request plus exact stream.
+
+It exposes no raw stream borrow/getter, clone, duplicate ownership, generic escape hatch, send API, semantic execution method, owner recovery, retry, or loop.
+
+## 9. Candidate ingress result
+
+`PostAuthControlStreamIngress` has a third typed outcome:
+
+`CandidatePublication(PostAuthCandidatePublicationTransaction)`
+
+The requester and capability variants remain present and preserve their existing meanings.
+
+No generic untyped candidate result is introduced.
+
+## 10. Candidate decode failure remains distinct and terminal to this one read
+
+GE materializes:
+
+`CandidatePublicationMeshRequestError`
+
+with at least:
+
+- `InvalidOuterKind`;
+- `Wire(CandidatePublicationWireError)`.
+
+`PostAuthControlStreamIngressError::CandidatePublicationWire(...)` preserves that current-Mesh candidate decoding failure as its source.
+
+Once exact `PRWP` selects candidate publication and strict current-Mesh decoding fails:
+
+- the frame is not reinterpreted as capability;
+- the frame is not reinterpreted as requester/rendezvous;
+- no second frame read occurs;
+- no response is written;
+- no retry/resynchronization occurs;
+- no semantic execution occurs.
+
+The one-shot stream value is consumed by the failed ingress call exactly as selected by GD.
+
+## 11. Requester/rendezvous behavior is preserved
 
 Exact `PRWZ` remains first in routing order.
 
@@ -74,73 +200,9 @@ Its behavior remains unchanged:
 - requester DR acknowledgement send surface remains unchanged;
 - requester response/error/custody classifications remain unchanged.
 
-Candidate-publication materialization must not intercept or reinterpret exact `PRWZ` traffic.
+Candidate-publication materialization cannot intercept or reinterpret exact `PRWZ` traffic.
 
-## 6. Candidate-publication strict structural decode
-
-Exact `PRWP` prefix recognition is family selection only.
-
-After recognition, source calls the existing:
-
-`decode_candidate_publication_control_frame(&frame)`
-
-That existing decoder remains authoritative for:
-
-- outer `ControlMessageKind::Command` requirement;
-- strict candidate-publication PRWP payload decoding;
-- exact peer-originated outer request ID preservation;
-- typed `CandidatePublicationControlFrame` production.
-
-No candidate semantic authority is inferred from prefix recognition.
-
-## 7. Candidate same-stream custody type
-
-C03e-GE materializes bridge-owned:
-
-`PostAuthCandidatePublicationTransaction`
-
-It retains exactly:
-
-1. one strict decoded `CandidatePublicationControlFrame`;
-2. the exact same already-accepted `MeshControlStream` by value.
-
-It exposes only narrow custody surfaces:
-
-- `command()` — immutable borrow of the strict decoded command;
-- `into_parts()` — consuming transfer of the exact command and exact stream.
-
-It exposes no raw stream borrow/getter, clone, duplicate ownership, generic escape hatch, send API, semantic execution method, owner recovery, retry, or loop.
-
-## 8. Candidate ingress result
-
-`PostAuthControlStreamIngress` now has a third typed outcome:
-
-`CandidatePublication(PostAuthCandidatePublicationTransaction)`
-
-The requester and capability variants remain present and preserve their existing meanings.
-
-No generic untyped candidate result is introduced.
-
-## 9. Candidate decode failure remains distinct and terminal to this one read
-
-`PostAuthControlStreamIngressError` now includes:
-
-`CandidatePublicationWire(CandidatePublicationControlFrameError)`
-
-The error preserves the existing strict candidate-control-frame error as its source.
-
-Once exact `PRWP` selects candidate publication and strict decoding fails:
-
-- the frame is not reinterpreted as capability;
-- the frame is not reinterpreted as requester/rendezvous;
-- no second frame read occurs;
-- no response is written;
-- no retry/resynchronization occurs;
-- no semantic execution occurs.
-
-The one-shot stream value is consumed by the failed ingress call exactly as selected by GD.
-
-## 10. Capability fallback remains legacy-preserving
+## 12. Capability fallback remains legacy-preserving
 
 Every bounded frame whose payload begins neither exact `PRWZ` nor exact `PRWP` remains on the existing capability fallback path.
 
@@ -152,15 +214,13 @@ This includes:
 - unknown payload magic;
 - other non-reserved prefixes.
 
-C03e-GE does not introduce an `UnknownFamily` error ahead of the existing capability bridge.
+C03e-GE introduces no `UnknownFamily` error ahead of the existing capability bridge.
 
 Existing `PostAuthCapabilityTransaction` remains unchanged in responsibility and retains the exact already-read frame plus exact same stream.
 
-## 11. Identity authority remains separated
+## 13. Identity authority remains separated
 
-`PostAuthCandidatePublicationTransaction` carries structural/correlation state only.
-
-It is not publisher identity authority.
+`CandidatePublicationMeshRequest` and `PostAuthCandidatePublicationTransaction` carry structural/correlation/custody state only.
 
 Publisher logical identity must still come later from the current authenticated logical session owned by the higher Agent runtime owner.
 
@@ -175,9 +235,9 @@ It must not be derived from:
 
 No current authenticated-session execution adapter is selected or materialized here.
 
-## 12. Correlation remains non-authorizing
+## 14. Correlation remains non-authorizing
 
-The exact peer-originated outer request ID remains inside `CandidatePublicationControlFrame`.
+The exact peer-originated outer request ID is preserved in `CandidatePublicationMeshRequest`.
 
 C03e-GE does not:
 
@@ -187,7 +247,20 @@ C03e-GE does not:
 - treat it as freshness/replay authority;
 - treat it as rendezvous or durable-owner authority.
 
-## 13. FY/GA/GC remain dormant
+## 15. Historical candidate control frame remains byte-stable
+
+C03e-GE does not modify:
+
+- `candidate_publication_control_frame.rs`;
+- historical pre-Mesh `AuthenticatedPrwcConnection` receive/write APIs;
+- provider-neutral C03e-CQ execution helper;
+- historical candidate result framing.
+
+The historical `CandidatePublicationControlFrame` remains valid only at its own transport boundary.
+
+A later separately gated current-Mesh execution adapter must consume current-Mesh request fields without violating publisher-session authority or manufacturing historical transport ownership.
+
+## 16. FY/GA/GC remain dormant
 
 C03e-GE does not invoke:
 
@@ -195,11 +268,11 @@ C03e-GE does not invoke:
 - `project_candidate_publication_terminal_result(...)`;
 - `compose_candidate_publication_terminal_result_frame(...)`.
 
-The candidate transaction only makes the decoded command and exact stream available for later separately gated ownership composition.
+The candidate transaction only makes the decoded current-Mesh request and exact stream available for later separately gated ownership composition.
 
 No execution error, cleanup result, or result-wire error is flattened or reclassified by GE.
 
-## 14. Production reachability-owner custody remains separately gated
+## 17. Production reachability-owner custody remains separately gated
 
 C03e-GE does not construct, recover, store, or expose:
 
@@ -211,9 +284,9 @@ Existing live-owner bootstrap authority is not treated as interchangeable with t
 
 A fresh post-GE audit remains required before any such owner custody/recovery materialization.
 
-## 15. No current-Mesh candidate response write
+## 18. No current-Mesh candidate response write
 
-The new candidate transaction intentionally has no send method.
+The candidate transaction intentionally has no send method.
 
 C03e-GE does not materialize:
 
@@ -226,9 +299,9 @@ C03e-GE does not materialize:
 - peer-close policy;
 - repeated-ingress continuation after response.
 
-GC remains pure frame composition and is not invoked here.
+GC remains pure historical-frame composition and is not invoked here.
 
-## 16. No runtime activation
+## 19. No runtime activation
 
 C03e-GE does not modify any Agent caller to consume the new candidate variant.
 
@@ -238,34 +311,63 @@ It does not activate candidate-publication runtime traffic.
 
 No command loop, listener, readiness, bootstrap, network cutover, traversal, dialing, deployment, restart/recovery, or merge is authorized.
 
-## 17. Focused tests
+## 20. Focused tests
 
 Source includes focused structural tests proving at least:
 
 - the single stream-consuming ingress surface remains the only receive operation;
 - requester custody transfer signature remains present;
-- candidate custody transfer signature consumes the candidate transaction and returns exact command + Mesh stream ownership;
+- candidate custody transfer consumes the candidate transaction and returns exact current-Mesh request + Mesh stream ownership;
 - classifier partitions exact `PRWZ`, exact `PRWP`, and capability fallback prefixes;
 - requester family recognition still requires strict requester decoding;
-- candidate family recognition still requires strict candidate `Command` decoding.
+- candidate family recognition requires current-Mesh outer `Request`;
+- exact PRWP prefix alone is insufficient for successful payload decode;
+- valid current-Mesh candidate structural decode preserves exact request ID and decoded submission.
 
 No live network test, provider test, reachability commit, or runtime activation test is introduced.
 
-## 18. Exact dependency boundary
+## 21. Exact dependency boundary
 
 C03e-GE uses only types already present in `prw-remote-bridge`:
 
-- `CandidatePublicationControlFrame`;
-- `CandidatePublicationControlFrameError`;
-- `decode_candidate_publication_control_frame(...)`;
+- `CandidatePublicationWireSubmission`;
+- `CandidatePublicationWireError`;
 - `CANDIDATE_PUBLICATION_WIRE_MAGIC`;
-- existing `MeshControlStream` and `ControlFrame` dependencies.
+- existing `prw_remote_transport::{ControlFrame, ControlMessageKind}`;
+- existing `MeshControlStream`.
 
 No dependency or lockfile change is required or authorized.
 
-## 19. Validation gate
+## 22. Validation history before final candidate
 
-Canonical closure requires exact-final-head validation after all formatter/lint corrections, if any.
+Initial GE candidate:
+
+`074e24539b901ac59a9faa60e4d2727dcaa6f6aa`
+
+Rust #1344 / run `33295463675` / job `99214248173`:
+
+- locked dependency graph: PASS;
+- rustfmt: FAIL;
+- Clippy/tests/build: not run after formatter boundary.
+
+The exact formatter correction was one mechanical line-wrap hunk in the focused candidate custody signature test.
+
+Formatter-normalized candidate:
+
+`1bb7cbc8c6669c056adbda7082cbdf111c80a738`
+
+Rust #1345 / run `33295528406` / job `99214417160`:
+
+- locked dependency graph: PASS;
+- rustfmt: PASS;
+- Clippy/compile: FAIL at the historical-vs-Mesh frame-type incompatibility described in section 5;
+- tests/build: skipped after failure.
+
+Those failures are superseded evidence and are not final GE verdicts.
+
+## 23. Final validation gate
+
+Canonical closure requires exact-final-head validation after the current-Mesh compatibility correction and any later strictly mechanical formatter/lint corrections.
 
 Required Rust verdict:
 
@@ -278,24 +380,27 @@ Required Rust verdict:
 - workspace tests success;
 - workspace build success.
 
-If Android validation automatically triggers because of the Rust source delta, both native adapter and Android application must reach terminal success on the exact final GE head.
+Because GE changes Rust source and Android validation triggers, exact-final-head Android validation must also reach terminal success for:
+
+- native adapter;
+- Android application.
 
 Path-filtered workflows that skip must be recorded as `skipped`, never PASS.
 
-## 20. Durable closure evidence
+## 24. Durable closure evidence
 
 C03e-GE closes only after:
 
 1. exact GD predecessor remains unchanged;
 2. GD...GE compare is ahead-only with exact GD merge base;
-3. only the authorized source + contract paths are present, except narrowly mechanical formatter/lint corrections within the same source path;
+3. only the authorized source + contract paths are present;
 4. exact-final-head CI is terminal and non-failing;
 5. one immutable GE audit is uploaded to the canonical Private Remote Workspace Drive folder;
 6. raw Drive byte/hash readback passes;
 7. PR body moves from `Status: VALIDATING` to `Status: CLOSED` only after Drive verification;
 8. PR remains draft/open/unmerged.
 
-## 21. Intended canonical closure
+## 25. Intended canonical closure
 
 Closure:
 
@@ -305,15 +410,17 @@ Gate:
 
 `C03E_GE_CANDIDATE_PUBLICATION_MESH_POST_AUTH_CONTROL_STREAM_SAME_STREAM_CUSTODY_SOURCE_MATERIALIZED`
 
-## 22. Successor rule
+## 26. Successor rule
 
 GE does not pre-authorize a specific successor checkpoint.
 
 After exact-head validation and durable GE closure, a fresh prerequisite audit must choose the next narrow boundary among at least:
 
-- current authenticated-session -> dormant FY/GA/GC execution adaptation;
+- current authenticated-session + current-Mesh candidate request -> dormant FY semantic execution adaptation;
 - production `ProductionReachabilityOwner<S,T>` custody/recovery;
-- current-Mesh candidate terminal-result write custody;
+- current-Mesh candidate terminal-result composition/write adaptation;
 - any still-earlier prerequisite exposed by exact current source topology.
+
+Any successor must preserve the discovered transport-era distinction: current-Mesh request correlation/submission must not be converted into historical transport custody merely to reuse older APIs.
 
 No successor may jump directly to runtime activation, listener/readiness cutover, traversal/dialing, deployment, restart/recovery, or merge.
