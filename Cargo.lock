@@ -2539,6 +2539,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "nix",
+ "prw-connectivity",
  "prw-control-plane",
  "prw-core",
  "prw-device-identity-custody",
