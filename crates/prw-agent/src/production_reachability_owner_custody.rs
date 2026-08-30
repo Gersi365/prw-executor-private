@@ -17,7 +17,7 @@ use prw_remote_bridge::reachability_owner::{
 /// The wrapper intentionally has no `Clone` implementation. Store and verifier token-source
 /// ownership remain encapsulated inside the existing production owner. Later separately gated
 /// composition may operate through the bounded closure seam without obtaining a raw owner handle.
-pub(crate) struct ProductionReachabilityOwnerCustody<S, T> {
+pub struct ProductionReachabilityOwnerCustody<S, T> {
     owner: ProductionReachabilityOwner<S, T>,
 }
 
@@ -35,7 +35,7 @@ where
     /// # Errors
     ///
     /// Returns the exact existing [`ReachabilityOwnerError`] produced by authoritative recovery.
-    pub(crate) fn recover(
+    pub fn recover(
         store: S,
         token_source: T,
         peer: &PeerConnectivityIdentity,
@@ -49,7 +49,7 @@ where
     /// The higher-ranked closure cannot return a reference tied to the owner borrow, so mutable
     /// owner custody cannot escape this lexical call. This seam performs no operation by itself;
     /// the caller-provided operation remains separately gated.
-    pub(crate) fn with_owner_mut<R>(
+    pub fn with_owner_mut<R>(
         &mut self,
         operation: impl for<'owner> FnOnce(&'owner mut ProductionReachabilityOwner<S, T>) -> R,
     ) -> R {
