@@ -217,6 +217,7 @@ impl Clone for SharedRequesterRendezvousAuthority {
         }
     }
 }
+
 impl SharedRequesterRendezvousAuthority {
     /// Takes by-value custody of the exact existing requester/rendezvous runtime owner.
     ///
@@ -437,6 +438,7 @@ mod tests {
                 .expect("valid publisher device id"),
         }
     }
+
     fn assert_clone_send_sync<T: Clone + Send + Sync>() {}
 
     #[test]
