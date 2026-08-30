@@ -2539,6 +2539,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "nix",
+ "prw-connectivity",
  "prw-control-plane",
  "prw-core",
  "prw-device-identity-custody",
@@ -3792,7 +3793,7 @@ dependencies = [
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+checksum = "55937e1799185b12863d447f42597ed69d992868b8d88a1df17376a097d8369"
 
 [[package]]
 name = "target-lexicon"
@@ -4265,7 +4266,7 @@ dependencies = [
 name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+checksum = "ba73ea9cf16f25a0f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
 
 [[package]]
 name = "version-compare"
@@ -4683,7 +4684,7 @@ dependencies = [
 name = "zerofrom-derive"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11532158c46691caf0f2593ea8358fed6bbf68a0315e80aae9bd41fbade684a1"
+checksum = "11532158c46691caf0f2593ea8358fed6bbf68a0315e80aae9bd41fbade684a1e"
 dependencies = [
  "proc-macro2",
  "quote",
