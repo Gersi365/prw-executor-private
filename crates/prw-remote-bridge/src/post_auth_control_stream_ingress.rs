@@ -337,7 +337,9 @@ mod tests {
         assert_requester_custody_transfer_signature(
             PostAuthRequesterRendezvousTransaction::into_parts,
         );
-        assert_candidate_custody_transfer_signature(PostAuthCandidatePublicationTransaction::into_parts);
+        assert_candidate_custody_transfer_signature(
+            PostAuthCandidatePublicationTransaction::into_parts,
+        );
     }
 
     #[test]
