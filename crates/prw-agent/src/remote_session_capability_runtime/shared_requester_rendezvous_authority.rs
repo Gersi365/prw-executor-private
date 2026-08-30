@@ -217,7 +217,6 @@ impl Clone for SharedRequesterRendezvousAuthority {
         }
     }
 }
-
 impl SharedRequesterRendezvousAuthority {
     /// Takes by-value custody of the exact existing requester/rendezvous runtime owner.
     ///
@@ -407,10 +406,11 @@ mod tests {
 
     use super::{
         CandidatePublicationPostCommitRequesterCleanupOutcome,
-        CandidatePublicationTerminalFrameComposition,
-        CandidatePublicationTerminalResultProjection, RequesterRendezvousCommittedCleanupIdentity,
-        SharedRequesterRendezvousAuthority, compose_candidate_publication_terminal_result_frame,
-        project_candidate_publication_terminal_parts, project_candidate_publication_terminal_result,
+        CandidatePublicationTerminalFrameComposition, CandidatePublicationTerminalResultProjection,
+        RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority,
+        compose_candidate_publication_terminal_result_frame,
+        project_candidate_publication_terminal_parts,
+        project_candidate_publication_terminal_result,
     };
     use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 
@@ -437,7 +437,6 @@ mod tests {
                 .expect("valid publisher device id"),
         }
     }
-
     fn assert_clone_send_sync<T: Clone + Send + Sync>() {}
 
     #[test]
