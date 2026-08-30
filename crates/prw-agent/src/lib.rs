@@ -21,6 +21,11 @@ pub mod linux_bootstrap;
 )]
 pub(crate) mod linux_identity;
 pub mod local_commands;
+#[allow(
+    dead_code,
+    reason = "C03e-GG materializes production reachability-owner custody before separately gated candidate execution"
+)]
+pub(crate) mod production_reachability_owner_custody;
 pub mod reachability_authority_admission;
 pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
