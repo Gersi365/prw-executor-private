@@ -91,6 +91,40 @@ impl std::error::Error for CandidatePublicationResultWireError {
     }
 }
 
+/// One locally constructed candidate-publication terminal frame result paired with an opaque
+/// higher-owner disposition that is never inspected or serialized by this bridge codec.
+///
+/// C03e-GC introduces this narrow generic custody carrier so an Agent caller can preserve its
+/// post-commit requester cleanup disposition beside the exact existing frame-construction result
+/// without adding a direct control-transport dependency merely to name [`ControlFrame`]. The
+/// existing Accepted/Rejected encoding functions remain authoritative and unchanged.
+pub struct CandidatePublicationResultFrameComposition<D> {
+    frame_result: Result<ControlFrame, CandidatePublicationResultWireError>,
+    disposition: D,
+}
+
+impl<D> CandidatePublicationResultFrameComposition<D> {
+    /// Pairs one already-computed existing frame result with one opaque disposition.
+    ///
+    /// Construction performs no encoding, frame I/O, retry, semantic execution, or disposition
+    /// inspection. `disposition` cannot alter `frame_result`.
+    #[must_use]
+    pub const fn new(
+        frame_result: Result<ControlFrame, CandidatePublicationResultWireError>,
+        disposition: D,
+    ) -> Self {
+        Self {
+            frame_result,
+            disposition,
+        }
+    }
+
+    /// Transfers the exact frame-construction result and opaque disposition by value.
+    pub fn into_parts(self) -> (Result<ControlFrame, CandidatePublicationResultWireError>, D) {
+        (self.frame_result, self.disposition)
+    }
+}
+
 /// Encodes one typed terminal candidate-publication result into a bounded Phase 129 frame.
 ///
 /// `request_id` is caller-supplied echo correlation only. This codec allocates and registers no
@@ -243,9 +277,9 @@ mod tests {
 
     use super::{
         CANDIDATE_PUBLICATION_ACCEPTED_RESULT_BYTES, CANDIDATE_PUBLICATION_REJECTED_RESULT_BYTES,
-        CandidatePublicationResultMessage, CandidatePublicationResultWireError,
-        OP_PUBLISHER_CANDIDATE_SET_ACCEPTED, OP_PUBLISHER_CANDIDATE_SET_REJECTED,
-        decode_candidate_publication_result_frame,
+        CandidatePublicationResultFrameComposition, CandidatePublicationResultMessage,
+        CandidatePublicationResultWireError, OP_PUBLISHER_CANDIDATE_SET_ACCEPTED,
+        OP_PUBLISHER_CANDIDATE_SET_REJECTED, decode_candidate_publication_result_frame,
         encode_candidate_publication_execution_result_frame,
         encode_candidate_publication_result_frame, project_candidate_publication_execution_result,
     };
@@ -436,6 +470,46 @@ mod tests {
                 ControlFrameError::ZeroRequestId
             ))
         );
+    }
+
+    #[test]
+    fn frame_composition_preserves_existing_frame_result_and_opaque_disposition() {
+        let frame = encode_candidate_publication_result_frame(
+            61,
+            CandidatePublicationResultMessage::Rejected,
+        )
+        .expect("encode bounded rejected frame");
+        let composition = CandidatePublicationResultFrameComposition::new(Ok(frame), 17_u8);
+
+        let (frame_result, disposition) = composition.into_parts();
+        let frame = frame_result.expect("preserved frame result");
+
+        assert_eq!(frame.request_id(), 61);
+        assert_eq!(
+            decode_candidate_publication_result_frame(&frame),
+            Ok(CandidatePublicationResultMessage::Rejected)
+        );
+        assert_eq!(disposition, 17);
+    }
+
+    #[test]
+    fn frame_composition_preserves_frame_failure_and_opaque_disposition() {
+        let composition = CandidatePublicationResultFrameComposition::new(
+            Err(CandidatePublicationResultWireError::Frame(
+                ControlFrameError::ZeroRequestId,
+            )),
+            23_u8,
+        );
+
+        let (frame_result, disposition) = composition.into_parts();
+
+        assert_eq!(
+            frame_result,
+            Err(CandidatePublicationResultWireError::Frame(
+                ControlFrameError::ZeroRequestId
+            ))
+        );
+        assert_eq!(disposition, 23);
     }
 
     #[test]
