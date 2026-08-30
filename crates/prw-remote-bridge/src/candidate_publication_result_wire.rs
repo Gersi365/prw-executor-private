@@ -120,7 +120,6 @@ impl<D> CandidatePublicationResultFrameComposition<D> {
     }
 
     /// Transfers the exact frame-construction result and opaque disposition by value.
-    #[must_use]
     pub fn into_parts(self) -> (Result<ControlFrame, CandidatePublicationResultWireError>, D) {
         (self.frame_result, self.disposition)
     }
