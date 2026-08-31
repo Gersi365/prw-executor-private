@@ -270,7 +270,7 @@ fn store_for(
         }
     };
     let snapshot =
-        ReachabilityDurableSnapshot::new(fixture.plan.clone(), record).expect("snapshot");
+        ReachabilityDurableSnapshot::new(fixture.plan.durable_state(), record).expect("snapshot");
     MemoryStore::seeded(snapshot)
 }
 
@@ -420,7 +420,7 @@ fn resync_reads_durable_state_each_time_and_returns_the_new_current_token() {
 
     handle.replace(
         ReachabilityDurableSnapshot::new(
-            fixture.plan.clone(),
+            fixture.plan.durable_state(),
             CandidatePublicationFreshnessRecord::established(fixture.plan.peer().clone(), second),
         )
         .expect("replacement snapshot"),
