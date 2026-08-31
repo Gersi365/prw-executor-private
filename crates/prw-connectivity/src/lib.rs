@@ -241,7 +241,7 @@ impl PeerConnectivityPlanDurableState {
     /// Semantic consistency is validated only when the state is restored into a
     /// [`PeerConnectivityPlan`]. This constructor performs no I/O and assigns no candidate IDs.
     #[must_use]
-    pub fn from_parts(
+    pub const fn from_parts(
         peer: PeerConnectivityIdentity,
         candidates: Vec<ConnectivityCandidate>,
         candidate_id_high_watermark: Option<CandidateId>,
@@ -362,14 +362,13 @@ impl PeerConnectivityPlan {
         let active_maximum = candidates.iter().map(|candidate| candidate.id.get()).max();
         let candidate_id_high_watermark = match (active_maximum, candidate_id_high_watermark) {
             (None, None) => 0,
-            (None, Some(high_watermark)) => high_watermark.get(),
             (Some(_), None) => return Err(ConnectivityError::InvalidCandidateIdHighWatermark),
             (Some(active_maximum), Some(high_watermark))
                 if high_watermark.get() < active_maximum =>
             {
                 return Err(ConnectivityError::InvalidCandidateIdHighWatermark);
             }
-            (Some(_), Some(high_watermark)) => high_watermark.get(),
+            (None, Some(high_watermark)) | (Some(_), Some(high_watermark)) => high_watermark.get(),
         };
 
         let candidates = candidates
