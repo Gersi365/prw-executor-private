@@ -19,8 +19,8 @@ use aws_lc_rs::{
 };
 use prw_connectivity::{
     CandidateId, ConnectivityCandidate, ConnectivityEndpoint, ConnectivityError,
-    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan, SelectedConnectivityPath,
-    TransportIdentity,
+    ConnectivityPathKind, PeerConnectivityIdentity, PeerConnectivityPlan,
+    PeerConnectivityPlanDurableState, SelectedConnectivityPath, TransportIdentity,
 };
 use prw_control_plane::DeviceIdentityBinding;
 use prw_core::{DeviceId, DeviceLifecycle, SessionId, UserId, WorkspaceId};
@@ -37,7 +37,7 @@ use prw_remote_bridge::{
         CandidatePublicationFreshnessTokenSource, FreshnessTokenSourceError,
         ProductionReachabilityOwner, ReachabilityDurableSnapshot, ReachabilityDurableStore,
         ReachabilityOwnerError, ReachabilityOwnerMode, ReachabilityPersistenceCommit,
-        ReachabilityPersistenceError, ReachabilityTraversalFactory,
+        ReachabilityPersistenceError, ReachabilitySnapshotError, ReachabilityTraversalFactory,
         ReachabilityTraversalFactoryError,
     },
 };
@@ -330,8 +330,9 @@ fn owner(
         fixture.initial_plan.peer().clone(),
         initial_freshness,
     );
-    let snapshot = ReachabilityDurableSnapshot::new(fixture.initial_plan.clone(), freshness)
-        .expect("peer-consistent seed");
+    let snapshot =
+        ReachabilityDurableSnapshot::new(fixture.initial_plan.durable_state(), freshness)
+            .expect("peer-consistent seed");
     let (store, handle) = MemoryStore::seeded(snapshot);
     let owner = resolve_ready(ProductionReachabilityOwner::recover(
         store,
@@ -377,9 +378,15 @@ fn successful_commit_advances_durable_freshness_and_invalidates_current_traversa
         owner.freshness().lifecycle(),
         CandidatePublicationFreshnessLifecycle::Established(replacement)
     );
+    let durable = store.snapshot();
     assert_eq!(
-        store.snapshot().freshness().lifecycle(),
+        durable.freshness().lifecycle(),
         CandidatePublicationFreshnessLifecycle::Established(replacement)
+    );
+    assert_eq!(durable.plan().candidates(), &[fixture.initial_candidate]);
+    assert_eq!(
+        durable.plan().candidate_id_high_watermark(),
+        Some(CandidateId::new(1).expect("candidate id"))
     );
 
     assert_eq!(
@@ -391,6 +398,149 @@ fn successful_commit_advances_durable_freshness_and_invalidates_current_traversa
         )),
         Err(ReachabilityOwnerError::StalePublicationFreshness)
     );
+}
+
+#[test]
+fn durable_recovery_preserves_historical_high_watermark_and_blocks_removed_id_reuse() {
+    let fixture = fixture();
+    let current = freshness(23);
+    let replacement = freshness(24);
+    let historical = candidate(2, ConnectivityPathKind::InternetDirect, 52002);
+    let mut historical_plan = fixture.initial_plan.clone();
+    historical_plan
+        .refresh_candidates(vec![historical])
+        .expect("advance high-watermark");
+    historical_plan
+        .refresh_candidates(Vec::new())
+        .expect("remove historical candidate");
+    assert_eq!(
+        historical_plan.candidate_id_high_watermark(),
+        Some(CandidateId::new(2).expect("candidate id"))
+    );
+
+    let snapshot = ReachabilityDurableSnapshot::new(
+        historical_plan.durable_state(),
+        CandidatePublicationFreshnessRecord::established(historical_plan.peer().clone(), current),
+    )
+    .expect("historical durable snapshot");
+    let (store, handle) = MemoryStore::seeded(snapshot);
+    let mut owner = resolve_ready(ProductionReachabilityOwner::recover(
+        store,
+        TokenSource::new([replacement]),
+        historical_plan.peer(),
+    ))
+    .expect("recover historical high-watermark");
+
+    assert_eq!(
+        owner.plan().candidate_id_high_watermark(),
+        Some(CandidateId::new(2).expect("candidate id"))
+    );
+    let reused = candidate(2, ConnectivityPathKind::Relay, 52003);
+    let publication = publish_current_candidates(
+        &fixture.registry,
+        &fixture.target,
+        fixture.transport,
+        vec![reused],
+    )
+    .expect("bounded publication");
+    assert_eq!(
+        resolve_ready(owner.commit_candidate_publication(
+            &fixture.registry,
+            &fixture.requester,
+            &publication,
+            current,
+        )),
+        Err(ReachabilityOwnerError::Candidate(
+            prw_remote_bridge::candidate_reachability::CandidateReachabilityError::Connectivity(
+                ConnectivityError::CandidateIdRebound
+            )
+        ))
+    );
+    assert_eq!(owner.mode(), ReachabilityOwnerMode::Current);
+    assert_eq!(
+        owner.freshness().lifecycle(),
+        CandidatePublicationFreshnessLifecycle::Established(current)
+    );
+    assert_eq!(
+        handle.snapshot().plan().candidate_id_high_watermark(),
+        Some(CandidateId::new(2).expect("candidate id"))
+    );
+}
+
+#[test]
+fn invalid_durable_high_watermark_fails_recovery_through_snapshot_classification() {
+    let fixture = fixture();
+    let current = freshness(25);
+    let invalid_state = PeerConnectivityPlanDurableState::from_parts(
+        fixture.initial_plan.peer().clone(),
+        vec![fixture.initial_candidate],
+        None,
+    );
+    let snapshot = ReachabilityDurableSnapshot::new(
+        invalid_state,
+        CandidatePublicationFreshnessRecord::established(
+            fixture.initial_plan.peer().clone(),
+            current,
+        ),
+    )
+    .expect("cross-member peer consistency");
+    let (store, _handle) = MemoryStore::seeded(snapshot);
+
+    let result = resolve_ready(ProductionReachabilityOwner::recover(
+        store,
+        TokenSource::new([]),
+        fixture.initial_plan.peer(),
+    ));
+    assert!(matches!(
+        result,
+        Err(ReachabilityOwnerError::Snapshot(
+            ReachabilitySnapshotError::PlanRestoration(
+                ConnectivityError::InvalidCandidateIdHighWatermark
+            )
+        ))
+    ));
+}
+
+#[test]
+fn invalid_durable_reload_enters_recovery_without_partial_freshness_install() {
+    let fixture = fixture();
+    let current = freshness(26);
+    let durable_ahead = freshness(27);
+    let (mut owner, store) = owner(&fixture, current, []);
+    owner
+        .provision_current_traversal(&mut NewTraversalFactory)
+        .expect("current traversal");
+    let invalid_state = PeerConnectivityPlanDurableState::from_parts(
+        fixture.initial_plan.peer().clone(),
+        vec![fixture.initial_candidate],
+        None,
+    );
+    store.replace(
+        ReachabilityDurableSnapshot::new(
+            invalid_state,
+            CandidatePublicationFreshnessRecord::established(
+                fixture.initial_plan.peer().clone(),
+                durable_ahead,
+            ),
+        )
+        .expect("cross-member peer consistency"),
+    );
+
+    assert_eq!(
+        resolve_ready(owner.reload_from_store()),
+        Err(ReachabilityOwnerError::Snapshot(
+            ReachabilitySnapshotError::PlanRestoration(
+                ConnectivityError::InvalidCandidateIdHighWatermark
+            )
+        ))
+    );
+    assert_eq!(owner.mode(), ReachabilityOwnerMode::RecoveryRequired);
+    assert!(!owner.has_current_traversal());
+    assert_eq!(
+        owner.freshness().lifecycle(),
+        CandidatePublicationFreshnessLifecycle::NewLifecycleEligible(current)
+    );
+    assert_eq!(owner.plan(), &fixture.initial_plan);
 }
 
 #[test]
@@ -449,7 +599,7 @@ fn stale_durable_expected_state_forces_recovery_and_authoritative_reload() {
 
     store.replace(
         ReachabilityDurableSnapshot::new(
-            fixture.initial_plan.clone(),
+            fixture.initial_plan.durable_state(),
             CandidatePublicationFreshnessRecord::established(
                 fixture.initial_plan.peer().clone(),
                 durable_ahead,
@@ -576,8 +726,14 @@ fn transport_rotation_durably_retires_old_peer_and_drops_traversal() {
         owner.freshness().lifecycle(),
         CandidatePublicationFreshnessLifecycle::Retired
     );
+    let durable = store.snapshot();
     assert_eq!(
-        store.snapshot().freshness().lifecycle(),
+        durable.freshness().lifecycle(),
         CandidatePublicationFreshnessLifecycle::Retired
+    );
+    assert_eq!(durable.plan().candidates(), &[fixture.initial_candidate]);
+    assert_eq!(
+        durable.plan().candidate_id_high_watermark(),
+        Some(CandidateId::new(1).expect("candidate id"))
     );
 }
