@@ -223,6 +223,55 @@ pub enum SelectedConnectivityPath {
     Offline,
 }
 
+/// Provider-neutral durable semantic projection of one peer connectivity plan.
+///
+/// This carrier deliberately omits transient reachability observations. It preserves only the
+/// exact peer, the current configured candidate vector, and historical candidate-ID anti-reuse
+/// state required to reconstruct one plan across durable recovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerConnectivityPlanDurableState {
+    peer: PeerConnectivityIdentity,
+    candidates: Vec<ConnectivityCandidate>,
+    candidate_id_high_watermark: Option<CandidateId>,
+}
+
+impl PeerConnectivityPlanDurableState {
+    /// Creates a typed durable-state carrier from decoded/provider-neutral parts.
+    ///
+    /// Semantic consistency is validated only when the state is restored into a
+    /// [`PeerConnectivityPlan`]. This constructor performs no I/O and assigns no candidate IDs.
+    #[must_use]
+    pub const fn from_parts(
+        peer: PeerConnectivityIdentity,
+        candidates: Vec<ConnectivityCandidate>,
+        candidate_id_high_watermark: Option<CandidateId>,
+    ) -> Self {
+        Self {
+            peer,
+            candidates,
+            candidate_id_high_watermark,
+        }
+    }
+
+    /// Returns the exact logical/transport peer identity.
+    #[must_use]
+    pub const fn peer(&self) -> &PeerConnectivityIdentity {
+        &self.peer
+    }
+
+    /// Returns the current configured candidates in exact plan order.
+    #[must_use]
+    pub fn candidates(&self) -> &[ConnectivityCandidate] {
+        &self.candidates
+    }
+
+    /// Returns the exact historical candidate-ID high-watermark.
+    #[must_use]
+    pub const fn candidate_id_high_watermark(&self) -> Option<CandidateId> {
+        self.candidate_id_high_watermark
+    }
+}
+
 /// Bounded peer candidate plan and observation state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerConnectivityPlan {
@@ -276,6 +325,67 @@ impl PeerConnectivityPlan {
         })
     }
 
+    /// Restores one plan from provider-neutral durable semantic state.
+    ///
+    /// Every restored reachability observation is `Unknown`; persisted reachability observations
+    /// are not part of the durable carrier and cannot become authority after recovery.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid candidate sets using the same structural classifications as [`Self::new`]
+    /// and fails with [`ConnectivityError::InvalidCandidateIdHighWatermark`] when the persisted
+    /// high-watermark is missing for active candidates or falls below the active maximum.
+    pub fn from_durable_state(
+        state: PeerConnectivityPlanDurableState,
+    ) -> Result<Self, ConnectivityError> {
+        let PeerConnectivityPlanDurableState {
+            peer,
+            candidates,
+            candidate_id_high_watermark,
+        } = state;
+
+        if candidates.len() > MAX_CONNECTIVITY_CANDIDATES {
+            return Err(ConnectivityError::CandidateCapacity);
+        }
+
+        for (index, candidate) in candidates.iter().enumerate() {
+            for existing in &candidates[..index] {
+                if existing.id == candidate.id {
+                    return Err(ConnectivityError::DuplicateCandidateId);
+                }
+                if existing.kind == candidate.kind && existing.endpoint == candidate.endpoint {
+                    return Err(ConnectivityError::DuplicateCandidateEndpoint);
+                }
+            }
+        }
+
+        let active_maximum = candidates.iter().map(|candidate| candidate.id.get()).max();
+        let candidate_id_high_watermark = match (active_maximum, candidate_id_high_watermark) {
+            (None, None) => 0,
+            (Some(_), None) => return Err(ConnectivityError::InvalidCandidateIdHighWatermark),
+            (Some(active_maximum), Some(high_watermark))
+                if high_watermark.get() < active_maximum =>
+            {
+                return Err(ConnectivityError::InvalidCandidateIdHighWatermark);
+            }
+            (None | Some(_), Some(high_watermark)) => high_watermark.get(),
+        };
+
+        let candidates = candidates
+            .into_iter()
+            .map(|candidate| CandidateState {
+                candidate,
+                observation: ReachabilityObservation::Unknown,
+            })
+            .collect();
+
+        Ok(Self {
+            peer,
+            candidates,
+            candidate_id_high_watermark,
+        })
+    }
+
     /// Returns the logical/transport peer identity.
     #[must_use]
     pub const fn peer(&self) -> &PeerConnectivityIdentity {
@@ -299,6 +409,23 @@ impl PeerConnectivityPlan {
             None
         } else {
             Some(CandidateId(self.candidate_id_high_watermark))
+        }
+    }
+
+    /// Projects this plan into provider-neutral durable semantic state.
+    ///
+    /// Transient reachability observations are intentionally omitted. Projection performs no
+    /// mutation, provider call, I/O, candidate allocation, or freshness transition.
+    #[must_use]
+    pub fn durable_state(&self) -> PeerConnectivityPlanDurableState {
+        PeerConnectivityPlanDurableState {
+            peer: self.peer.clone(),
+            candidates: self
+                .candidates
+                .iter()
+                .map(|state| state.candidate)
+                .collect(),
+            candidate_id_high_watermark: self.candidate_id_high_watermark(),
         }
     }
 
@@ -424,6 +551,8 @@ pub enum ConnectivityError {
     DuplicateCandidateEndpoint,
     /// An existing or retired plan-scoped candidate identifier was rebound/reused.
     CandidateIdRebound,
+    /// Durable candidate-ID high-watermark is missing or lower than the active maximum.
+    InvalidCandidateIdHighWatermark,
     /// Observation referenced a candidate not in the plan.
     UnknownCandidate,
 }
@@ -440,6 +569,9 @@ impl fmt::Display for ConnectivityError {
             Self::DuplicateCandidateEndpoint => "connectivity candidate endpoint is duplicated",
             Self::CandidateIdRebound => {
                 "connectivity candidate identifier cannot be rebound or reused"
+            }
+            Self::InvalidCandidateIdHighWatermark => {
+                "connectivity candidate identifier high-watermark is inconsistent"
             }
             Self::UnknownCandidate => "connectivity candidate is unknown",
         })
@@ -847,6 +979,163 @@ mod tests {
             Err(ConnectivityError::CandidateIdRebound)
         );
         assert_eq!(plan.candidate_id_high_watermark(), before);
+    }
+
+    #[test]
+    fn durable_state_round_trip_preserves_empty_never_used_plan() {
+        let original = PeerConnectivityPlan::new(peer(), Vec::new()).expect("empty plan");
+        let state = original.durable_state();
+
+        assert_eq!(state.peer(), original.peer());
+        assert!(state.candidates().is_empty());
+        assert_eq!(state.candidate_id_high_watermark(), None);
+
+        let restored = PeerConnectivityPlan::from_durable_state(state).expect("restore empty plan");
+        assert_eq!(restored.peer(), original.peer());
+        assert_eq!(restored.candidate_count(), 0);
+        assert_eq!(restored.candidate_id_high_watermark(), None);
+        assert_eq!(restored.selected_path(), SelectedConnectivityPath::Offline);
+    }
+
+    #[test]
+    fn durable_state_round_trip_preserves_active_candidates_order_and_high_water() {
+        let expected_candidates = vec![
+            candidate(5, ConnectivityPathKind::Relay, 2005),
+            candidate(2, ConnectivityPathKind::LocalDirect, 2002),
+        ];
+        let original =
+            PeerConnectivityPlan::new(peer(), expected_candidates.clone()).expect("initial plan");
+        let state = original.durable_state();
+
+        assert_eq!(state.candidates(), expected_candidates.as_slice());
+        assert_eq!(state.candidate_id_high_watermark(), Some(id(5)));
+
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore active plan");
+        let restored_state = restored.durable_state();
+        assert_eq!(restored_state.peer(), original.peer());
+        assert_eq!(restored_state.candidates(), expected_candidates.as_slice());
+        assert_eq!(restored_state.candidate_id_high_watermark(), Some(id(5)));
+    }
+
+    #[test]
+    fn durable_state_drops_transient_observations_on_restore() {
+        let mut original = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::LocalDirect, 2001)],
+        )
+        .expect("initial plan");
+        original
+            .set_observation(id(1), ReachabilityObservation::Reachable)
+            .expect("reachable observation");
+        assert!(matches!(
+            original.selected_path(),
+            SelectedConnectivityPath::Candidate(_)
+        ));
+
+        let restored = PeerConnectivityPlan::from_durable_state(original.durable_state())
+            .expect("restore without transient observation");
+        assert_eq!(restored.selected_path(), SelectedConnectivityPath::Offline);
+    }
+
+    #[test]
+    fn durable_state_round_trip_preserves_historical_high_water_above_active_maximum() {
+        let retained = candidate(2, ConnectivityPathKind::LocalDirect, 2002);
+        let mut original = PeerConnectivityPlan::new(
+            peer(),
+            vec![
+                retained,
+                candidate(7, ConnectivityPathKind::InternetDirect, 2007),
+            ],
+        )
+        .expect("initial plan");
+        original
+            .refresh_candidates(vec![retained])
+            .expect("retain lower candidate");
+
+        let state = original.durable_state();
+        assert_eq!(state.candidates(), &[retained]);
+        assert_eq!(state.candidate_id_high_watermark(), Some(id(7)));
+
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore historical high-water");
+        assert_eq!(restored.candidate_id_high_watermark(), Some(id(7)));
+        assert_eq!(restored.durable_state().candidates(), &[retained]);
+    }
+
+    #[test]
+    fn durable_state_round_trip_preserves_empty_plan_with_historical_high_water() {
+        let mut original = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(7, ConnectivityPathKind::InternetDirect, 2007)],
+        )
+        .expect("initial plan");
+        original
+            .refresh_candidates(Vec::new())
+            .expect("remove all current candidates");
+
+        let state = original.durable_state();
+        assert!(state.candidates().is_empty());
+        assert_eq!(state.candidate_id_high_watermark(), Some(id(7)));
+
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore empty historical plan");
+        assert_eq!(restored.candidate_count(), 0);
+        assert_eq!(restored.candidate_id_high_watermark(), Some(id(7)));
+        assert_eq!(restored.selected_path(), SelectedConnectivityPath::Offline);
+    }
+
+    #[test]
+    fn durable_state_rejects_high_water_below_active_maximum() {
+        let state = PeerConnectivityPlanDurableState::from_parts(
+            peer(),
+            vec![candidate(7, ConnectivityPathKind::InternetDirect, 2007)],
+            Some(id(6)),
+        );
+
+        assert_eq!(
+            PeerConnectivityPlan::from_durable_state(state),
+            Err(ConnectivityError::InvalidCandidateIdHighWatermark)
+        );
+    }
+
+    #[test]
+    fn durable_state_rejects_missing_high_water_for_active_candidates() {
+        let state = PeerConnectivityPlanDurableState::from_parts(
+            peer(),
+            vec![candidate(1, ConnectivityPathKind::InternetDirect, 2001)],
+            None,
+        );
+
+        assert_eq!(
+            PeerConnectivityPlan::from_durable_state(state),
+            Err(ConnectivityError::InvalidCandidateIdHighWatermark)
+        );
+    }
+
+    #[test]
+    fn restored_plan_rejects_reuse_of_historical_removed_candidate_id() {
+        let retained = candidate(8, ConnectivityPathKind::InternetDirect, 3008);
+        let mut original = PeerConnectivityPlan::new(
+            peer(),
+            vec![candidate(7, ConnectivityPathKind::InternetDirect, 2007)],
+        )
+        .expect("initial plan");
+        original
+            .refresh_candidates(vec![retained])
+            .expect("advance candidate namespace");
+
+        let mut restored = PeerConnectivityPlan::from_durable_state(original.durable_state())
+            .expect("restore historical namespace");
+        assert_eq!(restored.candidate_id_high_watermark(), Some(id(8)));
+        assert_eq!(
+            restored.refresh_candidates(vec![candidate(
+                7,
+                ConnectivityPathKind::InternetDirect,
+                2007,
+            )]),
+            Err(ConnectivityError::CandidateIdRebound)
+        );
     }
 
     #[test]
