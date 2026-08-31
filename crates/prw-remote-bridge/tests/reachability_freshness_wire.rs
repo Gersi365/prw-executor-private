@@ -269,8 +269,8 @@ fn store_for(
             CandidatePublicationFreshnessRecord::retired(fixture.plan.peer().clone())
         }
     };
-    let snapshot = ReachabilityDurableSnapshot::new(fixture.plan.durable_state(), record)
-        .expect("snapshot");
+    let snapshot =
+        ReachabilityDurableSnapshot::new(fixture.plan.durable_state(), record).expect("snapshot");
     MemoryStore::seeded(snapshot)
 }
 
