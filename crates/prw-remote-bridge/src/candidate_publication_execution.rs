@@ -6,7 +6,7 @@
 //! request-ID allocation, response encoding, retry/loop/task creation, concrete rendezvous-provider
 //! selection, listener/runtime activation, networking mutation, deployment, or merge behavior.
 
-use std::fmt;
+use std::{fmt, future::Future};
 
 use prw_registry::WorkspaceDeviceRegistry;
 use prw_session::AuthenticatedDeviceSession;
@@ -89,14 +89,15 @@ impl std::error::Error for CandidatePublicationExecutionError {
 /// reachability-owner commit.
 ///
 /// This function reads no frame, writes no frame, retries nothing, allocates no request ID and
-/// selects no concrete requester/rendezvous provider.
+/// selects no concrete requester/rendezvous provider. The caller owns polling of the durable
+/// operation; this composition owns no async runtime or background task.
 ///
 /// # Errors
 ///
 /// Returns [`CandidatePublicationExecutionError`] on publisher/transport/candidate construction,
 /// requester/rendezvous authorization, expected-publisher mismatch, or existing reachability-owner
 /// commit failure. No later stage runs after an earlier failure.
-pub fn execute_authenticated_candidate_publication<S, T, P>(
+pub async fn execute_authenticated_candidate_publication<S, T, P>(
     connection: &AuthenticatedPrwcConnection,
     command: &CandidatePublicationControlFrame,
     registry: &WorkspaceDeviceRegistry,
@@ -115,16 +116,17 @@ where
         requester_authority,
         owner,
     )
+    .await
 }
 
 trait CandidatePublicationCommit {
-    fn commit_candidate_publication(
-        &mut self,
-        registry: &WorkspaceDeviceRegistry,
-        requester_session: &AuthenticatedDeviceSession,
-        publication: &AuthenticatedCandidatePublication,
+    fn commit_candidate_publication<'a>(
+        &'a mut self,
+        registry: &'a WorkspaceDeviceRegistry,
+        requester_session: &'a AuthenticatedDeviceSession,
+        publication: &'a AuthenticatedCandidatePublication,
         presented_freshness: CandidatePublicationFreshnessToken,
-    ) -> Result<ReachabilityCommitOutcome, ReachabilityOwnerError>;
+    ) -> impl Future<Output = Result<ReachabilityCommitOutcome, ReachabilityOwnerError>> + 'a;
 }
 
 impl<S, T> CandidatePublicationCommit for ProductionReachabilityOwner<S, T>
@@ -132,13 +134,13 @@ where
     S: ReachabilityDurableStore,
     T: CandidatePublicationFreshnessTokenSource,
 {
-    fn commit_candidate_publication(
-        &mut self,
-        registry: &WorkspaceDeviceRegistry,
-        requester_session: &AuthenticatedDeviceSession,
-        publication: &AuthenticatedCandidatePublication,
+    fn commit_candidate_publication<'a>(
+        &'a mut self,
+        registry: &'a WorkspaceDeviceRegistry,
+        requester_session: &'a AuthenticatedDeviceSession,
+        publication: &'a AuthenticatedCandidatePublication,
         presented_freshness: CandidatePublicationFreshnessToken,
-    ) -> Result<ReachabilityCommitOutcome, ReachabilityOwnerError> {
+    ) -> impl Future<Output = Result<ReachabilityCommitOutcome, ReachabilityOwnerError>> + 'a {
         Self::commit_candidate_publication(
             self,
             registry,
@@ -149,7 +151,7 @@ where
     }
 }
 
-fn execute_candidate_publication_for_session<P, C>(
+async fn execute_candidate_publication_for_session<P, C>(
     publisher_session: &AuthenticatedDeviceSession,
     command: &CandidatePublicationControlFrame,
     registry: &WorkspaceDeviceRegistry,
@@ -184,12 +186,19 @@ where
             &publication,
             submission.presented_freshness(),
         )
+        .await
         .map_err(CandidatePublicationExecutionError::Reachability)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{
+        cell::RefCell,
+        future::{Future, ready},
+        rc::Rc,
+        sync::Arc,
+        task::{Context, Poll, Wake, Waker},
+    };
 
     use aws_lc_rs::{
         rand::SystemRandom,
@@ -221,6 +230,22 @@ mod tests {
         CandidatePublicationCommit, CandidatePublicationExecutionError,
         execute_candidate_publication_for_session,
     };
+
+    struct NoopWake;
+
+    impl Wake for NoopWake {
+        fn wake(self: Arc<Self>) {}
+    }
+
+    fn resolve_ready<F: Future>(future: F) -> F::Output {
+        let waker = Waker::from(Arc::new(NoopWake));
+        let mut context = Context::from_waker(&waker);
+        let mut future = std::pin::pin!(future);
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("test future unexpectedly pending"),
+        }
+    }
 
     struct Fixture {
         registry: WorkspaceDeviceRegistry,
@@ -335,18 +360,18 @@ mod tests {
     }
 
     impl CandidatePublicationCommit for FakeCommit {
-        fn commit_candidate_publication(
-            &mut self,
-            _registry: &WorkspaceDeviceRegistry,
-            _requester_session: &AuthenticatedDeviceSession,
-            publication: &AuthenticatedCandidatePublication,
+        fn commit_candidate_publication<'a>(
+            &'a mut self,
+            _registry: &'a WorkspaceDeviceRegistry,
+            _requester_session: &'a AuthenticatedDeviceSession,
+            publication: &'a AuthenticatedCandidatePublication,
             presented_freshness: CandidatePublicationFreshnessToken,
-        ) -> Result<ReachabilityCommitOutcome, ReachabilityOwnerError> {
+        ) -> impl Future<Output = Result<ReachabilityCommitOutcome, ReachabilityOwnerError>> + 'a {
             self.calls += 1;
             self.order.borrow_mut().push("commit");
             self.observed_publisher = Some(publication.peer().device_id().clone());
             self.observed_freshness = Some(presented_freshness);
-            Err(self.error)
+            ready(Err(self.error))
         }
     }
 
@@ -375,13 +400,13 @@ mod tests {
         let empty_registry = WorkspaceDeviceRegistry::new();
 
         assert_eq!(
-            execute_candidate_publication_for_session(
+            resolve_ready(execute_candidate_publication_for_session(
                 &fixture.publisher_session,
                 &command,
                 &empty_registry,
                 &mut authority,
                 &mut commit,
-            ),
+            )),
             Err(CandidatePublicationExecutionError::Candidate(
                 CandidateReachabilityError::Registry(RegistryError::MembershipUnknown)
             ))
@@ -405,13 +430,13 @@ mod tests {
         let mut commit = fake_commit(Rc::clone(&order));
 
         assert_eq!(
-            execute_candidate_publication_for_session(
+            resolve_ready(execute_candidate_publication_for_session(
                 &fixture.publisher_session,
                 &command,
                 &fixture.registry,
                 &mut authority,
                 &mut commit,
-            ),
+            )),
             Err(CandidatePublicationExecutionError::RequesterAuthority(
                 RequesterRendezvousAuthorityError::Ambiguous
             ))
@@ -444,13 +469,13 @@ mod tests {
         let mut commit = fake_commit(Rc::clone(&order));
 
         assert_eq!(
-            execute_candidate_publication_for_session(
+            resolve_ready(execute_candidate_publication_for_session(
                 &fixture.publisher_session,
                 &command,
                 &fixture.registry,
                 &mut authority,
                 &mut commit,
-            ),
+            )),
             Err(CandidatePublicationExecutionError::ExpectedPublisherMismatch)
         );
         assert_eq!(authority.calls, 1);
@@ -476,13 +501,13 @@ mod tests {
         let mut commit = fake_commit(Rc::clone(&order));
 
         assert_eq!(
-            execute_candidate_publication_for_session(
+            resolve_ready(execute_candidate_publication_for_session(
                 &fixture.publisher_session,
                 &command,
                 &fixture.registry,
                 &mut authority,
                 &mut commit,
-            ),
+            )),
             Err(CandidatePublicationExecutionError::Reachability(
                 ReachabilityOwnerError::RecoveryRequired
             ))
