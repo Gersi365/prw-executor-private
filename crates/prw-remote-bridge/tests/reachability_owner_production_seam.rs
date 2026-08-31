@@ -7,8 +7,11 @@
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
+    future::{Future, ready},
     net::{IpAddr, Ipv4Addr},
     rc::Rc,
+    sync::Arc,
+    task::{Context, Poll, Wake, Waker},
 };
 
 use aws_lc_rs::{
@@ -40,6 +43,22 @@ use prw_remote_bridge::{
     },
 };
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
+
+struct NoopWake;
+
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
+}
+
+fn resolve_ready<F: Future>(future: F) -> F::Output {
+    let waker = Waker::from(Arc::new(NoopWake));
+    let mut context = Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    match future.as_mut().poll(&mut context) {
+        Poll::Ready(value) => value,
+        Poll::Pending => panic!("test future unexpectedly pending"),
+    }
+}
 
 #[derive(Clone)]
 struct MemoryStoreHandle {
@@ -85,38 +104,47 @@ impl MemoryStore {
 }
 
 impl ReachabilityDurableStore for MemoryStore {
-    fn load_current(
-        &mut self,
-        peer: &PeerConnectivityIdentity,
-    ) -> Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError> {
-        Ok(self
+    fn load_current<'a>(
+        &'a mut self,
+        peer: &'a PeerConnectivityIdentity,
+    ) -> impl Future<
+        Output = Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError>,
+    > + Send
+    + 'a {
+        let result = Ok(self
             .handle
             .current
             .borrow()
             .as_ref()
             .filter(|snapshot| snapshot.plan().peer() == peer)
-            .cloned())
+            .cloned());
+        ready(result)
     }
 
-    fn compare_and_commit(
-        &mut self,
+    fn compare_and_commit<'a>(
+        &'a mut self,
         expected_current: CandidatePublicationFreshnessToken,
-        replacement: &ReachabilityDurableSnapshot,
-    ) -> Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError> {
-        if self.handle.ambiguous_next_commit.replace(false) {
-            return Err(ReachabilityPersistenceError::UnavailableOrAmbiguous);
-        }
-        let current_token = self
-            .handle
-            .current
-            .borrow()
-            .as_ref()
-            .and_then(|snapshot| snapshot.freshness().lifecycle().current_token());
-        if current_token != Some(expected_current) {
-            return Ok(ReachabilityPersistenceCommit::StaleExpected);
-        }
-        *self.handle.current.borrow_mut() = Some(replacement.clone());
-        Ok(ReachabilityPersistenceCommit::Committed)
+        replacement: &'a ReachabilityDurableSnapshot,
+    ) -> impl Future<Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>>
+    + Send
+    + 'a {
+        let result = if self.handle.ambiguous_next_commit.replace(false) {
+            Err(ReachabilityPersistenceError::UnavailableOrAmbiguous)
+        } else {
+            let current_token = self
+                .handle
+                .current
+                .borrow()
+                .as_ref()
+                .and_then(|snapshot| snapshot.freshness().lifecycle().current_token());
+            if current_token != Some(expected_current) {
+                Ok(ReachabilityPersistenceCommit::StaleExpected)
+            } else {
+                *self.handle.current.borrow_mut() = Some(replacement.clone());
+                Ok(ReachabilityPersistenceCommit::Committed)
+            }
+        };
+        ready(result)
     }
 }
 
@@ -313,11 +341,11 @@ fn owner(
     let snapshot = ReachabilityDurableSnapshot::new(fixture.initial_plan.clone(), freshness)
         .expect("peer-consistent seed");
     let (store, handle) = MemoryStore::seeded(snapshot);
-    let owner = ProductionReachabilityOwner::recover(
+    let owner = resolve_ready(ProductionReachabilityOwner::recover(
         store,
         TokenSource::new(replacements),
         fixture.initial_plan.peer(),
-    )
+    ))
     .expect("recover owner");
     (owner, handle)
 }
@@ -340,9 +368,13 @@ fn successful_commit_advances_durable_freshness_and_invalidates_current_traversa
         vec![fixture.initial_candidate],
     )
     .expect("authenticated publication");
-    let outcome = owner
-        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
-        .expect("durable publication commit");
+    let outcome = resolve_ready(owner.commit_candidate_publication(
+        &fixture.registry,
+        &fixture.requester,
+        &publication,
+        current,
+    ))
+    .expect("durable publication commit");
 
     assert_eq!(outcome.replacement_freshness(), replacement);
     assert!(outcome.invalidated_traversal());
@@ -359,12 +391,12 @@ fn successful_commit_advances_durable_freshness_and_invalidates_current_traversa
     );
 
     assert_eq!(
-        owner.commit_candidate_publication(
+        resolve_ready(owner.commit_candidate_publication(
             &fixture.registry,
             &fixture.requester,
             &publication,
             current,
-        ),
+        )),
         Err(ReachabilityOwnerError::StalePublicationFreshness)
     );
 }
@@ -388,12 +420,12 @@ fn candidate_validation_failure_preserves_freshness_store_and_traversal() {
     .expect("bounded publication");
 
     assert_eq!(
-        owner.commit_candidate_publication(
+        resolve_ready(owner.commit_candidate_publication(
             &fixture.registry,
             &fixture.requester,
             &publication,
             current,
-        ),
+        )),
         Err(ReachabilityOwnerError::Candidate(
             prw_remote_bridge::candidate_reachability::CandidateReachabilityError::Connectivity(
                 ConnectivityError::CandidateIdRebound
@@ -442,18 +474,18 @@ fn stale_durable_expected_state_forces_recovery_and_authoritative_reload() {
     .expect("publication");
 
     assert_eq!(
-        owner.commit_candidate_publication(
+        resolve_ready(owner.commit_candidate_publication(
             &fixture.registry,
             &fixture.requester,
             &publication,
             local,
-        ),
+        )),
         Err(ReachabilityOwnerError::DurableStateOutOfSync)
     );
     assert_eq!(owner.mode(), ReachabilityOwnerMode::RecoveryRequired);
     assert!(!owner.has_current_traversal());
     assert_eq!(
-        owner.reload_from_store().expect("authoritative reload"),
+        resolve_ready(owner.reload_from_store()).expect("authoritative reload"),
         ReachabilityOwnerMode::Current
     );
     assert_eq!(
@@ -481,12 +513,12 @@ fn ambiguous_persistence_result_forces_recovery_without_reactivating_traversal()
     .expect("publication");
 
     assert_eq!(
-        owner.commit_candidate_publication(
+        resolve_ready(owner.commit_candidate_publication(
             &fixture.registry,
             &fixture.requester,
             &publication,
             current,
-        ),
+        )),
         Err(ReachabilityOwnerError::Persistence(
             ReachabilityPersistenceError::UnavailableOrAmbiguous
         ))
@@ -508,9 +540,13 @@ fn postcommit_traversal_factory_failure_recovers_forward_without_plan_rollback()
         vec![fixture.initial_candidate],
     )
     .expect("publication");
-    owner
-        .commit_candidate_publication(&fixture.registry, &fixture.requester, &publication, current)
-        .expect("commit");
+    resolve_ready(owner.commit_candidate_publication(
+        &fixture.registry,
+        &fixture.requester,
+        &publication,
+        current,
+    ))
+    .expect("commit");
 
     assert_eq!(
         owner.provision_current_traversal(&mut FailingTraversalFactory),
@@ -540,8 +576,7 @@ fn transport_rotation_durably_retires_old_peer_and_drops_traversal() {
         .rotate_transport_identity(&fixture.target_device_id, fixture.transport, transport(22))
         .expect("authoritative transport rotation");
 
-    owner
-        .retire_noncurrent_lifecycle(&fixture.registry)
+    resolve_ready(owner.retire_noncurrent_lifecycle(&fixture.registry))
         .expect("durable retirement");
     assert_eq!(owner.mode(), ReachabilityOwnerMode::Retired);
     assert!(!owner.has_current_traversal());
