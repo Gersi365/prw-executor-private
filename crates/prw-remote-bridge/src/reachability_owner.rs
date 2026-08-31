@@ -6,7 +6,9 @@
 //! socket, async runtime, DNS resolver, network adapter, control-plane wire codec, persistence
 //! serialization format, database product, Agent bootstrap activation, or deployment behavior.
 
-use std::fmt;
+#![allow(clippy::manual_async_fn)]
+
+use std::{fmt, future::Future};
 
 use prw_connectivity::{
     CandidateId, PeerConnectivityIdentity, PeerConnectivityPlan, SelectedConnectivityPath,
@@ -123,11 +125,12 @@ impl fmt::Display for ReachabilitySnapshotError {
 
 impl std::error::Error for ReachabilitySnapshotError {}
 
-/// Durable compare-and-commit boundary used by the production owner.
+/// Awaitable durable compare-and-commit boundary used by the production owner.
 ///
 /// The concrete database, serialization, replication and transaction implementation remain
 /// outside this tranche. Implementations must make `compare_and_commit` linearizable for one
-/// exact peer lifecycle: only the durable state holding `expected_current` may be replaced.
+/// exact peer lifecycle: only the durable state holding `expected_current` may be replaced. The
+/// returned futures are polled by the caller; this trait owns no executor or async runtime.
 pub trait ReachabilityDurableStore {
     /// Loads the exact durable current snapshot for one peer lifecycle.
     ///
@@ -135,10 +138,13 @@ pub trait ReachabilityDurableStore {
     ///
     /// Returns an ambiguous/unavailable classification rather than treating storage absence or
     /// uncertainty as new-lifecycle authority.
-    fn load_current(
-        &mut self,
-        peer: &PeerConnectivityIdentity,
-    ) -> Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError>;
+    fn load_current<'a>(
+        &'a mut self,
+        peer: &'a PeerConnectivityIdentity,
+    ) -> impl Future<
+        Output = Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError>,
+    > + Send
+    + 'a;
 
     /// Atomically compares current durable freshness and commits the complete replacement.
     ///
@@ -146,11 +152,13 @@ pub trait ReachabilityDurableStore {
     ///
     /// `StaleExpected` is a definite non-commit. Any returned error is treated by the owner as
     /// potentially ambiguous and forces fail-closed recovery.
-    fn compare_and_commit(
-        &mut self,
+    fn compare_and_commit<'a>(
+        &'a mut self,
         expected_current: CandidatePublicationFreshnessToken,
-        replacement: &ReachabilityDurableSnapshot,
-    ) -> Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>;
+        replacement: &'a ReachabilityDurableSnapshot,
+    ) -> impl Future<Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>>
+    + Send
+    + 'a;
 }
 
 /// Failure of verifier-owned production freshness-token generation.
@@ -360,13 +368,14 @@ where
     /// # Errors
     ///
     /// Fails closed on missing/ambiguous storage or a snapshot for a different exact peer.
-    pub fn recover(
+    pub async fn recover(
         mut store: S,
         token_source: T,
         peer: &PeerConnectivityIdentity,
     ) -> Result<Self, ReachabilityOwnerError> {
         let snapshot = store
             .load_current(peer)
+            .await
             .map_err(ReachabilityOwnerError::Persistence)?
             .ok_or(ReachabilityOwnerError::DurableStateMissing)?;
         if snapshot.plan.peer() != peer || snapshot.freshness.peer() != peer {
@@ -429,7 +438,7 @@ where
     /// Any failure before durable commit preserves local plan/freshness/traversal state. A stale
     /// durable expected value or ambiguous persistence result invalidates traversal and enters
     /// `RecoveryRequired` because another writer or uncertain commit may have moved authority.
-    pub fn commit_candidate_publication(
+    pub async fn commit_candidate_publication(
         &mut self,
         registry: &WorkspaceDeviceRegistry,
         requester_session: &AuthenticatedDeviceSession,
@@ -475,6 +484,7 @@ where
         match self
             .store
             .compare_and_commit(expected_current, &staged_snapshot)
+            .await
         {
             Ok(ReachabilityPersistenceCommit::Committed) => {
                 let invalidated_traversal = self.traversal.take().is_some();
@@ -569,7 +579,7 @@ where
     ///
     /// Refuses retirement while the exact transport remains current. Stale/ambiguous durable CAS
     /// results enter recovery rather than guessing whether retirement committed.
-    pub fn retire_noncurrent_lifecycle(
+    pub async fn retire_noncurrent_lifecycle(
         &mut self,
         registry: &WorkspaceDeviceRegistry,
     ) -> Result<(), ReachabilityOwnerError> {
@@ -589,7 +599,11 @@ where
         let retired = CandidatePublicationFreshnessRecord::retired(self.plan.peer().clone());
         let snapshot = ReachabilityDurableSnapshot::new(self.plan.clone(), retired.clone())
             .map_err(ReachabilityOwnerError::Snapshot)?;
-        match self.store.compare_and_commit(expected_current, &snapshot) {
+        match self
+            .store
+            .compare_and_commit(expected_current, &snapshot)
+            .await
+        {
             Ok(ReachabilityPersistenceCommit::Committed) => {
                 self.traversal = None;
                 self.freshness = retired;
@@ -612,9 +626,11 @@ where
     /// # Errors
     ///
     /// Missing/ambiguous/mismatched durable state leaves the owner in `RecoveryRequired`.
-    pub fn reload_from_store(&mut self) -> Result<ReachabilityOwnerMode, ReachabilityOwnerError> {
+    pub async fn reload_from_store(
+        &mut self,
+    ) -> Result<ReachabilityOwnerMode, ReachabilityOwnerError> {
         let peer = self.plan.peer().clone();
-        let snapshot = match self.store.load_current(&peer) {
+        let snapshot = match self.store.load_current(&peer).await {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => {
                 self.enter_recovery();
