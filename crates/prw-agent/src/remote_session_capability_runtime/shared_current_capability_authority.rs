@@ -2,9 +2,10 @@
 //!
 //! C03e-W selects one combined Tokio `RwLock` state so future spawned workers can revalidate each
 //! protected operation against current registry and policy state without per-task authority
-//! snapshots. C03e-X materializes only this owner and its bounded internal read operation. It does
-//! not spawn tasks, expose lock guards, wire the Agent binary, publish readiness or activate remote
-//! transport.
+//! snapshots. C03e-X materializes only this owner and its bounded internal read operation. C03e-GR
+//! adds only a bounded async read operation so the same current-authority read custody can remain
+//! lexical across one explicitly awaitable durable candidate commit. It does not spawn tasks,
+//! expose lock guards, wire the Agent binary, publish readiness or activate remote transport.
 
 use std::sync::Arc;
 
@@ -70,6 +71,22 @@ where
     {
         let state = self.state.read().await;
         operation(&state.registry, &state.policy)
+    }
+
+    /// Runs one explicitly awaitable operation while retaining one coherent current-authority read.
+    ///
+    /// The existing `RwLock` read guard remains lexical to this method for the complete awaited
+    /// operation. Neither the guard nor registry/policy references can escape. This exists only so
+    /// an already-selected durable operation can be awaited without dropping current registry
+    /// authority between commit-time validation and durable completion; it creates no runtime,
+    /// task, channel, retry path, snapshot authority or new synchronization primitive.
+    pub(super) async fn with_current_authority_async<R, F>(&self, operation: F) -> R
+    where
+        R: Send,
+        F: for<'a> AsyncFnOnce(&'a WorkspaceDeviceRegistry, &'a P) -> R + Send,
+    {
+        let state = self.state.read().await;
+        operation(&state.registry, &state.policy).await
     }
 }
 
