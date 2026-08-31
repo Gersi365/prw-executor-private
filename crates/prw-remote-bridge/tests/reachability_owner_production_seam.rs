@@ -10,8 +10,7 @@ use std::{
     future::{Future, ready},
     net::{IpAddr, Ipv4Addr},
     rc::Rc,
-    sync::Arc,
-    task::{Context, Poll, Wake, Waker},
+    task::{Context, Poll, Waker},
 };
 
 use aws_lc_rs::{
@@ -44,15 +43,8 @@ use prw_remote_bridge::{
 };
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
 
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
 fn resolve_ready<F: Future>(future: F) -> F::Output {
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut context = Context::from_waker(&waker);
+    let mut context = Context::from_waker(Waker::noop());
     let mut future = std::pin::pin!(future);
     match future.as_mut().poll(&mut context) {
         Poll::Ready(value) => value,
