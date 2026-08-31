@@ -7,8 +7,7 @@ use std::{
     cell::RefCell,
     future::{Future, ready},
     rc::Rc,
-    sync::Arc,
-    task::{Context, Poll, Wake, Waker},
+    task::{Context, Poll, Waker},
 };
 
 use aws_lc_rs::{
@@ -41,15 +40,8 @@ use prw_remote_bridge::{
 use prw_remote_transport::{ControlFrame, ControlMessageKind};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
 
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
 fn resolve_ready<F: Future>(future: F) -> F::Output {
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut context = Context::from_waker(&waker);
+    let mut context = Context::from_waker(Waker::noop());
     let mut future = std::pin::pin!(future);
     match future.as_mut().poll(&mut context) {
         Poll::Ready(value) => value,
@@ -115,6 +107,10 @@ impl ReachabilityDurableStore for MemoryStore {
         ready(result)
     }
 
+    #[allow(
+        clippy::manual_async_fn,
+        reason = "test store is intentionally !Send; this explicit future captures no Rc-backed store borrow and still satisfies the production Send-future contract"
+    )]
     fn compare_and_commit<'a>(
         &'a mut self,
         _expected_current: CandidatePublicationFreshnessToken,
