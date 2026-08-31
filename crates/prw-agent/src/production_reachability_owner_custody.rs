@@ -32,19 +32,20 @@ where
 {
     /// Recovers and retains exactly one production owner for `peer`.
     ///
-    /// This delegates once to the existing authoritative durable recovery law. Missing,
+    /// This delegates once to the existing authoritative awaitable durable recovery law. Missing,
     /// ambiguous, mismatched, recovery-required, or retired durable state is preserved exactly as
     /// classified by `ProductionReachabilityOwner::recover`; no default/rebaseline owner exists.
+    /// The caller owns polling; custody construction creates no runtime or background task.
     ///
     /// # Errors
     ///
     /// Returns the exact existing [`ReachabilityOwnerError`] produced by authoritative recovery.
-    pub fn recover(
+    pub async fn recover(
         store: S,
         token_source: T,
         peer: &PeerConnectivityIdentity,
     ) -> Result<Self, ReachabilityOwnerError> {
-        let owner = ProductionReachabilityOwner::recover(store, token_source, peer)?;
+        let owner = ProductionReachabilityOwner::recover(store, token_source, peer).await?;
         Ok(Self { owner })
     }
 
@@ -189,9 +190,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
+    use std::{
+        future::{Future, ready},
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        task::{Context, Poll, Wake, Waker},
     };
 
     use prw_connectivity::{PeerConnectivityIdentity, PeerConnectivityPlan, TransportIdentity};
@@ -212,6 +217,22 @@ mod tests {
         ProductionReachabilityOwnerCustodyLookupError, ProductionReachabilityOwnerCustodyMap,
     };
 
+    struct NoopWake;
+
+    impl Wake for NoopWake {
+        fn wake(self: Arc<Self>) {}
+    }
+
+    fn resolve_ready<F: Future>(future: F) -> F::Output {
+        let waker = Waker::from(Arc::new(NoopWake));
+        let mut context = Context::from_waker(&waker);
+        let mut future = std::pin::pin!(future);
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("test future unexpectedly pending"),
+        }
+    }
+
     struct CountingStore {
         expected_peer: PeerConnectivityIdentity,
         snapshot: Option<ReachabilityDurableSnapshot>,
@@ -221,25 +242,31 @@ mod tests {
     }
 
     impl ReachabilityDurableStore for CountingStore {
-        fn load_current(
-            &mut self,
-            peer: &PeerConnectivityIdentity,
-        ) -> Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError> {
+        fn load_current<'a>(
+            &'a mut self,
+            peer: &'a PeerConnectivityIdentity,
+        ) -> impl Future<
+            Output = Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError>,
+        > + Send
+        + 'a {
             assert_eq!(peer, &self.expected_peer);
             self.load_calls.fetch_add(1, Ordering::SeqCst);
-            match self.load_error {
+            let result = match self.load_error {
                 Some(error) => Err(error),
                 None => Ok(self.snapshot.clone()),
-            }
+            };
+            ready(result)
         }
 
-        fn compare_and_commit(
-            &mut self,
+        fn compare_and_commit<'a>(
+            &'a mut self,
             _expected_current: CandidatePublicationFreshnessToken,
-            _replacement: &ReachabilityDurableSnapshot,
-        ) -> Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError> {
+            _replacement: &'a ReachabilityDurableSnapshot,
+        ) -> impl Future<Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>>
+        + Send
+        + 'a {
             self.commit_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(ReachabilityPersistenceCommit::Committed)
+            ready(Ok(ReachabilityPersistenceCommit::Committed))
         }
     }
 
@@ -291,7 +318,7 @@ mod tests {
         commit_calls: &Arc<AtomicUsize>,
         issue_calls: &Arc<AtomicUsize>,
     ) -> ProductionReachabilityOwnerCustody<CountingStore, CountingTokenSource> {
-        ProductionReachabilityOwnerCustody::recover(
+        resolve_ready(ProductionReachabilityOwnerCustody::recover(
             CountingStore {
                 expected_peer: peer.clone(),
                 snapshot: Some(established_snapshot(peer)),
@@ -303,7 +330,7 @@ mod tests {
                 issue_calls: Arc::clone(issue_calls),
             },
             peer,
-        )
+        ))
         .unwrap_or_else(|error| panic!("authoritative recovery should succeed: {error}"))
     }
 
@@ -322,8 +349,12 @@ mod tests {
             issue_calls: Arc::clone(&issue_calls),
         };
 
-        let mut custody = ProductionReachabilityOwnerCustody::recover(store, token_source, &peer)
-            .unwrap_or_else(|error| panic!("authoritative recovery should succeed: {error}"));
+        let mut custody = resolve_ready(ProductionReachabilityOwnerCustody::recover(
+            store,
+            token_source,
+            &peer,
+        ))
+        .unwrap_or_else(|error| panic!("authoritative recovery should succeed: {error}"));
 
         assert_eq!(load_calls.load(Ordering::SeqCst), 1);
         assert_eq!(commit_calls.load(Ordering::SeqCst), 0);
@@ -345,7 +376,7 @@ mod tests {
     fn missing_durable_state_is_preserved_exactly() {
         let peer = test_peer();
         let (load_calls, commit_calls, issue_calls) = counts();
-        let result = ProductionReachabilityOwnerCustody::recover(
+        let result = resolve_ready(ProductionReachabilityOwnerCustody::recover(
             CountingStore {
                 expected_peer: peer.clone(),
                 snapshot: None,
@@ -357,7 +388,7 @@ mod tests {
                 issue_calls: Arc::clone(&issue_calls),
             },
             &peer,
-        );
+        ));
 
         assert!(matches!(
             result,
@@ -372,7 +403,7 @@ mod tests {
     fn ambiguous_durable_load_is_preserved_exactly() {
         let peer = test_peer();
         let (load_calls, commit_calls, issue_calls) = counts();
-        let result = ProductionReachabilityOwnerCustody::recover(
+        let result = resolve_ready(ProductionReachabilityOwnerCustody::recover(
             CountingStore {
                 expected_peer: peer.clone(),
                 snapshot: None,
@@ -384,7 +415,7 @@ mod tests {
                 issue_calls: Arc::clone(&issue_calls),
             },
             &peer,
-        );
+        ));
 
         assert!(matches!(
             result,
