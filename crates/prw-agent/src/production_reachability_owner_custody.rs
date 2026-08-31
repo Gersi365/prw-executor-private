@@ -3,10 +3,11 @@
 //! C03e-GG materializes only the C03e-GF-selected fail-closed recovery/custody boundary around
 //! the existing `ProductionReachabilityOwner`. Construction performs one authoritative durable
 //! recovery for one exact peer lifecycle. C03e-GI adds only the C03e-GH-selected exact peer-keyed
-//! association/lookup boundary over already-recovered custodies. The retained owners are not
-//! cloneable or exposed directly, and this module performs no candidate execution, requester
-//! mutation, response I/O, traversal activation, listener/readiness publication, dialing,
-//! deployment, or process recovery.
+//! association/lookup boundary over already-recovered custodies. C03e-GR adds bounded async owner
+//! operations so one exact mutable owner custody can remain lexical across an explicitly awaitable
+//! durable operation. The retained owners are not cloneable or exposed directly, and this module
+//! performs no requester mutation, response I/O, traversal activation, listener/readiness
+//! publication, dialing, deployment, or process recovery.
 
 use std::fmt;
 
@@ -20,7 +21,8 @@ use prw_remote_bridge::reachability_owner::{
 ///
 /// The wrapper intentionally has no `Clone` implementation. Store and verifier token-source
 /// ownership remain encapsulated inside the existing production owner. Later separately gated
-/// composition may operate through the bounded closure seam without obtaining a raw owner handle.
+/// composition may operate through bounded sync/async closure seams without obtaining a raw owner
+/// handle.
 pub struct ProductionReachabilityOwnerCustody<S, T> {
     owner: ProductionReachabilityOwner<S, T>,
 }
@@ -59,6 +61,19 @@ where
         operation: impl for<'owner> FnOnce(&'owner mut ProductionReachabilityOwner<S, T>) -> R,
     ) -> R {
         operation(&mut self.owner)
+    }
+
+    /// Runs one bounded awaitable operation with exclusive mutable access to the retained owner.
+    ///
+    /// The async closure may borrow the exact owner only for the lexical duration of this call. The
+    /// owner, store and token source cannot escape, no alias is created, and no runtime/task/channel
+    /// is owned here. This is the awaitable counterpart required when the existing durable owner
+    /// operation itself crosses persistence I/O.
+    pub async fn with_owner_mut_async<R, F>(&mut self, operation: F) -> R
+    where
+        F: for<'owner> AsyncFnOnce(&'owner mut ProductionReachabilityOwner<S, T>) -> R,
+    {
+        operation(&mut self.owner).await
     }
 }
 
@@ -112,8 +127,8 @@ impl std::error::Error for ProductionReachabilityOwnerCustodyLookupError {}
 ///
 /// Construction rejects duplicate exact peer ownership. Lookup remains defensive and also rejects
 /// any ambiguous match instead of selecting an arbitrary first entry. Successful mutation continues
-/// to occur only through the existing bounded [`ProductionReachabilityOwnerCustody::with_owner_mut`]
-/// seam, so no raw owner, store, token source, collection entry, or guard escapes.
+/// to occur only through bounded custody operations, so no raw owner, store, token source,
+/// collection entry, or guard escapes.
 pub struct ProductionReachabilityOwnerCustodyMap<S, T> {
     entries: Vec<ProductionReachabilityOwnerCustody<S, T>>,
 }
@@ -186,6 +201,41 @@ where
         let index = matching_index.ok_or(ProductionReachabilityOwnerCustodyLookupError::Missing)?;
         Ok(self.entries[index].with_owner_mut(operation))
     }
+
+    /// Runs one bounded awaitable operation against the custody for the exact two-part peer key.
+    ///
+    /// Exact lookup is completed before the operation is invoked. Once selected, the exact map entry
+    /// and its mutable production owner remain lexically borrowed until the supplied async operation
+    /// completes. No owner reference, map entry, guard, task or runtime escapes this method.
+    ///
+    /// # Errors
+    ///
+    /// Preserves the same exact missing/ambiguous classifications as the synchronous lookup and does
+    /// not invoke `operation` unless exactly one peer custody is selected.
+    pub async fn with_owner_mut_for_peer_async<R, F>(
+        &mut self,
+        peer: &PeerConnectivityIdentity,
+        operation: F,
+    ) -> Result<R, ProductionReachabilityOwnerCustodyLookupError>
+    where
+        F: for<'owner> AsyncFnOnce(&'owner mut ProductionReachabilityOwner<S, T>) -> R,
+    {
+        let mut matching_index = None;
+
+        for (index, custody) in self.entries.iter_mut().enumerate() {
+            if custody.with_owner_mut(|owner| owner.plan().peer() == peer) {
+                match matching_index {
+                    Some(_) => {
+                        return Err(ProductionReachabilityOwnerCustodyLookupError::Ambiguous);
+                    }
+                    None => matching_index = Some(index),
+                }
+            }
+        }
+
+        let index = matching_index.ok_or(ProductionReachabilityOwnerCustodyLookupError::Missing)?;
+        Ok(self.entries[index].with_owner_mut_async(operation).await)
+    }
 }
 
 #[cfg(test)]
@@ -196,7 +246,7 @@ mod tests {
             Arc,
             atomic::{AtomicUsize, Ordering},
         },
-        task::{Context, Poll, Wake, Waker},
+        task::{Context, Poll, Waker},
     };
 
     use prw_connectivity::{PeerConnectivityIdentity, PeerConnectivityPlan, TransportIdentity};
@@ -217,15 +267,8 @@ mod tests {
         ProductionReachabilityOwnerCustodyLookupError, ProductionReachabilityOwnerCustodyMap,
     };
 
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
-
     fn resolve_ready<F: Future>(future: F) -> F::Output {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
+        let mut context = Context::from_waker(Waker::noop());
         let mut future = std::pin::pin!(future);
         match future.as_mut().poll(&mut context) {
             Poll::Ready(value) => value,
@@ -471,6 +514,30 @@ mod tests {
         );
         assert_eq!(first_load.load(Ordering::SeqCst), 1);
         assert_eq!(second_load.load(Ordering::SeqCst), 1);
+        assert_eq!(first_commit.load(Ordering::SeqCst), 0);
+        assert_eq!(second_commit.load(Ordering::SeqCst), 0);
+        assert_eq!(first_issue.load(Ordering::SeqCst), 0);
+        assert_eq!(second_issue.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn async_lookup_retains_exact_device_and_transport_without_fallback() {
+        let first_peer = test_peer_with_transport(0x31);
+        let second_peer = test_peer_with_transport(0x32);
+        let (first_load, first_commit, first_issue) = counts();
+        let (second_load, second_commit, second_issue) = counts();
+        let first = recovered_custody(&first_peer, &first_load, &first_commit, &first_issue);
+        let second = recovered_custody(&second_peer, &second_load, &second_commit, &second_issue);
+        let mut map = ProductionReachabilityOwnerCustodyMap::try_new(vec![first, second])
+            .expect("distinct exact peer keys must compose");
+
+        let observed = resolve_ready(map.with_owner_mut_for_peer_async(
+            &second_peer,
+            async |owner| owner.plan().peer().clone(),
+        ))
+        .expect("exact async two-part peer lookup must succeed");
+
+        assert_eq!(observed, second_peer);
         assert_eq!(first_commit.load(Ordering::SeqCst), 0);
         assert_eq!(second_commit.load(Ordering::SeqCst), 0);
         assert_eq!(first_issue.load(Ordering::SeqCst), 0);
