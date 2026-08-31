@@ -24,6 +24,7 @@ mod recovery_epoch;
 
 pub mod enrollment_pop;
 pub mod reachability_acquisition_evidence;
+pub mod reachability_durable_snapshot_etcd;
 pub mod reachability_live_owner_codec;
 pub mod reachability_live_owner_etcd;
 pub mod reachability_live_owner_txn;
