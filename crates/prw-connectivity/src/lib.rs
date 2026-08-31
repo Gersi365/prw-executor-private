@@ -1011,7 +1011,8 @@ mod tests {
         assert_eq!(state.candidates(), expected_candidates.as_slice());
         assert_eq!(state.candidate_id_high_watermark(), Some(id(5)));
 
-        let restored = PeerConnectivityPlan::from_durable_state(state).expect("restore active plan");
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore active plan");
         let restored_state = restored.durable_state();
         assert_eq!(restored_state.peer(), original.peer());
         assert_eq!(restored_state.candidates(), expected_candidates.as_slice());
@@ -1057,7 +1058,8 @@ mod tests {
         assert_eq!(state.candidates(), &[retained]);
         assert_eq!(state.candidate_id_high_watermark(), Some(id(7)));
 
-        let restored = PeerConnectivityPlan::from_durable_state(state).expect("restore historical high-water");
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore historical high-water");
         assert_eq!(restored.candidate_id_high_watermark(), Some(id(7)));
         assert_eq!(restored.durable_state().candidates(), &[retained]);
     }
@@ -1077,7 +1079,8 @@ mod tests {
         assert!(state.candidates().is_empty());
         assert_eq!(state.candidate_id_high_watermark(), Some(id(7)));
 
-        let restored = PeerConnectivityPlan::from_durable_state(state).expect("restore empty historical plan");
+        let restored =
+            PeerConnectivityPlan::from_durable_state(state).expect("restore empty historical plan");
         assert_eq!(restored.candidate_count(), 0);
         assert_eq!(restored.candidate_id_high_watermark(), Some(id(7)));
         assert_eq!(restored.selected_path(), SelectedConnectivityPath::Offline);
