@@ -262,8 +262,9 @@ mod tests {
             &'a mut self,
             _expected_current: CandidatePublicationFreshnessToken,
             _replacement: &'a ReachabilityDurableSnapshot,
-        ) -> impl Future<Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>>
-        + Send
+        ) -> impl Future<
+            Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>,
+        > + Send
         + 'a {
             self.commit_calls.fetch_add(1, Ordering::SeqCst);
             ready(Ok(ReachabilityPersistenceCommit::Committed))
