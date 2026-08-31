@@ -252,7 +252,7 @@ fn decode_exact_get(
     }
 }
 
-fn validate_mod_revision(revision: i64) -> Result<(), ReachabilityDurableSnapshotEtcdError> {
+const fn validate_mod_revision(revision: i64) -> Result<(), ReachabilityDurableSnapshotEtcdError> {
     if revision <= 0 {
         return Err(ReachabilityDurableSnapshotEtcdError::InvalidModRevision { actual: revision });
     }
