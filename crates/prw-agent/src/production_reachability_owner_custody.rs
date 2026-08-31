@@ -531,10 +531,11 @@ mod tests {
         let mut map = ProductionReachabilityOwnerCustodyMap::try_new(vec![first, second])
             .expect("distinct exact peer keys must compose");
 
-        let observed = resolve_ready(map.with_owner_mut_for_peer_async(
-            &second_peer,
-            async |owner| owner.plan().peer().clone(),
-        ))
+        let observed = resolve_ready(
+            map.with_owner_mut_for_peer_async(&second_peer, async |owner| {
+                owner.plan().peer().clone()
+            }),
+        )
         .expect("exact async two-part peer lookup must succeed");
 
         assert_eq!(observed, second_peer);
