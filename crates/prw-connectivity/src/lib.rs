@@ -368,7 +368,7 @@ impl PeerConnectivityPlan {
             {
                 return Err(ConnectivityError::InvalidCandidateIdHighWatermark);
             }
-            (None, Some(high_watermark)) | (Some(_), Some(high_watermark)) => high_watermark.get(),
+            (None | Some(_), Some(high_watermark)) => high_watermark.get(),
         };
 
         let candidates = candidates
