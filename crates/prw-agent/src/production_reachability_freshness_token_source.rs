@@ -10,9 +10,7 @@ use prw_remote_bridge::{
     candidate_publication_freshness::{
         CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES, CandidatePublicationFreshnessToken,
     },
-    reachability_owner::{
-        CandidatePublicationFreshnessTokenSource, FreshnessTokenSourceError,
-    },
+    reachability_owner::{CandidatePublicationFreshnessTokenSource, FreshnessTokenSourceError},
 };
 
 /// Agent-owned concrete production source for verifier freshness tokens.
@@ -63,8 +61,8 @@ mod tests {
     };
 
     use super::{
-        CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES,
-        ProductionReachabilityFreshnessTokenSource, issue_token_with_fill,
+        CANDIDATE_PUBLICATION_FRESHNESS_TOKEN_BYTES, ProductionReachabilityFreshnessTokenSource,
+        issue_token_with_fill,
     };
 
     #[test]
