@@ -129,11 +129,11 @@ impl ReachabilityDurableStore for MemoryStore {
                 .borrow()
                 .as_ref()
                 .and_then(|snapshot| snapshot.freshness().lifecycle().current_token());
-            if current_token != Some(expected_current) {
-                Ok(ReachabilityPersistenceCommit::StaleExpected)
-            } else {
+            if current_token == Some(expected_current) {
                 *self.handle.current.borrow_mut() = Some(replacement.clone());
                 Ok(ReachabilityPersistenceCommit::Committed)
+            } else {
+                Ok(ReachabilityPersistenceCommit::StaleExpected)
             }
         };
         ready(result)
