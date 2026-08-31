@@ -366,7 +366,8 @@ mod tests {
             _requester_session: &'a AuthenticatedDeviceSession,
             publication: &'a AuthenticatedCandidatePublication,
             presented_freshness: CandidatePublicationFreshnessToken,
-        ) -> impl Future<Output = Result<ReachabilityCommitOutcome, ReachabilityOwnerError>> + 'a {
+        ) -> impl Future<Output = Result<ReachabilityCommitOutcome, ReachabilityOwnerError>> + 'a
+        {
             self.calls += 1;
             self.order.borrow_mut().push("commit");
             self.observed_publisher = Some(publication.peer().device_id().clone());
