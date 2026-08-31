@@ -28,6 +28,7 @@ pub mod post_auth_control_stream_ingress;
 pub mod prwc_connection_authentication;
 pub mod prwc_request_id_lifecycle;
 pub mod reachability_durable_snapshot_codec;
+pub mod reachability_durable_snapshot_key_codec;
 pub mod reachability_freshness_wire;
 pub mod reachability_live_owner;
 pub mod reachability_live_owner_acquisition_composition;
