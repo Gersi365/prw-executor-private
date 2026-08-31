@@ -23,6 +23,11 @@ pub(crate) mod linux_identity;
 pub mod local_commands;
 #[allow(
     dead_code,
+    reason = "C03e-GT materializes the production freshness-token source before separately gated production-owner composition"
+)]
+pub(crate) mod production_reachability_freshness_token_source;
+#[allow(
+    dead_code,
     reason = "C03e-GG materializes production reachability-owner custody before separately gated candidate execution"
 )]
 pub(crate) mod production_reachability_owner_custody;
@@ -88,7 +93,7 @@ pub struct LocalIpcContract {
     pub authorization: LocalPeerAuthorization,
     /// Required Unix mode for the PRW runtime subdirectory.
     pub runtime_directory_mode: u32,
-    /// Required Unix mode for the Agent socket filesystem entry.
+    /// Required Unix mode for the filesystem-backed Agent socket.
     pub socket_mode: u32,
 }
 
