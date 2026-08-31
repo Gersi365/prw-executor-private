@@ -3,7 +3,13 @@
 //! All durable state is in-memory and all wire work is byte-buffer framing only. No socket,
 //! async runtime, network adapter, Agent bootstrap or deployment path is activated.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    future::{Future, ready},
+    rc::Rc,
+    sync::Arc,
+    task::{Context, Poll, Wake, Waker},
+};
 
 use aws_lc_rs::{
     rand::SystemRandom,
@@ -34,6 +40,22 @@ use prw_remote_bridge::{
 };
 use prw_remote_transport::{ControlFrame, ControlMessageKind};
 use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService};
+
+struct NoopWake;
+
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
+}
+
+fn resolve_ready<F: Future>(future: F) -> F::Output {
+    let waker = Waker::from(Arc::new(NoopWake));
+    let mut context = Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    match future.as_mut().poll(&mut context) {
+        Poll::Ready(value) => value,
+        Poll::Pending => panic!("test future unexpectedly pending"),
+    }
+}
 
 #[derive(Clone)]
 struct MemoryStoreHandle {
@@ -75,26 +97,32 @@ impl MemoryStore {
 }
 
 impl ReachabilityDurableStore for MemoryStore {
-    fn load_current(
-        &mut self,
-        peer: &PeerConnectivityIdentity,
-    ) -> Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError> {
+    fn load_current<'a>(
+        &'a mut self,
+        peer: &'a PeerConnectivityIdentity,
+    ) -> impl Future<
+        Output = Result<Option<ReachabilityDurableSnapshot>, ReachabilityPersistenceError>,
+    > + Send
+    + 'a {
         *self.handle.loads.borrow_mut() += 1;
-        Ok(self
+        let result = Ok(self
             .handle
             .current
             .borrow()
             .as_ref()
             .filter(|snapshot| snapshot.plan().peer() == peer)
-            .cloned())
+            .cloned());
+        ready(result)
     }
 
-    fn compare_and_commit(
-        &mut self,
+    fn compare_and_commit<'a>(
+        &'a mut self,
         _expected_current: CandidatePublicationFreshnessToken,
-        _replacement: &ReachabilityDurableSnapshot,
-    ) -> Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError> {
-        panic!("resynchronization must never compare-and-commit")
+        _replacement: &'a ReachabilityDurableSnapshot,
+    ) -> impl Future<Output = Result<ReachabilityPersistenceCommit, ReachabilityPersistenceError>>
+    + Send
+    + 'a {
+        async { panic!("resynchronization must never compare-and-commit") }
     }
 }
 
@@ -349,12 +377,12 @@ fn authenticated_resync_redelivers_exact_authoritative_token_without_commit() {
         CandidatePublicationFreshnessLifecycle::Established(token),
     );
 
-    let message = authenticated_current_token_resynchronization(
+    let message = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut store,
-    )
+    ))
     .expect("authenticated resync");
 
     assert_eq!(handle.loads(), 1);
@@ -378,12 +406,12 @@ fn resync_reads_durable_state_each_time_and_returns_the_new_current_token() {
         CandidatePublicationFreshnessLifecycle::Established(first),
     );
 
-    let first_delivery = authenticated_current_token_resynchronization(
+    let first_delivery = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut store,
-    )
+    ))
     .expect("first resync");
     assert_eq!(
         first_delivery,
@@ -401,12 +429,12 @@ fn resync_reads_durable_state_each_time_and_returns_the_new_current_token() {
         )
         .expect("replacement snapshot"),
     );
-    let second_delivery = authenticated_current_token_resynchronization(
+    let second_delivery = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut store,
-    )
+    ))
     .expect("second resync");
     assert_eq!(handle.loads(), 2);
     assert_eq!(
@@ -428,12 +456,12 @@ fn currentness_is_revalidated_before_durable_lookup() {
         CandidatePublicationFreshnessLifecycle::Established(token),
     );
 
-    let error = authenticated_current_token_resynchronization(
+    let error = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.other,
         fixture.transport,
         &mut store,
-    )
+    ))
     .expect_err("other device cannot obtain target token");
     assert!(matches!(
         error,
@@ -454,12 +482,12 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
         &fixture,
         CandidatePublicationFreshnessLifecycle::RecoveryRequired,
     );
-    let recovery = authenticated_current_token_resynchronization(
+    let recovery = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut recovery_store,
-    )
+    ))
     .expect_err("recovery state blocks token");
     assert_eq!(recovery, FreshnessResynchronizationError::RecoveryRequired);
     assert_eq!(
@@ -469,12 +497,12 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
 
     let (mut retired_store, _) =
         store_for(&fixture, CandidatePublicationFreshnessLifecycle::Retired);
-    let retired = authenticated_current_token_resynchronization(
+    let retired = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut retired_store,
-    )
+    ))
     .expect_err("retired state blocks token");
     assert_eq!(retired, FreshnessResynchronizationError::Retired);
     assert_eq!(
@@ -487,12 +515,12 @@ fn recovery_retired_and_missing_durable_state_never_disclose_tokens() {
         CandidatePublicationFreshnessLifecycle::Established(freshness(49)),
     );
     missing_handle.clear();
-    let missing = authenticated_current_token_resynchronization(
+    let missing = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut missing_store,
-    )
+    ))
     .expect_err("missing state blocks token");
     assert_eq!(
         missing,
@@ -517,12 +545,12 @@ fn registry_transport_rotation_blocks_old_identity_before_store_read() {
         .rotate_transport_identity(&fixture.target_device_id, fixture.transport, transport(51))
         .expect("rotate transport");
 
-    let error = authenticated_current_token_resynchronization(
+    let error = resolve_ready(authenticated_current_token_resynchronization(
         &fixture.registry,
         &fixture.target,
         fixture.transport,
         &mut store,
-    )
+    ))
     .expect_err("old transport cannot resync");
     assert!(matches!(
         error,
