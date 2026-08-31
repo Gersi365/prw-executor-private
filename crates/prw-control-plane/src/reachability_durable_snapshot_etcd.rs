@@ -231,10 +231,8 @@ fn classify_transaction_response(
 fn decode_exact_get(
     expected_key: &[u8],
     response: &GetResponse,
-) -> Result<
-    Option<ReachabilityDurableSnapshotEtcdObservation>,
-    ReachabilityDurableSnapshotEtcdError,
-> {
+) -> Result<Option<ReachabilityDurableSnapshotEtcdObservation>, ReachabilityDurableSnapshotEtcdError>
+{
     match response.kvs() {
         [] => Ok(None),
         [kv] => {

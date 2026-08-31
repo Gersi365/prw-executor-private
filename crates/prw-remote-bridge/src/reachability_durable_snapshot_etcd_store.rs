@@ -202,11 +202,9 @@ mod tests {
     ) -> ReachabilityDurableSnapshot {
         let (candidates, high_water) = if with_candidate {
             let id = CandidateId::new(1).expect("candidate id");
-            let endpoint = ConnectivityEndpoint::new(
-                IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)),
-                443,
-            )
-            .expect("endpoint");
+            let endpoint =
+                ConnectivityEndpoint::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)), 443)
+                    .expect("endpoint");
             (
                 vec![ConnectivityCandidate::new(
                     id,
@@ -218,11 +216,8 @@ mod tests {
         } else {
             (Vec::new(), None)
         };
-        let plan = PeerConnectivityPlanDurableState::from_parts(
-            peer.clone(),
-            candidates,
-            high_water,
-        );
+        let plan =
+            PeerConnectivityPlanDurableState::from_parts(peer.clone(), candidates, high_water);
         let freshness = CandidatePublicationFreshnessRecord::established(peer, freshness);
         ReachabilityDurableSnapshot::new(plan, freshness).expect("peer-consistent snapshot")
     }
