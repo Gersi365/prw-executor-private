@@ -334,7 +334,7 @@ pub const fn accepted_publication_token_delivery(
 ///
 /// Fails closed on stale/revoked currentness, missing/ambiguous durable state, peer mismatch,
 /// `RecoveryRequired`, or `Retired`.
-pub fn authenticated_current_token_resynchronization<S>(
+pub async fn authenticated_current_token_resynchronization<S>(
     registry: &WorkspaceDeviceRegistry,
     publisher_session: &AuthenticatedDeviceSession,
     presented_transport_identity: TransportIdentity,
@@ -354,6 +354,7 @@ where
         PeerConnectivityIdentity::new(principal.device_id().clone(), presented_transport_identity);
     let snapshot = store
         .load_current(&peer)
+        .await
         .map_err(FreshnessResynchronizationError::Persistence)?
         .ok_or(FreshnessResynchronizationError::DurableStateMissing)?;
     if snapshot.plan().peer() != &peer || snapshot.freshness().peer() != &peer {

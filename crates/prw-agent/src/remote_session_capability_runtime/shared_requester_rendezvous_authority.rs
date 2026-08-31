@@ -12,8 +12,10 @@
 //! preserving post-commit cleanup disposition separately. C03e-GK adds the GJ-selected dormant
 //! envelope-neutral current-Mesh semantic decomposition: initial owned publication admission,
 //! requester grant release, fresh commit-time current-authority read, exact GI owner lookup,
-//! lexical durable commit, and post-commit requester cleanup. It exposes no raw provider, mutex,
-//! guard or production owner and activates no listener/network runtime.
+//! lexical durable commit, and post-commit requester cleanup. C03e-GR propagates the GQ-selected
+//! durable awaitability through those existing dormant commit callsites while retaining the same
+//! current-authority read and exact production-owner custody across the durable await. It exposes no
+//! raw provider, mutex, guard or production owner and activates no listener/network runtime.
 
 use std::{fmt, sync::Arc};
 
@@ -366,9 +368,9 @@ impl SharedRequesterRendezvousAuthority {
         commit: C,
     ) -> Result<(T, Result<(), RequesterRendezvousLifecycleError>), E>
     where
-        C: FnOnce() -> Result<T, E>,
+        C: AsyncFnOnce() -> Result<T, E>,
     {
-        let committed = commit()?;
+        let committed = commit().await?;
         let cleanup = self
             .cleanup_committed_requester_rendezvous_record(identity)
             .await;
@@ -388,15 +390,14 @@ impl SharedRequesterRendezvousAuthority {
     /// 2. that read is released before requester authority selects one exact current grant;
     /// 3. expected publisher equality is checked after requester lock release;
     /// 4. a second fresh current-authority read is acquired for commit-time currentness;
-    /// 5. inside that synchronous read, exact GI `publication.peer()` lookup obtains one lexical
-    ///    production-owner mutable borrow and existing durable commit runs synchronously;
-    /// 6. current-authority and production-owner custody are released;
+    /// 5. while that same read remains held, exact GI `publication.peer()` lookup obtains one lexical
+    ///    production-owner mutable borrow and the existing durable commit is awaited;
+    /// 6. only after durable completion are production-owner and current-authority custody released;
     /// 7. only definite durable commit success reacquires requester authority for exact cleanup.
     ///
-    /// The outer custody-map mutable borrow may remain reserved while the second current-authority
-    /// read is awaited, but no inner production-owner borrow crosses an `.await`. This method adds no
-    /// map synchronization, task, response I/O, retry, peer-close behavior, runtime activation,
-    /// traversal or dialing.
+    /// The same current-authority read and the exact selected production-owner mutable borrow now
+    /// cross only the durable commit `.await`, as required by GR. This adds no map synchronization,
+    /// task, response I/O, retry, peer-close behavior, runtime activation, traversal or dialing.
     ///
     /// # Errors
     ///
@@ -447,17 +448,20 @@ impl SharedRequesterRendezvousAuthority {
 
         let cleanup_identity = RequesterRendezvousCommittedCleanupIdentity::from_grant(&grant);
         let commit_result = authority
-            .with_current_authority(|registry, _policy| {
-                owner_map.with_owner_mut_for_peer(publication.peer(), |owner| {
-                    owner
-                        .commit_candidate_publication(
-                            registry,
-                            grant.requester_session(),
-                            &publication,
-                            submission.presented_freshness(),
-                        )
-                        .map_err(CandidatePublicationExecutionError::Reachability)
-                })
+            .with_current_authority_async(async |registry, _policy| {
+                owner_map
+                    .with_owner_mut_for_peer_async(publication.peer(), async |owner| {
+                        owner
+                            .commit_candidate_publication(
+                                registry,
+                                grant.requester_session(),
+                                &publication,
+                                submission.presented_freshness(),
+                            )
+                            .await
+                            .map_err(CandidatePublicationExecutionError::Reachability)
+                    })
+                    .await
             })
             .await;
 
@@ -533,7 +537,7 @@ impl SharedRequesterRendezvousAuthority {
 
         let cleanup_identity = RequesterRendezvousCommittedCleanupIdentity::from_grant(&grant);
         let (reachability_commit, cleanup) = self
-            .commit_then_cleanup(cleanup_identity, || {
+            .commit_then_cleanup(cleanup_identity, async || {
                 owner
                     .commit_candidate_publication(
                         registry,
@@ -541,6 +545,7 @@ impl SharedRequesterRendezvousAuthority {
                         &publication,
                         submission.presented_freshness(),
                     )
+                    .await
                     .map_err(CandidatePublicationExecutionError::Reachability)
             })
             .await?;
@@ -637,7 +642,7 @@ mod tests {
         let authority = authority_with_capacity(1);
         let identity = unknown_cleanup_identity();
 
-        let result = block_on(authority.commit_then_cleanup(identity, || {
+        let result = block_on(authority.commit_then_cleanup(identity, async || {
             assert!(authority.runtime_owner.try_lock().is_ok());
             Ok::<u8, ()>(7)
         }));
@@ -654,7 +659,7 @@ mod tests {
         let authority = authority_with_capacity(1);
         let identity = unknown_cleanup_identity();
 
-        let result = block_on(authority.commit_then_cleanup(identity, || {
+        let result = block_on(authority.commit_then_cleanup(identity, async || {
             assert!(authority.runtime_owner.try_lock().is_ok());
             Err::<u8, _>("commit failed")
         }));
