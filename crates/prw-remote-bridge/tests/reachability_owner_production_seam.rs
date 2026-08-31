@@ -330,8 +330,9 @@ fn owner(
         fixture.initial_plan.peer().clone(),
         initial_freshness,
     );
-    let snapshot = ReachabilityDurableSnapshot::new(fixture.initial_plan.durable_state(), freshness)
-        .expect("peer-consistent seed");
+    let snapshot =
+        ReachabilityDurableSnapshot::new(fixture.initial_plan.durable_state(), freshness)
+            .expect("peer-consistent seed");
     let (store, handle) = MemoryStore::seeded(snapshot);
     let owner = resolve_ready(ProductionReachabilityOwner::recover(
         store,
@@ -506,10 +507,7 @@ fn durable_recovery_preserves_historical_candidate_id_anti_reuse() {
         .expect("advance historical candidate namespace");
     let snapshot = ReachabilityDurableSnapshot::new(
         historical_plan.durable_state(),
-        CandidatePublicationFreshnessRecord::established(
-            historical_plan.peer().clone(),
-            current,
-        ),
+        CandidatePublicationFreshnessRecord::established(historical_plan.peer().clone(), current),
     )
     .expect("historical durable snapshot");
     let (store, _handle) = MemoryStore::seeded(snapshot);

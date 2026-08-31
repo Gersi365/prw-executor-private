@@ -125,9 +125,14 @@ pub enum ReachabilitySnapshotError {
 impl fmt::Display for ReachabilitySnapshotError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PeerMismatch => formatter.write_str("reachability durable snapshot peer mismatch"),
+            Self::PeerMismatch => {
+                formatter.write_str("reachability durable snapshot peer mismatch")
+            }
             Self::PlanRestoration(error) => {
-                write!(formatter, "reachability durable plan restoration failed: {error}")
+                write!(
+                    formatter,
+                    "reachability durable plan restoration failed: {error}"
+                )
             }
         }
     }
@@ -502,11 +507,9 @@ where
             staged_plan.peer().clone(),
             replacement_freshness,
         );
-        let staged_snapshot = ReachabilityDurableSnapshot::new(
-            staged_plan.durable_state(),
-            staged_freshness.clone(),
-        )
-        .map_err(ReachabilityOwnerError::Snapshot)?;
+        let staged_snapshot =
+            ReachabilityDurableSnapshot::new(staged_plan.durable_state(), staged_freshness.clone())
+                .map_err(ReachabilityOwnerError::Snapshot)?;
 
         match self
             .store
