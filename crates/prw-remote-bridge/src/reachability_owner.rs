@@ -11,7 +11,8 @@
 use std::{fmt, future::Future};
 
 use prw_connectivity::{
-    CandidateId, PeerConnectivityIdentity, PeerConnectivityPlan, SelectedConnectivityPath,
+    CandidateId, ConnectivityError, PeerConnectivityIdentity, PeerConnectivityPlan,
+    PeerConnectivityPlanDurableState, SelectedConnectivityPath,
 };
 use prw_nat_traversal::{IceConnectivitySession, TraversalError};
 use prw_registry::{RegistryError, WorkspaceDeviceRegistry};
@@ -68,24 +69,28 @@ impl std::error::Error for ReachabilityPersistenceError {}
 
 /// Exact committed state carried through the persistence transaction seam.
 ///
-/// Production stores must persist snapshots emitted by this owner at accepted publication or
-/// retirement commit points. Transient reachability observations are not written by observation
-/// admission, so recovery naturally falls back to the last committed publication snapshot rather
-/// than treating a prior `Reachable` observation as durable truth.
+/// The plan member is provider-neutral durable semantic state rather than a live plan. Production
+/// stores therefore cannot accidentally persist transient reachability observations. Recovery and
+/// reload validate and restore this state through `PeerConnectivityPlan::from_durable_state(...)`
+/// before it can become local owner state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReachabilityDurableSnapshot {
-    plan: PeerConnectivityPlan,
+    plan: PeerConnectivityPlanDurableState,
     freshness: CandidatePublicationFreshnessRecord,
 }
 
 impl ReachabilityDurableSnapshot {
-    /// Creates one peer-consistent durable snapshot.
+    /// Creates one peer-consistent durable snapshot from typed durable plan state.
+    ///
+    /// Semantic plan validation occurs only when the plan state is restored. This constructor
+    /// enforces the cross-member exact-peer invariant before a persistence operation can observe the
+    /// snapshot.
     ///
     /// # Errors
     ///
-    /// Rejects a plan/freshness peer mismatch before a persistence operation can observe it.
+    /// Rejects a plan/freshness peer mismatch.
     pub fn new(
-        plan: PeerConnectivityPlan,
+        plan: PeerConnectivityPlanDurableState,
         freshness: CandidatePublicationFreshnessRecord,
     ) -> Result<Self, ReachabilitySnapshotError> {
         if plan.peer() != freshness.peer() {
@@ -94,9 +99,9 @@ impl ReachabilityDurableSnapshot {
         Ok(Self { plan, freshness })
     }
 
-    /// Returns the exact committed connectivity plan snapshot.
+    /// Returns the exact committed provider-neutral durable connectivity-plan state.
     #[must_use]
-    pub const fn plan(&self) -> &PeerConnectivityPlan {
+    pub const fn plan(&self) -> &PeerConnectivityPlanDurableState {
         &self.plan
     }
 
@@ -107,23 +112,35 @@ impl ReachabilityDurableSnapshot {
     }
 }
 
-/// Structural durable-snapshot failures.
+/// Structural or semantic durable-snapshot failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ReachabilitySnapshotError {
-    /// Plan and freshness record refer to different logical/transport peer identities.
+    /// Plan state and freshness record refer to different logical/transport peer identities.
     PeerMismatch,
+    /// Decoded typed durable plan state violated connectivity restoration invariants.
+    PlanRestoration(ConnectivityError),
 }
 
 impl fmt::Display for ReachabilitySnapshotError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::PeerMismatch => "reachability durable snapshot peer mismatch",
-        })
+        match self {
+            Self::PeerMismatch => formatter.write_str("reachability durable snapshot peer mismatch"),
+            Self::PlanRestoration(error) => {
+                write!(formatter, "reachability durable plan restoration failed: {error}")
+            }
+        }
     }
 }
 
-impl std::error::Error for ReachabilitySnapshotError {}
+impl std::error::Error for ReachabilitySnapshotError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PlanRestoration(error) => Some(error),
+            Self::PeerMismatch => None,
+        }
+    }
+}
 
 /// Awaitable durable compare-and-commit boundary used by the production owner.
 ///
@@ -252,7 +269,7 @@ impl ReachabilityCommitOutcome {
 pub enum ReachabilityOwnerError {
     /// Authenticated publication admission or candidate validation failed before commit.
     Candidate(CandidateReachabilityError),
-    /// Durable snapshot structure did not preserve one exact peer identity.
+    /// Durable snapshot structure or typed plan restoration was invalid.
     Snapshot(ReachabilitySnapshotError),
     /// Caller-presented freshness is not the owner's exact current verifier token.
     StalePublicationFreshness,
@@ -364,10 +381,13 @@ where
     ///
     /// Storage absence never creates `NewLifecycleEligible`; bootstrap authorization must have
     /// been durably established by the separate lifecycle authority before this call.
+    /// Loaded plan state is validated through the connectivity-owned durable restoration boundary
+    /// before an owner is constructed.
     ///
     /// # Errors
     ///
-    /// Fails closed on missing/ambiguous storage or a snapshot for a different exact peer.
+    /// Fails closed on missing/ambiguous storage, a snapshot for a different exact peer, or invalid
+    /// typed durable plan state. No partially restored owner is returned.
     pub async fn recover(
         mut store: S,
         token_source: T,
@@ -383,12 +403,16 @@ where
                 ReachabilitySnapshotError::PeerMismatch,
             ));
         }
-        let mode = mode_for_lifecycle(snapshot.freshness.lifecycle());
+        let ReachabilityDurableSnapshot { plan, freshness } = snapshot;
+        let plan = PeerConnectivityPlan::from_durable_state(plan).map_err(|error| {
+            ReachabilityOwnerError::Snapshot(ReachabilitySnapshotError::PlanRestoration(error))
+        })?;
+        let mode = mode_for_lifecycle(freshness.lifecycle());
         Ok(Self {
             store,
             token_source,
-            plan: snapshot.plan,
-            freshness: snapshot.freshness,
+            plan,
+            freshness,
             traversal: None,
             mode,
         })
@@ -430,8 +454,9 @@ where
     /// Processes one authenticated candidate publication through one durable commit boundary.
     ///
     /// Ordering is fixed: current owner -> identity/workspace/transport admission -> exact current
-    /// freshness -> complete candidate validation on a staged plan -> fresh verifier token ->
-    /// durable CAS -> local plan/freshness install plus old-traversal invalidation.
+    /// freshness -> complete candidate validation on a staged live plan -> fresh verifier token ->
+    /// typed durable-plan projection -> durable CAS -> local live plan/freshness install plus
+    /// old-traversal invalidation.
     ///
     /// # Errors
     ///
@@ -477,9 +502,11 @@ where
             staged_plan.peer().clone(),
             replacement_freshness,
         );
-        let staged_snapshot =
-            ReachabilityDurableSnapshot::new(staged_plan.clone(), staged_freshness.clone())
-                .map_err(ReachabilityOwnerError::Snapshot)?;
+        let staged_snapshot = ReachabilityDurableSnapshot::new(
+            staged_plan.durable_state(),
+            staged_freshness.clone(),
+        )
+        .map_err(ReachabilityOwnerError::Snapshot)?;
 
         match self
             .store
@@ -597,7 +624,7 @@ where
         }
         let expected_current = self.expected_current_token_even_during_recovery()?;
         let retired = CandidatePublicationFreshnessRecord::retired(self.plan.peer().clone());
-        let snapshot = ReachabilityDurableSnapshot::new(self.plan.clone(), retired.clone())
+        let snapshot = ReachabilityDurableSnapshot::new(self.plan.durable_state(), retired.clone())
             .map_err(ReachabilityOwnerError::Snapshot)?;
         match self
             .store
@@ -621,11 +648,13 @@ where
         }
     }
 
-    /// Reloads authoritative durable state for this exact peer and drops any local traversal.
+    /// Reloads authoritative durable state for this exact peer and drops any local traversal on a
+    /// failed or successful authoritative replacement.
     ///
     /// # Errors
     ///
-    /// Missing/ambiguous/mismatched durable state leaves the owner in `RecoveryRequired`.
+    /// Missing/ambiguous/mismatched/semantically invalid durable state leaves the owner in
+    /// `RecoveryRequired`. Loaded plan and freshness are installed only as one fully restored pair.
     pub async fn reload_from_store(
         &mut self,
     ) -> Result<ReachabilityOwnerMode, ReachabilityOwnerError> {
@@ -647,9 +676,19 @@ where
                 ReachabilitySnapshotError::PeerMismatch,
             ));
         }
+        let ReachabilityDurableSnapshot { plan, freshness } = snapshot;
+        let plan = match PeerConnectivityPlan::from_durable_state(plan) {
+            Ok(plan) => plan,
+            Err(error) => {
+                self.enter_recovery();
+                return Err(ReachabilityOwnerError::Snapshot(
+                    ReachabilitySnapshotError::PlanRestoration(error),
+                ));
+            }
+        };
         self.traversal = None;
-        self.plan = snapshot.plan;
-        self.freshness = snapshot.freshness;
+        self.plan = plan;
+        self.freshness = freshness;
         self.mode = mode_for_lifecycle(self.freshness.lifecycle());
         Ok(self.mode)
     }
