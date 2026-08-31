@@ -345,7 +345,8 @@ mod tests {
             peer.clone(),
             CandidatePublicationFreshnessToken::new([0x47; 32]).expect("non-zero freshness token"),
         );
-        ReachabilityDurableSnapshot::new(plan, freshness).expect("peer-consistent snapshot")
+        ReachabilityDurableSnapshot::new(plan.durable_state(), freshness)
+            .expect("peer-consistent snapshot")
     }
 
     fn counts() -> (Arc<AtomicUsize>, Arc<AtomicUsize>, Arc<AtomicUsize>) {
