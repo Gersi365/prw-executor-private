@@ -28,6 +28,11 @@ pub mod local_commands;
 pub(crate) mod production_reachability_freshness_token_source;
 #[allow(
     dead_code,
+    reason = "C03e-HO materializes the Agent durable-owner composition seam before separately gated provider bootstrap and runtime activation"
+)]
+pub(crate) mod production_reachability_owner_composition;
+#[allow(
+    dead_code,
     reason = "C03e-GG materializes production reachability-owner custody before separately gated candidate execution"
 )]
 pub(crate) mod production_reachability_owner_custody;
