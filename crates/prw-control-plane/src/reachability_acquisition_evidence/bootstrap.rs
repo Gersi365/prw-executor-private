@@ -666,10 +666,8 @@ impl std::error::Error for ReachabilityProductionEtcdBootstrapError {}
 /// Returns the role-specific bounded connection class for the first failed connection.
 pub async fn bootstrap_reachability_production_preparation(
     config: ReachabilityProductionEtcdBootstrapConfig,
-) -> Result<
-    ReachabilityProductionEtcdBootstrapPreparation,
-    ReachabilityProductionEtcdBootstrapError,
-> {
+) -> Result<ReachabilityProductionEtcdBootstrapPreparation, ReachabilityProductionEtcdBootstrapError>
+{
     let ReachabilityProductionEtcdBootstrapConfig {
         endpoints,
         trust_bundle_pem,
