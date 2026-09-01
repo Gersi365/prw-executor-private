@@ -25,7 +25,7 @@ use crate::{
 };
 
 /// Concrete Agent custody produced by the selected production durable-snapshot composition chain.
-pub(crate) type ProductionReachabilityEtcdOwnerCustody = ProductionReachabilityOwnerCustody<
+pub type ProductionReachabilityEtcdOwnerCustody = ProductionReachabilityOwnerCustody<
     ReachabilityDurableSnapshotEtcdStore,
     ProductionReachabilityFreshnessTokenSource,
 >;
@@ -44,7 +44,7 @@ pub(crate) type ProductionReachabilityEtcdOwnerCustody = ProductionReachabilityO
 /// # Errors
 ///
 /// Returns the existing [`ReachabilityOwnerError`] from authoritative durable recovery unchanged.
-pub(crate) async fn recover_production_reachability_owner_custody(
+pub async fn recover_production_reachability_owner_custody(
     provider: ReachabilityDurableSnapshotEtcdExecutor,
     peer: &PeerConnectivityIdentity,
 ) -> Result<ProductionReachabilityEtcdOwnerCustody, ReachabilityOwnerError> {
