@@ -537,3 +537,280 @@ mod tests {
         ));
     }
 }
+
+/// Validated immutable input for one bounded three-role production authority bootstrap.
+///
+/// This additive config preserves the existing two-role bootstrap API while adding a dedicated
+/// durable-snapshot identity on the same exact endpoint set and explicit trust bundle. All three
+/// identities are retained by value and must remain pairwise certificate/key separated.
+pub struct ReachabilityProductionEtcdBootstrapConfig {
+    endpoints: Vec<String>,
+    trust_bundle_pem: Vec<u8>,
+    live_owner_identity: ReachabilityEtcdClientIdentityMaterial,
+    fence_allocator_identity: ReachabilityEtcdClientIdentityMaterial,
+    durable_snapshot_identity: ReachabilityEtcdClientIdentityMaterial,
+}
+
+impl ReachabilityProductionEtcdBootstrapConfig {
+    /// Validates and retains the selected three-role production bootstrap material.
+    ///
+    /// Endpoint/trust validation is identical to the existing two-role configuration law. Exact
+    /// certificate or private-key byte reuse between any pair of the three roles is rejected.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing bounded configuration error before any provider I/O is attempted.
+    pub fn new<E, S>(
+        endpoints: E,
+        trust_bundle_pem: impl Into<Vec<u8>>,
+        live_owner_identity: ReachabilityEtcdClientIdentityMaterial,
+        fence_allocator_identity: ReachabilityEtcdClientIdentityMaterial,
+        durable_snapshot_identity: ReachabilityEtcdClientIdentityMaterial,
+    ) -> Result<Self, ReachabilityLiveOwnerEtcdBootstrapConfigError>
+    where
+        E: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let endpoints: Vec<String> = endpoints.into_iter().map(Into::into).collect();
+        validate_endpoints(&endpoints)?;
+
+        let trust_bundle_pem = trust_bundle_pem.into();
+        if !contains_non_whitespace(&trust_bundle_pem) {
+            return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::EmptyTrustBundle);
+        }
+
+        validate_production_identity_separation(
+            &live_owner_identity,
+            &fence_allocator_identity,
+            &durable_snapshot_identity,
+        )?;
+
+        Ok(Self {
+            endpoints,
+            trust_bundle_pem,
+            live_owner_identity,
+            fence_allocator_identity,
+            durable_snapshot_identity,
+        })
+    }
+}
+
+/// Narrow provider-bootstrap output for the three-role production authority path.
+///
+/// The carrier retains only the existing live/fence preparation plus one dedicated durable executor.
+/// It exposes no broad etcd client, raw `KvClient`, endpoint, trust, certificate, or private-key
+/// material.
+pub struct ReachabilityProductionEtcdBootstrapPreparation {
+    live_owner: ReachabilityLiveOwnerAcquisitionPreparation,
+    durable_snapshot:
+        crate::reachability_durable_snapshot_etcd::ReachabilityDurableSnapshotEtcdExecutor,
+}
+
+impl ReachabilityProductionEtcdBootstrapPreparation {
+    /// Consumes the provider-bootstrap carrier into its two already-narrowed role outputs.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        ReachabilityLiveOwnerAcquisitionPreparation,
+        crate::reachability_durable_snapshot_etcd::ReachabilityDurableSnapshotEtcdExecutor,
+    ) {
+        (self.live_owner, self.durable_snapshot)
+    }
+}
+
+/// Provider connection failure during the bounded three-role production bootstrap.
+///
+/// Underlying provider errors are intentionally not retained, preventing connection/configuration
+/// detail from escaping through the narrow production bootstrap boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReachabilityProductionEtcdBootstrapError {
+    /// The live-owner authority mTLS client could not be established.
+    LiveOwnerConnect,
+    /// The fence-sequence allocator mTLS client could not be established.
+    FenceAllocatorConnect,
+    /// The dedicated durable-snapshot mTLS client could not be established.
+    DurableSnapshotConnect,
+}
+
+impl fmt::Display for ReachabilityProductionEtcdBootstrapError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LiveOwnerConnect => {
+                formatter.write_str("live-owner etcd authority bootstrap connection failed")
+            }
+            Self::FenceAllocatorConnect => {
+                formatter.write_str("fence-allocator etcd authority bootstrap connection failed")
+            }
+            Self::DurableSnapshotConnect => {
+                formatter.write_str("durable-snapshot etcd authority bootstrap connection failed")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ReachabilityProductionEtcdBootstrapError {}
+
+/// Connects the selected three role-scoped mTLS clients and returns only narrowed provider outputs.
+///
+/// All three connections use the same exact validated endpoint vector and explicit private trust
+/// bundle with distinct role identities. Each broad `Client` is dropped immediately after its
+/// role-scoped `KvClient` is acquired. The durable `KvClient` is moved directly into the existing
+/// `ReachabilityDurableSnapshotEtcdExecutor`.
+///
+/// Calling this async function performs provider network I/O. Merely constructing the config does
+/// not. No partial preparation or degraded two-role result is returned if any role fails.
+///
+/// # Errors
+///
+/// Returns the role-specific bounded connection class for the first failed connection.
+pub async fn bootstrap_reachability_production_preparation(
+    config: ReachabilityProductionEtcdBootstrapConfig,
+) -> Result<ReachabilityProductionEtcdBootstrapPreparation, ReachabilityProductionEtcdBootstrapError>
+{
+    let ReachabilityProductionEtcdBootstrapConfig {
+        endpoints,
+        trust_bundle_pem,
+        live_owner_identity,
+        fence_allocator_identity,
+        durable_snapshot_identity,
+    } = config;
+
+    let live_owner_options = connect_options(&trust_bundle_pem, &live_owner_identity);
+    let live_owner_client = Client::connect(endpoints.as_slice(), Some(live_owner_options))
+        .await
+        .map_err(|_| ReachabilityProductionEtcdBootstrapError::LiveOwnerConnect)?;
+    let live_owner_kv = live_owner_client.kv_client();
+    drop(live_owner_client);
+
+    let fence_allocator_options = connect_options(&trust_bundle_pem, &fence_allocator_identity);
+    let fence_allocator_client =
+        Client::connect(endpoints.as_slice(), Some(fence_allocator_options))
+            .await
+            .map_err(|_| ReachabilityProductionEtcdBootstrapError::FenceAllocatorConnect)?;
+    let fence_allocator_kv = fence_allocator_client.kv_client();
+    drop(fence_allocator_client);
+
+    let durable_snapshot_options = connect_options(&trust_bundle_pem, &durable_snapshot_identity);
+    let durable_snapshot_client =
+        Client::connect(endpoints.as_slice(), Some(durable_snapshot_options))
+            .await
+            .map_err(|_| ReachabilityProductionEtcdBootstrapError::DurableSnapshotConnect)?;
+    let durable_snapshot_kv = durable_snapshot_client.kv_client();
+    drop(durable_snapshot_client);
+
+    let live_owner = ReachabilityLiveOwnerAcquisitionPreparation::from_role_scoped_clients(
+        live_owner_kv,
+        fence_allocator_kv,
+    );
+    let durable_snapshot =
+        crate::reachability_durable_snapshot_etcd::ReachabilityDurableSnapshotEtcdExecutor::new(
+            durable_snapshot_kv,
+        );
+
+    Ok(ReachabilityProductionEtcdBootstrapPreparation {
+        live_owner,
+        durable_snapshot,
+    })
+}
+
+fn validate_production_identity_separation(
+    live_owner_identity: &ReachabilityEtcdClientIdentityMaterial,
+    fence_allocator_identity: &ReachabilityEtcdClientIdentityMaterial,
+    durable_snapshot_identity: &ReachabilityEtcdClientIdentityMaterial,
+) -> Result<(), ReachabilityLiveOwnerEtcdBootstrapConfigError> {
+    validate_identity_pair(live_owner_identity, fence_allocator_identity)?;
+    validate_identity_pair(live_owner_identity, durable_snapshot_identity)?;
+    validate_identity_pair(fence_allocator_identity, durable_snapshot_identity)
+}
+
+fn validate_identity_pair(
+    left: &ReachabilityEtcdClientIdentityMaterial,
+    right: &ReachabilityEtcdClientIdentityMaterial,
+) -> Result<(), ReachabilityLiveOwnerEtcdBootstrapConfigError> {
+    if left.certificate_pem == right.certificate_pem {
+        return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate);
+    }
+    if left.private_key_pem.as_slice() == right.private_key_pem.as_slice() {
+        return Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod production_tests {
+    use super::*;
+
+    fn identity(
+        certificate_marker: u8,
+        private_key_marker: u8,
+    ) -> ReachabilityEtcdClientIdentityMaterial {
+        ReachabilityEtcdClientIdentityMaterial::new(
+            vec![certificate_marker],
+            vec![private_key_marker],
+        )
+        .expect("non-empty production identity material")
+    }
+
+    fn endpoints() -> [&'static str; AUTHORITY_MEMBER_COUNT] {
+        [
+            "https://etcd-a.authority.example:2379",
+            "https://etcd-b.authority.example:2379",
+            "https://etcd-c.authority.example:2379",
+        ]
+    }
+
+    fn production_config(
+        live_owner_identity: ReachabilityEtcdClientIdentityMaterial,
+        fence_allocator_identity: ReachabilityEtcdClientIdentityMaterial,
+        durable_snapshot_identity: ReachabilityEtcdClientIdentityMaterial,
+    ) -> Result<
+        ReachabilityProductionEtcdBootstrapConfig,
+        ReachabilityLiveOwnerEtcdBootstrapConfigError,
+    > {
+        ReachabilityProductionEtcdBootstrapConfig::new(
+            endpoints(),
+            b"private-authority-ca".to_vec(),
+            live_owner_identity,
+            fence_allocator_identity,
+            durable_snapshot_identity,
+        )
+    }
+
+    #[test]
+    fn production_config_accepts_three_distinct_role_identities() {
+        assert!(production_config(identity(1, 2), identity(3, 4), identity(5, 6)).is_ok());
+    }
+
+    #[test]
+    fn production_config_rejects_durable_certificate_reuse_with_live_owner() {
+        assert!(matches!(
+            production_config(identity(1, 2), identity(3, 4), identity(1, 6)),
+            Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate)
+        ));
+    }
+
+    #[test]
+    fn production_config_rejects_durable_certificate_reuse_with_fence_allocator() {
+        assert!(matches!(
+            production_config(identity(1, 2), identity(3, 4), identity(3, 6)),
+            Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedClientCertificate)
+        ));
+    }
+
+    #[test]
+    fn production_config_rejects_durable_private_key_reuse_with_live_owner() {
+        assert!(matches!(
+            production_config(identity(1, 2), identity(3, 4), identity(5, 2)),
+            Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey)
+        ));
+    }
+
+    #[test]
+    fn production_config_rejects_durable_private_key_reuse_with_fence_allocator() {
+        assert!(matches!(
+            production_config(identity(1, 2), identity(3, 4), identity(5, 4)),
+            Err(ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey)
+        ));
+    }
+}
