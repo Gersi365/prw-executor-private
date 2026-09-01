@@ -167,7 +167,7 @@ impl LocalIpcProtocolVersion {
 }
 
 /// Message direction/result class encoded in a local IPC frame.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum LocalIpcMessageKind {
     /// Client request to the Agent.
