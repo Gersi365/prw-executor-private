@@ -10,7 +10,7 @@ use std::fmt;
 
 use prw_control_plane::reachability_acquisition_evidence::bootstrap::{
     ReachabilityEtcdClientIdentityMaterialError, ReachabilityLiveOwnerEtcdBootstrapConfig,
-    ReachabilityLiveOwnerEtcdBootstrapConfigError,
+    ReachabilityLiveOwnerEtcdBootstrapConfigError, ReachabilityProductionEtcdBootstrapConfig,
 };
 
 /// First fixed reachability authority endpoint credential name.
@@ -33,6 +33,12 @@ pub const FENCE_ALLOCATOR_CLIENT_CERTIFICATE_CREDENTIAL_NAME: &str =
 /// Fixed fence-allocator client private-key credential name.
 pub const FENCE_ALLOCATOR_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME: &str =
     "prw.reachability.fence-allocator.client-private-key.v1";
+/// Fixed durable-snapshot client certificate credential name.
+pub const DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME: &str =
+    "prw.reachability.durable-snapshot.client-certificate.v1";
+/// Fixed durable-snapshot client private-key credential name.
+pub const DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME: &str =
+    "prw.reachability.durable-snapshot.client-private-key.v1";
 /// Environment variable through which systemd exposes the service credential directory.
 pub const SYSTEMD_CREDENTIALS_DIRECTORY_ENV: &str = "CREDENTIALS_DIRECTORY";
 
@@ -149,6 +155,32 @@ pub fn load_reachability_live_owner_etcd_bootstrap_config_from_systemd_credentia
     }
 }
 
+/// Loads the fixed three-role production reachability bootstrap configuration from systemd
+/// service credentials.
+///
+/// The function reads the existing eight fixed reachability credentials plus the two dedicated
+/// durable-snapshot identity credentials relative to `$CREDENTIALS_DIRECTORY`. All private keys
+/// remain in zeroizing owned buffers and are moved directly into the control-plane identity
+/// boundary. This function performs no provider connection or other network I/O.
+///
+/// # Errors
+///
+/// Returns [`ReachabilityCustodyError`] when the platform, systemd runtime boundary, file shape,
+/// ownership, permissions, bounded read, endpoint encoding, identity material, or production
+/// bootstrap configuration fails validation.
+pub fn load_reachability_production_etcd_bootstrap_config_from_systemd_credentials()
+-> Result<ReachabilityProductionEtcdBootstrapConfig, ReachabilityCustodyError> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::load_production_from_environment()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err(ReachabilityCustodyError::UnsupportedPlatform)
+    }
+}
+
 #[cfg(target_os = "linux")]
 mod linux {
     use std::{
@@ -162,6 +194,7 @@ mod linux {
 
     use prw_control_plane::reachability_acquisition_evidence::bootstrap::{
         ReachabilityEtcdClientIdentityMaterial, ReachabilityLiveOwnerEtcdBootstrapConfig,
+        ReachabilityProductionEtcdBootstrapConfig,
     };
     use rustix::{
         fs::{Mode, OFlags, open},
@@ -172,6 +205,8 @@ mod linux {
     use super::{
         AUTHORITY_CA_BUNDLE_CREDENTIAL_NAME, AUTHORITY_ENDPOINT_1_CREDENTIAL_NAME,
         AUTHORITY_ENDPOINT_2_CREDENTIAL_NAME, AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME,
+        DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+        DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
         FENCE_ALLOCATOR_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
         FENCE_ALLOCATOR_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
         LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
@@ -194,6 +229,13 @@ mod linux {
         let directory =
             credentials_directory_from_value(env::var_os(SYSTEMD_CREDENTIALS_DIRECTORY_ENV))?;
         load_from_credentials_directory(&directory)
+    }
+
+    pub fn load_production_from_environment()
+    -> Result<ReachabilityProductionEtcdBootstrapConfig, ReachabilityCustodyError> {
+        let directory =
+            credentials_directory_from_value(env::var_os(SYSTEMD_CREDENTIALS_DIRECTORY_ENV))?;
+        load_production_from_credentials_directory(&directory)
     }
 
     fn credentials_directory_from_value(
@@ -260,6 +302,76 @@ mod linux {
             trust_bundle_pem,
             live_owner_identity,
             fence_allocator_identity,
+        )
+        .map_err(ReachabilityCustodyError::BootstrapConfig)
+    }
+
+    fn load_production_from_credentials_directory(
+        directory: &Path,
+    ) -> Result<ReachabilityProductionEtcdBootstrapConfig, ReachabilityCustodyError> {
+        validate_credentials_directory(directory)?;
+
+        let endpoint_1 = read_endpoint(directory, AUTHORITY_ENDPOINT_1_CREDENTIAL_NAME)?;
+        let endpoint_2 = read_endpoint(directory, AUTHORITY_ENDPOINT_2_CREDENTIAL_NAME)?;
+        let endpoint_3 = read_endpoint(directory, AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME)?;
+        let trust_bundle_pem = read_non_secret_credential(
+            directory,
+            AUTHORITY_CA_BUNDLE_CREDENTIAL_NAME,
+            MAX_AUTHORITY_CA_BUNDLE_BYTES,
+        )?;
+
+        let live_owner_certificate = read_non_secret_credential(
+            directory,
+            LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+            MAX_CLIENT_CERTIFICATE_BYTES,
+        )?;
+        let live_owner_private_key =
+            read_private_key_credential(directory, LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME)?;
+        let live_owner_identity =
+            ReachabilityEtcdClientIdentityMaterial::new_with_zeroizing_private_key(
+                live_owner_certificate,
+                live_owner_private_key,
+            )
+            .map_err(ReachabilityCustodyError::IdentityMaterial)?;
+
+        let fence_allocator_certificate = read_non_secret_credential(
+            directory,
+            FENCE_ALLOCATOR_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+            MAX_CLIENT_CERTIFICATE_BYTES,
+        )?;
+        let fence_allocator_private_key = read_private_key_credential(
+            directory,
+            FENCE_ALLOCATOR_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+        )?;
+        let fence_allocator_identity =
+            ReachabilityEtcdClientIdentityMaterial::new_with_zeroizing_private_key(
+                fence_allocator_certificate,
+                fence_allocator_private_key,
+            )
+            .map_err(ReachabilityCustodyError::IdentityMaterial)?;
+
+        let durable_snapshot_certificate = read_non_secret_credential(
+            directory,
+            DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+            MAX_CLIENT_CERTIFICATE_BYTES,
+        )?;
+        let durable_snapshot_private_key = read_private_key_credential(
+            directory,
+            DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+        )?;
+        let durable_snapshot_identity =
+            ReachabilityEtcdClientIdentityMaterial::new_with_zeroizing_private_key(
+                durable_snapshot_certificate,
+                durable_snapshot_private_key,
+            )
+            .map_err(ReachabilityCustodyError::IdentityMaterial)?;
+
+        ReachabilityProductionEtcdBootstrapConfig::new(
+            [endpoint_1, endpoint_2, endpoint_3],
+            trust_bundle_pem,
+            live_owner_identity,
+            fence_allocator_identity,
+            durable_snapshot_identity,
         )
         .map_err(ReachabilityCustodyError::BootstrapConfig)
     }
@@ -485,6 +597,18 @@ mod linux {
                     b"fence-allocator-private-key",
                 );
             }
+
+            fn populate_valid_production(&self) {
+                self.populate_valid();
+                self.write_credential(
+                    DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+                    b"durable-snapshot-certificate",
+                );
+                self.write_credential(
+                    DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                    b"durable-snapshot-private-key",
+                );
+            }
         }
 
         impl Drop for TestDirectory {
@@ -511,6 +635,116 @@ mod linux {
             directory.populate_valid();
 
             assert!(load_from_credentials_directory(directory.path()).is_ok());
+        }
+
+        #[test]
+        fn production_credential_names_are_fixed_and_role_distinct() {
+            assert_eq!(
+                DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+                "prw.reachability.durable-snapshot.client-certificate.v1"
+            );
+            assert_eq!(
+                DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                "prw.reachability.durable-snapshot.client-private-key.v1"
+            );
+
+            let existing_names = [
+                LIVE_OWNER_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+                LIVE_OWNER_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                FENCE_ALLOCATOR_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+                FENCE_ALLOCATOR_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+            ];
+            assert!(!existing_names.contains(&DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME));
+            assert!(!existing_names.contains(&DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME));
+            assert_ne!(
+                DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
+                DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME
+            );
+        }
+
+        #[test]
+        fn production_fixed_credential_set_builds_opaque_config_without_network_io() {
+            let directory = TestDirectory::new();
+            directory.populate_valid_production();
+
+            assert!(load_production_from_credentials_directory(directory.path()).is_ok());
+        }
+
+        #[test]
+        fn production_loader_rejects_missing_durable_identity_credential() {
+            let missing_certificate = TestDirectory::new();
+            missing_certificate.populate_valid_production();
+            fs::remove_file(
+                missing_certificate
+                    .credential_path(DURABLE_SNAPSHOT_CLIENT_CERTIFICATE_CREDENTIAL_NAME),
+            )
+            .expect("remove durable certificate credential");
+            assert!(matches!(
+                load_production_from_credentials_directory(missing_certificate.path()),
+                Err(ReachabilityCustodyError::CredentialUnavailable)
+            ));
+
+            let missing_private_key = TestDirectory::new();
+            missing_private_key.populate_valid_production();
+            fs::remove_file(
+                missing_private_key
+                    .credential_path(DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME),
+            )
+            .expect("remove durable private-key credential");
+            assert!(matches!(
+                load_production_from_credentials_directory(missing_private_key.path()),
+                Err(ReachabilityCustodyError::CredentialUnavailable)
+            ));
+        }
+
+        #[test]
+        fn production_loader_rejects_oversized_durable_private_key() {
+            let directory = TestDirectory::new();
+            directory.populate_valid_production();
+            let oversized = vec![b'k'; MAX_CLIENT_PRIVATE_KEY_BYTES + 1];
+            directory.write_credential(
+                DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                &oversized,
+            );
+
+            assert!(matches!(
+                load_production_from_credentials_directory(directory.path()),
+                Err(ReachabilityCustodyError::CredentialSizeOutOfBounds)
+            ));
+        }
+
+        #[test]
+        fn production_loader_preserves_durable_private_key_reuse_rejection_with_live_owner() {
+            let directory = TestDirectory::new();
+            directory.populate_valid_production();
+            directory.write_credential(
+                DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                b"live-owner-private-key",
+            );
+
+            assert!(matches!(
+                load_production_from_credentials_directory(directory.path()),
+                Err(ReachabilityCustodyError::BootstrapConfig(
+                    ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey
+                ))
+            ));
+        }
+
+        #[test]
+        fn production_loader_preserves_durable_private_key_reuse_rejection_with_fence_allocator() {
+            let directory = TestDirectory::new();
+            directory.populate_valid_production();
+            directory.write_credential(
+                DURABLE_SNAPSHOT_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
+                b"fence-allocator-private-key",
+            );
+
+            assert!(matches!(
+                load_production_from_credentials_directory(directory.path()),
+                Err(ReachabilityCustodyError::BootstrapConfig(
+                    ReachabilityLiveOwnerEtcdBootstrapConfigError::ReusedPrivateKey
+                ))
+            ));
         }
 
         #[test]
