@@ -23,6 +23,11 @@ pub(crate) mod linux_identity;
 pub mod local_commands;
 #[allow(
     dead_code,
+    reason = "C03e-HU materializes Agent production bootstrap composition before separately gated systemd custody join and runtime activation"
+)]
+pub(crate) mod production_reachability_bootstrap;
+#[allow(
+    dead_code,
     reason = "C03e-GT materializes the production freshness-token source before separately gated production-owner composition"
 )]
 pub(crate) mod production_reachability_freshness_token_source;
