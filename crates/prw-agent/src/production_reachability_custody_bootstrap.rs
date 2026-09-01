@@ -86,8 +86,10 @@ impl From<ProductionReachabilityBootstrapError> for ProductionReachabilityCustod
 /// HU fails closed. No partial or degraded production composition is returned.
 pub async fn bootstrap_production_reachability_from_systemd_credentials(
     peer: &PeerConnectivityIdentity,
-) -> Result<ProductionReachabilityBootstrapComposition, ProductionReachabilityCustodyBootstrapError>
-{
+) -> Result<
+    ProductionReachabilityBootstrapComposition,
+    ProductionReachabilityCustodyBootstrapError,
+> {
     let config = load_reachability_production_etcd_bootstrap_config_from_systemd_credentials()
         .map_err(ProductionReachabilityCustodyBootstrapError::Custody)?;
 
