@@ -28,6 +28,11 @@ pub mod local_commands;
 pub(crate) mod production_reachability_bootstrap;
 #[allow(
     dead_code,
+    reason = "C03e-HW materializes Agent production systemd custody join before separately gated runtime activation"
+)]
+pub(crate) mod production_reachability_custody_bootstrap;
+#[allow(
+    dead_code,
     reason = "C03e-GT materializes the production freshness-token source before separately gated production-owner composition"
 )]
 pub(crate) mod production_reachability_freshness_token_source;
