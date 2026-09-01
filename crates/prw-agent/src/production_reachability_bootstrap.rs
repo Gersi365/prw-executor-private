@@ -212,7 +212,8 @@ mod tests {
 
     #[test]
     fn owner_recovery_failure_is_wrapped_without_detail_in_display() {
-        let error = ProductionReachabilityBootstrapError::from(ReachabilityOwnerError::RecoveryRequired);
+        let error =
+            ProductionReachabilityBootstrapError::from(ReachabilityOwnerError::RecoveryRequired);
         assert!(matches!(
             error,
             ProductionReachabilityBootstrapError::OwnerRecovery(
