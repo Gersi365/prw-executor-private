@@ -3,16 +3,27 @@
 //! C03e-HY materializes only the C03e-HX-selected side-effect-free ownership adaptation. One
 //! already-produced [`ProductionReachabilityBootstrapComposition`] is consumed exactly once; its
 //! live composed authority is adapted into the existing Agent runtime-authority owner while its
-//! recovered durable production owner remains retained beside that authority owner.
+//! recovered durable production owner remains retained beside that authority owner. C03e-IA adds
+//! only the C03e-HZ-selected endpoint-startup custody transaction over this complete owner.
 //!
-//! This module reads no credentials, performs no provider or durable I/O, creates no runtime/task,
-//! binds no endpoint, publishes no readiness, activates no candidate publication or traversal,
-//! dials no peer, mutates no startup/shutdown path, and exposes no generic extraction seam.
+//! This module reads no credentials during ownership adaptation, creates no background task,
+//! publishes no readiness, activates no candidate publication or traversal, dials no peer, mutates
+//! no executable startup/shutdown callsite, and exposes no generic extraction seam. The IA endpoint
+//! transaction calls the existing endpoint-bind seam only when separately invoked.
+
+use std::net::SocketAddr;
 
 use crate::{
     production_reachability_bootstrap::ProductionReachabilityBootstrapComposition,
+    production_reachability_endpoint_lifecycle::{
+        ProductionReachabilityEndpointLifecycleRuntime,
+        ProductionReachabilityEndpointLifecycleStartupFailure,
+    },
     production_reachability_owner_composition::ProductionReachabilityEtcdOwnerCustody,
     reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
+    remote_session_capability_runtime::{
+        RemoteSessionEndpointLifecycleRuntime, RemoteSessionSupervisorShutdownController,
+    },
 };
 
 /// Agent-owned joint custody of the production live authority and recovered durable owner.
@@ -43,12 +54,74 @@ impl ProductionReachabilityRuntimeCustody {
             owner_custody,
         }
     }
+
+    /// Starts one existing remote endpoint while preserving complete production custody.
+    ///
+    /// The existing endpoint startup is attempted exactly once. On success, the live authority
+    /// moves into the existing endpoint lifecycle and the untouched durable owner custody moves
+    /// beside that endpoint into [`ProductionReachabilityEndpointLifecycleRuntime`]. On failure,
+    /// the exact live authority recovered from the existing startup failure is recombined with the
+    /// untouched durable custody and returned as complete production runtime custody.
+    ///
+    /// No retry, replacement endpoint, provider re-bootstrap, durable recovery, two-role fallback,
+    /// readiness publication or executable startup wiring is performed here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProductionReachabilityEndpointLifecycleStartupFailure`] with the existing bounded
+    /// endpoint startup classification and the complete reconstructed pre-bind runtime custody.
+    pub fn bind_remote_endpoint_from_systemd_credentials(
+        self,
+        bind_addr: SocketAddr,
+    ) -> Result<
+        (
+            ProductionReachabilityEndpointLifecycleRuntime,
+            RemoteSessionSupervisorShutdownController,
+        ),
+        ProductionReachabilityEndpointLifecycleStartupFailure,
+    > {
+        let Self {
+            authority_owner,
+            owner_custody,
+        } = self;
+
+        match RemoteSessionEndpointLifecycleRuntime::bind_from_systemd_credentials(
+            authority_owner,
+            bind_addr,
+        ) {
+            Ok((endpoint, shutdown_controller)) => Ok((
+                ProductionReachabilityEndpointLifecycleRuntime::new(endpoint, owner_custody),
+                shutdown_controller,
+            )),
+            Err(failure) => {
+                let error = failure.error();
+                let authority_owner = failure.into_authority_owner();
+                let runtime_custody = Self {
+                    authority_owner,
+                    owner_custody,
+                };
+                Err(ProductionReachabilityEndpointLifecycleStartupFailure::new(
+                    runtime_custody,
+                    error,
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+
     use super::ProductionReachabilityRuntimeCustody;
-    use crate::production_reachability_bootstrap::ProductionReachabilityBootstrapComposition;
+    use crate::{
+        production_reachability_bootstrap::ProductionReachabilityBootstrapComposition,
+        production_reachability_endpoint_lifecycle::{
+            ProductionReachabilityEndpointLifecycleRuntime,
+            ProductionReachabilityEndpointLifecycleStartupFailure,
+        },
+        remote_session_capability_runtime::RemoteSessionSupervisorShutdownController,
+    };
 
     fn assert_constructor_signature(
         constructor: fn(
@@ -58,10 +131,32 @@ mod tests {
         let _ = constructor;
     }
 
+    fn assert_endpoint_startup_signature(
+        startup: fn(
+            ProductionReachabilityRuntimeCustody,
+            SocketAddr,
+        ) -> Result<
+            (
+                ProductionReachabilityEndpointLifecycleRuntime,
+                RemoteSessionSupervisorShutdownController,
+            ),
+            ProductionReachabilityEndpointLifecycleStartupFailure,
+        >,
+    ) {
+        let _ = startup;
+    }
+
     #[test]
     fn runtime_custody_constructor_consumes_exact_bootstrap_composition_shape() {
         assert_constructor_signature(
             ProductionReachabilityRuntimeCustody::from_bootstrap_composition,
+        );
+    }
+
+    #[test]
+    fn endpoint_startup_consumes_complete_runtime_custody_by_value() {
+        assert_endpoint_startup_signature(
+            ProductionReachabilityRuntimeCustody::bind_remote_endpoint_from_systemd_credentials,
         );
     }
 }
