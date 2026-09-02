@@ -1123,7 +1123,7 @@ mod repeated_real_admission_supervisor {
         DuplicateActiveDevice,
     }
 
-    /// Owns one untouched pre-authentication request rejected before any AJ/network work.
+    /// Owns one untouched pre-authentication request rejected before AJ construction.
     pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
         reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
         request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
