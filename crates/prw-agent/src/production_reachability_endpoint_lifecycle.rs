@@ -22,7 +22,7 @@ use crate::{
 type EndpointStartupCustodyResult<Authority, Durable, Endpoint, Controller, Error> =
     Result<((Endpoint, Durable), Controller), ((Authority, Durable), Error)>;
 
-pub(super) fn compose_endpoint_startup_custody<Authority, Durable, Endpoint, Controller, Error>(
+pub fn compose_endpoint_startup_custody<Authority, Durable, Endpoint, Controller, Error>(
     authority: Authority,
     durable: Durable,
     bind: impl FnOnce(Authority) -> Result<(Endpoint, Controller), (Authority, Error)>,
@@ -70,7 +70,7 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
 
 /// Recoverable production endpoint-startup failure retaining complete pre-bind runtime custody.
 pub struct ProductionReachabilityEndpointLifecycleStartupFailure {
-    runtime_custody: ProductionReachabilityRuntimeCustody,
+    runtime_custody: Box<ProductionReachabilityRuntimeCustody>,
     error: RemoteSessionEndpointLifecycleStartupError,
 }
 
@@ -98,12 +98,12 @@ impl std::error::Error for ProductionReachabilityEndpointLifecycleStartupFailure
 
 impl ProductionReachabilityEndpointLifecycleStartupFailure {
     #[must_use]
-    pub(super) const fn new(
+    pub(super) fn new(
         runtime_custody: ProductionReachabilityRuntimeCustody,
         error: RemoteSessionEndpointLifecycleStartupError,
     ) -> Self {
         Self {
-            runtime_custody,
+            runtime_custody: Box::new(runtime_custody),
             error,
         }
     }
@@ -117,7 +117,7 @@ impl ProductionReachabilityEndpointLifecycleStartupFailure {
     /// Recovers the complete production runtime custody after failed endpoint startup.
     #[must_use]
     pub fn into_runtime_custody(self) -> ProductionReachabilityRuntimeCustody {
-        self.runtime_custody
+        *self.runtime_custody
     }
 }
 
