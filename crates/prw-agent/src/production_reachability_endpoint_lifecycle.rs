@@ -3,19 +3,30 @@
 //! C03e-IA materializes only the C03e-HZ-selected endpoint-startup custody transaction. The
 //! wrapper retains the existing remote endpoint lifecycle beside the recovered durable production
 //! reachability owner. A startup failure retains the complete pre-bind production runtime custody.
+//! C03e-IC adds only the C03e-IB-selected dormant runtime-drive delegation while retaining durable
+//! owner custody until the existing lower endpoint lifecycle returns after close and idle drain.
 //!
-//! This module adds no executable callsite, runtime drive, readiness publication, candidate
-//! publication, traversal activation, peer dial, retry, provider re-bootstrap, systemd unit/package
+//! This module adds no executable callsite, readiness publication, candidate publication, traversal
+//! activation, peer dial, retry, provider re-bootstrap, durable-owner operation, systemd unit/package
 //! mutation, deployment, or production-state mutation.
 
-use std::{fmt, net::SocketAddr};
+use std::{fmt, net::SocketAddr, num::NonZeroUsize};
+
+use prw_core::DeviceId;
+use prw_policy::PolicyEvaluator;
+use prw_remote_bridge::CapabilityDispatcher;
+use prw_session::SessionAuthenticationService;
+use tokio::sync::mpsc;
 
 use crate::{
     production_reachability_owner_composition::ProductionReachabilityEtcdOwnerCustody,
     production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody,
     remote_session_capability_runtime::{
         RemoteSessionEndpointBoundAddressError, RemoteSessionEndpointLifecycleRuntime,
-        RemoteSessionEndpointLifecycleStartupError,
+        RemoteSessionEndpointLifecycleStartupError, RemoteSessionExpectedDeviceAdmissionRejection,
+        RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
+        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+        RemoteSessionRepeatedAdmissionFailure, SharedCurrentCapabilityAuthority,
     },
 };
 
@@ -31,6 +42,16 @@ pub fn compose_endpoint_startup_custody<Authority, Durable, Endpoint, Controller
         Ok((endpoint, controller)) => Ok(((endpoint, durable), controller)),
         Err((authority, error)) => Err(((authority, durable), error)),
     }
+}
+
+fn drive_with_retained_custody<Endpoint, Custody, Output>(
+    endpoint: Endpoint,
+    custody: Custody,
+    drive: impl FnOnce(Endpoint) -> Output,
+) -> Output {
+    let output = drive(endpoint);
+    drop(custody);
+    output
 }
 
 /// Joint production custody for one successfully started remote endpoint lifecycle.
@@ -65,6 +86,63 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
     /// Returns the existing bounded endpoint observation error unchanged.
     pub fn bound_addr(&self) -> Result<SocketAddr, RemoteSessionEndpointBoundAddressError> {
         self.endpoint.bound_addr()
+    }
+
+    /// Drives the existing repeated-admission endpoint lifecycle while retaining durable custody.
+    ///
+    /// This wrapper is consumed exactly once. Durable production-owner custody remains lexically
+    /// alive for the complete delegated lower endpoint-drive call and is released only after that
+    /// call returns. The lower lifecycle remains solely responsible for admission, worker,
+    /// supervisor-shutdown, endpoint-close and idle-drain behavior.
+    ///
+    /// No durable-owner operation, retry, re-bootstrap, replacement endpoint, readiness publication,
+    /// candidate publication, traversal activation or executable process wiring is performed here.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing [`RemoteSessionPersistentCollectionConfigError`] unchanged after the
+    /// lower endpoint lifecycle has completed its existing close and idle-drain law.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-IC forwards the exact existing lower endpoint-lifecycle inputs"
+    )]
+    pub fn drive_repeated_real_remote_admission_endpoint_lifecycle<P, D, T, F, C, R, E>(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+    {
+        let Self {
+            endpoint,
+            owner_custody,
+        } = self;
+
+        drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
+            endpoint.drive_repeated_real_remote_admission_endpoint_lifecycle(
+                max_active_workers,
+                authority,
+                session_authentication,
+                expected_requests,
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            )
+        })
     }
 }
 
@@ -123,10 +201,57 @@ impl ProductionReachabilityEndpointLifecycleStartupFailure {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, net::SocketAddr};
+    use std::{
+        cell::{Cell, RefCell},
+        net::SocketAddr,
+        num::NonZeroUsize,
+        rc::Rc,
+    };
 
-    use super::{ProductionReachabilityEndpointLifecycleRuntime, compose_endpoint_startup_custody};
-    use crate::remote_session_capability_runtime::RemoteSessionEndpointBoundAddressError;
+    use prw_core::DeviceId;
+    use prw_policy::BoundedLocalReadPolicy;
+    use prw_remote_bridge::{AuthorizedCapabilityRequest, CapabilityDispatcher};
+    use prw_session::SessionAuthenticationService;
+    use tokio::sync::mpsc;
+
+    use super::{
+        ProductionReachabilityEndpointLifecycleRuntime, compose_endpoint_startup_custody,
+        drive_with_retained_custody,
+    };
+    use crate::remote_session_capability_runtime::{
+        RemoteSessionEndpointBoundAddressError, RemoteSessionExpectedDeviceAdmissionRejection,
+        RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
+        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+        RemoteSessionRepeatedAdmissionFailure, SharedCurrentCapabilityAuthority,
+    };
+
+    struct TestDispatcher;
+
+    impl CapabilityDispatcher for TestDispatcher {
+        type Error = ();
+
+        fn dispatch(
+            &mut self,
+            _request: &AuthorizedCapabilityRequest,
+        ) -> Result<Vec<u8>, Self::Error> {
+            Ok(Vec::new())
+        }
+    }
+
+    type TestExpectedRequest =
+        RemoteSessionExpectedDeviceAdmissionRequest<TestDispatcher, fn() -> u64>;
+    type TestExpectedRejection =
+        RemoteSessionExpectedDeviceAdmissionRejection<TestDispatcher, fn() -> u64>;
+
+    struct DropProbe {
+        events: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.events.borrow_mut().push("custody_drop");
+        }
+    }
 
     fn assert_bound_addr_signature(
         observation: fn(
@@ -134,6 +259,26 @@ mod tests {
         ) -> Result<SocketAddr, RemoteSessionEndpointBoundAddressError>,
     ) {
         let _ = observation;
+    }
+
+    #[expect(
+        clippy::type_complexity,
+        reason = "C03e-IC test states the exact selected production wrapper drive shape"
+    )]
+    fn assert_drive_signature(
+        drive: fn(
+            ProductionReachabilityEndpointLifecycleRuntime,
+            NonZeroUsize,
+            &SharedCurrentCapabilityAuthority<BoundedLocalReadPolicy>,
+            &mut SessionAuthenticationService,
+            mpsc::Receiver<TestExpectedRequest>,
+            fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            fn(RemoteSessionRegisteredWorkerCompletion),
+            fn(TestExpectedRejection),
+            fn(RemoteSessionRepeatedAdmissionFailure),
+        ) -> Result<(), RemoteSessionPersistentCollectionConfigError>,
+    ) {
+        let _ = drive;
     }
 
     #[test]
@@ -162,7 +307,32 @@ mod tests {
     }
 
     #[test]
+    fn retained_custody_drops_only_after_delegated_drive_returns() {
+        let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+        let custody = DropProbe {
+            events: Rc::clone(&events),
+        };
+
+        let result = drive_with_retained_custody(7_u8, custody, |endpoint| {
+            assert_eq!(endpoint, 7);
+            events.borrow_mut().push("drive");
+            assert_eq!(*events.borrow(), vec!["drive"]);
+            Err::<(), _>("lower_error")
+        });
+
+        assert_eq!(result, Err("lower_error"));
+        assert_eq!(*events.borrow(), vec!["drive", "custody_drop"]);
+    }
+
+    #[test]
     fn production_endpoint_bound_address_has_exact_read_only_shape() {
         assert_bound_addr_signature(ProductionReachabilityEndpointLifecycleRuntime::bound_addr);
+    }
+
+    #[test]
+    fn production_endpoint_drive_consumes_wrapper_with_exact_lower_shape() {
+        assert_drive_signature(
+            ProductionReachabilityEndpointLifecycleRuntime::drive_repeated_real_remote_admission_endpoint_lifecycle,
+        );
     }
 }
