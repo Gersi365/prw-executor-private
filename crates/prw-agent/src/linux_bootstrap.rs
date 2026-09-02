@@ -195,7 +195,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -1438,9 +1438,7 @@ pub(crate) struct LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C
     remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
 }
 
-impl<P, D, T, F, C, R, E>
-    LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C, R, E>
-{
+impl<P, D, T, F, C, R, E> LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
     /// Owns exact typed production peer identity plus existing remote-operation inputs without I/O.
     #[must_use]
     #[allow(
@@ -1500,15 +1498,13 @@ where
         let _ = run_remote_process_operation_composition(
             RemoteSessionExecutorRuntime::new,
             move |executor| {
-                executor
-                    .bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
-                        &peer,
-                    )
+                executor.bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                    &peer,
+                )
             },
             move |executor, runtime_custody| {
                 runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
-                    executor,
-                    bind_addr,
+                    executor, bind_addr,
                 )
             },
             move |controller| publisher.publish(controller),
