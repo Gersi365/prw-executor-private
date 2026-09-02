@@ -1993,3 +1993,37 @@ impl RemoteSessionExecutorRuntime {
 }
 
 mod recoverable_spawned_requester_rendezvous_worker;
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives exactly one production reachability custody/bootstrap transaction on this executor.
+    ///
+    /// The existing asynchronous production systemd custody/bootstrap seam is polled only by this
+    /// already-owned private current-thread runtime. Success is immediately adapted into the
+    /// existing joint production runtime custody. The runtime itself remains privately owned here;
+    /// no generic future driver, runtime handle, provider client or secret material is exposed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing production custody/bootstrap error unchanged. The borrowed executor
+    /// remains caller-owned after failure; no endpoint bind, retry, fallback or second runtime is
+    /// created by this method.
+    #[allow(
+        dead_code,
+        reason = "C03e-IE materializes the ID-selected production private-executor bootstrap before separately gated process composition"
+    )]
+    pub(crate) fn bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+        &self,
+        peer: &prw_connectivity::PeerConnectivityIdentity,
+    ) -> Result<
+        crate::production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody,
+        crate::production_reachability_custody_bootstrap::ProductionReachabilityCustodyBootstrapError,
+    > {
+        self.runtime
+            .block_on(
+                crate::production_reachability_custody_bootstrap::bootstrap_production_reachability_from_systemd_credentials(peer),
+            )
+            .map(
+                crate::production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody::from_bootstrap_composition,
+            )
+    }
+}
