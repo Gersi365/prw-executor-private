@@ -60,6 +60,8 @@ mod tests {
 
     #[test]
     fn runtime_custody_constructor_consumes_exact_bootstrap_composition_shape() {
-        assert_constructor_signature(ProductionReachabilityRuntimeCustody::from_bootstrap_composition);
+        assert_constructor_signature(
+            ProductionReachabilityRuntimeCustody::from_bootstrap_composition,
+        );
     }
 }
