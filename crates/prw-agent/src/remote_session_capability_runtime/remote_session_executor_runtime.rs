@@ -1873,7 +1873,7 @@ mod repeated_real_admission_supervisor {
                     active.insert(
                         device_id(&format!("shutdown-device-{value}")),
                         RemoteSessionPersistentWorkerEntry {
-                            cancellation_controller: controller,
+                            cancellation_controller,
                             worker_handle,
                         },
                     );
@@ -2017,7 +2017,7 @@ impl RemoteSessionExecutorRuntime {
     ) -> Result<
         crate::production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody,
         crate::production_reachability_custody_bootstrap::ProductionReachabilityCustodyBootstrapError,
-    > {
+    >{
         self.runtime
             .block_on(
                 crate::production_reachability_custody_bootstrap::bootstrap_production_reachability_from_systemd_credentials(peer),
