@@ -33,6 +33,11 @@ pub(crate) mod production_reachability_bootstrap;
 pub(crate) mod production_reachability_custody_bootstrap;
 #[allow(
     dead_code,
+    reason = "C03e-IA materializes production endpoint lifecycle custody before separately gated runtime drive and activation"
+)]
+pub(crate) mod production_reachability_endpoint_lifecycle;
+#[allow(
+    dead_code,
     reason = "C03e-GT materializes the production freshness-token source before separately gated production-owner composition"
 )]
 pub(crate) mod production_reachability_freshness_token_source;
