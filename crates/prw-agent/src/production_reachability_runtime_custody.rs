@@ -17,7 +17,7 @@ use crate::{
     production_reachability_bootstrap::ProductionReachabilityBootstrapComposition,
     production_reachability_endpoint_lifecycle::{
         ProductionReachabilityEndpointLifecycleRuntime,
-        ProductionReachabilityEndpointLifecycleStartupFailure, compose_endpoint_startup_custody,
+        ProductionReachabilityEndpointLifecycleStartupFailure,
     },
     production_reachability_owner_composition::ProductionReachabilityEtcdOwnerCustody,
     reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
@@ -85,25 +85,17 @@ impl ProductionReachabilityRuntimeCustody {
             owner_custody,
         } = self;
 
-        let startup =
-            compose_endpoint_startup_custody(authority_owner, owner_custody, |authority_owner| {
-                RemoteSessionEndpointLifecycleRuntime::bind_from_systemd_credentials(
-                    authority_owner,
-                    bind_addr,
-                )
-                .map_err(|failure| {
-                    let error = failure.error();
-                    let authority_owner = failure.into_authority_owner();
-                    (authority_owner, error)
-                })
-            });
-
-        match startup {
-            Ok(((endpoint, owner_custody), shutdown_controller)) => Ok((
+        match RemoteSessionEndpointLifecycleRuntime::bind_from_systemd_credentials(
+            authority_owner,
+            bind_addr,
+        ) {
+            Ok((endpoint, shutdown_controller)) => Ok((
                 ProductionReachabilityEndpointLifecycleRuntime::new(endpoint, owner_custody),
                 shutdown_controller,
             )),
-            Err(((authority_owner, owner_custody), error)) => {
+            Err(failure) => {
+                let error = failure.error();
+                let authority_owner = failure.into_authority_owner();
                 let runtime_custody = Self {
                     authority_owner,
                     owner_custody,
