@@ -195,7 +195,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -1424,6 +1424,102 @@ mod tests {
                     LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
                 thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
             }
+        );
+    }
+}
+
+/// Crate-private typed inputs for one dormant production reachability remote process operation.
+#[allow(
+    dead_code,
+    reason = "C03e-IG materializes the IF-selected dormant production process operation before separately gated executable assembly"
+)]
+pub(crate) struct LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    peer: prw_connectivity::PeerConnectivityIdentity,
+    remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+}
+
+impl<P, D, T, F, C, R, E> LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    /// Owns exact typed production peer identity plus existing remote-operation inputs without I/O.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-IG materializes typed production operation ownership before separately gated caller construction"
+    )]
+    pub(crate) const fn new(
+        peer: prw_connectivity::PeerConnectivityIdentity,
+        remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    ) -> Self {
+        Self {
+            peer,
+            remote_process_inputs,
+        }
+    }
+}
+
+/// Builds one dormant production operation using the selected same-executor publish-and-drive law.
+///
+/// Factory construction performs ownership composition only. Credential/provider I/O, durable
+/// recovery and endpoint bind occur only if a later separately gated caller invokes the returned
+/// closure. The existing public two-role operation remains unchanged.
+#[allow(
+    dead_code,
+    reason = "C03e-IG materializes the IF-selected dormant production process operation before separately gated executable assembly"
+)]
+pub(crate) fn linux_agent_production_remote_process_operation<P, D, T, F, C, R, E>(
+    inputs: LinuxAgentProductionRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let LinuxAgentProductionRemoteProcessOperationInputs {
+        peer,
+        remote_process_inputs,
+    } = inputs;
+
+    move |publisher| {
+        let LinuxAgentRemoteProcessOperationInputs {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            mut session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        } = remote_process_inputs;
+
+        let _ = run_remote_process_operation_composition(
+            RemoteSessionExecutorRuntime::new,
+            move |executor| {
+                executor.bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                    &peer,
+                )
+            },
+            move |executor, runtime_custody| {
+                runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
+                    executor, bind_addr,
+                )
+            },
+            move |controller| publisher.publish(controller),
+            move |lifecycle, _publication| {
+                let _ = lifecycle.drive_repeated_real_remote_admission_endpoint_lifecycle(
+                    max_active_workers,
+                    &capability_authority,
+                    &mut session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                );
+            },
         );
     }
 }
