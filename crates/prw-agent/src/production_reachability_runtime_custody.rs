@@ -204,6 +204,10 @@ mod tests {
         let _ = startup;
     }
 
+    #[allow(
+        clippy::type_complexity,
+        reason = "C03e-IE test helper preserves the exact supplied-executor startup signature"
+    )]
     fn assert_same_executor_endpoint_startup_signature(
         startup: fn(
             ProductionReachabilityRuntimeCustody,
