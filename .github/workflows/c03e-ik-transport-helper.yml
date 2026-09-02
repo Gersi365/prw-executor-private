@@ -1,0 +1,120 @@
+name: C03e-IK Exact Source Transport Helper
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-ik-transport-helper
+    paths:
+      - '.github/workflows/c03e-ik-transport-helper.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: c03e-ik-exact-source-transport-helper
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact IK target branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: phase-152-c03e-ik-production-reachability-requester-rendezvous-process-companion-executable-assembly-source-materialization
+          fetch-depth: 0
+
+      - name: Guard predecessor and materialize exact IJ-selected wrapper
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          target='crates/prw-agent/src/linux_bootstrap.rs'
+          expected_head='5b05dfaea8043b60ae606ad2c0b20cda30b9b9ad'
+          expected_before='99eaa8f9343845036291297dd87a387f0d51aef8'
+          expected_after='db146a724ad7cd21e97b6da9ce6d527d24901c4b'
+
+          test "$(git rev-parse HEAD)" = "$expected_head"
+          test "$(git hash-object "$target")" = "$expected_before"
+          test -z "$(git status --porcelain)"
+
+          cat > /tmp/c03e-ik.patch <<'PATCH'
+          diff --git a/crates/prw-agent/src/linux_bootstrap.rs b/crates/prw-agent/src/linux_bootstrap.rs
+          index 99eaa8f..db146a7 100644
+          --- a/crates/prw-agent/src/linux_bootstrap.rs
+          +++ b/crates/prw-agent/src/linux_bootstrap.rs
+          @@ -954,6 +954,48 @@ where
+               })
+           }
+          
+          +/// Runs the fixed local profile with the already-typed production/requester-rendezvous companion.
+          +///
+          +/// This crate-private assembly boundary only composes the existing C03e-II operation factory with
+          +/// the existing injected remote-companion runner. It constructs no real production inputs and is
+          +/// not invoked by `run()` or the Agent executable.
+          +#[allow(
+          +    dead_code,
+          +    reason = "C03e-IK materializes the IJ-selected dormant executable assembly before separately gated caller/input assembly"
+          +)]
+          +pub(crate) fn run_with_production_reachability_requester_rendezvous_remote_process_companion<
+          +    P,
+          +    D,
+          +    T,
+          +    F,
+          +    C,
+          +    R,
+          +    E,
+          +>(
+          +    inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+          +        P,
+          +        D,
+          +        T,
+          +        F,
+          +        C,
+          +        R,
+          +        E,
+          +    >,
+          +) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+          +where
+          +    P: PolicyEvaluator + Send + Sync + 'static,
+          +    D: CapabilityDispatcher + Send + 'static,
+          +    T: FnMut() -> u64 + Send + 'static,
+          +    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+          +    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+          +    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+          +    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+          +{
+          +    let operation =
+          +        linux_agent_production_reachability_requester_rendezvous_remote_process_operation(inputs);
+          +    run_with_remote_process_companion(operation)
+          +}
+          +
+           fn run_with_remote_process_companion_inputs<F>(
+               inputs: LocalLinuxProductionRuntimeInputs<'_>,
+               operation: F,
+          PATCH
+          sed -i 's/^          //' /tmp/c03e-ik.patch
+
+          git apply --check /tmp/c03e-ik.patch
+          git apply /tmp/c03e-ik.patch
+
+          test "$(git hash-object "$target")" = "$expected_after"
+          test "$(git diff --name-only)" = "$target"
+          test "$(git diff --numstat -- "$target")" = $'42\t0\tcrates/prw-agent/src/linux_bootstrap.rs'
+          git diff --check -- "$target"
+
+      - name: Commit exact source-only IK materialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          target='crates/prw-agent/src/linux_bootstrap.rs'
+          expected_after='db146a724ad7cd21e97b6da9ce6d527d24901c4b'
+          test "$(git hash-object "$target")" = "$expected_after"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$target"
+          test "$(git diff --cached --name-only)" = "$target"
+          test "$(git diff --cached --numstat -- "$target")" = $'42\t0\tcrates/prw-agent/src/linux_bootstrap.rs'
+          git diff --cached --check
+          git commit -m 'C03e-IK: materialize production requester rendezvous executable assembly'
+          git push origin HEAD:phase-152-c03e-ik-production-reachability-requester-rendezvous-process-companion-executable-assembly-source-materialization
