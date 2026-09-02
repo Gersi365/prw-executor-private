@@ -954,6 +954,48 @@ where
     })
 }
 
+/// Runs the fixed local profile with the already-typed production/requester-rendezvous companion.
+///
+/// This crate-private assembly boundary only composes the existing C03e-II operation factory with
+/// the existing injected remote-companion runner. It constructs no real production inputs and is
+/// not invoked by `run()` or the Agent executable.
+#[allow(
+    dead_code,
+    reason = "C03e-IK materializes the IJ-selected dormant executable assembly before separately gated caller/input assembly"
+)]
+pub(crate) fn run_with_production_reachability_requester_rendezvous_remote_process_companion<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let operation =
+        linux_agent_production_reachability_requester_rendezvous_remote_process_operation(inputs);
+    run_with_remote_process_companion(operation)
+}
+
 fn run_with_remote_process_companion_inputs<F>(
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
     operation: F,
