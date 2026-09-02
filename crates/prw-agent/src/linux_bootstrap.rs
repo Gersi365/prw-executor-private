@@ -519,7 +519,7 @@ impl<P, D, T, F, C, R, E>
         dead_code,
         reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
     )]
-    pub(crate) fn new(
+    pub(crate) const fn new(
         peer: PeerConnectivityIdentity,
         remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
     ) -> Self {
