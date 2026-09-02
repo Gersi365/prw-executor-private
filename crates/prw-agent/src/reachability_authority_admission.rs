@@ -47,6 +47,20 @@ impl ReachabilityAuthorityRuntimeOwner {
         Self { admission }
     }
 
+    /// Adapts one already-composed live authority directly into the existing runtime owner.
+    ///
+    /// This crate-internal constructor performs ownership composition only. It does not read
+    /// credentials, bootstrap a provider, perform network I/O, publish readiness or expose the
+    /// private admission wrapper.
+    #[must_use]
+    pub(crate) const fn from_composed_authority(
+        authority: ReachabilityLiveOwnerComposedAsyncAuthority,
+    ) -> Self {
+        Self::new(ReachabilityLiveOwnerAuthorityAdmission::from_authority(
+            authority,
+        ))
+    }
+
     /// Returns the admitted composed authority for a separately gated Agent operation seam.
     #[allow(
         dead_code,
@@ -111,6 +125,14 @@ mod tests {
         let _ = constructor;
     }
 
+    fn assert_runtime_owner_composed_authority_constructor(
+        constructor: fn(
+            ReachabilityLiveOwnerComposedAsyncAuthority,
+        ) -> ReachabilityAuthorityRuntimeOwner,
+    ) {
+        let _ = constructor;
+    }
+
     fn assert_runtime_owner_authority_accessor(
         accessor: for<'a> fn(
             &'a mut ReachabilityAuthorityRuntimeOwner,
@@ -129,6 +151,9 @@ mod tests {
     #[test]
     fn runtime_owner_has_exact_admission_and_mutable_authority_shapes() {
         assert_runtime_owner_constructor(ReachabilityAuthorityRuntimeOwner::new);
+        assert_runtime_owner_composed_authority_constructor(
+            ReachabilityAuthorityRuntimeOwner::from_composed_authority,
+        );
         assert_runtime_owner_authority_accessor(ReachabilityAuthorityRuntimeOwner::authority_mut);
     }
 }
