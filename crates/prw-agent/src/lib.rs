@@ -46,6 +46,11 @@ pub(crate) mod production_reachability_owner_composition;
     reason = "C03e-GG materializes production reachability-owner custody before separately gated candidate execution"
 )]
 pub(crate) mod production_reachability_owner_custody;
+#[allow(
+    dead_code,
+    reason = "C03e-HY materializes joint production reachability runtime custody before separately gated endpoint/process integration"
+)]
+pub(crate) mod production_reachability_runtime_custody;
 pub mod reachability_authority_admission;
 pub mod reachability_authority_bootstrap;
 pub mod reachability_authority_composition;
