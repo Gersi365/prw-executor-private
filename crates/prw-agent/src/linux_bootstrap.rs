@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 
+use prw_connectivity::PeerConnectivityIdentity;
 use prw_core::DeviceId;
 use prw_network::PrivateDnsConfig;
 use prw_policy::{BoundedLocalReadPolicy, PolicyEvaluator};
@@ -494,6 +495,40 @@ impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, 
     }
 }
 
+/// Crate-private production process-operation inputs selected by C03e-IF.
+///
+/// This owner retains one typed logical peer identity beside the existing injected remote-process
+/// inputs. Construction is side-effect-free: it performs no credential read, provider I/O,
+/// endpoint bind, listener activation, readiness publication or durable-owner mutation.
+#[allow(
+    dead_code,
+    reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
+)]
+pub(crate) struct LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+    peer: PeerConnectivityIdentity,
+    remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+}
+
+impl<P, D, T, F, C, R, E>
+    LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>
+{
+    /// Consumes the exact typed peer identity and existing remote-process inputs without starting work.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
+    )]
+    pub(crate) fn new(
+        peer: PeerConnectivityIdentity,
+        remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    ) -> Self {
+        Self {
+            peer,
+            remote_process_inputs,
+        }
+    }
+}
+
 /// Builds one side-effect-free injected remote operation compatible with the AX bootstrap facade.
 ///
 /// Factory construction performs ownership composition only. Remote credential/provider I/O and
@@ -533,6 +568,76 @@ where
                 RemoteSessionEndpointLifecycleRuntime::bind_with_executor_from_systemd_credentials(
                     executor,
                     authority_owner,
+                    bind_addr,
+                )
+            },
+            move |controller| publisher.publish(controller),
+            move |lifecycle, _publication| {
+                let _ = lifecycle.drive_repeated_real_remote_admission_endpoint_lifecycle(
+                    max_active_workers,
+                    &capability_authority,
+                    &mut session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                );
+            },
+        );
+    }
+}
+
+/// Builds one dormant production-reachability remote process operation selected by C03e-IF.
+///
+/// Factory construction only moves already-typed values into a one-shot closure. Credential/provider
+/// bootstrap, endpoint bind, shutdown-controller publication and endpoint drive occur only if a
+/// separately gated caller later invokes that closure. The operation preserves one exact executor
+/// across production bootstrap and endpoint startup and retains durable production-owner custody
+/// through the production endpoint wrapper's complete lifecycle drive.
+#[allow(
+    dead_code,
+    reason = "C03e-IG materializes the IF-selected production process operation before separately gated executable assembly"
+)]
+pub(crate) fn linux_agent_production_reachability_remote_process_operation<P, D, T, F, C, R, E>(
+    inputs: LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    move |publisher| {
+        let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
+            peer,
+            remote_process_inputs,
+        } = inputs;
+        let LinuxAgentRemoteProcessOperationInputs {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            mut session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        } = remote_process_inputs;
+
+        let _ = run_remote_process_operation_composition(
+            RemoteSessionExecutorRuntime::new,
+            move |executor| {
+                executor.bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                    &peer,
+                )
+            },
+            move |executor, runtime_custody| {
+                runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
+                    executor,
                     bind_addr,
                 )
             },
@@ -969,6 +1074,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
 
+    use prw_connectivity::{PeerConnectivityIdentity, TransportIdentity};
     use prw_core::DeviceId;
     use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
     use prw_registry::WorkspaceDeviceRegistry;
@@ -980,12 +1086,13 @@ mod tests {
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
-        LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteBindAddressSourceError,
-        LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentBootstrapWithRemoteReport, LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
+        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
         LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
         finalize_remote_process_companion, initial_runtime_config,
+        linux_agent_production_reachability_remote_process_operation,
         linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
         map_lifecycle_start_kind, map_remote_shutdown_publish,
         parse_linux_agent_remote_bind_addr_value, run, run_remote_process_operation_composition,
@@ -1270,6 +1377,36 @@ mod tests {
         let operation = linux_agent_remote_process_operation(inputs);
         assert_remote_operation_shape(operation);
         let _ = test_verifier_time as fn() -> u64;
+    }
+
+    #[test]
+    fn production_operation_factory_construction_is_side_effect_free_and_send_static() {
+        let peer = PeerConnectivityIdentity::new(
+            DeviceId::new("c03e-ig-peer").expect("device"),
+            TransportIdentity::new([0x49; 32]).expect("transport"),
+        );
+        let (_sender, receiver) = mpsc::channel::<TestExpectedRequest>(1);
+        let remote_process_inputs = LinuxAgentRemoteProcessOperationInputs::new(
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            NonZeroUsize::new(1).expect("nonzero test worker bound"),
+            SharedCurrentCapabilityAuthority::new(
+                WorkspaceDeviceRegistry::new(),
+                BoundedLocalReadPolicy::allow_local_reads(),
+            ),
+            SessionAuthenticationService::new(),
+            receiver,
+            test_admission_timing as fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            test_completion as fn(RemoteSessionRegisteredWorkerCompletion),
+            test_rejection as fn(TestExpectedRejection),
+            test_admission_failure as fn(RemoteSessionRepeatedAdmissionFailure),
+        );
+        let inputs = LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
+            peer,
+            remote_process_inputs,
+        );
+
+        let operation = linux_agent_production_reachability_remote_process_operation(inputs);
+        assert_remote_operation_shape(operation);
     }
 
     #[test]
