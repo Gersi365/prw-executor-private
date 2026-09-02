@@ -685,7 +685,13 @@ pub(crate) struct LinuxAgentProductionReachabilityRequesterRendezvousRemoteProce
 
 impl<P, D, T, F, C, R, E>
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
-        P, D, T, F, C, R, E,
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
     >
 {
     /// Consumes the exact production operation inputs and requester/rendezvous custody values.
@@ -696,7 +702,13 @@ impl<P, D, T, F, C, R, E>
     )]
     pub(crate) const fn new(
         production_inputs: LinuxAgentProductionReachabilityRemoteProcessOperationInputs<
-            P, D, T, F, C, R, E,
+            P,
+            D,
+            T,
+            F,
+            C,
+            R,
+            E,
         >,
         requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
         requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
@@ -729,7 +741,13 @@ pub(crate) fn linux_agent_production_reachability_requester_rendezvous_remote_pr
     E,
 >(
     inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
-        P, D, T, F, C, R, E,
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
     >,
 ) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
 where
@@ -746,8 +764,7 @@ where
         requester_rendezvous_start_policy_source,
         requester_rendezvous_runtime_owner,
     } = inputs;
-    let operation =
-        linux_agent_production_reachability_remote_process_operation(production_inputs);
+    let operation = linux_agent_production_reachability_remote_process_operation(production_inputs);
 
     move |publisher| {
         drop(requester_rendezvous_runtime_owner);
