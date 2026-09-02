@@ -196,7 +196,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -655,6 +655,104 @@ where
                 );
             },
         );
+    }
+}
+
+/// Crate-private production requester/rendezvous process-operation lifetime custody selected by C03e-IH.
+///
+/// Construction joins only already-typed, already-owned values. It performs no requester-policy
+/// evaluation, requester/rendezvous provider mutation, credential read, endpoint bind, listener
+/// activation, readiness publication, candidate publication, traversal, dialing, or durable-owner
+/// mutation. The owner is intentionally non-cloneable.
+#[allow(
+    dead_code,
+    reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+)]
+pub(crate) struct LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+> {
+    production_inputs:
+        LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+    requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+}
+
+impl<P, D, T, F, C, R, E>
+    LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P, D, T, F, C, R, E,
+    >
+{
+    /// Consumes the exact production operation inputs and requester/rendezvous custody values.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+    )]
+    pub(crate) const fn new(
+        production_inputs: LinuxAgentProductionReachabilityRemoteProcessOperationInputs<
+            P, D, T, F, C, R, E,
+        >,
+        requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
+        requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+    ) -> Self {
+        Self {
+            production_inputs,
+            requester_rendezvous_start_policy_source,
+            requester_rendezvous_runtime_owner,
+        }
+    }
+}
+
+/// Builds one dormant production operation that retains requester/rendezvous custody by value.
+///
+/// Factory construction delegates exactly once to the existing C03e-IG production operation and
+/// otherwise performs ownership composition only. Requester-policy and requester/rendezvous
+/// provider behavior remain uninvoked; the returned one-shot closure explicitly releases those
+/// custody values immediately before delegating to the unchanged production operation.
+#[allow(
+    dead_code,
+    reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+)]
+pub(crate) fn linux_agent_production_reachability_requester_rendezvous_remote_process_operation<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P, D, T, F, C, R, E,
+    >,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(RemoteSessionRegisteredWorkerCompletion) + Send + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        production_inputs,
+        requester_rendezvous_start_policy_source,
+        requester_rendezvous_runtime_owner,
+    } = inputs;
+    let operation =
+        linux_agent_production_reachability_remote_process_operation(production_inputs);
+
+    move |publisher| {
+        drop(requester_rendezvous_runtime_owner);
+        drop(requester_rendezvous_start_policy_source);
+        operation(publisher);
     }
 }
 
@@ -1407,6 +1505,49 @@ mod tests {
         );
 
         let operation = linux_agent_production_reachability_remote_process_operation(inputs);
+        assert_remote_operation_shape(operation);
+    }
+
+    #[test]
+    fn production_requester_rendezvous_join_factory_construction_is_side_effect_free_and_send_static()
+    {
+        let peer = PeerConnectivityIdentity::new(
+            DeviceId::new("c03e-ii-peer").expect("device"),
+            TransportIdentity::new([0x52; 32]).expect("transport"),
+        );
+        let (_sender, receiver) = mpsc::channel::<TestExpectedRequest>(1);
+        let remote_process_inputs = LinuxAgentRemoteProcessOperationInputs::new(
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            NonZeroUsize::new(1).expect("nonzero test worker bound"),
+            SharedCurrentCapabilityAuthority::new(
+                WorkspaceDeviceRegistry::new(),
+                BoundedLocalReadPolicy::allow_local_reads(),
+            ),
+            SessionAuthenticationService::new(),
+            receiver,
+            test_admission_timing as fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            test_completion as fn(RemoteSessionRegisteredWorkerCompletion),
+            test_rejection as fn(TestExpectedRejection),
+            test_admission_failure as fn(RemoteSessionRepeatedAdmissionFailure),
+        );
+        let production_inputs = LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
+            peer,
+            remote_process_inputs,
+        );
+        let requester_rendezvous_start_policy_source =
+            super::BoundedRequesterRendezvousStartPolicySource::default();
+        let requester_rendezvous_runtime_owner =
+            super::CandidatePublicationRequesterRendezvousRuntimeOwner::new(
+                prw_remote_bridge::requester_rendezvous_in_memory_provider::InMemoryRequesterRendezvousAuthorityProvider::new(1)
+                    .expect("explicit non-zero requester/rendezvous provider capacity"),
+            );
+        let inputs = super::LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
+            production_inputs,
+            requester_rendezvous_start_policy_source,
+            requester_rendezvous_runtime_owner,
+        );
+
+        let operation = super::linux_agent_production_reachability_requester_rendezvous_remote_process_operation(inputs);
         assert_remote_operation_shape(operation);
     }
 
