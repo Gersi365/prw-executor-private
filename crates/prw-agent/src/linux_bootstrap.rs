@@ -1527,7 +1527,7 @@ mod tests {
 
     #[test]
     fn production_requester_rendezvous_join_factory_construction_is_side_effect_free_and_send_static()
-    {
+     {
         let peer = PeerConnectivityIdentity::new(
             DeviceId::new("c03e-ii-peer").expect("device"),
             TransportIdentity::new([0x52; 32]).expect("transport"),
