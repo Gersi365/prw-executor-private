@@ -85,10 +85,8 @@ impl ProductionReachabilityRuntimeCustody {
             owner_custody,
         } = self;
 
-        let startup = compose_endpoint_startup_custody(
-            authority_owner,
-            owner_custody,
-            |authority_owner| {
+        let startup =
+            compose_endpoint_startup_custody(authority_owner, owner_custody, |authority_owner| {
                 RemoteSessionEndpointLifecycleRuntime::bind_from_systemd_credentials(
                     authority_owner,
                     bind_addr,
@@ -98,8 +96,7 @@ impl ProductionReachabilityRuntimeCustody {
                     let authority_owner = failure.into_authority_owner();
                     (authority_owner, error)
                 })
-            },
-        );
+            });
 
         match startup {
             Ok(((endpoint, owner_custody), shutdown_controller)) => Ok((
