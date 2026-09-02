@@ -19,10 +19,8 @@ use crate::{
     },
 };
 
-type EndpointStartupCustodyResult<Authority, Durable, Endpoint, Controller, Error> = Result<
-    ((Endpoint, Durable), Controller),
-    ((Authority, Durable), Error),
->;
+type EndpointStartupCustodyResult<Authority, Durable, Endpoint, Controller, Error> =
+    Result<((Endpoint, Durable), Controller), ((Authority, Durable), Error)>;
 
 pub(super) fn compose_endpoint_startup_custody<Authority, Durable, Endpoint, Controller, Error>(
     authority: Authority,
@@ -127,9 +125,7 @@ impl ProductionReachabilityEndpointLifecycleStartupFailure {
 mod tests {
     use std::{cell::Cell, net::SocketAddr};
 
-    use super::{
-        ProductionReachabilityEndpointLifecycleRuntime, compose_endpoint_startup_custody,
-    };
+    use super::{ProductionReachabilityEndpointLifecycleRuntime, compose_endpoint_startup_custody};
     use crate::remote_session_capability_runtime::RemoteSessionEndpointBoundAddressError;
 
     fn assert_bound_addr_signature(
