@@ -1123,7 +1123,7 @@ mod repeated_real_admission_supervisor {
         DuplicateActiveDevice,
     }
 
-    /// Owns one untouched pre-authentication request rejected before AJ construction.
+    /// Owns one untouched pre-authentication request rejected before any AJ/network work.
     pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
         reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
         request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
@@ -1873,7 +1873,7 @@ mod repeated_real_admission_supervisor {
                     active.insert(
                         device_id(&format!("shutdown-device-{value}")),
                         RemoteSessionPersistentWorkerEntry {
-                            cancellation_controller,
+                            cancellation_controller: controller,
                             worker_handle,
                         },
                     );
