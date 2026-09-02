@@ -504,7 +504,8 @@ impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, 
     dead_code,
     reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
 )]
-pub(crate) struct LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E> {
+pub(crate) struct LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>
+{
     peer: PeerConnectivityIdentity,
     remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
 }
@@ -637,8 +638,7 @@ where
             },
             move |executor, runtime_custody| {
                 runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
-                    executor,
-                    bind_addr,
+                    executor, bind_addr,
                 )
             },
             move |controller| publisher.publish(controller),
@@ -1086,7 +1086,8 @@ mod tests {
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
-        LinuxAgentBootstrapWithRemoteReport, LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
+        LinuxAgentBootstrapWithRemoteReport,
+        LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
         LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
