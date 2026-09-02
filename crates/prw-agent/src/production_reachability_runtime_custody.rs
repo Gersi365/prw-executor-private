@@ -122,7 +122,7 @@ impl ProductionReachabilityRuntimeCustody {
 
 #[cfg(test)]
 mod tests {
-    use std::{future::Future, net::SocketAddr};
+    use std::net::SocketAddr;
 
     use super::ProductionReachabilityRuntimeCustody;
     use crate::{
@@ -157,8 +157,6 @@ mod tests {
         let _ = startup;
     }
 
-    fn assert_not_future<F: Future>(_future: F) {}
-
     #[test]
     fn runtime_custody_constructor_consumes_exact_bootstrap_composition_shape() {
         assert_constructor_signature(
@@ -171,10 +169,5 @@ mod tests {
         assert_endpoint_startup_signature(
             ProductionReachabilityRuntimeCustody::bind_remote_endpoint_from_systemd_credentials,
         );
-    }
-
-    #[test]
-    fn endpoint_startup_is_synchronous_source_capability_not_background_future() {
-        let _ = assert_not_future::<std::future::Ready<()>>;
     }
 }
