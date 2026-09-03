@@ -495,6 +495,52 @@ impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, 
     }
 }
 
+/// Populates the existing remote-operation owner from the selected production bind-address source.
+///
+/// This crate-private helper performs exactly one existing process-environment bind-address load and
+/// otherwise only moves already-typed remote-operation inputs into the existing owner constructor.
+/// It does not construct peer identity, requester/rendezvous custody or any executable caller.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance"
+)]
+pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    max_active_workers: NonZeroUsize,
+    capability_authority: SharedCurrentCapabilityAuthority<P>,
+    session_authentication: SessionAuthenticationService,
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    LinuxAgentRemoteBindAddressSourceError,
+> {
+    let bind_addr = load_linux_agent_remote_bind_addr_from_env()?;
+    Ok(LinuxAgentRemoteProcessOperationInputs::new(
+        bind_addr,
+        max_active_workers,
+        capability_authority,
+        session_authentication,
+        expected_requests,
+        admission_timing,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+    ))
+}
+
 /// Crate-private production process-operation inputs selected by C03e-IF.
 ///
 /// This owner retains one typed logical peer identity beside the existing injected remote-process
