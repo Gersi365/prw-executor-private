@@ -28,11 +28,9 @@ pub const REGISTRY_AUTHORITY_ENDPOINT_3_CREDENTIAL_NAME: &str =
 pub const REGISTRY_AUTHORITY_CA_BUNDLE_CREDENTIAL_NAME: &str =
     "prw.registry.authority-ca-bundle.v1";
 /// Fixed dedicated durable-registry client certificate credential name.
-pub const REGISTRY_CLIENT_CERTIFICATE_CREDENTIAL_NAME: &str =
-    "prw.registry.client-certificate.v1";
+pub const REGISTRY_CLIENT_CERTIFICATE_CREDENTIAL_NAME: &str = "prw.registry.client-certificate.v1";
 /// Fixed dedicated durable-registry client private-key credential name.
-pub const REGISTRY_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME: &str =
-    "prw.registry.client-private-key.v1";
+pub const REGISTRY_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME: &str = "prw.registry.client-private-key.v1";
 /// Environment variable through which systemd exposes service credentials.
 pub const REGISTRY_SYSTEMD_CREDENTIALS_DIRECTORY_ENV: &str = "CREDENTIALS_DIRECTORY";
 
@@ -187,8 +185,8 @@ mod linux {
     const OWNER_READ_BIT: u32 = 0o400;
     const OWNER_DIRECTORY_ACCESS_BITS: u32 = 0o500;
 
-    pub fn load_from_environment(
-    ) -> Result<DurableRegistryProductionEtcdBootstrapConfig, DurableRegistryCustodyError> {
+    pub fn load_from_environment()
+    -> Result<DurableRegistryProductionEtcdBootstrapConfig, DurableRegistryCustodyError> {
         let directory = credentials_directory_from_value(env::var_os(
             REGISTRY_SYSTEMD_CREDENTIALS_DIRECTORY_ENV,
         ))?;
@@ -228,10 +226,8 @@ mod linux {
             REGISTRY_CLIENT_CERTIFICATE_CREDENTIAL_NAME,
             MAX_CLIENT_CERTIFICATE_BYTES,
         )?;
-        let private_key_pem = read_private_key_credential(
-            directory,
-            REGISTRY_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME,
-        )?;
+        let private_key_pem =
+            read_private_key_credential(directory, REGISTRY_CLIENT_PRIVATE_KEY_CREDENTIAL_NAME)?;
 
         let registry_identity =
             DurableRegistryEtcdClientIdentityMaterial::new_with_zeroizing_private_key(
@@ -248,10 +244,7 @@ mod linux {
         .map_err(DurableRegistryCustodyError::BootstrapConfig)
     }
 
-    fn read_endpoint(
-        directory: &Path,
-        name: &str,
-    ) -> Result<String, DurableRegistryCustodyError> {
+    fn read_endpoint(directory: &Path, name: &str) -> Result<String, DurableRegistryCustodyError> {
         let bytes = read_non_secret_credential(directory, name, MAX_ENDPOINT_CREDENTIAL_BYTES)?;
         String::from_utf8(bytes).map_err(|_| DurableRegistryCustodyError::EndpointEncodingInvalid)
     }
@@ -319,9 +312,7 @@ mod linux {
         Ok(file)
     }
 
-    fn validate_credentials_directory(
-        directory: &Path,
-    ) -> Result<(), DurableRegistryCustodyError> {
+    fn validate_credentials_directory(directory: &Path) -> Result<(), DurableRegistryCustodyError> {
         if !directory.is_absolute() {
             return Err(DurableRegistryCustodyError::CredentialsDirectoryInvalid);
         }
@@ -414,10 +405,8 @@ mod linux {
         impl TestDirectory {
             fn new() -> Self {
                 let id = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
-                let path = std::env::temp_dir().join(format!(
-                    "prw-phase152-c03e-iz-{}-{id}",
-                    process::id()
-                ));
+                let path = std::env::temp_dir()
+                    .join(format!("prw-phase152-c03e-iz-{}-{id}", process::id()));
                 fs::create_dir(&path).expect("create isolated C03e-IZ test directory");
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
                     .expect("secure C03e-IZ test directory mode");
