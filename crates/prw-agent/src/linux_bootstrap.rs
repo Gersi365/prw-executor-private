@@ -635,6 +635,112 @@ impl<P, D, T, F, C, R, E>
     }
 }
 
+/// Bounded Agent-local failure while populating one production peer input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinuxAgentProductionPeerInputPopulationError {
+    /// The fixed process logical-peer source failed before provider/bootstrap work.
+    PeerDeviceSource(LinuxAgentRemotePeerDeviceSourceError),
+    /// Existing production durable-registry custody/provider bootstrap failed.
+    DurableRegistryBootstrap(
+        crate::production_durable_registry_custody_bootstrap::ProductionDurableRegistryCustodyBootstrapError,
+    ),
+    /// Existing current same-device durable-registry peer lookup failed.
+    DurableRegistryLookup(prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError),
+}
+
+impl std::fmt::Display for LinuxAgentProductionPeerInputPopulationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::PeerDeviceSource(_) => "production peer-device source failed",
+            Self::DurableRegistryBootstrap(_) => "production durable-registry bootstrap failed",
+            Self::DurableRegistryLookup(_) => "production durable-registry peer lookup failed",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentProductionPeerInputPopulationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PeerDeviceSource(error) => Some(error),
+            Self::DurableRegistryBootstrap(error) => Some(error),
+            Self::DurableRegistryLookup(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentRemotePeerDeviceSourceError> for LinuxAgentProductionPeerInputPopulationError {
+    fn from(error: LinuxAgentRemotePeerDeviceSourceError) -> Self {
+        Self::PeerDeviceSource(error)
+    }
+}
+
+impl From<
+    crate::production_durable_registry_custody_bootstrap::ProductionDurableRegistryCustodyBootstrapError,
+> for LinuxAgentProductionPeerInputPopulationError
+{
+    fn from(
+        error: crate::production_durable_registry_custody_bootstrap::ProductionDurableRegistryCustodyBootstrapError,
+    ) -> Self {
+        Self::DurableRegistryBootstrap(error)
+    }
+}
+
+impl From<prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError>
+    for LinuxAgentProductionPeerInputPopulationError
+{
+    fn from(
+        error: prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError,
+    ) -> Self {
+        Self::DurableRegistryLookup(error)
+    }
+}
+
+/// Populates only the existing production reachability `peer` field from current registry authority.
+///
+/// The helper loads one fixed process logical [`DeviceId`], bootstraps the existing production
+/// durable-registry store once, adapts that exact store into the existing Agent runtime custody,
+/// resolves one current same-device [`PeerConnectivityIdentity`], and then moves the already-built
+/// remote-process inputs unchanged into the existing production owner. It selects no caller and
+/// performs no reachability recovery, endpoint bind, readiness publication or remote lifecycle work.
+///
+/// # Errors
+///
+/// Fails before the next stage on peer-device source, durable-registry bootstrap or current-peer
+/// lookup failure. No retry, fallback, alternate peer, cache or degraded owner is produced.
+#[allow(
+    clippy::future_not_send,
+    dead_code,
+    reason = "C03e-JK materializes the JJ-selected production peer input population before separately gated remaining production provenance"
+)]
+pub(crate) async fn linux_agent_production_reachability_remote_process_operation_inputs_from_production_peer<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    remote_process_inputs: LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> Result<
+    LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    LinuxAgentProductionPeerInputPopulationError,
+> {
+    let device_id = load_linux_agent_remote_peer_device_id_from_env()?;
+    let store = crate::production_durable_registry_custody_bootstrap::bootstrap_production_durable_registry_from_systemd_credentials().await?;
+    let mut registry_custody =
+        crate::production_durable_registry_runtime_custody::ProductionDurableRegistryRuntimeCustody::from_store(store);
+    let peer = registry_custody
+        .peer_connectivity_identity(device_id)
+        .await?;
+    Ok(
+        LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
+            peer,
+            remote_process_inputs,
+        ),
+    )
+}
+
 /// Builds one side-effect-free injected remote operation compatible with the AX bootstrap facade.
 ///
 /// Factory construction performs ownership composition only. Remote credential/provider I/O and
@@ -1547,6 +1653,91 @@ mod tests {
         )))
         .expect("non-empty spaced peer device identifier");
         assert_eq!(spaced.as_str(), "  peer-device-1  ");
+    }
+
+    #[test]
+    fn production_peer_input_population_error_preserves_selected_stage_types() {
+        fn assert_peer_source_conversion(
+            convert: fn(
+                LinuxAgentRemotePeerDeviceSourceError,
+            ) -> super::LinuxAgentProductionPeerInputPopulationError,
+        ) {
+            let _ = convert;
+        }
+
+        fn assert_bootstrap_conversion(
+            convert: fn(
+                crate::production_durable_registry_custody_bootstrap::ProductionDurableRegistryCustodyBootstrapError,
+            ) -> super::LinuxAgentProductionPeerInputPopulationError,
+        ) {
+            let _ = convert;
+        }
+
+        fn assert_lookup_conversion(
+            convert: fn(
+                prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError,
+            ) -> super::LinuxAgentProductionPeerInputPopulationError,
+        ) {
+            let _ = convert;
+        }
+
+        assert_peer_source_conversion(super::LinuxAgentProductionPeerInputPopulationError::from);
+        assert_bootstrap_conversion(super::LinuxAgentProductionPeerInputPopulationError::from);
+        assert_lookup_conversion(super::LinuxAgentProductionPeerInputPopulationError::from);
+
+        let peer_source = super::LinuxAgentProductionPeerInputPopulationError::from(
+            LinuxAgentRemotePeerDeviceSourceError::Missing,
+        );
+        assert!(matches!(
+            peer_source,
+            super::LinuxAgentProductionPeerInputPopulationError::PeerDeviceSource(
+                LinuxAgentRemotePeerDeviceSourceError::Missing
+            )
+        ));
+        assert_eq!(
+            peer_source.to_string(),
+            "production peer-device source failed"
+        );
+        assert!(std::error::Error::source(&peer_source).is_some());
+
+        let lookup = super::LinuxAgentProductionPeerInputPopulationError::from(
+            prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError::ReadUnavailable,
+        );
+        assert!(matches!(
+            lookup,
+            super::LinuxAgentProductionPeerInputPopulationError::DurableRegistryLookup(
+                prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError::ReadUnavailable
+            )
+        ));
+        assert_eq!(
+            lookup.to_string(),
+            "production durable-registry peer lookup failed"
+        );
+        assert!(std::error::Error::source(&lookup).is_some());
+    }
+
+    #[test]
+    fn production_peer_input_population_helper_future_is_dormant_until_polled() {
+        let (_sender, receiver) = mpsc::channel::<TestExpectedRequest>(1);
+        let remote_process_inputs = LinuxAgentRemoteProcessOperationInputs::new(
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            NonZeroUsize::new(1).expect("nonzero test worker bound"),
+            SharedCurrentCapabilityAuthority::new(
+                WorkspaceDeviceRegistry::new(),
+                BoundedLocalReadPolicy::allow_local_reads(),
+            ),
+            SessionAuthenticationService::new(),
+            receiver,
+            test_admission_timing as fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            test_completion as fn(RemoteSessionRegisteredWorkerCompletion),
+            test_rejection as fn(TestExpectedRejection),
+            test_admission_failure as fn(RemoteSessionRepeatedAdmissionFailure),
+        );
+
+        let future = super::linux_agent_production_reachability_remote_process_operation_inputs_from_production_peer(
+            remote_process_inputs,
+        );
+        drop(future);
     }
 
     #[test]
