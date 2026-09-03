@@ -4,6 +4,7 @@
 //! It does not provision credentials, connect to etcd, activate authority lifecycle operations,
 //! modify systemd units, or expose private-key bytes through a public API.
 
+pub mod durable_registry_custody;
 pub mod mesh_transport_custody;
 
 use std::fmt;
