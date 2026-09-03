@@ -410,10 +410,10 @@ pub fn encode_device_value(
     };
     let lifecycle_code = encode_device_lifecycle(binding.lifecycle)?;
 
-    let (transport_presence, transport_bytes) = match device.transport_identity() {
-        Some(identity) => (TRANSPORT_PRESENT, *identity.as_bytes()),
-        None => (TRANSPORT_ABSENT, [0; DURABLE_REGISTRY_TRANSPORT_BYTES]),
-    };
+    let (transport_presence, transport_bytes) = device.transport_identity().map_or(
+        (TRANSPORT_ABSENT, [0; DURABLE_REGISTRY_TRANSPORT_BYTES]),
+        |identity| (TRANSPORT_PRESENT, *identity.as_bytes()),
+    );
 
     let total_len = DURABLE_REGISTRY_DEVICE_FIXED_BYTES
         .checked_add(workspace_bytes.len())
@@ -455,13 +455,22 @@ pub fn encode_device_value(
     Ok(encoded)
 }
 
-/// Decodes one canonical `PRWD` v1.0 registered-device value.
-///
-/// # Errors
-///
-/// Rejects wrong magic/version, malformed lengths, non-zero reserved data, unsupported identity
-/// profile/lifecycle/transport representation, invalid identifiers/public identity, or trailing bytes.
-pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRegistryCodecError> {
+struct DeviceValueHeader {
+    workspace_len: usize,
+    user_len: usize,
+    device_len: usize,
+    public_identity_len: usize,
+    algorithm_code: u16,
+    encoding_code: u16,
+    lifecycle_code: u16,
+    transport_presence: u16,
+    transport_slot: [u8; DURABLE_REGISTRY_TRANSPORT_BYTES],
+    payload_offset: usize,
+}
+
+fn decode_device_value_header(
+    encoded: &[u8],
+) -> Result<DeviceValueHeader, DurableRegistryCodecError> {
     let mut cursor = 0;
     if read_array::<4>(
         encoded,
@@ -539,35 +548,57 @@ pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRe
     if total_len != expected_len || encoded.len() != expected_len {
         return Err(DurableRegistryCodecError::InvalidRecordLength);
     }
+    Ok(DeviceValueHeader {
+        workspace_len,
+        user_len,
+        device_len,
+        public_identity_len,
+        algorithm_code,
+        encoding_code,
+        lifecycle_code,
+        transport_presence,
+        transport_slot,
+        payload_offset: cursor,
+    })
+}
 
+/// Decodes one canonical `PRWD` v1.0 registered-device value.
+///
+/// # Errors
+///
+/// Rejects wrong magic/version, malformed lengths, non-zero reserved data, unsupported identity
+/// profile/lifecycle/transport representation, invalid identifiers/public identity, or trailing bytes.
+pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRegistryCodecError> {
+    let header = decode_device_value_header(encoded)?;
+    let mut cursor = header.payload_offset;
     let workspace_bytes = read_slice(
         encoded,
         &mut cursor,
-        workspace_len,
+        header.workspace_len,
         DurableRegistryCodecError::InvalidRecordLength,
     )?;
     let user_bytes = read_slice(
         encoded,
         &mut cursor,
-        user_len,
+        header.user_len,
         DurableRegistryCodecError::InvalidRecordLength,
     )?;
     let device_bytes = read_slice(
         encoded,
         &mut cursor,
-        device_len,
+        header.device_len,
         DurableRegistryCodecError::InvalidRecordLength,
     )?;
     let public_identity_bytes = read_slice(
         encoded,
         &mut cursor,
-        public_identity_len,
+        header.public_identity_len,
         DurableRegistryCodecError::InvalidRecordLength,
     )?;
     debug_assert_eq!(cursor, encoded.len());
 
-    if algorithm_code != DEVICE_IDENTITY_ALGORITHM_ECDSA_P256_SHA256
-        || encoding_code != DEVICE_IDENTITY_ENCODING_SPKI_DER
+    if header.algorithm_code != DEVICE_IDENTITY_ALGORITHM_ECDSA_P256_SHA256
+        || header.encoding_code != DEVICE_IDENTITY_ENCODING_SPKI_DER
     {
         return Err(DurableRegistryCodecError::UnsupportedPublicIdentityProfile);
     }
@@ -582,7 +613,8 @@ pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRe
         public_identity_bytes.to_vec(),
     )
     .map_err(|_| DurableRegistryCodecError::InvalidPublicIdentity)?;
-    let transport_identity = decode_transport_identity(transport_presence, transport_slot)?;
+    let transport_identity =
+        decode_transport_identity(header.transport_presence, header.transport_slot)?;
 
     Ok(RegisteredDevice {
         binding: DeviceIdentityBinding {
@@ -590,7 +622,7 @@ pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRe
             user_id: decode_user_id(user_bytes)?,
             device_id: decode_device_id(device_bytes)?,
             public_identity,
-            lifecycle: decode_device_lifecycle(lifecycle_code)?,
+            lifecycle: decode_device_lifecycle(header.lifecycle_code)?,
         },
         transport_identity,
     })
@@ -770,7 +802,6 @@ fn decode_transport_identity(
 ) -> Result<Option<TransportIdentity>, DurableRegistryCodecError> {
     match presence {
         TRANSPORT_ABSENT if slot.iter().all(|byte| *byte == 0) => Ok(None),
-        TRANSPORT_ABSENT => Err(DurableRegistryCodecError::InvalidTransportPresence),
         TRANSPORT_PRESENT => TransportIdentity::new(slot)
             .map(Some)
             .map_err(|_| DurableRegistryCodecError::InvalidTransportIdentity),
@@ -1087,7 +1118,7 @@ mod tests {
             Err(DurableRegistryCodecError::InvalidWorkspaceRole)
         );
 
-        let mut reserved = source.clone();
+        let mut reserved = source;
         reserved[36..40].copy_from_slice(&1_u32.to_be_bytes());
         assert_eq!(
             decode_membership_value(&reserved),
@@ -1128,7 +1159,7 @@ mod tests {
             Err(DurableRegistryCodecError::InvalidTransportPresence)
         );
 
-        let mut absent_nonzero = source.clone();
+        let mut absent_nonzero = source;
         absent_nonzero[54..56].copy_from_slice(&0_u16.to_be_bytes());
         assert_eq!(
             decode_device_value(&absent_nonzero),
