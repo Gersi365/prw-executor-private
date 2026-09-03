@@ -36,18 +36,31 @@ jobs:
           function = "pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<"
           if text.count(function) != 1:
               raise SystemExit(11)
-          if "clippy::too_many_arguments" in text or "clippy::type_complexity" in text:
-              raise SystemExit(12)
           fn_index = text.index(function)
           allow_index = text.rfind("#[allow(\n", max(0, fn_index - 500), fn_index)
           if allow_index < 0:
               raise SystemExit(13)
           attribute = text[allow_index:fn_index]
+          if "clippy::too_many_arguments" in attribute or "clippy::type_complexity" in attribute:
+              raise SystemExit(12)
           if "dead_code," not in attribute or "C03e-IM materializes the IL-selected production bind-address input population" not in attribute:
               raise SystemExit(14)
           insertion = allow_index + len("#[allow(\n")
           text = text[:insertion] + "    clippy::too_many_arguments,\n    clippy::type_complexity,\n" + text[insertion:]
           path.write_text(text)
+
+          updated = path.read_text()
+          updated_fn_index = updated.index(function)
+          updated_allow_index = updated.rfind(
+              "#[allow(\n", max(0, updated_fn_index - 500), updated_fn_index
+          )
+          updated_attribute = updated[updated_allow_index:updated_fn_index]
+          if updated_attribute.count("clippy::too_many_arguments") != 1:
+              raise SystemExit(15)
+          if updated_attribute.count("clippy::type_complexity") != 1:
+              raise SystemExit(16)
+          if "dead_code," not in updated_attribute:
+              raise SystemExit(17)
           PY
 
           git diff --check
@@ -56,8 +69,6 @@ jobs:
           test "$(git diff --numstat -- "$SOURCE_PATH")" = $'2\t0\tcrates/prw-agent/src/linux_bootstrap.rs'
           test "$(grep -c '^pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<' "$SOURCE_PATH")" -eq 1
           test "$(grep -c 'let bind_addr = load_linux_agent_remote_bind_addr_from_env()?;' "$SOURCE_PATH")" -eq 1
-          test "$(grep -c 'clippy::too_many_arguments' "$SOURCE_PATH")" -eq 1
-          test "$(grep -c 'clippy::type_complexity' "$SOURCE_PATH")" -eq 1
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
