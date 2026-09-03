@@ -550,10 +550,10 @@ const fn semantic(error: RegistryError) -> DurableRegistryEtcdStoreError {
 
 fn map_provider_error(error: DurableRegistryEtcdError) -> DurableRegistryEtcdStoreError {
     match error {
-        DurableRegistryEtcdError::ReadUnavailable(_) => {
+        DurableRegistryEtcdError::ReadUnavailable(_error) => {
             DurableRegistryEtcdStoreError::ReadUnavailable
         }
-        DurableRegistryEtcdError::MutationIndeterminate(_) => {
+        DurableRegistryEtcdError::MutationIndeterminate(_error) => {
             DurableRegistryEtcdStoreError::MutationIndeterminate
         }
         DurableRegistryEtcdError::UnexpectedGetCardinality { .. }
@@ -702,7 +702,9 @@ fn revoke_device_successor(
     }
 }
 
-fn ensure_enrolled_device(current: &RegisteredDevice) -> Result<(), DurableRegistryEtcdStoreError> {
+const fn ensure_enrolled_device(
+    current: &RegisteredDevice,
+) -> Result<(), DurableRegistryEtcdStoreError> {
     match current.binding().lifecycle {
         DeviceLifecycle::Enrolled => Ok(()),
         DeviceLifecycle::Revoked => Err(semantic(RegistryError::DeviceRevoked)),
@@ -760,10 +762,10 @@ fn classify_membership_compare_failure(
             MembershipLifecycle::Active | MembershipLifecycle::Suspended,
         ) => None,
     };
-    match error {
-        Some(error) => Err(semantic(error)),
-        None => Err(DurableRegistryEtcdStoreError::CurrentnessConflict),
-    }
+    error.map_or(
+        Err(DurableRegistryEtcdStoreError::CurrentnessConflict),
+        |error| Err(semantic(error)),
+    )
 }
 
 fn same_membership_observation(
