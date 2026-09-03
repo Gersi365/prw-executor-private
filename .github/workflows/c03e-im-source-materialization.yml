@@ -33,11 +33,21 @@ jobs:
 
           path = Path("crates/prw-agent/src/linux_bootstrap.rs")
           text = path.read_text()
-          old = """#[allow(\n    dead_code,\n    reason = \"C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance\"\n)]\npub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n"""
-          new = """#[allow(\n    clippy::too_many_arguments,\n    clippy::type_complexity,\n    dead_code,\n    reason = \"C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance\"\n)]\npub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n"""
-          if text.count(old) != 1:
-              raise SystemExit("expected IM helper allow attribute exactly once")
-          path.write_text(text.replace(old, new, 1))
+          function = "pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<"
+          if text.count(function) != 1:
+              raise SystemExit(11)
+          if "clippy::too_many_arguments" in text or "clippy::type_complexity" in text:
+              raise SystemExit(12)
+          fn_index = text.index(function)
+          allow_index = text.rfind("#[allow(\n", max(0, fn_index - 500), fn_index)
+          if allow_index < 0:
+              raise SystemExit(13)
+          attribute = text[allow_index:fn_index]
+          if "dead_code," not in attribute or "C03e-IM materializes the IL-selected production bind-address input population" not in attribute:
+              raise SystemExit(14)
+          insertion = allow_index + len("#[allow(\n")
+          text = text[:insertion] + "    clippy::too_many_arguments,\n    clippy::type_complexity,\n" + text[insertion:]
+          path.write_text(text)
           PY
 
           git diff --check
