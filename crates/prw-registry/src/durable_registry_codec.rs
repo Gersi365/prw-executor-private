@@ -137,8 +137,8 @@ pub fn encode_membership_key(
 ) -> Result<Vec<u8>, DurableRegistryCodecError> {
     let workspace_bytes = bounded_identifier(workspace_id.as_str().as_bytes())?;
     let user_bytes = bounded_identifier(user_id.as_str().as_bytes())?;
-    let workspace_len =
-        u64::try_from(workspace_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidKeyLength)?;
+    let workspace_len = u64::try_from(workspace_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidKeyLength)?;
     let user_len =
         u64::try_from(user_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidKeyLength)?;
     let capacity = DURABLE_REGISTRY_MEMBERSHIP_KEY_PREFIX
@@ -175,10 +175,28 @@ pub fn decode_membership_key(
     }
     let mut cursor = DURABLE_REGISTRY_MEMBERSHIP_KEY_PREFIX.len();
     decode_key_version(encoded, &mut cursor)?;
-    let workspace_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidKeyLength)?;
-    let workspace_bytes = read_slice(encoded, &mut cursor, workspace_len, DurableRegistryCodecError::InvalidKeyLength)?;
-    let user_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidKeyLength)?;
-    let user_bytes = read_slice(encoded, &mut cursor, user_len, DurableRegistryCodecError::InvalidKeyLength)?;
+    let workspace_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
+    let workspace_bytes = read_slice(
+        encoded,
+        &mut cursor,
+        workspace_len,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
+    let user_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
+    let user_bytes = read_slice(
+        encoded,
+        &mut cursor,
+        user_len,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
     if cursor != encoded.len() {
         return Err(DurableRegistryCodecError::InvalidKeyLength);
     }
@@ -196,8 +214,8 @@ pub fn decode_membership_key(
 /// encoded-size computation fails.
 pub fn encode_device_key(device_id: &DeviceId) -> Result<Vec<u8>, DurableRegistryCodecError> {
     let device_bytes = bounded_identifier(device_id.as_str().as_bytes())?;
-    let device_len =
-        u64::try_from(device_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidKeyLength)?;
+    let device_len = u64::try_from(device_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidKeyLength)?;
     let capacity = DURABLE_REGISTRY_DEVICE_KEY_PREFIX
         .len()
         .checked_add(VERSION_BYTES + LENGTH_BYTES)
@@ -226,8 +244,17 @@ pub fn decode_device_key(encoded: &[u8]) -> Result<DeviceId, DurableRegistryCode
     }
     let mut cursor = DURABLE_REGISTRY_DEVICE_KEY_PREFIX.len();
     decode_key_version(encoded, &mut cursor)?;
-    let device_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidKeyLength)?;
-    let device_bytes = read_slice(encoded, &mut cursor, device_len, DurableRegistryCodecError::InvalidKeyLength)?;
+    let device_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
+    let device_bytes = read_slice(
+        encoded,
+        &mut cursor,
+        device_len,
+        DurableRegistryCodecError::InvalidKeyLength,
+    )?;
     if cursor != encoded.len() {
         return Err(DurableRegistryCodecError::InvalidKeyLength);
     }
@@ -250,10 +277,10 @@ pub fn encode_membership_value(
         .ok_or(DurableRegistryCodecError::InvalidRecordLength)?;
     let total_len_u64 =
         u64::try_from(total_len).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let workspace_len =
-        u64::try_from(workspace_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let user_len =
-        u64::try_from(user_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let workspace_len = u64::try_from(workspace_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let user_len = u64::try_from(user_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
 
     let mut encoded = Vec::with_capacity(total_len);
     encoded.extend_from_slice(&DURABLE_REGISTRY_MEMBERSHIP_MAGIC);
@@ -281,16 +308,30 @@ pub fn decode_membership_value(
     encoded: &[u8],
 ) -> Result<WorkspaceMembership, DurableRegistryCodecError> {
     let mut cursor = 0;
-    if read_array::<4>(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?
-        != DURABLE_REGISTRY_MEMBERSHIP_MAGIC
+    if read_array::<4>(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )? != DURABLE_REGISTRY_MEMBERSHIP_MAGIC
     {
         return Err(DurableRegistryCodecError::InvalidValueMagic);
     }
     decode_value_version(encoded, &mut cursor)?;
-    let total_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let workspace_len =
-        read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let user_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
+    let total_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let workspace_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let user_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
     let role_code = u16::from_be_bytes(read_array::<2>(
         encoded,
         &mut cursor,
@@ -351,7 +392,8 @@ pub fn encode_device_value(
     let user_bytes = bounded_identifier(binding.user_id.as_str().as_bytes())?;
     let device_bytes = bounded_identifier(binding.device_id.as_str().as_bytes())?;
     let public_identity = binding.public_identity.as_bytes();
-    if public_identity.is_empty() || public_identity.len() > MAX_DURABLE_REGISTRY_PUBLIC_IDENTITY_BYTES
+    if public_identity.is_empty()
+        || public_identity.len() > MAX_DURABLE_REGISTRY_PUBLIC_IDENTITY_BYTES
     {
         return Err(DurableRegistryCodecError::InvalidPublicIdentity);
     }
@@ -381,14 +423,14 @@ pub fn encode_device_value(
         .ok_or(DurableRegistryCodecError::InvalidRecordLength)?;
     let total_len_u64 =
         u64::try_from(total_len).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let workspace_len =
-        u64::try_from(workspace_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let user_len =
-        u64::try_from(user_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let device_len =
-        u64::try_from(device_bytes.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
-    let public_identity_len =
-        u64::try_from(public_identity.len()).map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let workspace_len = u64::try_from(workspace_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let user_len = u64::try_from(user_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let device_len = u64::try_from(device_bytes.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
+    let public_identity_len = u64::try_from(public_identity.len())
+        .map_err(|_| DurableRegistryCodecError::InvalidRecordLength)?;
 
     let mut encoded = Vec::with_capacity(total_len);
     encoded.extend_from_slice(&DURABLE_REGISTRY_DEVICE_MAGIC);
@@ -419,23 +461,42 @@ pub fn encode_device_value(
 ///
 /// Rejects wrong magic/version, malformed lengths, non-zero reserved data, unsupported identity
 /// profile/lifecycle/transport representation, invalid identifiers/public identity, or trailing bytes.
-pub fn decode_device_value(
-    encoded: &[u8],
-) -> Result<RegisteredDevice, DurableRegistryCodecError> {
+pub fn decode_device_value(encoded: &[u8]) -> Result<RegisteredDevice, DurableRegistryCodecError> {
     let mut cursor = 0;
-    if read_array::<4>(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?
-        != DURABLE_REGISTRY_DEVICE_MAGIC
+    if read_array::<4>(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )? != DURABLE_REGISTRY_DEVICE_MAGIC
     {
         return Err(DurableRegistryCodecError::InvalidValueMagic);
     }
     decode_value_version(encoded, &mut cursor)?;
-    let total_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let workspace_len =
-        read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let user_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let device_len = read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
-    let public_identity_len =
-        read_length(encoded, &mut cursor, DurableRegistryCodecError::InvalidRecordLength)?;
+    let total_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let workspace_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let user_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let device_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
+    let public_identity_len = read_length(
+        encoded,
+        &mut cursor,
+        DurableRegistryCodecError::InvalidRecordLength,
+    )?;
     let algorithm_code = u16::from_be_bytes(read_array::<2>(
         encoded,
         &mut cursor,
@@ -583,10 +644,7 @@ pub fn decode_bound_device_record(
     Ok(device)
 }
 
-fn decode_key_version(
-    encoded: &[u8],
-    cursor: &mut usize,
-) -> Result<(), DurableRegistryCodecError> {
+fn decode_key_version(encoded: &[u8], cursor: &mut usize) -> Result<(), DurableRegistryCodecError> {
     let major = u16::from_be_bytes(read_array::<2>(
         encoded,
         cursor,
@@ -692,13 +750,13 @@ const fn encode_device_lifecycle(
     match lifecycle {
         DeviceLifecycle::Enrolled => Ok(DEVICE_LIFECYCLE_ENROLLED),
         DeviceLifecycle::Revoked => Ok(DEVICE_LIFECYCLE_REVOKED),
-        DeviceLifecycle::PendingEnrollment => Err(DurableRegistryCodecError::InvalidDeviceLifecycle),
+        DeviceLifecycle::PendingEnrollment => {
+            Err(DurableRegistryCodecError::InvalidDeviceLifecycle)
+        }
     }
 }
 
-const fn decode_device_lifecycle(
-    code: u16,
-) -> Result<DeviceLifecycle, DurableRegistryCodecError> {
+const fn decode_device_lifecycle(code: u16) -> Result<DeviceLifecycle, DurableRegistryCodecError> {
     match code {
         DEVICE_LIFECYCLE_ENROLLED => Ok(DeviceLifecycle::Enrolled),
         DEVICE_LIFECYCLE_REVOKED => Ok(DeviceLifecycle::Revoked),
@@ -941,7 +999,8 @@ mod tests {
                 device_id: device_id("device"),
                 public_identity: public_identity(vec![
                     0x31;
-                    MAX_DURABLE_REGISTRY_PUBLIC_IDENTITY_BYTES + 1
+                    MAX_DURABLE_REGISTRY_PUBLIC_IDENTITY_BYTES
+                        + 1
                 ]),
                 lifecycle: DeviceLifecycle::Enrolled,
             },
@@ -968,8 +1027,7 @@ mod tests {
         );
 
         let mut wrong_version = source.clone();
-        wrong_version[version_offset..version_offset + 2]
-            .copy_from_slice(&2_u16.to_be_bytes());
+        wrong_version[version_offset..version_offset + 2].copy_from_slice(&2_u16.to_be_bytes());
         assert_eq!(
             decode_device_key(&wrong_version),
             Err(DurableRegistryCodecError::UnsupportedKeyVersion)
