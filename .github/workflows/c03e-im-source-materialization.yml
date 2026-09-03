@@ -28,7 +28,7 @@ jobs:
           git fetch origin "$TARGET_BRANCH"
           test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$EXPECTED_TARGET_HEAD"
           git checkout -B c03e-im-clippy-work "origin/$TARGET_BRANCH"
-          test "$(git hash-object "$SOURCE_PATH")" = "$EXPECTED_SOURCE_BLOB"
+          test "$(git rev-parse "HEAD:$SOURCE_PATH")" = "$EXPECTED_SOURCE_BLOB"
 
           python - <<'PY'
           from pathlib import Path
