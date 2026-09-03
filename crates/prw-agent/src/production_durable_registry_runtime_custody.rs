@@ -26,7 +26,7 @@ impl ProductionDurableRegistryRuntimeCustody {
     /// I/O, issue etcd operations, validate registry state, publish readiness, register global state,
     /// or create a runtime task.
     #[must_use]
-    pub fn from_store(store: DurableRegistryEtcdStore) -> Self {
+    pub const fn from_store(store: DurableRegistryEtcdStore) -> Self {
         Self { store }
     }
 }
