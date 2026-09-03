@@ -22,6 +22,7 @@ mod fence_sequence_live_owner_handoff;
 #[allow(dead_code)]
 mod recovery_epoch;
 
+pub mod durable_registry_etcd;
 pub mod enrollment_pop;
 pub mod reachability_acquisition_evidence;
 pub mod reachability_durable_snapshot_etcd;
