@@ -384,9 +384,8 @@ fn classify_pair_read_response(
     if !response.succeeded() {
         return Err(DurableRegistryEtcdError::UnexpectedTxnResponseShape);
     }
-    let [TxnOpResponse::Get(first), TxnOpResponse::Get(second)] =
-        response.op_responses().as_slice()
-    else {
+    let responses = response.op_responses();
+    let [TxnOpResponse::Get(first), TxnOpResponse::Get(second)] = responses.as_slice() else {
         return Err(DurableRegistryEtcdError::UnexpectedTxnResponseShape);
     };
     Ok(DurableRegistryEtcdObservationPair {
