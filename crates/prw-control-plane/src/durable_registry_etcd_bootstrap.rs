@@ -160,7 +160,9 @@ pub enum DurableRegistryProductionEtcdBootstrapConfigError {
 impl fmt::Display for DurableRegistryProductionEtcdBootstrapConfigError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
-            Self::EndpointCount => "durable registry etcd bootstrap requires exactly three endpoints",
+            Self::EndpointCount => {
+                "durable registry etcd bootstrap requires exactly three endpoints"
+            }
             Self::InsecureEndpoint => "durable registry etcd bootstrap endpoint must use https",
             Self::MalformedEndpoint => "durable registry etcd bootstrap endpoint is malformed",
             Self::NonFqdnEndpoint => {
@@ -339,8 +341,11 @@ mod tests {
     use super::*;
 
     fn identity() -> DurableRegistryEtcdClientIdentityMaterial {
-        DurableRegistryEtcdClientIdentityMaterial::new(b"registry-cert".to_vec(), b"registry-key".to_vec())
-            .expect("non-empty identity")
+        DurableRegistryEtcdClientIdentityMaterial::new(
+            b"registry-cert".to_vec(),
+            b"registry-key".to_vec(),
+        )
+        .expect("non-empty identity")
     }
 
     fn endpoints() -> [&'static str; AUTHORITY_MEMBER_COUNT] {
