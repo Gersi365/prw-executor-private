@@ -23,6 +23,11 @@ pub(crate) mod linux_identity;
 pub mod local_commands;
 #[allow(
     dead_code,
+    reason = "C03e-JB materializes Agent production durable-registry custody composition before separately gated runtime activation"
+)]
+pub(crate) mod production_durable_registry_custody_bootstrap;
+#[allow(
+    dead_code,
     reason = "C03e-HU materializes Agent production bootstrap composition before separately gated systemd custody join and runtime activation"
 )]
 pub(crate) mod production_reachability_bootstrap;
