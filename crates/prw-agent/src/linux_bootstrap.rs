@@ -58,6 +58,9 @@ use crate::remote_session_capability_runtime::{
 /// Fixed non-secret process configuration name for the production remote endpoint bind address.
 pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
 
+/// Fixed non-secret process configuration name for the production remote peer logical device.
+pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = "PRW_REMOTE_PEER_DEVICE_ID";
+
 /// Stable failure while acquiring or validating production remote bind-address configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -126,6 +129,62 @@ fn parse_linux_agent_remote_bind_addr_value(
 pub fn load_linux_agent_remote_bind_addr_from_env()
 -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
     parse_linux_agent_remote_bind_addr_value(std::env::var_os(PRW_REMOTE_BIND_ADDR_ENV))
+}
+
+/// Stable failure while acquiring or validating the production remote peer logical device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LinuxAgentRemotePeerDeviceSourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured value does not satisfy the existing `DeviceId` contract.
+    InvalidIdentifier,
+}
+
+impl std::fmt::Display for LinuxAgentRemotePeerDeviceSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "remote peer-device configuration missing",
+            Self::NonUnicode => "remote peer-device configuration encoding invalid",
+            Self::InvalidIdentifier => "remote peer-device identifier invalid",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentRemotePeerDeviceSourceError {}
+
+fn parse_linux_agent_remote_peer_device_id_value(
+    value: Option<OsString>,
+) -> Result<DeviceId, LinuxAgentRemotePeerDeviceSourceError> {
+    let value = value.ok_or(LinuxAgentRemotePeerDeviceSourceError::Missing)?;
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentRemotePeerDeviceSourceError::NonUnicode)?;
+    DeviceId::new(value).map_err(|error| match error {
+        prw_core::IdentifierError::Empty => {
+            LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier
+        }
+    })
+}
+
+/// Loads the explicitly configured production remote peer logical device from the process environment.
+///
+/// The exact Unicode value is passed directly to [`DeviceId::new`] without trimming,
+/// normalization, case conversion, delimiter parsing or endpoint interpretation. This source
+/// performs no registry/provider I/O and does not construct a [`PeerConnectivityIdentity`].
+///
+/// Configuration validity is process peer intent only; current same-device transport authority
+/// remains the responsibility of the separately materialized durable-registry lookup.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is missing, non-Unicode, empty, or whitespace-only.
+/// The bounded error surface does not expose the configured identifier value.
+pub fn load_linux_agent_remote_peer_device_id_from_env()
+-> Result<DeviceId, LinuxAgentRemotePeerDeviceSourceError> {
+    parse_linux_agent_remote_peer_device_id_value(std::env::var_os(PRW_REMOTE_PEER_DEVICE_ID_ENV))
 }
 
 /// Stable high-level terminal class exposed to the Agent binary.
@@ -1291,16 +1350,18 @@ mod tests {
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
         LinuxAgentBootstrapWithRemoteReport,
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
-        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemotePeerDeviceSourceError,
+        LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
         LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
-        finalize_remote_process_companion, initial_runtime_config,
+        PRW_REMOTE_PEER_DEVICE_ID_ENV, finalize_remote_process_companion, initial_runtime_config,
         linux_agent_production_reachability_remote_process_operation,
         linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
-        map_lifecycle_start_kind, map_remote_shutdown_publish,
-        parse_linux_agent_remote_bind_addr_value, run, run_remote_process_operation_composition,
-        run_with_remote_process_companion,
+        load_linux_agent_remote_peer_device_id_from_env, map_lifecycle_start_kind,
+        map_remote_shutdown_publish, parse_linux_agent_remote_bind_addr_value,
+        parse_linux_agent_remote_peer_device_id_value, run,
+        run_remote_process_operation_composition, run_with_remote_process_companion,
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
@@ -1435,6 +1496,57 @@ mod tests {
                 Err(LinuxAgentRemoteBindAddressSourceError::AddressNotBindAdvertisable)
             );
         }
+    }
+
+    #[test]
+    fn remote_peer_device_source_public_reader_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<DeviceId, LinuxAgentRemotePeerDeviceSourceError>,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(PRW_REMOTE_PEER_DEVICE_ID_ENV, "PRW_REMOTE_PEER_DEVICE_ID");
+        assert_signature(load_linux_agent_remote_peer_device_id_from_env);
+    }
+
+    #[test]
+    fn remote_peer_device_source_rejects_missing_empty_and_whitespace_values() {
+        assert_eq!(
+            parse_linux_agent_remote_peer_device_id_value(None),
+            Err(LinuxAgentRemotePeerDeviceSourceError::Missing)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_peer_device_id_value(Some(OsString::new())),
+            Err(LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_peer_device_id_value(Some(OsString::from("   "))),
+            Err(LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_peer_device_source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_remote_peer_device_id_value(Some(OsString::from_vec(vec![0xff]))),
+            Err(LinuxAgentRemotePeerDeviceSourceError::NonUnicode)
+        );
+    }
+
+    #[test]
+    fn remote_peer_device_source_preserves_exact_non_empty_identifier() {
+        let ordinary =
+            parse_linux_agent_remote_peer_device_id_value(Some(OsString::from("peer-device-1")))
+                .expect("ordinary peer device identifier");
+        assert_eq!(ordinary.as_str(), "peer-device-1");
+
+        let spaced = parse_linux_agent_remote_peer_device_id_value(Some(OsString::from(
+            "  peer-device-1  ",
+        )))
+        .expect("non-empty spaced peer device identifier");
+        assert_eq!(spaced.as_str(), "  peer-device-1  ");
     }
 
     #[test]
