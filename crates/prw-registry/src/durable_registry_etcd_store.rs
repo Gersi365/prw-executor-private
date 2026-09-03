@@ -49,7 +49,9 @@ pub enum DurableRegistryEtcdStoreError {
 impl fmt::Display for DurableRegistryEtcdStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Semantic(error) => write!(formatter, "durable registry semantic failure: {error}"),
+            Self::Semantic(error) => {
+                write!(formatter, "durable registry semantic failure: {error}")
+            }
             Self::ReadUnavailable => {
                 formatter.write_str("durable registry authoritative read unavailable")
             }
@@ -270,15 +272,15 @@ impl DurableRegistryEtcdStore {
 
         match mutation {
             DurableRegistryEtcdRegistrationMutation::Committed => Ok(device),
-            DurableRegistryEtcdRegistrationMutation::CompareFailed(pair) => Err(
-                classify_registration_failure(
+            DurableRegistryEtcdRegistrationMutation::CompareFailed(pair) => {
+                Err(classify_registration_failure(
                     &pair,
                     &workspace_id,
                     &user_id,
                     &device_id,
                     &membership,
-                )?,
-            ),
+                )?)
+            }
         }
     }
 
@@ -303,12 +305,7 @@ impl DurableRegistryEtcdStore {
             .map_err(|_| DurableRegistryEtcdStoreError::InvalidAuthority)?;
         let mutation = self
             .provider
-            .compare_and_put(
-                &key,
-                before.mod_revision,
-                &before.raw_value,
-                &replacement,
-            )
+            .compare_and_put(&key, before.mod_revision, &before.raw_value, &replacement)
             .await
             .map_err(map_provider_error)?;
         classify_device_update_result(mutation, device_id, &before, DeviceUpdateKind::Bind)
@@ -377,12 +374,7 @@ impl DurableRegistryEtcdStore {
             .map_err(|_| DurableRegistryEtcdStoreError::InvalidAuthority)?;
         let mutation = self
             .provider
-            .compare_and_put(
-                &key,
-                before.mod_revision,
-                &before.raw_value,
-                &replacement,
-            )
+            .compare_and_put(&key, before.mod_revision, &before.raw_value, &replacement)
             .await
             .map_err(map_provider_error)?;
         classify_device_update_result(mutation, device_id, &before, DeviceUpdateKind::Revoke)
@@ -441,12 +433,14 @@ impl DurableRegistryEtcdStore {
             .map_err(map_provider_error)?;
 
         let membership = match pair.first() {
-            Some(observation) => decode_membership_observation(
-                observation,
-                session.workspace_id(),
-                session.user_id(),
-            )?
-            .record,
+            Some(observation) => {
+                decode_membership_observation(
+                    observation,
+                    session.workspace_id(),
+                    session.user_id(),
+                )?
+                .record
+            }
             None => return Err(semantic(RegistryError::MembershipUnknown)),
         };
         if membership.lifecycle() != MembershipLifecycle::Active {
@@ -708,9 +702,7 @@ fn revoke_device_successor(
     }
 }
 
-fn ensure_enrolled_device(
-    current: &RegisteredDevice,
-) -> Result<(), DurableRegistryEtcdStoreError> {
+fn ensure_enrolled_device(current: &RegisteredDevice) -> Result<(), DurableRegistryEtcdStoreError> {
     match current.binding().lifecycle {
         DeviceLifecycle::Enrolled => Ok(()),
         DeviceLifecycle::Revoked => Err(semantic(RegistryError::DeviceRevoked)),
@@ -1049,11 +1041,7 @@ mod tests {
         let before = membership_observation(membership(MembershipLifecycle::Active), 4);
         let current = membership_observation(before.record.clone(), 5);
         assert_eq!(
-            classify_membership_compare_failure(
-                &before,
-                &current,
-                MembershipUpdateKind::Suspend
-            ),
+            classify_membership_compare_failure(&before, &current, MembershipUpdateKind::Suspend),
             Err(DurableRegistryEtcdStoreError::CurrentnessConflict)
         );
     }
@@ -1062,11 +1050,7 @@ mod tests {
     fn unchanged_membership_failure_shape_is_invalid_authority() {
         let before = membership_observation(membership(MembershipLifecycle::Active), 4);
         assert_eq!(
-            classify_membership_compare_failure(
-                &before,
-                &before,
-                MembershipUpdateKind::Suspend
-            ),
+            classify_membership_compare_failure(&before, &before, MembershipUpdateKind::Suspend),
             Err(DurableRegistryEtcdStoreError::InvalidAuthority)
         );
     }
@@ -1152,14 +1136,9 @@ mod tests {
     fn rotation_compare_failure_maps_stale_transport_semantics() {
         let expected = TransportIdentity::new([6; 32]).expect("expected");
         let stale = TransportIdentity::new([7; 32]).expect("stale");
-        let before = device_observation(
-            registered(DeviceLifecycle::Enrolled, Some(expected), 1),
-            9,
-        );
-        let current = device_observation(
-            registered(DeviceLifecycle::Enrolled, Some(stale), 1),
-            10,
-        );
+        let before =
+            device_observation(registered(DeviceLifecycle::Enrolled, Some(expected), 1), 9);
+        let current = device_observation(registered(DeviceLifecycle::Enrolled, Some(stale), 1), 10);
         assert_eq!(
             classify_device_compare_failure(
                 &before,
