@@ -163,7 +163,9 @@ fn parse_linux_agent_remote_peer_device_id_value(
         .into_string()
         .map_err(|_| LinuxAgentRemotePeerDeviceSourceError::NonUnicode)?;
     DeviceId::new(value).map_err(|error| match error {
-        prw_core::IdentifierError::Empty => LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier,
+        prw_core::IdentifierError::Empty => {
+            LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier
+        }
     })
 }
 
@@ -1349,16 +1351,17 @@ mod tests {
         LinuxAgentBootstrapWithRemoteReport,
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
         LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemotePeerDeviceSourceError,
-        LinuxAgentRemoteProcessCompanionFinalization, LinuxAgentRemoteProcessControllerFinalization,
-        LinuxAgentRemoteProcessOperationInputs, LinuxAgentRemoteProcessThreadFinalization,
-        LinuxAgentRemoteSupervisorShutdownPublish, LinuxAgentRemoteSupervisorShutdownPublisher,
-        PRW_REMOTE_BIND_ADDR_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV, finalize_remote_process_companion,
-        initial_runtime_config, linux_agent_production_reachability_remote_process_operation,
+        LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
+        LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
+        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
+        PRW_REMOTE_PEER_DEVICE_ID_ENV, finalize_remote_process_companion, initial_runtime_config,
+        linux_agent_production_reachability_remote_process_operation,
         linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
         load_linux_agent_remote_peer_device_id_from_env, map_lifecycle_start_kind,
         map_remote_shutdown_publish, parse_linux_agent_remote_bind_addr_value,
-        parse_linux_agent_remote_peer_device_id_value, run, run_remote_process_operation_composition,
-        run_with_remote_process_companion,
+        parse_linux_agent_remote_peer_device_id_value, run,
+        run_remote_process_operation_composition, run_with_remote_process_companion,
     };
     use crate::linux_identity::production_lifecycle::LocalLinuxProductionLifecycleAssemblyError;
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
@@ -1503,10 +1506,7 @@ mod tests {
             let _ = reader;
         }
 
-        assert_eq!(
-            PRW_REMOTE_PEER_DEVICE_ID_ENV,
-            "PRW_REMOTE_PEER_DEVICE_ID"
-        );
+        assert_eq!(PRW_REMOTE_PEER_DEVICE_ID_ENV, "PRW_REMOTE_PEER_DEVICE_ID");
         assert_signature(load_linux_agent_remote_peer_device_id_from_env);
     }
 
@@ -1537,10 +1537,9 @@ mod tests {
 
     #[test]
     fn remote_peer_device_source_preserves_exact_non_empty_identifier() {
-        let ordinary = parse_linux_agent_remote_peer_device_id_value(Some(OsString::from(
-            "peer-device-1",
-        )))
-        .expect("ordinary peer device identifier");
+        let ordinary =
+            parse_linux_agent_remote_peer_device_id_value(Some(OsString::from("peer-device-1")))
+                .expect("ordinary peer device identifier");
         assert_eq!(ordinary.as_str(), "peer-device-1");
 
         let spaced = parse_linux_agent_remote_peer_device_id_value(Some(OsString::from(
