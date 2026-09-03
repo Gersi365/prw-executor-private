@@ -16,18 +16,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply guarded C03e-IM rustfmt correction
+      - name: Apply guarded C03e-IM Clippy-shape correction
         shell: bash
         env:
           TARGET_BRANCH: phase-152-c03e-im-production-remote-bind-address-executable-input-population-source-materialization
-          EXPECTED_TARGET_HEAD: 51b14eae597b703df81a8c37c6972f7ab4e0c989
-          EXPECTED_SOURCE_BLOB: d797c9b7272dfa5fcd45a1383d1bef035e9bb10f
+          EXPECTED_TARGET_HEAD: 5cf958bfcbfea983012d158bdc47e903089288a4
+          EXPECTED_SOURCE_BLOB: 953c8e8a8c4bda90ab06a6411685e10fba560f6d
           SOURCE_PATH: crates/prw-agent/src/linux_bootstrap.rs
         run: |
           set -Eeuo pipefail
           git fetch origin "$TARGET_BRANCH"
           test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$EXPECTED_TARGET_HEAD"
-          git checkout -B c03e-im-format-work "origin/$TARGET_BRANCH"
+          git checkout -B c03e-im-clippy-work "origin/$TARGET_BRANCH"
           test "$(git hash-object "$SOURCE_PATH")" = "$EXPECTED_SOURCE_BLOB"
 
           python - <<'PY'
@@ -35,22 +35,24 @@ jobs:
 
           path = Path("crates/prw-agent/src/linux_bootstrap.rs")
           text = path.read_text()
-          old = """pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n    P, D, T, F, C, R, E,\n>(\n"""
-          new = """pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n    P,\n    D,\n    T,\n    F,\n    C,\n    R,\n    E,\n>(\n"""
+          old = """#[allow(\n    dead_code,\n    reason = \"C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance\"\n)]\npub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n"""
+          new = """#[allow(\n    clippy::too_many_arguments,\n    clippy::type_complexity,\n    dead_code,\n    reason = \"C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance\"\n)]\npub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n"""
           if text.count(old) != 1:
-              raise SystemExit("expected IM helper generic formatting target exactly once")
+              raise SystemExit("expected IM helper allow attribute exactly once")
           path.write_text(text.replace(old, new, 1))
           PY
 
           git diff --check
           test "$(git diff --name-only | wc -l)" -eq 1
           test "$(git diff --name-only)" = "$SOURCE_PATH"
-          test "$(git diff --numstat -- "$SOURCE_PATH")" = $'7\t1\tcrates/prw-agent/src/linux_bootstrap.rs'
+          test "$(git diff --numstat -- "$SOURCE_PATH")" = $'2\t0\tcrates/prw-agent/src/linux_bootstrap.rs'
           test "$(grep -c '^pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<' "$SOURCE_PATH")" -eq 1
           test "$(grep -c 'let bind_addr = load_linux_agent_remote_bind_addr_from_env()?;' "$SOURCE_PATH")" -eq 1
+          test "$(grep -c 'clippy::too_many_arguments' "$SOURCE_PATH")" -eq 1
+          test "$(grep -c 'clippy::type_complexity' "$SOURCE_PATH")" -eq 1
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$SOURCE_PATH"
-          git commit -m 'C03e-IM: rustfmt production bind input helper'
+          git commit -m 'C03e-IM: acknowledge selected helper lint shape'
           git push origin HEAD:"$TARGET_BRANCH"
