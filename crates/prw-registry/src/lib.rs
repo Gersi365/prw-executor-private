@@ -5,6 +5,7 @@
 //! accounts, map roles to capabilities, persist a database, or select a transport.
 
 pub mod durable_registry_codec;
+pub mod durable_registry_etcd_store;
 
 use std::{
     collections::{HashMap, hash_map::Entry},
