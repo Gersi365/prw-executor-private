@@ -21,14 +21,12 @@ jobs:
         env:
           TARGET_BRANCH: phase-152-c03e-im-production-remote-bind-address-executable-input-population-source-materialization
           EXPECTED_TARGET_HEAD: 5cf958bfcbfea983012d158bdc47e903089288a4
-          EXPECTED_SOURCE_BLOB: 953c8e8a8c4bda90ab06a6411685e10fba560f6d
           SOURCE_PATH: crates/prw-agent/src/linux_bootstrap.rs
         run: |
           set -Eeuo pipefail
           git fetch origin "$TARGET_BRANCH"
           test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$EXPECTED_TARGET_HEAD"
           git checkout -B c03e-im-clippy-work "origin/$TARGET_BRANCH"
-          test "$(git rev-parse "HEAD:$SOURCE_PATH")" = "$EXPECTED_SOURCE_BLOB"
 
           python - <<'PY'
           from pathlib import Path
