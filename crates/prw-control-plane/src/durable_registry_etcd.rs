@@ -456,9 +456,7 @@ fn decode_exact_get(
                 mod_revision: kv.mod_revision(),
             }))
         }
-        kvs => Err(DurableRegistryEtcdError::UnexpectedGetCardinality {
-            actual: kvs.len(),
-        }),
+        kvs => Err(DurableRegistryEtcdError::UnexpectedGetCardinality { actual: kvs.len() }),
     }
 }
 
