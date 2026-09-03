@@ -255,7 +255,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr failure contract.
+    /// Returns the bounded token used by the initial stderr summary contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -732,10 +732,12 @@ pub(crate) async fn linux_agent_production_reachability_remote_process_operation
     let peer = registry_custody
         .peer_connectivity_identity(device_id)
         .await?;
-    Ok(LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
-        peer,
-        remote_process_inputs,
-    ))
+    Ok(
+        LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
+            peer,
+            remote_process_inputs,
+        ),
+    )
 }
 
 /// Builds one side-effect-free injected remote operation compatible with the AX bootstrap facade.
@@ -1691,7 +1693,10 @@ mod tests {
                 LinuxAgentRemotePeerDeviceSourceError::Missing
             )
         ));
-        assert_eq!(peer_source.to_string(), "production peer-device source failed");
+        assert_eq!(
+            peer_source.to_string(),
+            "production peer-device source failed"
+        );
         assert!(std::error::Error::source(&peer_source).is_some());
 
         let lookup = super::LinuxAgentProductionPeerInputPopulationError::from(
