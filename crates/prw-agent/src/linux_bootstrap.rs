@@ -708,6 +708,7 @@ impl From<prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreErr
 /// Fails before the next stage on peer-device source, durable-registry bootstrap or current-peer
 /// lookup failure. No retry, fallback, alternate peer, cache or degraded owner is produced.
 #[allow(
+    clippy::future_not_send,
     dead_code,
     reason = "C03e-JK materializes the JJ-selected production peer input population before separately gated remaining production provenance"
 )]
