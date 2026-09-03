@@ -16,18 +16,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Materialize guarded C03e-IM source change
+      - name: Apply guarded C03e-IM rustfmt correction
         shell: bash
         env:
           TARGET_BRANCH: phase-152-c03e-im-production-remote-bind-address-executable-input-population-source-materialization
-          EXPECTED_TARGET_HEAD: 0c1c876bb022fa64abb371b084e54e929b6ed3ea
-          EXPECTED_SOURCE_BLOB: db146a724ad7cd21e97b6da9ce6d527d24901c4b
+          EXPECTED_TARGET_HEAD: 51b14eae597b703df81a8c37c6972f7ab4e0c989
+          EXPECTED_SOURCE_BLOB: d797c9b7272dfa5fcd45a1383d1bef035e9bb10f
           SOURCE_PATH: crates/prw-agent/src/linux_bootstrap.rs
         run: |
           set -Eeuo pipefail
           git fetch origin "$TARGET_BRANCH"
           test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$EXPECTED_TARGET_HEAD"
-          git checkout -B c03e-im-work "origin/$TARGET_BRANCH"
+          git checkout -B c03e-im-format-work "origin/$TARGET_BRANCH"
           test "$(git hash-object "$SOURCE_PATH")" = "$EXPECTED_SOURCE_BLOB"
 
           python - <<'PY'
@@ -35,22 +35,22 @@ jobs:
 
           path = Path("crates/prw-agent/src/linux_bootstrap.rs")
           text = path.read_text()
-          marker = """            on_admission_failure,\n        }\n    }\n}\n\n/// Crate-private production process-operation inputs selected by C03e-IF.\n"""
-          helper = """            on_admission_failure,\n        }\n    }\n}\n\n/// Populates the existing remote-operation owner from the selected production bind-address source.\n///\n/// This crate-private helper performs exactly one existing process-environment bind-address load and\n/// otherwise only moves already-typed remote-operation inputs into the existing owner constructor.\n/// It does not construct peer identity, requester/rendezvous custody or any executable caller.\n#[allow(\n    dead_code,\n    reason = \"C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance\"\n)]\npub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n    P, D, T, F, C, R, E,\n>(\n    max_active_workers: NonZeroUsize,\n    capability_authority: SharedCurrentCapabilityAuthority<P>,\n    session_authentication: SessionAuthenticationService,\n    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,\n    admission_timing: F,\n    on_completion: C,\n    on_rejection: R,\n    on_admission_failure: E,\n) -> Result<\n    LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,\n    LinuxAgentRemoteBindAddressSourceError,\n> {\n    let bind_addr = load_linux_agent_remote_bind_addr_from_env()?;\n    Ok(LinuxAgentRemoteProcessOperationInputs::new(\n        bind_addr,\n        max_active_workers,\n        capability_authority,\n        session_authentication,\n        expected_requests,\n        admission_timing,\n        on_completion,\n        on_rejection,\n        on_admission_failure,\n    ))\n}\n\n/// Crate-private production process-operation inputs selected by C03e-IF.\n"""
-          if text.count(marker) != 1:
-              raise SystemExit("expected insertion marker exactly once")
-          path.write_text(text.replace(marker, helper, 1))
+          old = """pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n    P, D, T, F, C, R, E,\n>(\n"""
+          new = """pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<\n    P,\n    D,\n    T,\n    F,\n    C,\n    R,\n    E,\n>(\n"""
+          if text.count(old) != 1:
+              raise SystemExit("expected IM helper generic formatting target exactly once")
+          path.write_text(text.replace(old, new, 1))
           PY
 
           git diff --check
           test "$(git diff --name-only | wc -l)" -eq 1
           test "$(git diff --name-only)" = "$SOURCE_PATH"
-          test "$(git diff --numstat -- "$SOURCE_PATH")" = $'38\t0\tcrates/prw-agent/src/linux_bootstrap.rs'
+          test "$(git diff --numstat -- "$SOURCE_PATH")" = $'7\t1\tcrates/prw-agent/src/linux_bootstrap.rs'
           test "$(grep -c '^pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<' "$SOURCE_PATH")" -eq 1
           test "$(grep -c 'let bind_addr = load_linux_agent_remote_bind_addr_from_env()?;' "$SOURCE_PATH")" -eq 1
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$SOURCE_PATH"
-          git commit -m 'C03e-IM: materialize production remote bind address executable input population'
+          git commit -m 'C03e-IM: rustfmt production bind input helper'
           git push origin HEAD:"$TARGET_BRANCH"
