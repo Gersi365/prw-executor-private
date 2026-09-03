@@ -23,6 +23,7 @@ mod fence_sequence_live_owner_handoff;
 mod recovery_epoch;
 
 pub mod durable_registry_etcd;
+pub mod durable_registry_etcd_bootstrap;
 pub mod enrollment_pop;
 pub mod reachability_acquisition_evidence;
 pub mod reachability_durable_snapshot_etcd;
