@@ -4,11 +4,19 @@
 //! already-produced [`DurableRegistryEtcdStore`] is consumed exactly once and retained privately by
 //! Agent runtime custody for a later separately gated operation-specific use site.
 //!
-//! This module does not load credentials, bootstrap a provider, issue registry semantic operations,
-//! expose a generic store/executor extraction seam, register global state, publish readiness, wire
-//! startup, create a background task, activate networking, deploy, or mutate production state.
+//! C03e-JF adds only the C03e-JE-selected operation-specific production peer-identity lookup. It
+//! resolves one explicitly supplied logical [`DeviceId`] through the privately held durable registry's
+//! authoritative current same-device transport binding and returns one [`PeerConnectivityIdentity`].
+//!
+//! This module does not load credentials, bootstrap a provider, expose a generic store/executor
+//! extraction seam, register global state, publish readiness, wire startup, create a background task,
+//! activate networking, deploy, mutate registry state, or mutate production state.
 
-use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore;
+use prw_connectivity::PeerConnectivityIdentity;
+use prw_core::DeviceId;
+use prw_registry::durable_registry_etcd_store::{
+    DurableRegistryEtcdStore, DurableRegistryEtcdStoreError,
+};
 
 /// Agent-owned dormant runtime custody of one production durable-registry semantic store.
 ///
@@ -28,6 +36,26 @@ impl ProductionDurableRegistryRuntimeCustody {
     #[must_use]
     pub const fn from_store(store: DurableRegistryEtcdStore) -> Self {
         Self { store }
+    }
+
+    /// Resolves one production peer identity from the durable registry's current same-device binding.
+    ///
+    /// The caller supplies only the logical device identity. The current transport identity is read
+    /// exactly once from the privately held semantic store and cannot be supplied or substituted by
+    /// the caller. Construction of the returned peer occurs only after that authoritative read
+    /// succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the existing provider-neutral durable-registry semantic/read authority failure
+    /// unchanged. No fallback peer, retry, stale cache, alternate device or alternate transport source
+    /// is used.
+    pub(crate) async fn peer_connectivity_identity(
+        &mut self,
+        device_id: DeviceId,
+    ) -> Result<PeerConnectivityIdentity, DurableRegistryEtcdStoreError> {
+        let current_transport = self.store.current_transport_identity(&device_id).await?;
+        Ok(PeerConnectivityIdentity::new(device_id, current_transport))
     }
 }
 
