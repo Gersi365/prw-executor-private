@@ -505,7 +505,13 @@ impl<P, D, T, F, C, R, E> LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, 
     reason = "C03e-IM materializes the IL-selected production bind-address input population before separately gated remaining production provenance"
 )]
 pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_addr<
-    P, D, T, F, C, R, E,
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
 >(
     max_active_workers: NonZeroUsize,
     capability_authority: SharedCurrentCapabilityAuthority<P>,
