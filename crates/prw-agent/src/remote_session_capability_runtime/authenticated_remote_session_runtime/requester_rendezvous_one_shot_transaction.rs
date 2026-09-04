@@ -114,6 +114,49 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         }
     }
 
+    /// Accepts and processes exactly one post-authenticated control stream through production
+    /// durable capability authority while preserving the existing typed family ingress semantics.
+    ///
+    /// The retained authenticated peer supplies the only stream acceptance authority. This wrapper
+    /// accepts exactly one control stream, transfers it by value into the existing typed family
+    /// ingress decoder for exactly one bounded read/classification, then transfers the exact typed
+    /// ingress by value into the existing C03e-KK processor. It performs no family-specific logic,
+    /// retry, second accept, second read, fallback, queueing, provider execution or runtime activation.
+    ///
+    /// # Errors
+    ///
+    /// Preserves the existing parent error surface: authenticated accept failure remains `Accept`,
+    /// typed ingress failure remains `Ingress`, and durable capability failure remains the existing
+    /// nested `ProductionDurableCapability` error with exact KG `Authority` / `Dispatch` / `Response`
+    /// provenance. Requester/rendezvous and candidate-publication outcomes are returned unchanged from
+    /// the C03e-KK processor.
+    #[allow(
+        dead_code,
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-KM materializes the KL-selected dormant one-transaction durable accept/read wrapper before separately gated higher caller integration"
+    )]
+    pub(crate) async fn process_one_post_auth_control_stream_ingress_with_production_durable_capability<
+        D: CapabilityDispatcher + Send,
+    >(
+        &mut self,
+        authority: &ProductionDurableCapabilityAuthority,
+        now_unix_seconds: u64,
+        dispatcher: &mut D,
+    ) -> Result<
+        AuthenticatedRemoteSessionPostAuthIngressOutcome,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        let stream = self.peer.accept_control_stream().await?;
+        let ingress = receive_post_auth_control_stream_ingress(stream).await?;
+        self.process_existing_post_auth_control_stream_ingress_with_production_durable_capability(
+            authority,
+            now_unix_seconds,
+            dispatcher,
+            ingress,
+        )
+        .await
+    }
+
     /// Processes exactly one post-authenticated control stream through the C03e-ET family ingress.
     ///
     /// This C03e-EV seam is the single Agent-owned acceptance point for one isolated transaction. It
