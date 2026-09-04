@@ -126,8 +126,8 @@ impl ProductionDurableCapabilityAuthority {
         now_unix_seconds: u64,
         transaction: &PostAuthCapabilityTransaction,
     ) -> Result<AuthorizedCapabilityRequest, DurableCapabilityBridgeError> {
-        {
-            let mut registry_custody = self.registry_custody.lock().await;
+        let mut registry_custody = self.registry_custody.lock().await;
+        let result = {
             let mut bridge =
                 DurableCapabilityBridge::new(&mut registry_custody.store, &self.policy);
             bridge
@@ -138,7 +138,9 @@ impl ProductionDurableCapabilityAuthority {
                     transaction.request_frame(),
                 )
                 .await
-        }
+        };
+        drop(registry_custody);
+        result
     }
 }
 
