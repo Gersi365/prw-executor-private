@@ -37,12 +37,83 @@ use super::super::{
     adapt_post_auth_requester_rendezvous_target_intent,
 };
 use super::AuthenticatedRemoteSessionRuntimeOwner;
+use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 
 const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE: u32 = 6;
 const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
     b"remote requester-aware session terminated";
 
 impl AuthenticatedRemoteSessionRuntimeOwner {
+    /// Processes one already-read typed post-authenticated ingress through production durable
+    /// capability authority while preserving existing requester and candidate family semantics.
+    ///
+    /// The caller transfers ownership of one exact [`PostAuthControlStreamIngress`] that has already
+    /// been accepted and decoded elsewhere. This method does not call `accept_control_stream()` and
+    /// does not call `receive_post_auth_control_stream_ingress(...)`; it therefore cannot accept a
+    /// second stream or consume a second family-ingress frame.
+    ///
+    /// Capability transactions delegate by value to the existing C03e-KG durable transaction helper.
+    /// Requester/rendezvous transactions preserve the exact current EV target adaptation and
+    /// response-stream custody handoff. Candidate-publication transactions preserve the existing
+    /// explicit fail-closed higher-owner barrier.
+    ///
+    /// # Errors
+    ///
+    /// Durable capability failures retain the exact nested KG `Authority`, `Dispatch` or `Response`
+    /// provenance under [`AuthenticatedRemoteSessionPostAuthIngressTransactionError::ProductionDurableCapability`].
+    /// Candidate-publication ingress returns the existing
+    /// [`AuthenticatedRemoteSessionPostAuthIngressTransactionError::CandidatePublicationHandoffNotSelected`]
+    /// classification. No retry, fallback, second read, provider execution or response fabrication is
+    /// performed.
+    #[allow(
+        dead_code,
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-KK materializes the KJ-selected dormant durable typed-ingress processor before separately gated accept/read caller migration"
+    )]
+    pub(crate) async fn process_existing_post_auth_control_stream_ingress_with_production_durable_capability<
+        D: CapabilityDispatcher + Send,
+    >(
+        &mut self,
+        authority: &ProductionDurableCapabilityAuthority,
+        now_unix_seconds: u64,
+        dispatcher: &mut D,
+        ingress: PostAuthControlStreamIngress,
+    ) -> Result<
+        AuthenticatedRemoteSessionPostAuthIngressOutcome,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        match ingress {
+            PostAuthControlStreamIngress::Capability(transaction) => {
+                self.process_production_durable_capability_transaction(
+                    authority,
+                    now_unix_seconds,
+                    dispatcher,
+                    transaction,
+                )
+                .await?;
+                Ok(AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed)
+            }
+            PostAuthControlStreamIngress::RequesterRendezvous(transaction) => {
+                let target_intent = adapt_decoded_requester_rendezvous_target_device_id(
+                    transaction.request().target_device_id().clone(),
+                );
+                let start_intent =
+                    adapt_post_auth_requester_rendezvous_target_intent(self, target_intent);
+                Ok(
+                    AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(
+                        Box::new(RequesterRendezvousResponseStreamCustodyHandoff::new(
+                            transaction,
+                            start_intent,
+                        )),
+                    ),
+                )
+            }
+            PostAuthControlStreamIngress::CandidatePublication(_transaction) => Err(
+                AuthenticatedRemoteSessionPostAuthIngressTransactionError::CandidatePublicationHandoffNotSelected,
+            ),
+        }
+    }
+
     /// Processes exactly one post-authenticated control stream through the C03e-ET family ingress.
     ///
     /// This C03e-EV seam is the single Agent-owned acceptance point for one isolated transaction. It
