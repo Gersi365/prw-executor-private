@@ -779,3 +779,159 @@ impl<'a> Reader<'a> {
         }
     }
 }
+
+/// Provider-aware current-registry and policy gate around Phase 140 remote control frames.
+pub struct DurableCapabilityBridge<'a, P: PolicyEvaluator> {
+    registry: &'a mut prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore,
+    policy: &'a P,
+}
+
+impl<'a, P: PolicyEvaluator> DurableCapabilityBridge<'a, P> {
+    /// Creates a durable bridge over one semantic registry store and already-selected policy.
+    #[must_use]
+    pub const fn new(
+        registry: &'a mut prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore,
+        policy: &'a P,
+    ) -> Self {
+        Self { registry, policy }
+    }
+
+    /// Authorizes one Phase 140 request against one durable session/transport observation.
+    ///
+    /// # Errors
+    ///
+    /// Preserves ordinary Phase 143 request, lease, semantic registry/transport, codec and policy
+    /// rejection while keeping non-semantic durable authority failures distinct.
+    pub async fn authorize(
+        &mut self,
+        presented_transport_identity: TransportIdentity,
+        lease: &RemoteSessionLease,
+        now_unix_seconds: u64,
+        frame: &ControlFrame,
+    ) -> Result<AuthorizedCapabilityRequest, DurableCapabilityBridgeError> {
+        if frame.kind() != ControlMessageKind::Request {
+            return Err(DurableCapabilityBridgeError::Bridge(
+                RemoteBridgeError::WrongControlMessageKind,
+            ));
+        }
+        lease
+            .validate_time(now_unix_seconds)
+            .map_err(DurableCapabilityBridgeError::Bridge)?;
+        let principal = self
+            .registry
+            .validate_authenticated_session_and_transport_identity(
+                lease.session(),
+                presented_transport_identity,
+            )
+            .await
+            .map_err(map_durable_capability_authority_error)?;
+        let command = BridgeCommand::decode(frame.payload())
+            .map_err(DurableCapabilityBridgeError::Bridge)?;
+        let capability = command.required_capability();
+        if self.policy.evaluate(capability) != Decision::Allow {
+            return Err(DurableCapabilityBridgeError::Bridge(
+                RemoteBridgeError::CapabilityDenied,
+            ));
+        }
+        Ok(AuthorizedCapabilityRequest {
+            request_id: frame.request_id(),
+            principal,
+            transport_identity: presented_transport_identity,
+            capability,
+            command,
+        })
+    }
+}
+
+/// Failure envelope for provider-aware durable capability authorization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DurableCapabilityBridgeError {
+    /// Existing Phase 143 request, lease, semantic registry/transport, codec or policy rejection.
+    Bridge(RemoteBridgeError),
+    /// Durable provider/currentness/canonical authority could not be established.
+    Authority(prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError),
+}
+
+impl fmt::Display for DurableCapabilityBridgeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Bridge(_) => "durable capability bridge rejected request",
+            Self::Authority(_) => "durable capability authority failed",
+        })
+    }
+}
+
+impl std::error::Error for DurableCapabilityBridgeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Bridge(error) => Some(error),
+            Self::Authority(error) => Some(error),
+        }
+    }
+}
+
+fn map_durable_capability_authority_error(
+    error: prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError,
+) -> DurableCapabilityBridgeError {
+    use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError;
+
+    match error {
+        DurableRegistryEtcdStoreError::Semantic(
+            prw_registry::RegistryError::TransportIdentityMissing
+            | prw_registry::RegistryError::TransportIdentityMismatch,
+        ) => DurableCapabilityBridgeError::Bridge(RemoteBridgeError::TransportIdentityRejected),
+        DurableRegistryEtcdStoreError::Semantic(_) => {
+            DurableCapabilityBridgeError::Bridge(RemoteBridgeError::RegistryRejected)
+        }
+        error => DurableCapabilityBridgeError::Authority(error),
+    }
+}
+
+#[cfg(test)]
+mod durable_capability_bridge_tests {
+    use super::*;
+    use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError;
+
+    #[test]
+    fn durable_authority_error_mapping_preserves_selected_semantic_boundary() {
+        assert_eq!(
+            map_durable_capability_authority_error(DurableRegistryEtcdStoreError::Semantic(
+                prw_registry::RegistryError::TransportIdentityMissing,
+            )),
+            DurableCapabilityBridgeError::Bridge(RemoteBridgeError::TransportIdentityRejected)
+        );
+        assert_eq!(
+            map_durable_capability_authority_error(DurableRegistryEtcdStoreError::Semantic(
+                prw_registry::RegistryError::TransportIdentityMismatch,
+            )),
+            DurableCapabilityBridgeError::Bridge(RemoteBridgeError::TransportIdentityRejected)
+        );
+        assert_eq!(
+            map_durable_capability_authority_error(DurableRegistryEtcdStoreError::Semantic(
+                prw_registry::RegistryError::SessionBindingMismatch,
+            )),
+            DurableCapabilityBridgeError::Bridge(RemoteBridgeError::RegistryRejected)
+        );
+        assert_eq!(
+            map_durable_capability_authority_error(DurableRegistryEtcdStoreError::ReadUnavailable),
+            DurableCapabilityBridgeError::Authority(DurableRegistryEtcdStoreError::ReadUnavailable)
+        );
+    }
+
+    #[test]
+    fn durable_bridge_error_display_is_bounded_and_source_preserves_stage() {
+        let bridge = DurableCapabilityBridgeError::Bridge(RemoteBridgeError::CapabilityDenied);
+        assert_eq!(
+            bridge.to_string(),
+            "durable capability bridge rejected request"
+        );
+        assert!(std::error::Error::source(&bridge).is_some());
+
+        let authority = DurableCapabilityBridgeError::Authority(
+            DurableRegistryEtcdStoreError::InvalidAuthority,
+        );
+        assert_eq!(authority.to_string(), "durable capability authority failed");
+        assert!(std::error::Error::source(&authority).is_some());
+    }
+}
