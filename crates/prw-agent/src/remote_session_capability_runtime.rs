@@ -64,6 +64,7 @@ pub use remote_session_worker_cancellation::{
 pub use shared_current_capability_authority::SharedCurrentCapabilityAuthority;
 pub(crate) use shared_requester_rendezvous_authority::SharedRequesterRendezvousAuthority;
 
+use authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError;
 use std::fmt;
 
 use prw_core::DeviceId;
@@ -159,6 +160,8 @@ pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressTransactionError {
     Bridge(RemoteBridgeError),
     /// Existing same-stream capability response I/O failed.
     CapabilityResponse(CapabilityRequestWireError),
+    /// Production durable capability authorization, dispatch or same-stream response failed.
+    ProductionDurableCapability(ProductionDurableCapabilityTransactionError),
     /// Candidate ingress succeeded, but no Agent candidate handoff/execution semantics are selected.
     CandidatePublicationHandoffNotSelected,
 }
@@ -171,6 +174,9 @@ impl fmt::Display for AuthenticatedRemoteSessionPostAuthIngressTransactionError 
             Self::Bridge(_) => "post-authenticated capability bridge transaction failed",
             Self::CapabilityResponse(_) => {
                 "post-authenticated capability response transmission failed"
+            }
+            Self::ProductionDurableCapability(_) => {
+                "production durable capability post-auth transaction failed"
             }
             Self::CandidatePublicationHandoffNotSelected => {
                 "candidate-publication post-authenticated handoff is not selected"
@@ -186,6 +192,7 @@ impl std::error::Error for AuthenticatedRemoteSessionPostAuthIngressTransactionE
             Self::Ingress(error) => Some(error),
             Self::Bridge(error) => Some(error),
             Self::CapabilityResponse(error) => Some(error),
+            Self::ProductionDurableCapability(error) => Some(error),
             Self::CandidatePublicationHandoffNotSelected => None,
         }
     }
@@ -218,6 +225,14 @@ impl From<CapabilityRequestWireError>
 {
     fn from(error: CapabilityRequestWireError) -> Self {
         Self::CapabilityResponse(error)
+    }
+}
+
+impl From<ProductionDurableCapabilityTransactionError>
+    for AuthenticatedRemoteSessionPostAuthIngressTransactionError
+{
+    fn from(error: ProductionDurableCapabilityTransactionError) -> Self {
+        Self::ProductionDurableCapability(error)
     }
 }
 
