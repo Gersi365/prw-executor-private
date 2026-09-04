@@ -128,7 +128,8 @@ impl ProductionDurableCapabilityAuthority {
     ) -> Result<AuthorizedCapabilityRequest, DurableCapabilityBridgeError> {
         {
             let mut registry_custody = self.registry_custody.lock().await;
-            let mut bridge = DurableCapabilityBridge::new(&mut registry_custody.store, &self.policy);
+            let mut bridge =
+                DurableCapabilityBridge::new(&mut registry_custody.store, &self.policy);
             bridge
                 .authorize(
                     presented_transport_identity,
