@@ -120,7 +120,7 @@ impl From<RemoteBridgeError> for AuthenticatedRemoteSessionCapabilityTransaction
 /// durable authority, dispatch and exact same-stream response custody.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum ProductionDurableCapabilityTransactionError {
+pub enum ProductionDurableCapabilityTransactionError {
     /// Current durable capability authorization failed.
     Authority(DurableCapabilityBridgeError),
     /// Dispatch of the successfully authorized request failed.
