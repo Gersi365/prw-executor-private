@@ -157,6 +157,56 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         .await
     }
 
+    /// Repeats the production-durable one-transaction post-authenticated ingress seam serially.
+    ///
+    /// Verifier time is sampled exactly once immediately before each C03e-KM wrapper invocation.
+    /// Capability success alone advances to another iteration. The first requester/rendezvous handoff
+    /// is returned by value, and the first typed ingress failure terminates the loop unchanged.
+    ///
+    /// This loop does not call `accept_control_stream()` or
+    /// `receive_post_auth_control_stream_ingress(...)` directly; those bounded ownership/read actions
+    /// remain exclusively inside the existing C03e-KM one-transaction wrapper. It creates no task,
+    /// queue, retry, reconnect, cancellation race, requester DR work, candidate provider work or
+    /// runtime activation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first exact [`AuthenticatedRemoteSessionPostAuthIngressTransactionError`] emitted
+    /// by the C03e-KM wrapper without suppression, flattening, retry or replacement.
+    #[allow(
+        dead_code,
+        reason = "C03e-KO materializes the KN-selected dormant durable repeated-ingress loop before separately gated cancellation or higher caller integration"
+    )]
+    pub(crate) async fn run_repeated_post_auth_control_stream_ingress_with_production_durable_capability<
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+    >(
+        &mut self,
+        authority: &ProductionDurableCapabilityAuthority,
+        mut verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+    ) -> Result<
+        RequesterRendezvousResponseStreamCustodyHandoff,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        loop {
+            let now_unix_seconds = verifier_time_unix_seconds();
+            match self
+                .process_one_post_auth_control_stream_ingress_with_production_durable_capability(
+                    authority,
+                    now_unix_seconds,
+                    dispatcher,
+                )
+                .await?
+            {
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed => {}
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(handoff) => {
+                    return Ok(*handoff);
+                }
+            }
+        }
+    }
+
     /// Processes exactly one post-authenticated control stream through the C03e-ET family ingress.
     ///
     /// This C03e-EV seam is the single Agent-owned acceptance point for one isolated transaction. It
