@@ -10,8 +10,12 @@
 //!
 //! C03e-KA adds only the C03e-JZ-selected dormant production durable capability-authority custody.
 //! One existing durable-registry runtime custody is shared through one outer `Arc<Mutex<_>>` beside
-//! the fixed fail-closed [`ProductionRemoteCapabilityDenyAllPolicy`]. No authorization method or
-//! durable-bridge invocation is materialized here.
+//! the fixed fail-closed [`ProductionRemoteCapabilityDenyAllPolicy`].
+//!
+//! C03e-KC adds only the C03e-KB-selected dormant authorization invocation seam. It borrows one
+//! existing post-auth capability transaction, acquires the existing durable-registry custody mutex,
+//! invokes the existing provider-aware durable capability bridge exactly once, and releases the guard
+//! before any downstream dispatch or response work.
 //!
 //! This module does not load credentials, bootstrap a provider, expose a generic store/executor
 //! extraction seam, register global state, publish readiness, wire startup, create a background task,
@@ -19,11 +23,16 @@
 
 use std::sync::Arc;
 
-use prw_connectivity::PeerConnectivityIdentity;
+use prw_connectivity::{PeerConnectivityIdentity, TransportIdentity};
 use prw_core::DeviceId;
 use prw_policy::ProductionRemoteCapabilityDenyAllPolicy;
 use prw_registry::durable_registry_etcd_store::{
     DurableRegistryEtcdStore, DurableRegistryEtcdStoreError,
+};
+use prw_remote_bridge::post_auth_control_stream_ingress::PostAuthCapabilityTransaction;
+use prw_remote_bridge::{
+    AuthorizedCapabilityRequest, DurableCapabilityBridge, DurableCapabilityBridgeError,
+    RemoteSessionLease,
 };
 use tokio::sync::Mutex;
 
@@ -72,7 +81,8 @@ impl ProductionDurableRegistryRuntimeCustody {
 ///
 /// The durable-registry runtime custody remains private behind one shared asynchronous mutex. The
 /// policy is the concrete production deny-all baseline and therefore cannot carry positive grants.
-/// This owner performs no authorization itself and exposes no inner-store access seam.
+/// Authorization is exposed only through one operation-specific bridge invocation and no inner-store
+/// access seam is exposed.
 pub struct ProductionDurableCapabilityAuthority {
     registry_custody: Arc<Mutex<ProductionDurableRegistryRuntimeCustody>>,
     policy: ProductionRemoteCapabilityDenyAllPolicy,
@@ -91,6 +101,42 @@ impl ProductionDurableCapabilityAuthority {
         Self {
             registry_custody: Arc::new(Mutex::new(registry_custody)),
             policy: ProductionRemoteCapabilityDenyAllPolicy,
+        }
+    }
+
+    /// Authorizes one already-read post-auth capability transaction through current durable authority.
+    ///
+    /// The exact capability transaction remains owned by the caller and is only borrowed for access
+    /// to its already-received request frame. The presented transport identity is transport evidence,
+    /// the lease is an already-authenticated logical-session lease, and `now_unix_seconds` is
+    /// verifier-owned time. This method does not read another frame, consume same-stream custody,
+    /// duplicate bridge authorization logic, dispatch the authorized request, or write a response.
+    ///
+    /// The durable-registry mutex is held only across the single provider-aware bridge authorization
+    /// transaction and is released before this method returns.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the existing [`DurableCapabilityBridgeError`] unchanged, preserving ordinary bridge
+    /// rejection separately from non-semantic durable-authority failure.
+    pub async fn authorize_capability_transaction(
+        &self,
+        presented_transport_identity: TransportIdentity,
+        lease: &RemoteSessionLease,
+        now_unix_seconds: u64,
+        transaction: &PostAuthCapabilityTransaction,
+    ) -> Result<AuthorizedCapabilityRequest, DurableCapabilityBridgeError> {
+        {
+            let mut registry_custody = self.registry_custody.lock().await;
+            let mut bridge = DurableCapabilityBridge::new(&mut registry_custody.store, &self.policy);
+            bridge
+                .authorize(
+                    presented_transport_identity,
+                    lease,
+                    now_unix_seconds,
+                    transaction.request_frame(),
+                )
+                .await
         }
     }
 }
@@ -132,5 +178,10 @@ mod tests {
     #[test]
     fn capability_authority_custody_is_send_sync() {
         assert_send_sync::<ProductionDurableCapabilityAuthority>();
+    }
+
+    #[test]
+    fn capability_authority_exposes_selected_authorization_method() {
+        let _ = ProductionDurableCapabilityAuthority::authorize_capability_transaction;
     }
 }
