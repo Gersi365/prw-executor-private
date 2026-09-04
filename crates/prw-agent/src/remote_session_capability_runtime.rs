@@ -157,9 +157,7 @@ pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressTransactionError {
     /// C03e-ET one-read ingress or strict requester/rendezvous/candidate wire handling failed.
     Ingress(PostAuthControlStreamIngressError),
     /// Production durable capability authorization, dispatch or exact same-stream response failed.
-    Capability(
-        authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError,
-    ),
+    Capability(authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError),
     /// Candidate ingress succeeded, but no Agent candidate handoff/execution semantics are selected.
     CandidatePublicationHandoffNotSelected,
 }
