@@ -73,7 +73,7 @@ impl ProductionDurableRegistryRuntimeCustody {
 /// The durable-registry runtime custody remains private behind one shared asynchronous mutex. The
 /// policy is the concrete production deny-all baseline and therefore cannot carry positive grants.
 /// This owner performs no authorization itself and exposes no inner-store access seam.
-pub(crate) struct ProductionDurableCapabilityAuthority {
+pub struct ProductionDurableCapabilityAuthority {
     registry_custody: Arc<Mutex<ProductionDurableRegistryRuntimeCustody>>,
     policy: ProductionRemoteCapabilityDenyAllPolicy,
 }
@@ -85,7 +85,7 @@ impl ProductionDurableCapabilityAuthority {
     /// Construction is synchronous and side-effect-free: it performs no lock acquisition, provider
     /// I/O, registry operation, policy lookup, authorization, task spawn or runtime activation.
     #[must_use]
-    pub(crate) fn from_registry_custody(
+    pub fn from_registry_custody(
         registry_custody: ProductionDurableRegistryRuntimeCustody,
     ) -> Self {
         Self {
