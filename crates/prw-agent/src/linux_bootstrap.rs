@@ -61,6 +61,9 @@ pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
 /// Fixed non-secret process configuration name for the production remote peer logical device.
 pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = "PRW_REMOTE_PEER_DEVICE_ID";
 
+/// Fixed non-secret process configuration name for the production remote active-worker bound.
+pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str = "PRW_REMOTE_MAX_ACTIVE_WORKERS";
+
 /// Stable failure while acquiring or validating production remote bind-address configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -185,6 +188,63 @@ fn parse_linux_agent_remote_peer_device_id_value(
 pub fn load_linux_agent_remote_peer_device_id_from_env()
 -> Result<DeviceId, LinuxAgentRemotePeerDeviceSourceError> {
     parse_linux_agent_remote_peer_device_id_value(std::env::var_os(PRW_REMOTE_PEER_DEVICE_ID_ENV))
+}
+
+/// Stable failure while acquiring or validating the production remote active-worker bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LinuxAgentRemoteMaxActiveWorkersSourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured value is not a strictly-positive target-`usize` ASCII decimal integer.
+    InvalidValue,
+}
+
+impl std::fmt::Display for LinuxAgentRemoteMaxActiveWorkersSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "remote max-active-workers configuration missing",
+            Self::NonUnicode => "remote max-active-workers configuration encoding invalid",
+            Self::InvalidValue => "remote max-active-workers configuration invalid",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentRemoteMaxActiveWorkersSourceError {}
+
+fn parse_linux_agent_remote_max_active_workers_value(
+    value: Option<OsString>,
+) -> Result<NonZeroUsize, LinuxAgentRemoteMaxActiveWorkersSourceError> {
+    let value = value.ok_or(LinuxAgentRemoteMaxActiveWorkersSourceError::Missing)?;
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentRemoteMaxActiveWorkersSourceError::NonUnicode)?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue);
+    }
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)?;
+    NonZeroUsize::new(parsed).ok_or(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+}
+
+/// Loads the explicitly configured production remote active-worker bound from the process environment.
+///
+/// The exact Unicode value must contain ASCII decimal digits only and is converted fail-closed into
+/// the existing [`NonZeroUsize`] input domain. This source performs no trimming, normalization,
+/// fallback, retry, alternate-variable lookup, dynamic refresh, or host-derived auto-sizing.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is missing, non-Unicode, empty, malformed, zero, or
+/// out of range for target `usize`. The bounded error surface does not expose the configured value.
+pub fn load_linux_agent_remote_max_active_workers_from_env()
+-> Result<NonZeroUsize, LinuxAgentRemoteMaxActiveWorkersSourceError> {
+    parse_linux_agent_remote_max_active_workers_value(std::env::var_os(
+        PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV,
+    ))
 }
 
 /// Stable high-level terminal class exposed to the Agent binary.
@@ -1456,16 +1516,19 @@ mod tests {
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
         LinuxAgentBootstrapWithRemoteReport,
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
-        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemotePeerDeviceSourceError,
-        LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemoteMaxActiveWorkersSourceError,
+        LinuxAgentRemotePeerDeviceSourceError, LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
         LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
-        PRW_REMOTE_PEER_DEVICE_ID_ENV, finalize_remote_process_companion, initial_runtime_config,
+        PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV,
+        finalize_remote_process_companion, initial_runtime_config,
         linux_agent_production_reachability_remote_process_operation,
         linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
+        load_linux_agent_remote_max_active_workers_from_env,
         load_linux_agent_remote_peer_device_id_from_env, map_lifecycle_start_kind,
         map_remote_shutdown_publish, parse_linux_agent_remote_bind_addr_value,
+        parse_linux_agent_remote_max_active_workers_value,
         parse_linux_agent_remote_peer_device_id_value, run,
         run_remote_process_operation_composition, run_with_remote_process_companion,
     };
@@ -1653,6 +1716,91 @@ mod tests {
         )))
         .expect("non-empty spaced peer device identifier");
         assert_eq!(spaced.as_str(), "  peer-device-1  ");
+    }
+
+    #[test]
+    fn remote_max_active_workers_source_public_reader_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<NonZeroUsize, LinuxAgentRemoteMaxActiveWorkersSourceError>,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(
+            PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV,
+            "PRW_REMOTE_MAX_ACTIVE_WORKERS"
+        );
+        assert_signature(load_linux_agent_remote_max_active_workers_from_env);
+    }
+
+    #[test]
+    fn remote_max_active_workers_source_rejects_missing_empty_and_malformed_values() {
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(None),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::Missing)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::new())),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+        );
+
+        for malformed in [" 1", "1 ", "+1", "-1", "1.0", "1_0", "1e1", "1a"] {
+            assert_eq!(
+                parse_linux_agent_remote_max_active_workers_value(Some(OsString::from(malformed))),
+                Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_max_active_workers_source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from_vec(vec![0xff]))),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::NonUnicode)
+        );
+    }
+
+    #[test]
+    fn remote_max_active_workers_source_rejects_zero_and_target_usize_overflow() {
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from("0"))),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from("0000"))),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+        );
+
+        let overflow = format!("{}0", usize::MAX);
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from(overflow))),
+            Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+        );
+    }
+
+    #[test]
+    fn remote_max_active_workers_source_preserves_positive_magnitude_and_leading_zeroes() {
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from("17")))
+                .expect("positive worker bound")
+                .get(),
+            17
+        );
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from("00017")))
+                .expect("leading-zero positive worker bound")
+                .get(),
+            17
+        );
+        assert_eq!(
+            parse_linux_agent_remote_max_active_workers_value(Some(OsString::from(
+                usize::MAX.to_string(),
+            )))
+            .expect("target-usize maximum is a valid positive worker bound")
+            .get(),
+            usize::MAX
+        );
     }
 
     #[test]
