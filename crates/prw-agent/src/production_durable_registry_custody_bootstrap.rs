@@ -125,7 +125,7 @@ pub async fn bootstrap_production_durable_registry_from_systemd_credentials()
 /// Propagates [`ProductionDurableRegistryCustodyBootstrapError`] unchanged from the existing one-shot
 /// production durable-registry bootstrap. No retry, fallback, synthetic authority or partial custody
 /// is returned.
-pub(crate) async fn bootstrap_production_durable_capability_authority_from_systemd_credentials()
+pub async fn bootstrap_production_durable_capability_authority_from_systemd_credentials()
 -> Result<ProductionDurableCapabilityAuthority, ProductionDurableRegistryCustodyBootstrapError> {
     let store = bootstrap_production_durable_registry_from_systemd_credentials().await?;
     let registry_custody = ProductionDurableRegistryRuntimeCustody::from_store(store);
