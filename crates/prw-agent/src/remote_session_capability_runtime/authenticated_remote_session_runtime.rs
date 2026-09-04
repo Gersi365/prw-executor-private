@@ -5,8 +5,9 @@
 //! post-authentication binding/composition transaction, C03e-O adds exactly one serialized
 //! capability request transaction over the C03e-N bridge-owned wire adapter, C03e-Q adds the
 //! C03e-P-selected borrowed serial request loop, and C03e-S adds the C03e-R-selected executor-neutral
-//! cancellation-aware single-worker seam. It does not spawn tasks, publish readiness, retry/reconnect,
-//! or wire the Agent binary.
+//! cancellation-aware single-worker seam. C03e-KG adds only one dormant production durable
+//! capability transaction composition over an already-read same-stream capability transaction. It
+//! does not spawn tasks, publish readiness, retry/reconnect, or wire the Agent binary.
 
 use std::{
     fmt,
@@ -18,12 +19,13 @@ use std::{
 use prw_core::DeviceId;
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
-    CapabilityBridge, CapabilityDispatcher, RemoteBridgeError,
+    CapabilityBridge, CapabilityDispatcher, DurableCapabilityBridgeError, RemoteBridgeError,
     authorized_request_dispatch::dispatch_authorized_request,
     capability_request_wire::{
         CapabilityRequestWireError, receive_capability_request_frame,
         send_capability_response_frame,
     },
+    post_auth_control_stream_ingress::PostAuthCapabilityTransaction,
     remote_server_transport_runtime::{
         AuthenticatedRemotePeerConnection, RemoteServerTransportRuntimeError,
     },
@@ -42,6 +44,7 @@ use crate::{
         },
         policy_source::RequesterRendezvousStartPolicySource,
     },
+    production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
 };
 
 #[allow(
@@ -110,6 +113,57 @@ impl From<CapabilityRequestWireError> for AuthenticatedRemoteSessionCapabilityTr
 impl From<RemoteBridgeError> for AuthenticatedRemoteSessionCapabilityTransactionError {
     fn from(error: RemoteBridgeError) -> Self {
         Self::Bridge(error)
+    }
+}
+
+/// Bounded failure while composing one already-read capability transaction through production
+/// durable authority, dispatch and exact same-stream response custody.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(crate) enum ProductionDurableCapabilityTransactionError {
+    /// Current durable capability authorization failed.
+    Authority(DurableCapabilityBridgeError),
+    /// Dispatch of the successfully authorized request failed.
+    Dispatch(RemoteBridgeError),
+    /// Sending the already-constructed response on the retained stream failed.
+    Response(CapabilityRequestWireError),
+}
+
+impl fmt::Display for ProductionDurableCapabilityTransactionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Authority(_) => "production durable capability authorization failed",
+            Self::Dispatch(_) => "production durable capability dispatch failed",
+            Self::Response(_) => "production durable capability response transmission failed",
+        })
+    }
+}
+
+impl std::error::Error for ProductionDurableCapabilityTransactionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Authority(error) => Some(error),
+            Self::Dispatch(error) => Some(error),
+            Self::Response(error) => Some(error),
+        }
+    }
+}
+
+impl From<DurableCapabilityBridgeError> for ProductionDurableCapabilityTransactionError {
+    fn from(error: DurableCapabilityBridgeError) -> Self {
+        Self::Authority(error)
+    }
+}
+
+impl From<RemoteBridgeError> for ProductionDurableCapabilityTransactionError {
+    fn from(error: RemoteBridgeError) -> Self {
+        Self::Dispatch(error)
+    }
+}
+
+impl From<CapabilityRequestWireError> for ProductionDurableCapabilityTransactionError {
+    fn from(error: CapabilityRequestWireError) -> Self {
+        Self::Response(error)
     }
 }
 
@@ -239,6 +293,52 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
                 )
             })
             .await
+    }
+
+    /// Processes one already-read same-stream capability transaction through production durable
+    /// authority, dispatch and response composition.
+    ///
+    /// Presented transport evidence and the authenticated lease are sourced only from the exact
+    /// retained [`BoundRemoteSession`]. The caller supplies verifier time, a dispatcher, the dormant
+    /// production durable authority, and ownership of one already-read [`PostAuthCapabilityTransaction`].
+    /// No stream is accepted and no second frame is read.
+    ///
+    /// Durable authorization completes before dispatch begins. The existing durable-authority method
+    /// releases its registry mutex before it returns, so neither dispatcher execution nor response
+    /// I/O occurs while durable-registry custody is locked. Only successful authorization reaches
+    /// dispatch, and only successful dispatch consumes the exact transaction to send one response on
+    /// the retained stream.
+    ///
+    /// # Errors
+    ///
+    /// Preserves durable-authority, dispatch and same-stream response failures under the exact bounded
+    /// [`ProductionDurableCapabilityTransactionError`] stage. No retry, fallback, alternate stream,
+    /// fabricated negative response, degraded authority or whole-peer close is performed.
+    #[allow(
+        dead_code,
+        reason = "C03e-KG materializes the KF-selected durable post-auth transaction seam before separately gated runtime caller migration"
+    )]
+    pub(crate) async fn process_production_durable_capability_transaction<
+        D: CapabilityDispatcher + Send,
+    >(
+        &self,
+        authority: &ProductionDurableCapabilityAuthority,
+        now_unix_seconds: u64,
+        dispatcher: &mut D,
+        transaction: PostAuthCapabilityTransaction,
+    ) -> Result<(), ProductionDurableCapabilityTransactionError> {
+        let bound_session = &self.capability_owner.bound_session;
+        let authorized = authority
+            .authorize_capability_transaction(
+                bound_session.transport_identity(),
+                bound_session.lease(),
+                now_unix_seconds,
+                &transaction,
+            )
+            .await?;
+        let response = dispatch_authorized_request(&authorized, dispatcher)?;
+        transaction.send_response_frame(&response).await?;
+        Ok(())
     }
 
     /// Processes exactly one capability request on exactly one newly accepted control stream.
@@ -446,17 +546,20 @@ pub fn compose_authenticated_remote_session(
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Range;
+    use std::{error::Error, ops::Range};
 
     use prw_core::DeviceId;
     use prw_remote_bridge::{
-        RemoteBridgeError, remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
+        DurableCapabilityBridgeError, RemoteBridgeError,
+        capability_request_wire::CapabilityRequestWireError,
+        remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
     };
     use prw_session::AuthenticatedDeviceSession;
 
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
         AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
+        ProductionDurableCapabilityTransactionError,
         REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
@@ -509,6 +612,24 @@ mod tests {
         let _ = adaptation;
     }
 
+    fn assert_durable_authority_error_conversion(
+        conversion: fn(DurableCapabilityBridgeError) -> ProductionDurableCapabilityTransactionError,
+    ) {
+        let _ = conversion;
+    }
+
+    fn assert_durable_dispatch_error_conversion(
+        conversion: fn(RemoteBridgeError) -> ProductionDurableCapabilityTransactionError,
+    ) {
+        let _ = conversion;
+    }
+
+    fn assert_durable_response_error_conversion(
+        conversion: fn(CapabilityRequestWireError) -> ProductionDurableCapabilityTransactionError,
+    ) {
+        let _ = conversion;
+    }
+
     #[test]
     fn outer_owner_consumes_exact_peer_and_capability_owner_shape() {
         assert_constructor_signature(AuthenticatedRemoteSessionRuntimeOwner::new);
@@ -531,6 +652,26 @@ mod tests {
         assert_requester_rendezvous_target_intent_adaptation_signature(
             AuthenticatedRemoteSessionRuntimeOwner::requester_rendezvous_start_intent_from_target_intent,
         );
+    }
+
+    #[test]
+    fn durable_transaction_error_preserves_selected_stage_conversions() {
+        assert_durable_authority_error_conversion(ProductionDurableCapabilityTransactionError::from);
+        assert_durable_dispatch_error_conversion(ProductionDurableCapabilityTransactionError::from);
+        assert_durable_response_error_conversion(ProductionDurableCapabilityTransactionError::from);
+    }
+
+    #[test]
+    fn durable_transaction_error_display_and_source_are_stage_bounded() {
+        let inner = RemoteBridgeError::SessionExpired;
+        let error = ProductionDurableCapabilityTransactionError::from(inner);
+
+        assert_eq!(
+            error.to_string(),
+            "production durable capability dispatch failed"
+        );
+        assert!(error.source().is_some());
+        assert_eq!(error, ProductionDurableCapabilityTransactionError::Dispatch(inner));
     }
 
     #[test]
