@@ -10,6 +10,12 @@
 //! the bounded executor in the existing semantic store. It performs no registry semantic operation,
 //! creates no retry/fallback/runtime task, wires no startup/readiness callsite, deploys nothing, and
 //! creates or mutates no production registry record.
+//!
+//! C03e-KE adds only the C03e-KD-selected production durable capability-authority population
+//! composition. It performs the existing durable-registry bootstrap exactly once and then applies the
+//! existing infallible runtime-custody and deny-all capability-authority ownership adaptations. It
+//! performs no registry semantic read, mutex acquisition, authorization, policy evaluation, runtime
+//! activation or executable wiring.
 
 use std::fmt;
 
@@ -21,6 +27,10 @@ use prw_reachability_custody::durable_registry_custody::{
     load_durable_registry_production_etcd_bootstrap_config_from_systemd_credentials,
 };
 use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore;
+
+use crate::production_durable_registry_runtime_custody::{
+    ProductionDurableCapabilityAuthority, ProductionDurableRegistryRuntimeCustody,
+};
 
 /// Bounded Agent-level failure while joining durable-registry custody to provider composition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +108,32 @@ pub async fn bootstrap_production_durable_registry_from_systemd_credentials()
     Ok(DurableRegistryEtcdStore::new(executor))
 }
 
+/// Populates one dormant production durable capability authority from the fixed production
+/// durable-registry systemd custody/provider bootstrap.
+///
+/// The existing durable-registry bootstrap is awaited exactly once. On success, the returned semantic
+/// store is consumed exactly once into [`ProductionDurableRegistryRuntimeCustody`] and that custody is
+/// then consumed exactly once into [`ProductionDurableCapabilityAuthority`]. The authority retains the
+/// existing production deny-all policy baseline through its existing constructor.
+///
+/// Population performs no registry semantic read, mutex acquisition, session or transport validation,
+/// policy evaluation, authorization, request decoding, dispatcher invocation, response I/O, task
+/// spawn, readiness publication or runtime/network activation.
+///
+/// # Errors
+///
+/// Propagates [`ProductionDurableRegistryCustodyBootstrapError`] unchanged from the existing one-shot
+/// production durable-registry bootstrap. No retry, fallback, synthetic authority or partial custody
+/// is returned.
+pub async fn bootstrap_production_durable_capability_authority_from_systemd_credentials()
+-> Result<ProductionDurableCapabilityAuthority, ProductionDurableRegistryCustodyBootstrapError> {
+    let store = bootstrap_production_durable_registry_from_systemd_credentials().await?;
+    let registry_custody = ProductionDurableRegistryRuntimeCustody::from_store(store);
+    Ok(ProductionDurableCapabilityAuthority::from_registry_custody(
+        registry_custody,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{error::Error, future::Future};
@@ -108,8 +144,10 @@ mod tests {
 
     use super::{
         ProductionDurableRegistryCustodyBootstrapError,
+        bootstrap_production_durable_capability_authority_from_systemd_credentials,
         bootstrap_production_durable_registry_from_systemd_credentials,
     };
+    use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 
     fn assert_bootstrap_signature() {
         fn assert_future<F>(_future: F)
@@ -126,9 +164,29 @@ mod tests {
         assert_future(bootstrap_production_durable_registry_from_systemd_credentials());
     }
 
+    fn assert_capability_authority_bootstrap_signature() {
+        fn assert_future<F>(_future: F)
+        where
+            F: Future<
+                Output = Result<
+                    ProductionDurableCapabilityAuthority,
+                    ProductionDurableRegistryCustodyBootstrapError,
+                >,
+            >,
+        {
+        }
+
+        assert_future(bootstrap_production_durable_capability_authority_from_systemd_credentials());
+    }
+
     #[test]
     fn production_registry_custody_bootstrap_has_zero_argument_store_return_shape() {
         let _ = assert_bootstrap_signature as fn();
+    }
+
+    #[test]
+    fn production_capability_authority_bootstrap_has_selected_zero_argument_return_shape() {
+        let _ = assert_capability_authority_bootstrap_signature as fn();
     }
 
     #[test]
