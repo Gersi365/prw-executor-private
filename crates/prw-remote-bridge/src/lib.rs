@@ -825,8 +825,8 @@ impl<'a, P: PolicyEvaluator> DurableCapabilityBridge<'a, P> {
             )
             .await
             .map_err(map_durable_capability_authority_error)?;
-        let command = BridgeCommand::decode(frame.payload())
-            .map_err(DurableCapabilityBridgeError::Bridge)?;
+        let command =
+            BridgeCommand::decode(frame.payload()).map_err(DurableCapabilityBridgeError::Bridge)?;
         let capability = command.required_capability();
         if self.policy.evaluate(capability) != Decision::Allow {
             return Err(DurableCapabilityBridgeError::Bridge(
