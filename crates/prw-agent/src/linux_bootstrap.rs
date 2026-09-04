@@ -1901,7 +1901,8 @@ mod tests {
         fn assert_worker_source_conversion(
             convert: fn(
                 LinuxAgentRemoteMaxActiveWorkersSourceError,
-            ) -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
+            )
+                -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
         ) {
             let _ = convert;
         }
@@ -1909,7 +1910,8 @@ mod tests {
         fn assert_bind_source_conversion(
             convert: fn(
                 LinuxAgentRemoteBindAddressSourceError,
-            ) -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
+            )
+                -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
         ) {
             let _ = convert;
         }
