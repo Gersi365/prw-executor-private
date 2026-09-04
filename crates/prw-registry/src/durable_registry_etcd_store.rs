@@ -422,6 +422,35 @@ impl DurableRegistryEtcdStore {
         &mut self,
         session: &AuthenticatedDeviceSession,
     ) -> Result<RegistryValidatedPrincipal, DurableRegistryEtcdStoreError> {
+        self.validate_authenticated_session_snapshot(session)
+            .await
+            .map(|(principal, _device)| principal)
+    }
+
+    /// Revalidates one authenticated session and its presented transport identity against the same
+    /// transactional membership/device snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Preserves Phase 130 session-validation precedence, then rejects an absent, stale, mismatched
+    /// or revoked transport identity from the already-decoded current device record. Provider and
+    /// canonical-authority failures remain distinct from semantic rejection.
+    pub async fn validate_authenticated_session_and_transport_identity(
+        &mut self,
+        session: &AuthenticatedDeviceSession,
+        presented: TransportIdentity,
+    ) -> Result<RegistryValidatedPrincipal, DurableRegistryEtcdStoreError> {
+        let (principal, device) = self
+            .validate_authenticated_session_snapshot(session)
+            .await?;
+        validate_presented_transport_from_device(&device, presented)?;
+        Ok(principal)
+    }
+
+    async fn validate_authenticated_session_snapshot(
+        &mut self,
+        session: &AuthenticatedDeviceSession,
+    ) -> Result<(RegistryValidatedPrincipal, RegisteredDevice), DurableRegistryEtcdStoreError> {
         let membership_key = encode_membership_key(session.workspace_id(), session.user_id())
             .map_err(|_| DurableRegistryEtcdStoreError::InvalidAuthority)?;
         let device_key = encode_device_key(session.device_id())
@@ -453,14 +482,15 @@ impl DurableRegistryEtcdStore {
             }
             None => return Err(semantic(RegistryError::DeviceUnknown)),
         };
-        validate_session_records(
+        let principal = validate_session_records(
             session.workspace_id(),
             session.user_id(),
             session.device_id(),
             session.public_identity(),
             &membership,
             &device,
-        )
+        )?;
+        Ok((principal, device))
     }
 
     async fn load_membership_observation(
@@ -719,6 +749,17 @@ fn current_transport_from_device(
     device
         .transport_identity()
         .ok_or_else(|| semantic(RegistryError::TransportIdentityMissing))
+}
+
+fn validate_presented_transport_from_device(
+    device: &RegisteredDevice,
+    presented: TransportIdentity,
+) -> Result<(), DurableRegistryEtcdStoreError> {
+    let current = current_transport_from_device(device)?;
+    if current != presented {
+        return Err(semantic(RegistryError::TransportIdentityMismatch));
+    }
+    Ok(())
 }
 
 fn classify_membership_update_result(
@@ -1165,6 +1206,28 @@ mod tests {
         assert_eq!(
             current_transport_from_device(&registered(DeviceLifecycle::Revoked, Some(bound), 1)),
             Err(semantic(RegistryError::DeviceRevoked))
+        );
+    }
+
+    #[test]
+    fn presented_transport_validation_uses_exact_current_device_record() {
+        let current = TransportIdentity::new([9; 32]).expect("current");
+        let stale = TransportIdentity::new([10; 32]).expect("stale");
+        let device = registered(DeviceLifecycle::Enrolled, Some(current), 1);
+        assert_eq!(
+            validate_presented_transport_from_device(&device, current),
+            Ok(())
+        );
+        assert_eq!(
+            validate_presented_transport_from_device(&device, stale),
+            Err(semantic(RegistryError::TransportIdentityMismatch))
+        );
+        assert_eq!(
+            validate_presented_transport_from_device(
+                &registered(DeviceLifecycle::Enrolled, None, 1),
+                current,
+            ),
+            Err(semantic(RegistryError::TransportIdentityMissing))
         );
     }
 
