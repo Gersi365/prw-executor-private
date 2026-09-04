@@ -894,6 +894,105 @@ pub(crate) async fn linux_agent_production_reachability_remote_process_operation
     )
 }
 
+/// Bounded Agent-local failure while composing production remote-process and peer input population.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinuxAgentProductionReachabilityRemoteProcessInputPopulationError {
+    /// Existing production worker-limit and bind-address input population failed.
+    RemoteProcessInputs(LinuxAgentProductionRemoteProcessInputPopulationError),
+    /// Existing production peer input population failed after remote-process inputs were built.
+    PeerInput(LinuxAgentProductionPeerInputPopulationError),
+}
+
+impl std::fmt::Display for LinuxAgentProductionReachabilityRemoteProcessInputPopulationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::RemoteProcessInputs(_) => "production remote-process input population failed",
+            Self::PeerInput(_) => "production peer input population failed",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentProductionReachabilityRemoteProcessInputPopulationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::RemoteProcessInputs(error) => Some(error),
+            Self::PeerInput(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentProductionRemoteProcessInputPopulationError>
+    for LinuxAgentProductionReachabilityRemoteProcessInputPopulationError
+{
+    fn from(error: LinuxAgentProductionRemoteProcessInputPopulationError) -> Self {
+        Self::RemoteProcessInputs(error)
+    }
+}
+
+impl From<LinuxAgentProductionPeerInputPopulationError>
+    for LinuxAgentProductionReachabilityRemoteProcessInputPopulationError
+{
+    fn from(error: LinuxAgentProductionPeerInputPopulationError) -> Self {
+        Self::PeerInput(error)
+    }
+}
+
+/// Composes the existing production worker-limit/bind and peer input-population stages.
+///
+/// The helper first builds the existing remote-process inputs from the fixed worker-limit and bind
+/// sources. Only after that succeeds does it invoke the existing peer population helper. The exact
+/// remote-process owner is moved unchanged into the peer stage. No source logic is duplicated and no
+/// operation factory, requester/rendezvous custody, runtime, listener or network lifecycle is invoked.
+///
+/// # Errors
+///
+/// Fails closed with the exact underlying remote-process or peer population error preserved through
+/// the bounded two-stage composite error. No retry, fallback, alternate peer/source or degraded
+/// partial owner is produced.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-JR materializes the JQ-selected production reachability input population composition before separately gated remaining production provenance"
+)]
+pub(crate) async fn linux_agent_production_reachability_remote_process_operation_inputs_from_production_worker_limit_and_peer<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    capability_authority: SharedCurrentCapabilityAuthority<P>,
+    session_authentication: SessionAuthenticationService,
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    LinuxAgentProductionReachabilityRemoteProcessInputPopulationError,
+> {
+    let remote_process_inputs =
+        linux_agent_remote_process_operation_inputs_from_production_worker_limit(
+            capability_authority,
+            session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )?;
+    let production_inputs =
+        linux_agent_production_reachability_remote_process_operation_inputs_from_production_peer(
+            remote_process_inputs,
+        )
+        .await?;
+    Ok(production_inputs)
+}
+
 /// Builds one side-effect-free injected remote operation compatible with the AX bootstrap facade.
 ///
 /// Factory construction performs ownership composition only. Remote credential/provider I/O and
