@@ -49,6 +49,21 @@ pub trait PolicyEvaluator {
     fn evaluate(&self, capability: Capability) -> Decision;
 }
 
+/// Production-safe remote capability baseline that grants no capability.
+///
+/// This type has no external policy source or mutable grant state. It exists so
+/// production durable capability-authority composition can remain explicitly
+/// fail-closed until an allow-bearing production policy source is separately
+/// selected and reviewed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProductionRemoteCapabilityDenyAllPolicy;
+
+impl PolicyEvaluator for ProductionRemoteCapabilityDenyAllPolicy {
+    fn evaluate(&self, _capability: Capability) -> Decision {
+        Decision::Deny
+    }
+}
+
 /// Fixed, bounded local policy for the initial read-only Agent command surface.
 ///
 /// Evaluation is entirely in-memory and covers exactly the two currently
@@ -191,7 +206,7 @@ impl PolicyEvaluator for BoundedLocalManagementPolicy {
 mod tests {
     use super::{
         BoundedLocalManagementDecisions, BoundedLocalManagementPolicy, BoundedLocalReadPolicy,
-        Capability, Decision, PolicyEvaluator,
+        Capability, Decision, PolicyEvaluator, ProductionRemoteCapabilityDenyAllPolicy,
     };
 
     struct DenyAll;
@@ -206,6 +221,37 @@ mod tests {
     fn evaluator_can_deny_capability() {
         let evaluator = DenyAll;
         assert_eq!(evaluator.evaluate(Capability::FilesDelete), Decision::Deny);
+    }
+
+    #[test]
+    fn production_remote_policy_denies_every_represented_capability() {
+        let policy = ProductionRemoteCapabilityDenyAllPolicy;
+
+        for capability in [
+            Capability::AgentStatusRead,
+            Capability::PrivateDnsConfigRead,
+            Capability::TerminalOpen,
+            Capability::TerminalExec,
+            Capability::FilesRead,
+            Capability::FilesWrite,
+            Capability::FilesDelete,
+            Capability::ForwardingCreate,
+            Capability::RequesterRendezvousStart,
+            Capability::DeviceManage,
+            Capability::PolicyManage,
+        ] {
+            assert_eq!(policy.evaluate(capability), Decision::Deny);
+        }
+    }
+
+    #[test]
+    fn production_remote_policy_is_copy_send_sync_and_zero_source() {
+        fn assert_copy_send_sync<T: Copy + Send + Sync>() {}
+        assert_copy_send_sync::<ProductionRemoteCapabilityDenyAllPolicy>();
+
+        let first = ProductionRemoteCapabilityDenyAllPolicy;
+        let second = ProductionRemoteCapabilityDenyAllPolicy;
+        assert_eq!(first, second);
     }
 
     #[test]
