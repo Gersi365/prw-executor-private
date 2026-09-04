@@ -9,30 +9,32 @@
 //! through the ET -> EV -> EX handoff while keeping the continuation uninvoked. C03e-GE adds only an
 //! explicit fail-closed compatibility arm when current-Mesh candidate publication reaches this
 //! still-dormant Agent transaction before any candidate handoff/execution semantics have been selected.
-//! The existing capability loop and worker do not invoke these seams. None of these seams activates
-//! requester/candidate authority/provider execution, candidate or requester response semantics, retry,
-//! peer-close policy, dialing, readiness publication, or runtime activation.
+//! C03e-KI migrates only the dormant capability arm and its compiler-coupled repeated loop/worker to
+//! borrowed production durable capability authority through the already-materialized KG helper. The
+//! requester/rendezvous and candidate-publication arms remain semantically unchanged. None of these
+//! seams activates requester/candidate authority/provider execution, candidate or requester response
+//! semantics, retry, peer-close policy, dialing, readiness publication, or runtime activation.
 
 use std::{
     future::{Future, poll_fn},
     task::Poll,
 };
 
-use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::{
-    CapabilityBridge, CapabilityDispatcher,
-    authorized_request_dispatch::dispatch_authorized_request,
+    CapabilityDispatcher,
     post_auth_control_stream_ingress::{
         PostAuthControlStreamIngress, receive_post_auth_control_stream_ingress,
     },
     requester_rendezvous_target_request_io::receive_requester_rendezvous_target_request,
 };
 
+use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
+
 use super::super::{
     AuthenticatedRemoteSessionPostAuthIngressOutcome,
     AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     RequesterRendezvousCorrelatedStartIntent, RequesterRendezvousOneShotTransactionError,
-    RequesterRendezvousResponseStreamCustodyHandoff, SharedCurrentCapabilityAuthority,
+    RequesterRendezvousResponseStreamCustodyHandoff,
     adapt_decoded_requester_rendezvous_target_device_id,
     adapt_post_auth_requester_rendezvous_target_intent,
 };
@@ -50,10 +52,12 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// value into `receive_post_auth_control_stream_ingress(...)`, which performs exactly one bounded
     /// PRWM frame read and typed family classification.
     ///
-    /// Capability-family processing reuses the exact already-read frame, the existing bound-session
-    /// registry/policy authorization path, the existing authorized dispatcher, and the exact same
-    /// stream retained by the bridge custody envelope for response I/O. No request re-read or stream
-    /// replacement occurs.
+    /// Capability-family processing transfers the exact already-read transaction by value into the
+    /// existing C03e-KG production durable capability helper. That helper derives presented transport
+    /// identity and lease only from this owner's retained bound session, completes durable authority
+    /// before dispatch, and sends the successful response on the exact same retained stream. No
+    /// request re-read, stream replacement, legacy shared-current fallback, or caller-selected
+    /// transport/lease evidence occurs.
     ///
     /// Requester/rendezvous-family processing keeps the strict decoded request together with the exact
     /// same ET stream, reads the nominated logical target only from that request, composes it through
@@ -76,8 +80,8 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// # Errors
     ///
     /// Preserves distinguishable failure classes for one authenticated stream accept, strict typed
-    /// ingress, existing capability authorization/dispatch, same-stream capability response I/O, and
-    /// the explicit unselected candidate-publication higher-owner handoff barrier. No failure is
+    /// ingress, the complete nested KG durable authority/dispatch/same-stream response stages, and the
+    /// explicit unselected candidate-publication higher-owner handoff barrier. No failure is
     /// translated into fabricated success or a requester/candidate response frame.
     #[allow(
         dead_code,
@@ -85,11 +89,10 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         reason = "C03e-EV intentionally preserves the C03e-EU-selected exclusive mutable-owner transaction custody before separately gated combined-loop integration"
     )]
     pub(crate) async fn process_one_post_auth_control_stream_ingress<
-        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
     >(
         &mut self,
-        authority: &SharedCurrentCapabilityAuthority<P>,
+        authority: &ProductionDurableCapabilityAuthority,
         now_unix_seconds: u64,
         dispatcher: &mut D,
     ) -> Result<
@@ -101,19 +104,13 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
 
         match ingress {
             PostAuthControlStreamIngress::Capability(transaction) => {
-                let bound_session = &self.capability_owner.bound_session;
-                let authorized = authority
-                    .with_current_authority(|registry, policy| {
-                        let bridge = CapabilityBridge::new(registry, policy);
-                        bound_session.authorize(
-                            &bridge,
-                            now_unix_seconds,
-                            transaction.request_frame(),
-                        )
-                    })
-                    .await?;
-                let response = dispatch_authorized_request(&authorized, dispatcher)?;
-                transaction.send_response_frame(&response).await?;
+                self.process_production_durable_capability_transaction(
+                    authority,
+                    now_unix_seconds,
+                    dispatcher,
+                    transaction,
+                )
+                .await?;
                 Ok(AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed)
             }
             PostAuthControlStreamIngress::RequesterRendezvous(transaction) => {
@@ -141,10 +138,11 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     ///
     /// Exactly one C03e-EV transaction is in flight per iteration. Verifier time is sampled once
     /// immediately before each EV invocation. Capability success is the only outcome that reaches the
-    /// next iteration. One requester/rendezvous result is a typed C03e-EZ handoff barrier retaining
-    /// the strict request, exact response stream and session-derived start intent without accepting
-    /// another stream. The first EV transaction failure — including the explicit GE unselected
-    /// candidate-publication handoff barrier — terminates the loop unchanged.
+    /// next iteration. The same borrowed production durable capability authority is propagated to EV
+    /// without reconstruction. One requester/rendezvous result is a typed C03e-EZ handoff barrier
+    /// retaining the strict request, exact response stream and session-derived start intent without
+    /// accepting another stream. The first EV transaction failure — including the explicit GE
+    /// unselected candidate-publication handoff barrier — terminates the loop unchanged.
     ///
     /// This method never calls `accept_control_stream()` directly and never invokes the historical
     /// capability-only `process_one_capability_request(...)` path. It therefore introduces no second
@@ -161,12 +159,11 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         reason = "C03e-EX materializes the isolated EW-selected repeated ingress loop before separately gated runtime integration"
     )]
     pub(crate) async fn run_repeated_post_auth_control_stream_ingress<
-        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
         T: FnMut() -> u64 + Send,
     >(
         &mut self,
-        authority: &SharedCurrentCapabilityAuthority<P>,
+        authority: &ProductionDurableCapabilityAuthority,
         mut verifier_time_unix_seconds: T,
         dispatcher: &mut D,
     ) -> Result<
@@ -194,7 +191,8 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Runs one executor-neutral cancellation-aware C03e-EX worker body without spawning a task.
     ///
     /// The worker owns exactly one repeated C03e-EX loop future and one caller-supplied cancellation
-    /// future. The loop is polled first on each wake so an already-ready requester handoff or EV
+    /// future. The same borrowed production durable capability authority is propagated unchanged into
+    /// that loop. The loop is polled first on each wake so an already-ready requester handoff or EV
     /// failure retains its exact classification. Cancellation wins only while the repeated loop is
     /// pending. The in-flight loop future is dropped when the lexical race block exits before the
     /// cancellation result leaves this method, releasing the exclusive mutable owner borrow first.
@@ -218,13 +216,12 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         reason = "C03e-EX materializes the isolated EW-selected executor-neutral worker before separately gated runtime integration"
     )]
     pub(crate) async fn run_repeated_post_auth_control_stream_ingress_worker<
-        P: PolicyEvaluator + Send + Sync,
         D: CapabilityDispatcher + Send,
         T: FnMut() -> u64 + Send,
         C: Future<Output = ()> + Send,
     >(
         &mut self,
-        authority: &SharedCurrentCapabilityAuthority<P>,
+        authority: &ProductionDurableCapabilityAuthority,
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
