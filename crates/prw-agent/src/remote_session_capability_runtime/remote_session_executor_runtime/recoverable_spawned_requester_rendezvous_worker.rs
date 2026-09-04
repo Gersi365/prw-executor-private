@@ -21,12 +21,14 @@ use super::{
 };
 use crate::{
     candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
+    production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
     remote_session_capability_runtime::{
         AuthenticatedRemoteSessionRuntimeOwner, SharedCurrentCapabilityAuthority,
         SharedRequesterRendezvousAuthority,
         requester_rendezvous_retained_custody_dr_continuation::{
             RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
+            run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability,
         },
     },
 };
@@ -302,6 +304,83 @@ impl RemoteSessionExecutorRuntime {
                     run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker(
                         session_owner,
                         &authority,
+                        policy_source.as_ref(),
+                        &requester_rendezvous_authority,
+                        verifier_time_unix_seconds,
+                        &mut dispatcher,
+                        cancellation,
+                    )
+                    .await;
+                drop(session_owner_guard);
+                result
+            });
+
+            join_and_recover_owned_value(session_owner_cell, worker_handle).await
+        });
+
+        RecoverableSpawnedRequesterRendezvousWorkerCompletion {
+            session_owner,
+            result,
+        }
+    }
+
+    /// Spawns and joins exactly one requester-aware KS durable-capability worker while preserving
+    /// recoverable peer custody and keeping durable-capability authority distinct from requester DR.
+    ///
+    /// One caller-owned outer `Arc<ProductionDurableCapabilityAuthority>` moves by value into the
+    /// bounded `'static` task. Inside that task only an ordinary borrow of the same authority reaches
+    /// the existing KS FI worker. The authority type itself is not cloned or widened, and the
+    /// existing shared-current authority remains reserved for requester DR continuation.
+    ///
+    /// Authenticated-session owner-cell recovery, requester/rendezvous authority sharing, dispatcher
+    /// ownership, verifier-time provider ownership, cancellation transfer and join classification
+    /// remain identical to the existing recoverable FQ seam. This method is dormant until a separately
+    /// gated higher-owner/FU integration is selected.
+    #[allow(
+        dead_code,
+        reason = "C03e-KU materializes the KT-selected dormant production-durable recoverable spawned requester-aware worker seam before separately gated FU propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        clippy::too_many_arguments,
+        reason = "C03e-KU preserves distinct durable-capability and requester-DR authority lanes without introducing an aggregate runtime context"
+    )]
+    pub(super) fn drive_recoverable_spawned_requester_rendezvous_worker_with_production_durable_capability<
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        S: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        C: Future<Output = ()> + Send + 'static,
+    >(
+        &mut self,
+        session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+        policy_source: Arc<S>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        verifier_time_unix_seconds: T,
+        dispatcher: D,
+        cancellation: C,
+    ) -> RecoverableSpawnedRequesterRendezvousWorkerCompletion {
+        let requester_dr_authority = (*requester_dr_authority).clone();
+        let requester_rendezvous_authority = requester_rendezvous_authority.clone();
+        let session_owner_cell: RecoverableAuthenticatedSessionOwnerCell =
+            Arc::new(Mutex::new(Some(session_owner)));
+        let worker_session_owner_cell = Arc::clone(&session_owner_cell);
+
+        let (session_owner, result) = self.runtime.block_on(async move {
+            let worker_handle = tokio::spawn(async move {
+                let mut session_owner_guard = worker_session_owner_cell.lock().await;
+                let session_owner = session_owner_guard
+                    .as_mut()
+                    .expect("spawned KS worker must borrow retained authenticated-session owner");
+                let mut dispatcher = dispatcher;
+
+                let result =
+                    run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability(
+                        session_owner,
+                        capability_authority.as_ref(),
+                        &requester_dr_authority,
                         policy_source.as_ref(),
                         &requester_rendezvous_authority,
                         verifier_time_unix_seconds,
