@@ -426,6 +426,10 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     dead_code,
     reason = "C03e-KS materializes the KR-selected dormant dual-authority FI worker before separately gated FQ/FU ownership propagation"
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "KR keeps durable capability ingress authority and requester DR authority as explicit distinct inputs"
+)]
 pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability<
     P: PolicyEvaluator + Send + Sync,
     D: CapabilityDispatcher + Send,
@@ -567,7 +571,7 @@ mod tests {
             RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
         );
         assert_requester_response_lifecycle_error_conversion(
-            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::from,
+            RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
         );
     }
 
