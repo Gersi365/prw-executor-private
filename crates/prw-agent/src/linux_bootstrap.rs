@@ -660,6 +660,99 @@ pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_bind_a
     ))
 }
 
+/// Bounded Agent-local failure while populating production worker-limit and bind-address inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinuxAgentProductionRemoteProcessInputPopulationError {
+    /// The fixed production worker-limit source failed before bind-address acquisition.
+    WorkerLimitSource(LinuxAgentRemoteMaxActiveWorkersSourceError),
+    /// The existing production bind-address source failed after worker-limit acquisition.
+    BindAddressSource(LinuxAgentRemoteBindAddressSourceError),
+}
+
+impl std::fmt::Display for LinuxAgentProductionRemoteProcessInputPopulationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::WorkerLimitSource(_) => "production worker-limit source failed",
+            Self::BindAddressSource(_) => "production bind-address source failed",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentProductionRemoteProcessInputPopulationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::WorkerLimitSource(error) => Some(error),
+            Self::BindAddressSource(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentRemoteMaxActiveWorkersSourceError>
+    for LinuxAgentProductionRemoteProcessInputPopulationError
+{
+    fn from(error: LinuxAgentRemoteMaxActiveWorkersSourceError) -> Self {
+        Self::WorkerLimitSource(error)
+    }
+}
+
+impl From<LinuxAgentRemoteBindAddressSourceError>
+    for LinuxAgentProductionRemoteProcessInputPopulationError
+{
+    fn from(error: LinuxAgentRemoteBindAddressSourceError) -> Self {
+        Self::BindAddressSource(error)
+    }
+}
+
+/// Populates the existing remote-process owner from production worker-limit and bind sources.
+///
+/// The helper loads the fixed worker limit exactly once, then delegates exactly once to the existing
+/// bind-address population helper with that exact `NonZeroUsize`. All remaining typed inputs move
+/// unchanged. It performs no peer lookup, operation construction, runtime activation or fallback.
+///
+/// # Errors
+///
+/// Fails closed on worker-limit source failure before bind-address acquisition, or on the existing
+/// bind-address source failure after worker-limit acquisition. The bounded stage error preserves the
+/// exact underlying source error without exposing configured values.
+#[allow(
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-JP materializes the JO-selected production worker-limit input population before separately gated remaining production provenance"
+)]
+pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_worker_limit<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    capability_authority: SharedCurrentCapabilityAuthority<P>,
+    session_authentication: SessionAuthenticationService,
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    LinuxAgentProductionRemoteProcessInputPopulationError,
+> {
+    let max_active_workers = load_linux_agent_remote_max_active_workers_from_env()?;
+    let inputs = linux_agent_remote_process_operation_inputs_from_production_bind_addr(
+        max_active_workers,
+        capability_authority,
+        session_authentication,
+        expected_requests,
+        admission_timing,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+    )?;
+    Ok(inputs)
+}
+
 /// Crate-private production process-operation inputs selected by C03e-IF.
 ///
 /// This owner retains one typed logical peer identity beside the existing injected remote-process
@@ -1800,6 +1893,99 @@ mod tests {
             .expect("target-usize maximum is a valid positive worker bound")
             .get(),
             usize::MAX
+        );
+    }
+
+    #[test]
+    fn production_remote_process_input_population_error_preserves_selected_stage_types() {
+        fn assert_worker_source_conversion(
+            convert: fn(
+                LinuxAgentRemoteMaxActiveWorkersSourceError,
+            )
+                -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
+        ) {
+            let _ = convert;
+        }
+
+        fn assert_bind_source_conversion(
+            convert: fn(
+                LinuxAgentRemoteBindAddressSourceError,
+            )
+                -> super::LinuxAgentProductionRemoteProcessInputPopulationError,
+        ) {
+            let _ = convert;
+        }
+
+        assert_worker_source_conversion(
+            super::LinuxAgentProductionRemoteProcessInputPopulationError::from,
+        );
+        assert_bind_source_conversion(
+            super::LinuxAgentProductionRemoteProcessInputPopulationError::from,
+        );
+
+        let worker = super::LinuxAgentProductionRemoteProcessInputPopulationError::from(
+            LinuxAgentRemoteMaxActiveWorkersSourceError::Missing,
+        );
+        assert!(matches!(
+            worker,
+            super::LinuxAgentProductionRemoteProcessInputPopulationError::WorkerLimitSource(
+                LinuxAgentRemoteMaxActiveWorkersSourceError::Missing
+            )
+        ));
+        assert_eq!(worker.to_string(), "production worker-limit source failed");
+        assert!(std::error::Error::source(&worker).is_some());
+
+        let bind = super::LinuxAgentProductionRemoteProcessInputPopulationError::from(
+            LinuxAgentRemoteBindAddressSourceError::Unavailable,
+        );
+        assert!(matches!(
+            bind,
+            super::LinuxAgentProductionRemoteProcessInputPopulationError::BindAddressSource(
+                LinuxAgentRemoteBindAddressSourceError::Unavailable
+            )
+        ));
+        assert_eq!(bind.to_string(), "production bind-address source failed");
+        assert!(std::error::Error::source(&bind).is_some());
+    }
+
+    #[test]
+    fn production_worker_limit_input_population_helper_has_selected_type_shape() {
+        #[allow(clippy::type_complexity)]
+        fn assert_signature(
+            entry: fn(
+                SharedCurrentCapabilityAuthority<BoundedLocalReadPolicy>,
+                SessionAuthenticationService,
+                mpsc::Receiver<TestExpectedRequest>,
+                fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+                fn(RemoteSessionRegisteredWorkerCompletion),
+                fn(TestExpectedRejection),
+                fn(RemoteSessionRepeatedAdmissionFailure),
+            ) -> Result<
+                LinuxAgentRemoteProcessOperationInputs<
+                    BoundedLocalReadPolicy,
+                    TestDispatcher,
+                    fn() -> u64,
+                    fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+                    fn(RemoteSessionRegisteredWorkerCompletion),
+                    fn(TestExpectedRejection),
+                    fn(RemoteSessionRepeatedAdmissionFailure),
+                >,
+                super::LinuxAgentProductionRemoteProcessInputPopulationError,
+            >,
+        ) {
+            let _ = entry;
+        }
+
+        assert_signature(
+            super::linux_agent_remote_process_operation_inputs_from_production_worker_limit::<
+                BoundedLocalReadPolicy,
+                TestDispatcher,
+                fn() -> u64,
+                fn(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+                fn(RemoteSessionRegisteredWorkerCompletion),
+                fn(TestExpectedRejection),
+                fn(RemoteSessionRepeatedAdmissionFailure),
+            >,
         );
     }
 
