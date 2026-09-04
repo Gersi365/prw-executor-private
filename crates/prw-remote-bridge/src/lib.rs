@@ -781,12 +781,12 @@ impl<'a> Reader<'a> {
 }
 
 /// Provider-aware current-registry and policy gate around Phase 140 remote control frames.
-pub struct DurableCapabilityBridge<'a, P: PolicyEvaluator> {
+pub struct DurableCapabilityBridge<'a, P: PolicyEvaluator + Sync> {
     registry: &'a mut prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore,
     policy: &'a P,
 }
 
-impl<'a, P: PolicyEvaluator> DurableCapabilityBridge<'a, P> {
+impl<'a, P: PolicyEvaluator + Sync> DurableCapabilityBridge<'a, P> {
     /// Creates a durable bridge over one semantic registry store and already-selected policy.
     #[must_use]
     pub const fn new(
@@ -871,7 +871,7 @@ impl std::error::Error for DurableCapabilityBridgeError {
     }
 }
 
-fn map_durable_capability_authority_error(
+const fn map_durable_capability_authority_error(
     error: prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError,
 ) -> DurableCapabilityBridgeError {
     use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError;
