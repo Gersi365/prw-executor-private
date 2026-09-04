@@ -176,9 +176,7 @@ mod tests {
         {
         }
 
-        assert_future(
-            bootstrap_production_durable_capability_authority_from_systemd_credentials(),
-        );
+        assert_future(bootstrap_production_durable_capability_authority_from_systemd_credentials());
     }
 
     #[test]
