@@ -13,8 +13,11 @@
 //! C03e-BB adds the BA-selected read-only observation of the exact already-bound endpoint address.
 //! C03e-GE adds only an explicit fail-closed compatibility classification when the newly typed Mesh
 //! candidate-publication ingress reaches this still-dormant higher-owner seam before any candidate
-//! handoff/execution semantics have been selected. This module still does not wire the Agent binary,
-//! publish readiness, or activate a production listener lifecycle.
+//! handoff/execution semantics have been selected. C03e-KI migrates only that dormant mixed-family
+//! capability caller chain to the already-materialized production durable capability transaction
+//! helper while leaving requester/rendezvous and candidate-publication semantics unchanged. This
+//! module still does not wire the Agent binary, publish readiness, or activate a production listener
+//! lifecycle.
 
 mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
@@ -68,8 +71,6 @@ use std::fmt;
 
 use prw_core::DeviceId;
 use prw_remote_bridge::{
-    RemoteBridgeError,
-    capability_request_wire::CapabilityRequestWireError,
     post_auth_control_stream_ingress::{
         PostAuthControlStreamIngressError, PostAuthRequesterRendezvousTransaction,
     },
@@ -141,7 +142,7 @@ impl RequesterRendezvousResponseStreamCustodyHandoff {
     reason = "C03e-EV materializes the one-transaction outcome before separately gated combined-loop integration"
 )]
 pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressOutcome {
-    /// Existing capability authorization, dispatch and same-stream response completed successfully.
+    /// Production durable capability authorization, dispatch and same-stream response completed.
     CapabilityProcessed,
     /// One strict requester/rendezvous target plus exact same-stream custody reached the handoff.
     RequesterRendezvous(Box<RequesterRendezvousResponseStreamCustodyHandoff>),
@@ -155,10 +156,8 @@ pub(crate) enum AuthenticatedRemoteSessionPostAuthIngressTransactionError {
     Accept(RemoteServerTransportRuntimeError),
     /// C03e-ET one-read ingress or strict requester/rendezvous/candidate wire handling failed.
     Ingress(PostAuthControlStreamIngressError),
-    /// Existing capability authorization or typed dispatch failed.
-    Bridge(RemoteBridgeError),
-    /// Existing same-stream capability response I/O failed.
-    CapabilityResponse(CapabilityRequestWireError),
+    /// Production durable capability authorization, dispatch or exact same-stream response failed.
+    Capability(authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError),
     /// Candidate ingress succeeded, but no Agent candidate handoff/execution semantics are selected.
     CandidatePublicationHandoffNotSelected,
 }
@@ -168,9 +167,8 @@ impl fmt::Display for AuthenticatedRemoteSessionPostAuthIngressTransactionError 
         formatter.write_str(match self {
             Self::Accept(_) => "post-authenticated control-stream acceptance failed",
             Self::Ingress(_) => "post-authenticated control-stream ingress failed",
-            Self::Bridge(_) => "post-authenticated capability bridge transaction failed",
-            Self::CapabilityResponse(_) => {
-                "post-authenticated capability response transmission failed"
+            Self::Capability(_) => {
+                "post-authenticated production durable capability transaction failed"
             }
             Self::CandidatePublicationHandoffNotSelected => {
                 "candidate-publication post-authenticated handoff is not selected"
@@ -184,8 +182,7 @@ impl std::error::Error for AuthenticatedRemoteSessionPostAuthIngressTransactionE
         match self {
             Self::Accept(error) => Some(error),
             Self::Ingress(error) => Some(error),
-            Self::Bridge(error) => Some(error),
-            Self::CapabilityResponse(error) => Some(error),
+            Self::Capability(error) => Some(error),
             Self::CandidatePublicationHandoffNotSelected => None,
         }
     }
@@ -207,17 +204,13 @@ impl From<PostAuthControlStreamIngressError>
     }
 }
 
-impl From<RemoteBridgeError> for AuthenticatedRemoteSessionPostAuthIngressTransactionError {
-    fn from(error: RemoteBridgeError) -> Self {
-        Self::Bridge(error)
-    }
-}
-
-impl From<CapabilityRequestWireError>
+impl From<authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError>
     for AuthenticatedRemoteSessionPostAuthIngressTransactionError
 {
-    fn from(error: CapabilityRequestWireError) -> Self {
-        Self::CapabilityResponse(error)
+    fn from(
+        error: authenticated_remote_session_runtime::ProductionDurableCapabilityTransactionError,
+    ) -> Self {
+        Self::Capability(error)
     }
 }
 
