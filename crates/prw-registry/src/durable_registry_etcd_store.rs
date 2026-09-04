@@ -440,7 +440,9 @@ impl DurableRegistryEtcdStore {
         session: &AuthenticatedDeviceSession,
         presented: TransportIdentity,
     ) -> Result<RegistryValidatedPrincipal, DurableRegistryEtcdStoreError> {
-        let (principal, device) = self.validate_authenticated_session_snapshot(session).await?;
+        let (principal, device) = self
+            .validate_authenticated_session_snapshot(session)
+            .await?;
         validate_presented_transport_from_device(&device, presented)?;
         Ok(principal)
     }
