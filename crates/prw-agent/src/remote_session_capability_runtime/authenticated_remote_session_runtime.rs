@@ -559,8 +559,7 @@ mod tests {
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
         AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
-        ProductionDurableCapabilityTransactionError,
-        REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+        ProductionDurableCapabilityTransactionError, REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
@@ -656,7 +655,9 @@ mod tests {
 
     #[test]
     fn durable_transaction_error_preserves_selected_stage_conversions() {
-        assert_durable_authority_error_conversion(ProductionDurableCapabilityTransactionError::from);
+        assert_durable_authority_error_conversion(
+            ProductionDurableCapabilityTransactionError::from,
+        );
         assert_durable_dispatch_error_conversion(ProductionDurableCapabilityTransactionError::from);
         assert_durable_response_error_conversion(ProductionDurableCapabilityTransactionError::from);
     }
@@ -671,7 +672,10 @@ mod tests {
             "production durable capability dispatch failed"
         );
         assert!(error.source().is_some());
-        assert_eq!(error, ProductionDurableCapabilityTransactionError::Dispatch(inner));
+        assert_eq!(
+            error,
+            ProductionDurableCapabilityTransactionError::Dispatch(inner)
+        );
     }
 
     #[test]
