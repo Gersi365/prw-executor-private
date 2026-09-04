@@ -408,6 +408,99 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     }
 }
 
+/// Runs the KR-selected requester-aware serial lifecycle with distinct durable-capability and
+/// requester-DR authority lanes.
+///
+/// Before requester handoff, the existing KQ durable cancellation worker owns the exact
+/// ingress/cancellation race. The durable capability authority is passed only to that worker, while
+/// the existing shared-current requester authority remains reserved for DR continuation after one
+/// requester handoff. One pinned caller cancellation future is retained across every serial cycle;
+/// each KQ invocation receives only a temporary polling adapter over that retained future.
+///
+/// Cancellation is deliberately not polled during requester DR or terminal acknowledgement response
+/// composition. After one successful terminal response it is checked exactly once before another KQ
+/// cycle can sample verifier time or accept another stream. No task, channel, queue, peer close,
+/// requester retry, candidate continuation, runtime activation, deployment or merge behavior is
+/// introduced here.
+#[allow(
+    dead_code,
+    reason = "C03e-KS materializes the KR-selected dormant dual-authority FI worker before separately gated FQ/FU ownership propagation"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "KR keeps durable capability ingress authority and requester DR authority as explicit distinct inputs"
+)]
+pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> u64 + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    C: Future<Output = ()> + Send,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    capability_authority: &crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+    cancellation: C,
+) -> RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop {
+    let mut cancellation = Box::pin(cancellation);
+
+    loop {
+        let cancellation_adapter = poll_fn(|context| cancellation.as_mut().poll(context));
+        let ingress_result = session_owner
+            .run_repeated_post_auth_control_stream_ingress_worker_with_production_durable_capability(
+                capability_authority,
+                &mut verifier_time_unix_seconds,
+                dispatcher,
+                cancellation_adapter,
+            )
+            .await;
+
+        let handoff = match ingress_result {
+            Ok(Some(handoff)) => handoff,
+            Ok(None) => {
+                return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+            }
+            Err(error) => {
+                return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+        };
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            requester_dr_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            handoff,
+        )
+        .await;
+
+        if let Err(error) =
+            complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await
+        {
+            return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                error.into(),
+            );
+        }
+
+        let cancellation_ready = poll_fn(|context| {
+            Poll::Ready(matches!(
+                cancellation.as_mut().poll(context),
+                Poll::Ready(())
+            ))
+        })
+        .await;
+
+        if cancellation_ready {
+            return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use prw_remote_bridge::{
