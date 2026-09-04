@@ -207,6 +207,66 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         }
     }
 
+    /// Runs one executor-neutral cancellation-aware production-durable ingress worker without spawning.
+    ///
+    /// The worker owns exactly one C03e-KO durable repeated-ingress future and one caller-supplied
+    /// cancellation future. The ingress loop is polled first on every wake so an already-ready
+    /// requester handoff or mixed-family ingress failure retains its exact classification.
+    /// Cancellation is polled only while the durable loop is pending and returns only `Ok(None)`.
+    ///
+    /// The lexical race block ensures the in-flight KO loop future is dropped before a cancellation
+    /// result leaves this method, releasing the exclusive mutable session-owner borrow first. This
+    /// method samples no verifier time directly, performs no stream accept/read, creates no task,
+    /// queue, retry, reconnect, peer close, requester DR work, candidate work or runtime activation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first exact [`AuthenticatedRemoteSessionPostAuthIngressTransactionError`] emitted
+    /// by the KO durable repeated loop without suppression, flattening, retry or replacement.
+    #[allow(
+        dead_code,
+        reason = "C03e-KQ materializes the KP-selected dormant durable cancellation-aware worker before separately gated higher caller integration"
+    )]
+    pub(crate) async fn run_repeated_post_auth_control_stream_ingress_worker_with_production_durable_capability<
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> u64 + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        authority: &ProductionDurableCapabilityAuthority,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> Result<
+        Option<RequesterRendezvousResponseStreamCustodyHandoff>,
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+    > {
+        {
+            let mut ingress_loop = Box::pin(
+                self.run_repeated_post_auth_control_stream_ingress_with_production_durable_capability(
+                    authority,
+                    verifier_time_unix_seconds,
+                    dispatcher,
+                ),
+            );
+            let mut cancellation = Box::pin(cancellation);
+
+            poll_fn(|context| {
+                match ingress_loop.as_mut().poll(context) {
+                    Poll::Ready(Ok(handoff)) => return Poll::Ready(Ok(Some(handoff))),
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Pending => {}
+                }
+
+                match cancellation.as_mut().poll(context) {
+                    Poll::Ready(()) => Poll::Ready(Ok(None)),
+                    Poll::Pending => Poll::Pending,
+                }
+            })
+            .await
+        }
+    }
+
     /// Processes exactly one post-authenticated control stream through the C03e-ET family ingress.
     ///
     /// This C03e-EV seam is the single Agent-owned acceptance point for one isolated transaction. It
