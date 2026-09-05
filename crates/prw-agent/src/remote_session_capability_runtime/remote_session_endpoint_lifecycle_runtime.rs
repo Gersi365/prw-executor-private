@@ -158,7 +158,8 @@ impl std::error::Error for RemoteSessionEndpointLifecycleStartupError {
 /// Bounded crate-visible terminal family for one requester-aware endpoint worker completion.
 #[allow(
     dead_code,
-    reason = "C03e-LP materializes the LO-reselected completion projection before separately gated higher-owner caller migration"
+    clippy::redundant_pub_crate,
+    reason = "C03e-LP preserves the exact LO-selected pub(crate) completion projection in the private child before separately gated higher-owner caller migration"
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection {
