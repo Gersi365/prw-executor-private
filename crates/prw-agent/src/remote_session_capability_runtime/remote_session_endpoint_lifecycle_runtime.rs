@@ -25,14 +25,20 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::{Notify, mpsc};
 
+use super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop;
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
-    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
-    RemoteSessionPersistentCollectionConfigError, RemoteSessionRealAdmissionTiming,
+    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
+    RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
     RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
-    SharedCurrentCapabilityAuthority,
+    RemoteSessionSpawnedWorkerJoinError, SharedCurrentCapabilityAuthority,
+    SharedRequesterRendezvousAuthority,
 };
 use crate::{
+    candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
+    production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
     reachability_authority_admission::ReachabilityAuthorityRuntimeOwner,
     remote_transport_runtime::{AgentRemoteTransportBindError, AgentRemoteTransportRuntime},
 };
@@ -447,6 +453,91 @@ impl RemoteSessionEndpointLifecycleRuntime {
             on_rejection,
             on_admission_failure,
         )
+    }
+
+    /// Consumes this startup owner and delegates one dormant production-durable repeated-admission
+    /// endpoint lifecycle to the exact C03e-LK executor boundary.
+    ///
+    /// The retained endpoint transport is borrowed only for that one executor invocation, and the
+    /// retained supervisor-shutdown signal is converted exactly once. The distinct requester-DR and
+    /// production durable capability authorities are forwarded unchanged. Endpoint close and idle
+    /// drain remain owned exclusively by the LK executor method.
+    ///
+    /// This seam performs no durable-authority bootstrap or population, callback projection,
+    /// requester-lifecycle visibility widening, executable caller migration, runtime activation,
+    /// endpoint bind, retry, merge, or deployment.
+    #[allow(
+        dead_code,
+        reason = "C03e-LM materializes the LL-selected dormant durable endpoint-owner caller adaptation before separately gated higher-owner projection and production authority population"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-LM forwards the exact LL-selected durable executor boundary inputs without introducing a new aggregate"
+    )]
+    pub(super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability<
+        P,
+        D,
+        T,
+        PS,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ),
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let Self {
+            mut executor,
+            transport,
+            supervisor_shutdown,
+        } = self;
+
+        executor
+            .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability(
+                max_active_workers,
+                &transport,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown.into_shutdown(),
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            )
     }
 }
 
