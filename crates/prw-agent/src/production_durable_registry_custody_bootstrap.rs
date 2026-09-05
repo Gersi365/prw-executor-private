@@ -16,17 +16,27 @@
 //! existing infallible runtime-custody and deny-all capability-authority ownership adaptations. It
 //! performs no registry semantic read, mutex acquisition, authorization, policy evaluation, runtime
 //! activation or executable wiring.
+//!
+//! C03e-LZ adds only the C03e-LY-selected same-custody peer + durable capability-authority
+//! population seam. It performs the existing durable-registry bootstrap exactly once, resolves the
+//! current peer transport identity from that exact runtime custody, and then consumes the same
+//! surviving custody into the existing durable capability authority. It adds no second bootstrap,
+//! requester/rendezvous population, caller, task, listener, readiness, or executable activation.
 
 use std::fmt;
 
+use prw_connectivity::PeerConnectivityIdentity;
 use prw_control_plane::durable_registry_etcd_bootstrap::{
     DurableRegistryProductionEtcdBootstrapError, bootstrap_durable_registry_production_executor,
 };
+use prw_core::DeviceId;
 use prw_reachability_custody::durable_registry_custody::{
     DurableRegistryCustodyError,
     load_durable_registry_production_etcd_bootstrap_config_from_systemd_credentials,
 };
-use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore;
+use prw_registry::durable_registry_etcd_store::{
+    DurableRegistryEtcdStore, DurableRegistryEtcdStoreError,
+};
 
 use crate::production_durable_registry_runtime_custody::{
     ProductionDurableCapabilityAuthority, ProductionDurableRegistryRuntimeCustody,
@@ -74,6 +84,49 @@ impl From<DurableRegistryProductionEtcdBootstrapError>
 {
     fn from(error: DurableRegistryProductionEtcdBootstrapError) -> Self {
         Self::ProviderBootstrap(error)
+    }
+}
+
+/// Bounded failure while deriving one current peer and durable capability authority from one custody.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProductionDurablePeerCapabilityAuthorityPopulationError {
+    /// The single production durable-registry custody/provider bootstrap failed.
+    Bootstrap(ProductionDurableRegistryCustodyBootstrapError),
+    /// The current same-device durable-registry peer lookup failed.
+    PeerLookup(DurableRegistryEtcdStoreError),
+}
+
+impl fmt::Display for ProductionDurablePeerCapabilityAuthorityPopulationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Bootstrap(_) => "production durable peer capability authority bootstrap failed",
+            Self::PeerLookup(_) => "production durable peer lookup failed",
+        })
+    }
+}
+
+impl std::error::Error for ProductionDurablePeerCapabilityAuthorityPopulationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Bootstrap(error) => Some(error),
+            Self::PeerLookup(error) => Some(error),
+        }
+    }
+}
+
+impl From<ProductionDurableRegistryCustodyBootstrapError>
+    for ProductionDurablePeerCapabilityAuthorityPopulationError
+{
+    fn from(error: ProductionDurableRegistryCustodyBootstrapError) -> Self {
+        Self::Bootstrap(error)
+    }
+}
+
+impl From<DurableRegistryEtcdStoreError>
+    for ProductionDurablePeerCapabilityAuthorityPopulationError
+{
+    fn from(error: DurableRegistryEtcdStoreError) -> Self {
+        Self::PeerLookup(error)
     }
 }
 
@@ -134,18 +187,65 @@ pub async fn bootstrap_production_durable_capability_authority_from_systemd_cred
     ))
 }
 
+/// Populates one current production peer and durable capability authority from one registry custody.
+///
+/// The existing durable-registry bootstrap is awaited exactly once. Its exact semantic store is
+/// consumed into one [`ProductionDurableRegistryRuntimeCustody`]. The current same-device
+/// [`PeerConnectivityIdentity`] is then resolved exactly once from that custody using only the
+/// supplied logical [`DeviceId`]. After successful lookup, the same surviving custody is consumed
+/// exactly once into [`ProductionDurableCapabilityAuthority`].
+///
+/// This helper performs no second provider/bootstrap sequence, generic custody extraction, registry
+/// write, requester/rendezvous population, runtime task creation, endpoint bind, readiness
+/// publication, executable invocation, retry, fallback, cache or degraded-authority construction.
+///
+/// # Errors
+///
+/// Returns [`ProductionDurablePeerCapabilityAuthorityPopulationError::Bootstrap`] if the existing
+/// one-shot durable-registry custody/provider bootstrap fails, or
+/// [`ProductionDurablePeerCapabilityAuthorityPopulationError::PeerLookup`] if the current same-device
+/// registry lookup fails. No capability authority is constructed after a failed peer lookup.
+#[allow(
+    dead_code,
+    reason = "C03e-LZ materializes the LY-selected same-custody peer and durable capability-authority population before separately gated caller population"
+)]
+pub async fn bootstrap_production_peer_and_durable_capability_authority_from_systemd_credentials(
+    device_id: DeviceId,
+) -> Result<
+    (
+        PeerConnectivityIdentity,
+        ProductionDurableCapabilityAuthority,
+    ),
+    ProductionDurablePeerCapabilityAuthorityPopulationError,
+> {
+    let store = bootstrap_production_durable_registry_from_systemd_credentials().await?;
+    let mut registry_custody = ProductionDurableRegistryRuntimeCustody::from_store(store);
+    let peer = registry_custody
+        .peer_connectivity_identity(device_id)
+        .await?;
+    let capability_authority =
+        ProductionDurableCapabilityAuthority::from_registry_custody(registry_custody);
+    Ok((peer, capability_authority))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{error::Error, future::Future};
 
+    use prw_connectivity::PeerConnectivityIdentity;
     use prw_control_plane::durable_registry_etcd_bootstrap::DurableRegistryProductionEtcdBootstrapError;
+    use prw_core::DeviceId;
     use prw_reachability_custody::durable_registry_custody::DurableRegistryCustodyError;
-    use prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStore;
+    use prw_registry::durable_registry_etcd_store::{
+        DurableRegistryEtcdStore, DurableRegistryEtcdStoreError,
+    };
 
     use super::{
+        ProductionDurablePeerCapabilityAuthorityPopulationError,
         ProductionDurableRegistryCustodyBootstrapError,
         bootstrap_production_durable_capability_authority_from_systemd_credentials,
         bootstrap_production_durable_registry_from_systemd_credentials,
+        bootstrap_production_peer_and_durable_capability_authority_from_systemd_credentials,
     };
     use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 
@@ -179,6 +279,28 @@ mod tests {
         assert_future(bootstrap_production_durable_capability_authority_from_systemd_credentials());
     }
 
+    fn assert_same_custody_population_signature(device_id: DeviceId) {
+        fn assert_future<F>(_future: F)
+        where
+            F: Future<
+                Output = Result<
+                    (
+                        PeerConnectivityIdentity,
+                        ProductionDurableCapabilityAuthority,
+                    ),
+                    ProductionDurablePeerCapabilityAuthorityPopulationError,
+                >,
+            >,
+        {
+        }
+
+        assert_future(
+            bootstrap_production_peer_and_durable_capability_authority_from_systemd_credentials(
+                device_id,
+            ),
+        );
+    }
+
     #[test]
     fn production_registry_custody_bootstrap_has_zero_argument_store_return_shape() {
         let _ = assert_bootstrap_signature as fn();
@@ -187,6 +309,11 @@ mod tests {
     #[test]
     fn production_capability_authority_bootstrap_has_selected_zero_argument_return_shape() {
         let _ = assert_capability_authority_bootstrap_signature as fn();
+    }
+
+    #[test]
+    fn same_custody_peer_capability_authority_population_has_exact_device_input_shape() {
+        let _ = assert_same_custody_population_signature as fn(DeviceId);
     }
 
     #[test]
@@ -222,6 +349,42 @@ mod tests {
             error.to_string(),
             "production durable registry provider bootstrap failed"
         );
+        assert!(error.source().is_some());
+    }
+
+    #[test]
+    fn same_custody_population_bootstrap_failure_preserves_source_without_detail() {
+        let source = ProductionDurableRegistryCustodyBootstrapError::from(
+            DurableRegistryCustodyError::CredentialsDirectoryMissing,
+        );
+        let error = ProductionDurablePeerCapabilityAuthorityPopulationError::from(source);
+        assert!(matches!(
+            error,
+            ProductionDurablePeerCapabilityAuthorityPopulationError::Bootstrap(
+                ProductionDurableRegistryCustodyBootstrapError::Custody(
+                    DurableRegistryCustodyError::CredentialsDirectoryMissing
+                )
+            )
+        ));
+        assert_eq!(
+            error.to_string(),
+            "production durable peer capability authority bootstrap failed"
+        );
+        assert!(error.source().is_some());
+    }
+
+    #[test]
+    fn same_custody_population_peer_lookup_failure_preserves_source_without_detail() {
+        let error = ProductionDurablePeerCapabilityAuthorityPopulationError::from(
+            DurableRegistryEtcdStoreError::ReadUnavailable,
+        );
+        assert!(matches!(
+            error,
+            ProductionDurablePeerCapabilityAuthorityPopulationError::PeerLookup(
+                DurableRegistryEtcdStoreError::ReadUnavailable
+            )
+        ));
+        assert_eq!(error.to_string(), "production durable peer lookup failed");
         assert!(error.source().is_some());
     }
 }
