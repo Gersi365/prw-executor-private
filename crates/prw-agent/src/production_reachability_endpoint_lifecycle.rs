@@ -247,8 +247,8 @@ impl fmt::Debug for ProductionReachabilityEndpointLifecycleStartupFailure {
     }
 }
 
-impl std::fmt::Display for ProductionReachabilityEndpointLifecycleStartupFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ProductionReachabilityEndpointLifecycleStartupFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error.fmt(formatter)
     }
 }
@@ -388,7 +388,7 @@ mod tests {
         });
 
         assert_eq!(result, Err(((11, 22), 55)));
-        assert_eq!(calls.get(), 1);
+        assert_eq!(*events.borrow(), vec!["drive", "custody_drop"]);
     }
 
     #[test]
