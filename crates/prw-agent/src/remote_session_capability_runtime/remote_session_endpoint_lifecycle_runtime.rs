@@ -25,7 +25,10 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::{Notify, mpsc};
 
-use super::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop;
+use super::requester_rendezvous_retained_custody_dr_continuation::{
+    RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+    RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+};
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
     RemoteSessionExpectedDeviceAdmissionRejection,
@@ -150,6 +153,24 @@ impl std::error::Error for RemoteSessionEndpointLifecycleStartupError {
             Self::Transport(error) => Some(error),
         }
     }
+}
+
+/// Bounded crate-visible terminal family for one requester-aware endpoint worker completion.
+#[allow(
+    dead_code,
+    clippy::redundant_pub_crate,
+    reason = "C03e-LP preserves the exact LO-selected pub(crate) completion projection in the private child before separately gated higher-owner caller migration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection {
+    /// Caller-owned cancellation won at one selected requester lifecycle cancellation boundary.
+    Cancelled,
+    /// The existing requester-aware serial lifecycle stopped on one ingress failure.
+    IngressFailure,
+    /// The existing requester-aware serial lifecycle stopped on one requester response failure.
+    RequesterResponseFailure,
+    /// Tokio reported abnormal completion for the retained requester-aware worker task.
+    AbnormalTaskCompletion,
 }
 
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
@@ -538,6 +559,95 @@ impl RemoteSessionEndpointLifecycleRuntime {
                 on_rejection,
                 on_admission_failure,
             )
+    }
+
+    /// Consumes this endpoint owner and exposes only the bounded C03e-LO-selected terminal family.
+    ///
+    /// The existing C03e-LM durable endpoint method remains the sole owner of endpoint/executor
+    /// lifecycle behavior. This adapter invokes it exactly once, forwards all non-completion inputs
+    /// and callbacks unchanged, and projects requester-private terminal payloads into four bounded
+    /// crate-visible families without widening those private types.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-LP materializes the LO-reselected dormant projection adapter before separately gated higher-owner caller migration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-LP preserves the exact C03e-LM durable endpoint inputs while projecting only completion"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection<
+        P,
+        D,
+        T,
+        PS,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        mut on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection),
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        self.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability(
+            max_active_workers,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            admission_timing,
+            |device_id, completion_result| {
+                let projection = match completion_result {
+                    Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled) => {
+                        RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection::Cancelled
+                    }
+                    Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                        RequesterRendezvousPostTerminalResponseSerialLifecycleError::Ingress(_),
+                    )) => {
+                        RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection::IngressFailure
+                    }
+                    Ok(RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                        RequesterRendezvousPostTerminalResponseSerialLifecycleError::RequesterResponse(_),
+                    )) => {
+                        RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection::RequesterResponseFailure
+                    }
+                    Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion) => {
+                        RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection::AbnormalTaskCompletion
+                    }
+                };
+                on_completion(device_id, projection);
+            },
+            on_rejection,
+            on_admission_failure,
+        )
     }
 }
 
