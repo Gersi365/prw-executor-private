@@ -27,7 +27,8 @@ use tokio::sync::{Notify, mpsc};
 
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
-    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
     RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
     RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
@@ -521,21 +522,22 @@ impl RemoteSessionEndpointLifecycleRuntime {
             supervisor_shutdown,
         } = self;
 
-        executor.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability(
-            max_active_workers,
-            &transport,
-            authority,
-            capability_authority,
-            policy_source,
-            requester_rendezvous_authority,
-            session_authentication,
-            expected_requests,
-            supervisor_shutdown.into_shutdown(),
-            admission_timing,
-            on_completion,
-            on_rejection,
-            on_admission_failure,
-        )
+        executor
+            .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability(
+                max_active_workers,
+                &transport,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown.into_shutdown(),
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            )
     }
 }
 
