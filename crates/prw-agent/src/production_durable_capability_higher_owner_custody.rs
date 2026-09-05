@@ -14,10 +14,12 @@ use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::CapabilityDispatcher;
 
 use crate::linux_bootstrap::{
+    LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
+    run_with_remote_process_companion,
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
@@ -188,4 +190,55 @@ where
         requester_rendezvous_inputs,
         capability_authority,
     )
+}
+
+/// Runs the existing Linux remote companion with one dormant higher-owner durable projection operation.
+///
+/// This crate-private assembly consumes only already-typed higher-owner inputs. It constructs the
+/// existing C03e-LV projection-capable one-shot operation exactly once and passes that operation
+/// directly to the existing generic Linux remote-companion runner exactly once. It adds no concrete
+/// production input population, callback policy, executable invocation site or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-LX materializes the LW-selected dormant higher-owner projection companion assembly before separately gated executable caller population"
+)]
+pub(crate) fn run_with_production_durable_reachability_requester_rendezvous_remote_process_companion_with_production_durable_capability_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection)
+        + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+{
+    let operation =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection(
+            inputs,
+        );
+    run_with_remote_process_companion(operation)
 }
