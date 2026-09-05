@@ -9,6 +9,7 @@ use std::{
     ffi::OsString,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::{NonZeroU16, NonZeroUsize},
+    sync::Arc,
     time::Duration,
 };
 
@@ -41,12 +42,16 @@ use crate::linux_identity::termination_signal::{
 use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
     RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
-    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
+    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
     RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-    RemoteSessionRepeatedAdmissionFailure, RemoteSessionSupervisorShutdownController,
-    SharedCurrentCapabilityAuthority,
+    RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
+    RemoteSessionSupervisorShutdownController, SharedCurrentCapabilityAuthority,
+    SharedRequesterRendezvousAuthority,
     remote_session_process_lifecycle_control::{
         RemoteSessionProcessControllerFinalization, RemoteSessionProcessLifecycleFinalization,
         RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
@@ -72,7 +77,7 @@ pub enum LinuxAgentRemoteBindAddressSourceError {
     Unavailable,
     /// The operating-system value is not valid Unicode.
     EncodingInvalid,
-    /// The configured value is not an exact `SocketAddr`.
+    /// The configured value does not satisfy the existing `SocketAddr` contract.
     SocketAddressInvalid,
     /// The parsed address is not eligible for this explicit bind-and-observe lane.
     AddressNotBindAdvertisable,
@@ -1233,6 +1238,118 @@ where
         drop(requester_rendezvous_runtime_owner);
         drop(requester_rendezvous_start_policy_source);
         operation(publisher);
+    }
+}
+
+/// Builds one dormant production requester/rendezvous operation that drives the durable
+/// capability callback projection selected by C03e-LS.
+///
+/// Factory construction performs ownership adaptation only: the retained bounded requester policy
+/// source is wrapped once in `Arc`, and the retained requester/rendezvous runtime owner is consumed
+/// once into the existing shared authority. Credential/provider I/O, endpoint bind, controller
+/// publication and lifecycle drive remain deferred until a separately gated caller invokes the
+/// returned one-shot closure.
+///
+/// Runtime invocation preserves the existing production stage ordering and calls the C03e-LR
+/// projection-capable production endpoint lifecycle exactly once. Completion, rejection and
+/// admission-failure callbacks are forwarded unchanged; no legacy aggregate reconstruction,
+/// callback policy, retry, reconnect, readiness publication or executable activation is added.
+#[allow(
+    dead_code,
+    reason = "C03e-LT materializes the LS-selected dormant Linux projection operation before separately gated higher-owner caller migration"
+)]
+pub(crate) fn linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+    production_durable_capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection)
+        + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+{
+    let LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        production_inputs,
+        requester_rendezvous_start_policy_source,
+        requester_rendezvous_runtime_owner,
+    } = inputs;
+    let requester_rendezvous_start_policy_source =
+        Arc::new(requester_rendezvous_start_policy_source);
+    let requester_rendezvous_authority =
+        SharedRequesterRendezvousAuthority::new(requester_rendezvous_runtime_owner);
+
+    move |publisher| {
+        let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
+            peer,
+            remote_process_inputs,
+        } = production_inputs;
+        let LinuxAgentRemoteProcessOperationInputs {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            mut session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        } = remote_process_inputs;
+
+        let _ = run_remote_process_operation_composition(
+            RemoteSessionExecutorRuntime::new,
+            move |executor| {
+                executor.bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                    &peer,
+                )
+            },
+            move |executor, runtime_custody| {
+                runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
+                    executor, bind_addr,
+                )
+            },
+            move |controller| publisher.publish(controller),
+            move |lifecycle, _publication| {
+                let _ = lifecycle
+                    .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection(
+                        max_active_workers,
+                        &capability_authority,
+                        production_durable_capability_authority,
+                        requester_rendezvous_start_policy_source,
+                        &requester_rendezvous_authority,
+                        &mut session_authentication,
+                        expected_requests,
+                        admission_timing,
+                        on_completion,
+                        on_rejection,
+                        on_admission_failure,
+                    );
+            },
+        );
     }
 }
 
