@@ -45,7 +45,8 @@ use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentS
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
     RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
-    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
     RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
     RemoteSessionRepeatedAdmissionFailure,
@@ -320,7 +321,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
