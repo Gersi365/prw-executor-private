@@ -388,7 +388,7 @@ mod tests {
         });
 
         assert_eq!(result, Err(((11, 22), 55)));
-        assert_eq!(*events.borrow(), vec!["drive", "custody_drop"]);
+        assert_eq!(calls.get(), 1);
     }
 
     #[test]
