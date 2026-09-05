@@ -212,12 +212,17 @@ pub async fn bootstrap_production_durable_capability_authority_from_systemd_cred
 pub async fn bootstrap_production_peer_and_durable_capability_authority_from_systemd_credentials(
     device_id: DeviceId,
 ) -> Result<
-    (PeerConnectivityIdentity, ProductionDurableCapabilityAuthority),
+    (
+        PeerConnectivityIdentity,
+        ProductionDurableCapabilityAuthority,
+    ),
     ProductionDurablePeerCapabilityAuthorityPopulationError,
 > {
     let store = bootstrap_production_durable_registry_from_systemd_credentials().await?;
     let mut registry_custody = ProductionDurableRegistryRuntimeCustody::from_store(store);
-    let peer = registry_custody.peer_connectivity_identity(device_id).await?;
+    let peer = registry_custody
+        .peer_connectivity_identity(device_id)
+        .await?;
     let capability_authority =
         ProductionDurableCapabilityAuthority::from_registry_custody(registry_custody);
     Ok((peer, capability_authority))
@@ -279,7 +284,10 @@ mod tests {
         where
             F: Future<
                 Output = Result<
-                    (PeerConnectivityIdentity, ProductionDurableCapabilityAuthority),
+                    (
+                        PeerConnectivityIdentity,
+                        ProductionDurableCapabilityAuthority,
+                    ),
                     ProductionDurablePeerCapabilityAuthorityPopulationError,
                 >,
             >,
