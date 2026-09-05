@@ -5,6 +5,8 @@
 //! aggregate is retained by value beside exactly one outer `Arc<ProductionDurableCapabilityAuthority>`.
 //! Construction performs only the selected ownership adaptation and activates no runtime behavior.
 
+#![allow(clippy::redundant_pub_crate)]
+
 use std::sync::Arc;
 
 use crate::linux_bootstrap::LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs;
