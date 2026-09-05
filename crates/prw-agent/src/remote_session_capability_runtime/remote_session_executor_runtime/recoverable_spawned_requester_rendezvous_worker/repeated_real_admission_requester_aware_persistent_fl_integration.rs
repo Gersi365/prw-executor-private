@@ -8,6 +8,7 @@
 //! records, select candidate/reachability state, dial targets, activate a listener/bootstrap/readiness
 //! path, deploy, restart/recover the process, or merge.
 
+mod production_durable_repeated_real_admission_collection;
 use std::{
     collections::{HashMap, hash_map::Entry},
     future::{Future, poll_fn},
