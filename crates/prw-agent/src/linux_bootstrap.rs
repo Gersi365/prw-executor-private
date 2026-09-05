@@ -77,7 +77,7 @@ pub enum LinuxAgentRemoteBindAddressSourceError {
     Unavailable,
     /// The operating-system value is not valid Unicode.
     EncodingInvalid,
-    /// The configured value does not satisfy the existing `SocketAddr` contract.
+    /// The configured value is not an exact `SocketAddr`.
     SocketAddressInvalid,
     /// The parsed address is not eligible for this explicit bind-and-observe lane.
     AddressNotBindAdvertisable,
