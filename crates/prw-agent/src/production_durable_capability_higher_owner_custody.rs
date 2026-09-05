@@ -17,11 +17,15 @@ use crate::linux_bootstrap::{
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
+    linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
-    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionRealAdmissionTiming,
-    RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
+    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+    RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
 };
 
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
@@ -126,4 +130,61 @@ where
         operation(publisher);
         drop(capability_authority);
     }
+}
+
+/// Builds one dormant higher-owner production operation that transfers durable-authority custody
+/// into the existing production durable callback projection operation.
+///
+/// Factory construction performs ownership transfer only. The existing requester/rendezvous
+/// production aggregate and the one retained outer durable-capability `Arc` are consumed by value
+/// and delegated exactly once to the C03e-LT projection-capable Linux operation. No additional Arc
+/// construction/clone, callback translation, provider I/O, endpoint bind, publication, retry,
+/// reconnect, executable caller or runtime activation is added.
+#[allow(
+    dead_code,
+    reason = "C03e-LV materializes the LU-selected dormant higher-owner callback projection caller migration before separately gated executable assembly"
+)]
+pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection)
+        + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+{
+    let LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        requester_rendezvous_inputs,
+        capability_authority,
+    } = inputs;
+
+    linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection(
+        requester_rendezvous_inputs,
+        capability_authority,
+    )
 }
