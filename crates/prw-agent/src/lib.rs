@@ -31,6 +31,12 @@ pub(crate) mod production_durable_registry_custody_bootstrap;
     reason = "C03e-JD materializes Agent production durable-registry runtime custody before separately gated operation-specific use and runtime activation"
 )]
 pub(crate) mod production_durable_registry_runtime_custody;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "C03e-LD materializes the LC-selected dormant production durable-capability higher-owner Arc custody before separately gated propagation and caller migration"
+)]
+pub(crate) mod production_durable_capability_higher_owner_custody;
 #[allow(
     dead_code,
     reason = "C03e-HU materializes Agent production bootstrap composition before separately gated systemd custody join and runtime activation"
