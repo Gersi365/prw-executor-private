@@ -247,8 +247,8 @@ impl fmt::Debug for ProductionReachabilityEndpointLifecycleStartupFailure {
     }
 }
 
-impl fmt::Display for ProductionReachabilityEndpointLifecycleStartupFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ProductionReachabilityEndpointLifecycleStartupFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.error.fmt(formatter)
     }
 }
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn retained_custody_drops_only_after_delegated_drive_returns() {
-        let events = Rc::new(RefCell::new(Vec::<&'static str>>));
+        let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
         let custody = DropProbe {
             events: Rc::clone(&events),
         };
