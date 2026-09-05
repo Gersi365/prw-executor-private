@@ -214,19 +214,20 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
         } = self;
 
         drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
-            endpoint.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection(
-                max_active_workers,
-                authority,
-                capability_authority,
-                policy_source,
-                requester_rendezvous_authority,
-                session_authentication,
-                expected_requests,
-                admission_timing,
-                on_completion,
-                on_rejection,
-                on_admission_failure,
-            )
+            endpoint
+                .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection(
+                    max_active_workers,
+                    authority,
+                    capability_authority,
+                    policy_source,
+                    requester_rendezvous_authority,
+                    session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                )
         })
     }
 }
