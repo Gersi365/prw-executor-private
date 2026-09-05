@@ -21,6 +21,12 @@ pub mod linux_bootstrap;
 )]
 pub(crate) mod linux_identity;
 pub mod local_commands;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "C03e-LD materializes the LC-selected dormant production durable-capability higher-owner Arc custody before separately gated propagation and caller migration"
+)]
+pub(crate) mod production_durable_capability_higher_owner_custody;
 #[allow(
     dead_code,
     reason = "C03e-JB materializes Agent production durable-registry custody composition before separately gated runtime activation"
