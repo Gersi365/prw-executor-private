@@ -10,7 +10,7 @@
 //! activation, peer dial, retry, provider re-bootstrap, durable-owner operation, systemd unit/package
 //! mutation, deployment, or production-state mutation.
 
-use std::{fmt, net::SocketAddr, num::NonZeroUsize};
+use std::{fmt, net::SocketAddr, num::NonZeroUsize, sync::Arc};
 
 use prw_core::DeviceId;
 use prw_policy::PolicyEvaluator;
@@ -19,14 +19,19 @@ use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
 use crate::{
+    candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
+    production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
     production_reachability_owner_composition::ProductionReachabilityEtcdOwnerCustody,
     production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody,
     remote_session_capability_runtime::{
         RemoteSessionEndpointBoundAddressError, RemoteSessionEndpointLifecycleRuntime,
         RemoteSessionEndpointLifecycleStartupError, RemoteSessionExpectedDeviceAdmissionRejection,
+        RemoteSessionExpectedDeviceAdmissionRejectionReason,
         RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
-        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-        RemoteSessionRepeatedAdmissionFailure, SharedCurrentCapabilityAuthority,
+        RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+        RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+        RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
+        SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
     },
 };
 
@@ -142,6 +147,86 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
                 on_rejection,
                 on_admission_failure,
             )
+        })
+    }
+
+    /// Drives the requester-aware durable endpoint projection while retaining reachability custody.
+    ///
+    /// This dormant crate-internal sibling consumes the production wrapper once, retains the
+    /// distinct durable production reachability owner for the complete lower C03e-LP drive, and
+    /// forwards the existing requester-aware durable capability inputs unchanged. Completion
+    /// projection remains owned entirely by the C03e-LP raw endpoint adapter.
+    ///
+    /// No higher-owner caller migration, authority bootstrap/population, callback remapping, retry,
+    /// endpoint rebind, readiness publication, or executable activation is performed here.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-LR materializes the LQ-selected dormant production-wrapper propagation before separately gated higher-owner caller migration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-LR forwards the exact C03e-LP durable projection inputs through retained production reachability custody"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection<
+        P,
+        D,
+        T,
+        PS,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection),
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let Self {
+            endpoint,
+            owner_custody,
+        } = self;
+
+        drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
+            endpoint
+                .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability_projection(
+                    max_active_workers,
+                    authority,
+                    capability_authority,
+                    policy_source,
+                    requester_rendezvous_authority,
+                    session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                )
         })
     }
 }
