@@ -1,5 +1,8 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use super::super::dispose_recoverable_repeated_real_admission_requester_aware_worker_completion;
+use super::super::super::RemoteSessionSpawnedWorkerJoinError;
+use crate::remote_session_capability_runtime::requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop;
 
 impl RemoteSessionExecutorRuntime {
     #[allow(
@@ -187,5 +190,95 @@ impl RemoteSessionExecutorRuntime {
         });
 
         Ok(())
+    }
+
+    /// Drives the dormant production-durable repeated real-admission endpoint lifecycle while
+    /// consuming every recovered requester-aware completion through the existing FW disposition.
+    ///
+    /// Completion peer disposition always finishes before the boundary-safe completion callback is
+    /// invoked. After the LA collection returns, the existing endpoint shutdown law is reproduced
+    /// locally as close, exact idle drain on the retained executor runtime, then unchanged result.
+    /// This seam does not add an endpoint caller, propagate LF custody, bootstrap durable authority,
+    /// or activate runtime behavior.
+    #[allow(
+        dead_code,
+        reason = "C03e-LK materializes the LJ-reselected dormant durable executor boundary before separately gated endpoint caller migration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-LK preserves the exact LG/LH durable repeated-admission boundary inputs without introducing a new aggregate"
+    )]
+    pub(in super::super::super::super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability<
+        P,
+        D,
+        T,
+        PS,
+        S,
+        F,
+        C,
+        R,
+        E,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: S,
+        admission_timing: F,
+        mut on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        S: Future<Output = ()> + Send,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ),
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let result = self
+            .drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_capability(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                admission_timing,
+                |completion| {
+                    let (device_id, result) =
+                        dispose_recoverable_repeated_real_admission_requester_aware_worker_completion(
+                            completion,
+                        );
+                    on_completion(device_id, result);
+                },
+                on_rejection,
+                on_admission_failure,
+            );
+
+        transport_runtime.close(0, b"remote endpoint shutdown");
+        self.runtime.block_on(transport_runtime.wait_idle());
+        result
     }
 }
