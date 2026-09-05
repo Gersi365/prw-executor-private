@@ -14,7 +14,7 @@ Selected closure:
 
 `CLOSED_PRODUCTION_DURABLE_CAPABILITY_ENDPOINT_LIFECYCLE_CALLER_MIGRATION_SELECTION`
 
-C03e-LL is documentation-only. It selects the next smallest dormant caller-adaptation boundary above the C03e-LK production-durable executor lifecycle. It does not materialize Rust/source behavior, populate a durable authority from production, invoke the Agent executable path, bind or activate a new endpoint, migrate `linux_bootstrap.rs`, or change runtime behavior.
+C03e-LL is documentation-only. It selects the next smallest dormant caller-adaptation boundary above the C03e-LK production-durable executor lifecycle. It does not materialize Rust/source behavior, populate a durable authority from production, invoke the Agent executable path, bind or activate a new endpoint, migrate `linux_bootstrap.rs`, widen parent-private requester lifecycle types, or change runtime behavior.
 
 ## 2. Exact predecessor authority
 
@@ -79,16 +79,32 @@ Its existing public:
 
 consumes `self`, destructures those exact retained values, and calls the legacy executor lifecycle. That method remains valid and is not selected for mutation, replacement, removal, or semantic widening.
 
-### 3.3 The next higher production/executable layer is not ready for durable migration
+### 3.3 The durable callback surface is intentionally parent-module bounded
 
-On exact LK source, `crates/prw-agent/src/linux_bootstrap.rs` still invokes the existing endpoint lifecycle and does not contain `ProductionDurableCapabilityAuthority` population or custody.
+The exact LK durable completion callback contains:
 
-Therefore moving directly into `linux_bootstrap.rs` would combine at least two independently gated concerns:
+`RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop`
 
-1. endpoint-owner adaptation to the already-materialized LK executor seam; and
-2. production/executable durable-capability authority population/custody.
+The defining requester/rendezvous module exposes this enum as `pub(super)`, making it available inside its parent `remote_session_capability_runtime` module but not as a crate-wide surface.
 
-C03e-LL rejects that combined step. The endpoint-owner adaptation is selected first and must remain dormant.
+That visibility is authoritative for C03e-LL. A new endpoint method cannot be selected as `pub(crate)` without either:
+
+1. widening the requester-lifecycle result type; or
+2. translating the LK callback into a different outward aggregate.
+
+Both would be additional semantic/visibility boundaries and are explicitly outside this checkpoint.
+
+### 3.4 The next higher production/executable layer is not ready for durable migration
+
+On exact LK source, `crates/prw-agent/src/linux_bootstrap.rs` still invokes the existing endpoint lifecycle and contains no `ProductionDurableCapabilityAuthority` durable-capability population/custody lane.
+
+Moving directly into `linux_bootstrap.rs` would therefore combine at least three independently gated concerns:
+
+1. endpoint-owner adaptation to the already-materialized LK executor seam;
+2. projection or widening of the parent-private requester-aware terminal callback surface; and
+3. production/executable durable-capability authority population/custody.
+
+C03e-LL rejects that combined step. The endpoint-owner adaptation is selected first and remains strictly inside `remote_session_capability_runtime`.
 
 ## 4. Selected boundary
 
@@ -121,7 +137,7 @@ RemoteSessionEndpointLifecycleRuntime {
     -> unchanged RemoteSessionPersistentCollectionConfigError result
 ```
 
-No second executor lifecycle, endpoint bind, endpoint close, idle drain, worker loop, peer disposition, durable authorization implementation, requester-rendezvous mutation, or callback adaptation is selected at this owner layer. Those semantics remain delegated to already-materialized lower seams.
+No second executor lifecycle, endpoint bind, endpoint close, idle drain, worker loop, peer disposition, durable authorization implementation, requester-rendezvous mutation, callback projection, or callback adaptation is selected at this owner layer. Those semantics remain delegated to already-materialized lower seams or separately gated above this boundary.
 
 ## 5. Selected ownership and authority forwarding
 
@@ -192,7 +208,7 @@ Endpoint close and idle drain remain owned by the exact LK executor method.
 
 ## 7. Selected callback and error surfaces
 
-The source successor must preserve the exact LK durable callback surfaces rather than remap them into legacy wrappers.
+The source successor must preserve the exact LK durable callback surfaces rather than remap them into legacy wrappers or widen their types.
 
 ### Completion
 
@@ -209,6 +225,8 @@ FnMut(
 ```
 
 The endpoint owner receives no recovered session owner and performs no peer disposition. FW/LK already consume peer custody before this callback.
+
+`RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop` remains parent-module bounded exactly as on LK. C03e-LL does not widen it.
 
 ### Rejection
 
@@ -245,17 +263,26 @@ No new endpoint-lifecycle error enum, startup mapping, retry policy, fallback, l
 
 ## 8. Selected visibility
 
-The future additive method is selected as crate-private:
+The future additive endpoint method is selected with parent-module visibility only:
 
-`pub(crate)`
+`pub(super)`
+
+when defined inside `remote_session_endpoint_lifecycle_runtime`.
+
+Effective visibility is therefore limited to the enclosing:
+
+`crate::remote_session_capability_runtime`
+
+This matches the current visibility ceiling of the requester-aware terminal callback type and the LK executor seam.
 
 Rationale:
 
-- LK intentionally exposes its new executor seam only far enough for the endpoint-lifecycle sibling to consume it;
-- the endpoint owner is the next composition boundary that may later be consumed by a crate-internal production/executable owner;
-- a public API is unnecessary and would widen authority beyond the selected continuation path.
+- the exact LK callback surface contains a `pub(super)` requester-lifecycle result type;
+- the endpoint sibling can consume the LK executor seam entirely within the same parent module;
+- `pub(crate)` would exceed the current callback-type visibility and would require a separately selected widening or projection boundary;
+- a public API is unnecessary and unauthorized.
 
-This selection does not authorize any other visibility widening.
+C03e-LL does not authorize visibility widening of the requester lifecycle type, the endpoint method, the LK executor method, or any other owner/type.
 
 ## 9. Exact first source-successor ceiling
 
@@ -266,7 +293,7 @@ After C03e-LL closes, the immediate source successor may change only:
 Permitted scope is limited to:
 
 1. imports required solely by the new durable endpoint-lifecycle method;
-2. one additive dormant crate-private method named exactly `drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability`;
+2. one additive dormant `pub(super)` method named exactly `drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability`;
 3. exact consumption/destructuring of the existing endpoint lifecycle owner;
 4. exact forwarding of the existing requester-DR authority;
 5. exact by-value forwarding of one `Arc<ProductionDurableCapabilityAuthority>`;
@@ -275,9 +302,9 @@ Permitted scope is limited to:
 8. exactly one `supervisor_shutdown.into_shutdown()` conversion;
 9. exactly one call to the LK durable executor lifecycle method;
 10. unchanged return of `RemoteSessionPersistentCollectionConfigError`;
-11. focused compile/source-shape tests only if they fit the same file without fabricating runtime authority.
+11. focused compile/source-shape tests only if they fit the same file without fabricating runtime authority or widening private types.
 
-The source successor must stop if implementation requires any second repository path, public API, new owner type, new durable provider/source, new error envelope, legacy method mutation, root executor mutation, `linux_bootstrap.rs` mutation, `main.rs` mutation, runtime activation, or deployment configuration.
+The source successor must stop if implementation requires any second repository path, crate-wide/public API, requester-lifecycle type visibility change, callback projection/translation, new owner type, new durable provider/source, new error envelope, legacy method mutation, root executor mutation, `linux_bootstrap.rs` mutation, `main.rs` mutation, runtime activation, or deployment configuration.
 
 ## 10. Explicitly unchanged legacy path
 
@@ -289,7 +316,7 @@ must remain source- and behavior-unchanged in the immediate successor.
 
 C03e-LL does not select replacement, deprecation, call-site migration, callback translation, or removal of the legacy endpoint lifecycle.
 
-The new durable method is an additive dormant lane only.
+The new durable method is an additive dormant parent-module lane only.
 
 ## 11. Identity invariant
 
@@ -319,6 +346,8 @@ C03e-LL does not perform or authorize:
 - Rust/source mutation in this selection checkpoint;
 - mutation of the existing endpoint lifecycle method;
 - mutation of the LK executor source;
+- requester-lifecycle result visibility widening;
+- callback projection or legacy-wrapper translation;
 - `linux_bootstrap.rs` mutation;
 - `main.rs` mutation;
 - production durable-capability authority population;
@@ -345,13 +374,15 @@ The C03e-LL documentation-only selection is valid only when tied to one exact fi
 
 Required validation authority:
 
-- exact LL branch head after the contract commit;
-- exact LK -> LL comparison with merge base equal to LK head;
+- exact LL branch head after all selection/corrective contract commits;
+- exact LK -> final LL comparison with merge base equal to LK head;
 - exactly one changed path: this contract;
 - zero Rust/source/runtime/manifest/lockfile/workflow/Android/packaging/host changes;
 - `PRW Rust Validation` terminal success on the exact final LL head;
 - path-filtered workflow skips recorded as `SKIPPED`, not PASS;
 - no Android PASS claimed unless an exact-head Android workflow actually runs and succeeds.
+
+Earlier LL heads and their CI become non-authoritative if a later corrective contract commit changes the branch head.
 
 ## 14. Immutable evidence rule
 
@@ -369,6 +400,6 @@ Closure may be claimed only after:
 
 After C03e-LL closes, **STOP**.
 
-The next checkpoint may only materialize the one-file endpoint-lifecycle durable caller adaptation selected here.
+The next checkpoint may only materialize the one-file parent-module endpoint-lifecycle durable caller adaptation selected here.
 
-After that source materialization closes, perform a fresh exact-head audit before selecting any production durable-authority population, `linux_bootstrap.rs` caller migration, executable aggregate assembly, startup error policy, runtime activation, merge, deployment, or destructive cleanup.
+After that source materialization closes, perform a fresh exact-head audit before selecting any boundary that projects/widens the requester-aware terminal callback outside `remote_session_capability_runtime`, any production durable-authority population, `linux_bootstrap.rs` caller migration, executable aggregate assembly, startup error policy, runtime activation, merge, deployment, or destructive cleanup.
