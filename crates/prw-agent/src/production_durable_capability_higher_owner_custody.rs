@@ -16,9 +16,7 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
-use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::{
-    BoundedRequesterRendezvousStartPolicySource,
-};
+use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::BoundedRequesterRendezvousStartPolicySource;
 use crate::linux_bootstrap::{
     LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
     LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
@@ -385,7 +383,12 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_policy
     on_admission_failure: E,
 ) -> Result<
     LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs<
-        D, T, F, C, R, E,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
     >,
     LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
 > {
