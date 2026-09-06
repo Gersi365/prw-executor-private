@@ -15,6 +15,7 @@ use prw_remote_bridge::CapabilityDispatcher;
 
 use crate::linux_bootstrap::{
     LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
@@ -30,6 +31,25 @@ use crate::remote_session_capability_runtime::{
     RemoteSessionRepeatedAdmissionFailure,
     RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
 };
+
+/// Non-cloneable dormant pre-requester owner for one same-custody production reachability pair.
+#[allow(
+    dead_code,
+    reason = "C03e-MB materializes the MA-selected pre-requester same-custody ownership carrier before separately gated population and requester/rendezvous join"
+)]
+pub(crate) struct LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+> {
+    production_inputs:
+        LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    capability_authority: ProductionDurableCapabilityAuthority,
+}
 
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
 pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
