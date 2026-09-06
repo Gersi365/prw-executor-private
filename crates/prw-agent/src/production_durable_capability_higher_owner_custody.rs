@@ -498,6 +498,136 @@ pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_r
     )
 }
 
+/// Bounded Agent-local failure while populating one final dormant durable requester/rendezvous owner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-MP materializes the MO-selected bounded two-source combined population error before separately gated concrete capacity provenance and executable caller wiring"
+)]
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
+    /// Existing requester-policy production-source population failed.
+    ProductionSources(LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError),
+    /// Explicit requester/rendezvous runtime-owner construction failed.
+    RequesterRendezvousRuntime(RequesterRendezvousLifecycleError),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::ProductionSources(_) => {
+                "production durable requester/rendezvous source population failed"
+            }
+            Self::RequesterRendezvousRuntime(_) => {
+                "production requester/rendezvous runtime population failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ProductionSources(error) => Some(error),
+            Self::RequesterRendezvousRuntime(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+    ) -> Self {
+        Self::ProductionSources(error)
+    }
+}
+
+impl From<RequesterRendezvousLifecycleError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
+    fn from(error: RequesterRendezvousLifecycleError) -> Self {
+        Self::RequesterRendezvousRuntime(error)
+    }
+}
+
+/// Populates one final dormant durable requester/rendezvous owner from existing production sources
+/// plus one explicit caller-owned provider capacity.
+///
+/// The helper first invokes the existing C03e-MJ requester-policy population exactly once. Only
+/// after that succeeds does it invoke the existing C03e-ML requester/rendezvous runtime-owner
+/// constructor exactly once with the unchanged explicit `max_records`. Only after both fallible
+/// stages succeed does it invoke the existing C03e-MN custody join exactly once. The returned owner
+/// remains dormant and retains the existing fail-closed current capability policy.
+///
+/// This helper selects no concrete capacity provenance, performs no requester-policy evaluation,
+/// provider registration or mutation, current-grant selection, cleanup, callback invocation,
+/// executable caller wiring, listener/readiness publication, or runtime/network activation.
+///
+/// # Errors
+///
+/// Returns only the bounded C03e-MP two-source population error. MJ failures are preserved as
+/// `ProductionSources`; ML failures are preserved as `RequesterRendezvousRuntime`. ML is not called
+/// after an MJ failure, MN is not called unless both fallible stages succeed, and no retry, fallback,
+/// rollback, partial owner or synthetic recovery path is introduced.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MP materializes the MO-selected dormant explicit-capacity combined production-population wrapper before separately gated concrete capacity provenance and executable caller wiring"
+)]
+pub(crate) async fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_production_sources_with_explicit_nonzero_capacity<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+    max_records: usize,
+) -> Result<
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        ProductionRemoteCapabilityDenyAllPolicy,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
+> {
+    let requester_policy_inputs =
+        linux_agent_production_durable_reachability_requester_policy_remote_process_operation_inputs_from_production_sources(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+        .await?;
+    let requester_rendezvous_runtime_owner =
+        linux_agent_production_requester_rendezvous_runtime_owner_from_explicit_nonzero_capacity(
+            max_records,
+        )?;
+    Ok(
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_existing_custody(
+            requester_policy_inputs,
+            requester_rendezvous_runtime_owner,
+        ),
+    )
+}
+
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
 pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
     P,
