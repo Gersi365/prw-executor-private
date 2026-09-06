@@ -10,7 +10,8 @@
 use std::sync::Arc;
 
 use prw_core::DeviceId;
-use prw_policy::PolicyEvaluator;
+use prw_policy::{PolicyEvaluator, ProductionRemoteCapabilityDenyAllPolicy};
+use prw_registry::WorkspaceDeviceRegistry;
 use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
@@ -245,6 +246,70 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
     linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources(
         capability_authority,
         session_authentication,
+        expected_requests,
+        admission_timing,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+    )
+    .await
+}
+
+/// Populates one dormant pre-requester durable owner with a fail-closed current capability authority.
+///
+/// This wrapper constructs exactly one empty [`WorkspaceDeviceRegistry`] and exactly one
+/// [`ProductionRemoteCapabilityDenyAllPolicy`], composes those exact values into one
+/// [`SharedCurrentCapabilityAuthority`], and moves that exact authority by value into the existing
+/// C03e-MF session-authentication population wrapper exactly once. The resulting current authority
+/// therefore contains no populated membership/device state and grants no represented capability.
+///
+/// This helper does not hydrate or synchronize the current registry, load an allow-bearing policy,
+/// adapt durable-registry custody into current authority, create an expected-request channel,
+/// select admission timing or callbacks, construct requester/rendezvous custody, add an invocation
+/// site, or activate runtime/listener/network behavior.
+///
+/// # Errors
+///
+/// Returns the existing C03e-MD population error unchanged. Empty-registry, deny-all-policy and
+/// shared-current-authority construction are infallible, so no new error variant, retry, fallback or
+/// recovery path is added.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MH materializes the MG-selected dormant fail-closed current capability-authority population wrapper before separately gated remaining production provenance and caller wiring"
+)]
+pub(crate) async fn linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_fail_closed_current_capability_authority<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+        ProductionRemoteCapabilityDenyAllPolicy,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+    LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+> {
+    let capability_authority = SharedCurrentCapabilityAuthority::new(
+        WorkspaceDeviceRegistry::new(),
+        ProductionRemoteCapabilityDenyAllPolicy,
+    );
+    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_session_authentication(
+        capability_authority,
         expected_requests,
         admission_timing,
         on_completion,
