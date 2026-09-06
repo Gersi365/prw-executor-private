@@ -12,10 +12,16 @@ use std::sync::Arc;
 use prw_core::DeviceId;
 use prw_policy::{PolicyEvaluator, ProductionRemoteCapabilityDenyAllPolicy};
 use prw_registry::WorkspaceDeviceRegistry;
-use prw_remote_bridge::CapabilityDispatcher;
+use prw_remote_bridge::{
+    CapabilityDispatcher,
+    requester_rendezvous_in_memory_provider::{
+        InMemoryRequesterRendezvousAuthorityProvider, RequesterRendezvousLifecycleError,
+    },
+};
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
+use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::BoundedRequesterRendezvousStartPolicySource;
 use crate::linux_bootstrap::{
     LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
@@ -407,6 +413,33 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_policy
             requester_policy_source,
         },
     )
+}
+
+/// Populates one dormant requester/rendezvous runtime owner from one explicit caller-owned capacity.
+///
+/// The helper invokes the existing bounded in-memory provider constructor exactly once. Only after
+/// successful provider construction does it move that exact provider by value into the existing
+/// runtime-owner constructor exactly once. It performs no requester-policy evaluation, provider
+/// registration, current-grant selection, cleanup, final requester/rendezvous join, caller wiring,
+/// listener/readiness publication, or runtime/network activation.
+///
+/// # Errors
+///
+/// Returns the existing [`RequesterRendezvousLifecycleError`] unchanged. Zero capacity therefore
+/// remains invalid through the provider constructor. No defaulting, clamping, retry, fallback,
+/// alternate capacity, or partial runtime owner is produced.
+#[allow(
+    dead_code,
+    reason = "C03e-ML materializes the MK-selected dormant explicit-capacity requester/rendezvous provider-runtime population before separately gated final join and caller wiring"
+)]
+pub(crate) fn linux_agent_production_requester_rendezvous_runtime_owner_from_explicit_nonzero_capacity(
+    max_records: usize,
+) -> Result<CandidatePublicationRequesterRendezvousRuntimeOwner, RequesterRendezvousLifecycleError>
+{
+    let provider = InMemoryRequesterRendezvousAuthorityProvider::new(max_records)?;
+    Ok(CandidatePublicationRequesterRendezvousRuntimeOwner::new(
+        provider,
+    ))
 }
 
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
