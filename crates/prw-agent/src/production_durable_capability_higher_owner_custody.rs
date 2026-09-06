@@ -434,7 +434,8 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_policy
 )]
 pub(crate) fn linux_agent_production_requester_rendezvous_runtime_owner_from_explicit_nonzero_capacity(
     max_records: usize,
-) -> Result<CandidatePublicationRequesterRendezvousRuntimeOwner, RequesterRendezvousLifecycleError> {
+) -> Result<CandidatePublicationRequesterRendezvousRuntimeOwner, RequesterRendezvousLifecycleError>
+{
     let provider = InMemoryRequesterRendezvousAuthorityProvider::new(max_records)?;
     Ok(CandidatePublicationRequesterRendezvousRuntimeOwner::new(
         provider,
