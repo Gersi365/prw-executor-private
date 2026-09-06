@@ -16,6 +16,9 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
+use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::{
+    BoundedRequesterRendezvousStartPolicySource,
+};
 use crate::linux_bootstrap::{
     LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
     LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
@@ -317,6 +320,90 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
         on_admission_failure,
     )
     .await
+}
+
+/// Non-cloneable dormant custody joining one populated pre-requester durable owner with one exact
+/// fail-closed requester/rendezvous start policy source.
+#[allow(
+    dead_code,
+    reason = "C03e-MJ materializes the MI-selected private empty requester-policy custody before separately gated provider/runtime join"
+)]
+pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+> {
+    production_inputs: LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+        ProductionRemoteCapabilityDenyAllPolicy,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+    requester_policy_source: BoundedRequesterRendezvousStartPolicySource,
+}
+
+/// Populates one dormant pre-requester owner plus one explicit empty requester policy source.
+///
+/// This wrapper first invokes the existing C03e-MH population helper exactly once. Only after that
+/// succeeds does it construct exactly one empty [`BoundedRequesterRendezvousStartPolicySource`]
+/// through `Default`. The exact successful MH owner and exact empty source are then moved by value
+/// into one private non-cloneable carrier. No requester binding is added and no policy lookup is
+/// performed during population.
+///
+/// This helper constructs no requester/rendezvous provider or runtime owner, selects no provider
+/// capacity, performs no provider registration, constructs no final requester/rendezvous aggregate,
+/// adds no invocation site, and activates no runtime/listener/network behavior.
+///
+/// # Errors
+///
+/// Returns the existing C03e-MD population error unchanged. Empty requester-policy source
+/// construction is infallible, so no new error variant, retry, fallback or recovery path is added.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MJ materializes the MI-selected dormant empty requester-policy population wrapper before separately gated provider/runtime provenance and final join"
+)]
+pub(crate) async fn linux_agent_production_durable_reachability_requester_policy_remote_process_operation_inputs_from_production_sources<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs<
+        D, T, F, C, R, E,
+    >,
+    LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+> {
+    let production_inputs = linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_fail_closed_current_capability_authority(
+        expected_requests,
+        admission_timing,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+    )
+    .await?;
+    let requester_policy_source = BoundedRequesterRendezvousStartPolicySource::default();
+    Ok(
+        LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs {
+            production_inputs,
+            requester_policy_source,
+        },
+    )
 }
 
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
