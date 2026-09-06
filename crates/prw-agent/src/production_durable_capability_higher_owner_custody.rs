@@ -504,7 +504,8 @@ pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_r
     dead_code,
     reason = "C03e-MP materializes the MO-selected bounded two-source combined population error before separately gated concrete capacity provenance and executable caller wiring"
 )]
-pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError {
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
+{
     /// Existing requester-policy production-source population failed.
     ProductionSources(LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError),
     /// Explicit requester/rendezvous runtime-owner construction failed.
@@ -540,7 +541,9 @@ impl std::error::Error
 impl From<LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError>
     for LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
 {
-    fn from(error: LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError) -> Self {
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+    ) -> Self {
         Self::ProductionSources(error)
     }
 }
