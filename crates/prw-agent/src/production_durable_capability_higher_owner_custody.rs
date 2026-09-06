@@ -203,6 +203,57 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
     )
 }
 
+/// Populates one dormant pre-requester durable owner with one fresh process-local session service.
+///
+/// This wrapper constructs exactly one existing empty fail-closed [`SessionAuthenticationService`]
+/// and moves that exact value by value into the existing C03e-MD production population helper
+/// exactly once. It does not begin a session, generate challenge randomness, select authentication
+/// timing, construct a service per admission/worker/session, clone or share the service, choose
+/// capability-policy provenance, create an expected-request channel, construct requester/rendezvous
+/// custody, add an invocation site, or activate runtime/listener/network behavior.
+///
+/// # Errors
+///
+/// Returns the existing C03e-MD population error unchanged. Service construction itself is
+/// infallible, so this wrapper adds no error variant, retry, fallback or recovery path.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MF materializes the ME-selected dormant session-authentication population wrapper before separately gated remaining production provenance and caller wiring"
+)]
+pub(crate) async fn linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_session_authentication<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    capability_authority: SharedCurrentCapabilityAuthority<P>,
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+    LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+> {
+    let session_authentication = SessionAuthenticationService::new();
+    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources(
+        capability_authority,
+        session_authentication,
+        expected_requests,
+        admission_timing,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+    )
+    .await
+}
+
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
 pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
     P,
