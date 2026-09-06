@@ -37,7 +37,8 @@ use crate::remote_session_capability_runtime::{
     RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
     RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
     RemoteSessionRepeatedAdmissionFailure,
-    RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection, SharedCurrentCapabilityAuthority,
+    RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
+    SharedCurrentCapabilityAuthority,
 };
 
 /// Non-cloneable dormant pre-requester owner for one same-custody production reachability pair.
@@ -74,7 +75,9 @@ pub(crate) enum LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulat
     SameCustodyPeerCapabilityAuthority(ProductionDurablePeerCapabilityAuthorityPopulationError),
 }
 
-impl std::fmt::Display for LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError {
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError
+{
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::RemoteProcessInputs(_) => {
@@ -90,7 +93,9 @@ impl std::fmt::Display for LinuxAgentProductionDurableReachabilityRemoteProcessI
     }
 }
 
-impl std::error::Error for LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError {
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError
+{
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::RemoteProcessInputs(error) => Some(error),
@@ -186,8 +191,10 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
             device_id,
         )
         .await?;
-    let production_inputs =
-        LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(peer, remote_process_inputs);
+    let production_inputs = LinuxAgentProductionReachabilityRemoteProcessOperationInputs::new(
+        peer,
+        remote_process_inputs,
+    );
     Ok(
         LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs {
             production_inputs,
