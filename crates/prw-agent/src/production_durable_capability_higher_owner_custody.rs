@@ -442,6 +442,62 @@ pub(crate) fn linux_agent_production_requester_rendezvous_runtime_owner_from_exp
     ))
 }
 
+/// Joins existing requester-policy and requester/rendezvous runtime custody into the existing
+/// production durable requester/rendezvous owner without invoking either authority lane.
+///
+/// This helper consumes the exact C03e-MJ requester-policy carrier and one already-populated
+/// requester/rendezvous runtime owner by value. It destructures only existing private custody,
+/// constructs the existing inner production requester/rendezvous owner exactly once, then moves that
+/// exact inner owner and the exact raw durable capability authority into the existing outer durable
+/// higher-owner constructor exactly once. It performs no I/O, policy evaluation, provider mutation,
+/// capacity selection, registration, current-grant selection, cleanup, caller wiring, listener or
+/// runtime/network activation.
+#[allow(
+    dead_code,
+    reason = "C03e-MN materializes the MM-selected dormant by-value requester/rendezvous custody join before separately gated combined production population and executable caller wiring"
+)]
+pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_existing_custody<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    requester_policy_inputs:
+        LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs<
+            D, T, F, C, R, E,
+        >,
+    requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+) -> LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+    ProductionRemoteCapabilityDenyAllPolicy,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+> {
+    let LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs {
+        production_inputs,
+        requester_policy_source,
+    } = requester_policy_inputs;
+    let LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs {
+        production_inputs,
+        capability_authority,
+    } = production_inputs;
+    let requester_rendezvous_inputs =
+        LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
+            production_inputs,
+            requester_policy_source,
+            requester_rendezvous_runtime_owner,
+        );
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
+        requester_rendezvous_inputs,
+        capability_authority,
+    )
+}
+
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
 pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
     P,
