@@ -70,6 +70,14 @@ pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = "PRW_REMOTE_PEER_DEVICE_ID";
 /// Fixed non-secret process configuration name for the production remote active-worker bound.
 pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str = "PRW_REMOTE_MAX_ACTIVE_WORKERS";
 
+/// Fixed non-secret process configuration name for the production requester/rendezvous record bound.
+#[allow(
+    dead_code,
+    reason = "C03e-MR materializes the MQ-selected fixed requester/rendezvous max-records environment source before separately gated population composition"
+)]
+pub(crate) const PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS_ENV: &str =
+    "PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS";
+
 /// Stable failure while acquiring or validating production remote bind-address configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -250,6 +258,77 @@ pub fn load_linux_agent_remote_max_active_workers_from_env()
 -> Result<NonZeroUsize, LinuxAgentRemoteMaxActiveWorkersSourceError> {
     parse_linux_agent_remote_max_active_workers_value(std::env::var_os(
         PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV,
+    ))
+}
+
+/// Bounded failure while acquiring or validating requester/rendezvous record capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-MR materializes the MQ-selected fixed requester/rendezvous max-records environment source before separately gated population composition"
+)]
+pub(crate) enum LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured value is empty, malformed, or outside target `usize`.
+    InvalidValue,
+}
+
+impl std::fmt::Display for LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "remote requester/rendezvous max-records configuration missing",
+            Self::NonUnicode => {
+                "remote requester/rendezvous max-records configuration encoding invalid"
+            }
+            Self::InvalidValue => "remote requester/rendezvous max-records configuration invalid",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError {}
+
+#[allow(
+    dead_code,
+    reason = "C03e-MR materializes the MQ-selected strict ASCII-decimal requester/rendezvous max-records parser before separately gated population composition"
+)]
+fn parse_linux_agent_remote_requester_rendezvous_max_records_value(
+    value: Option<OsString>,
+) -> Result<usize, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError> {
+    let value = value.ok_or(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::Missing)?;
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::NonUnicode)?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue);
+    }
+    value
+        .parse::<usize>()
+        .map_err(|_| LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue)
+}
+
+/// Loads the explicitly configured production requester/rendezvous record bound.
+///
+/// The exact Unicode value must contain ASCII decimal digits only and is converted fail-closed to
+/// target `usize`. Zero is returned unchanged; the existing requester/rendezvous provider
+/// constructor remains the sole semantic authority for the non-zero capacity invariant. This
+/// source performs no trimming, fallback, retry, alternate-variable lookup, worker-limit aliasing,
+/// cache, refresh, provider construction, population composition, or runtime activation.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is missing, non-Unicode, empty, malformed, or outside
+/// target `usize`. The bounded error surface does not expose the configured value.
+#[allow(
+    dead_code,
+    reason = "C03e-MR materializes the MQ-selected fixed requester/rendezvous max-records environment loader before separately gated population composition"
+)]
+pub(crate) fn load_linux_agent_remote_requester_rendezvous_max_records_from_env()
+-> Result<usize, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError> {
+    parse_linux_agent_remote_requester_rendezvous_max_records_value(std::env::var_os(
+        PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS_ENV,
     ))
 }
 
@@ -2110,6 +2189,103 @@ mod tests {
             .expect("target-usize maximum is a valid positive worker bound")
             .get(),
             usize::MAX
+        );
+    }
+
+    #[test]
+    fn remote_requester_rendezvous_max_records_source_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<
+                usize,
+                super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
+            >,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(
+            super::PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS_ENV,
+            "PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS"
+        );
+        assert_signature(super::load_linux_agent_remote_requester_rendezvous_max_records_from_env);
+    }
+
+    #[test]
+    fn remote_requester_rendezvous_max_records_source_rejects_missing_empty_and_malformed_values() {
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(None),
+            Err(super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::Missing)
+        );
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::new(),
+            )),
+            Err(super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue)
+        );
+
+        for malformed in [" 1", "1 ", "+1", "-1", "1.0", "1_0", "1e1", "1a"] {
+            assert_eq!(
+                super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                    OsString::from(malformed),
+                )),
+                Err(super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_requester_rendezvous_max_records_source_rejects_non_unicode_value() {
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from_vec(vec![0xff]),
+            )),
+            Err(super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::NonUnicode)
+        );
+    }
+
+    #[test]
+    fn remote_requester_rendezvous_max_records_source_preserves_zero_and_exact_magnitude() {
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from("0"),
+            )),
+            Ok(0)
+        );
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from("0000"),
+            )),
+            Ok(0)
+        );
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from("17"),
+            )),
+            Ok(17)
+        );
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from("00017"),
+            )),
+            Ok(17)
+        );
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from(usize::MAX.to_string()),
+            )),
+            Ok(usize::MAX)
+        );
+    }
+
+    #[test]
+    fn remote_requester_rendezvous_max_records_source_rejects_target_usize_overflow() {
+        let overflow = format!("{}0", usize::MAX);
+        assert_eq!(
+            super::parse_linux_agent_remote_requester_rendezvous_max_records_value(Some(
+                OsString::from(overflow),
+            )),
+            Err(super::LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue)
         );
     }
 
