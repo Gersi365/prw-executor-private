@@ -297,8 +297,7 @@ impl std::error::Error for LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceEr
 fn parse_linux_agent_remote_requester_rendezvous_max_records_value(
     value: Option<OsString>,
 ) -> Result<usize, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError> {
-    let value =
-        value.ok_or(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::Missing)?;
+    let value = value.ok_or(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::Missing)?;
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::NonUnicode)?;
@@ -326,8 +325,8 @@ fn parse_linux_agent_remote_requester_rendezvous_max_records_value(
     dead_code,
     reason = "C03e-MR materializes the MQ-selected fixed requester/rendezvous max-records environment loader before separately gated population composition"
 )]
-pub(crate) fn load_linux_agent_remote_requester_rendezvous_max_records_from_env(
-) -> Result<usize, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError> {
+pub(crate) fn load_linux_agent_remote_requester_rendezvous_max_records_from_env()
+-> Result<usize, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError> {
     parse_linux_agent_remote_requester_rendezvous_max_records_value(std::env::var_os(
         PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS_ENV,
     ))
@@ -369,7 +368,7 @@ impl LinuxAgentBootstrapTerminal {
     }
 }
 
-/// Listener/socket cleanup class exposed by the bootstrap facade.
+/// Listener/socket cleanup class exposed to the Agent binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentBootstrapCleanup {
     /// Exact validated listener/socket cleanup completed.
@@ -389,7 +388,7 @@ impl LinuxAgentBootstrapCleanup {
     }
 }
 
-/// Signal-mask restoration evidence exposed to the Agent binary.
+/// Signal-mask restoration evidence exposed to the bootstrap facade.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentBootstrapSignalMaskRestore {
     /// No signal mask had been changed on this failure path.
@@ -401,7 +400,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
