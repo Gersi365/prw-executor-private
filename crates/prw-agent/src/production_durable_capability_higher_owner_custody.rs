@@ -637,7 +637,8 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
     dead_code,
     reason = "C03e-MT materializes the MS-selected two-stage configured population error before separately gated executable caller wiring"
 )]
-pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError {
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
     /// Fixed requester/rendezvous max-records source failed before production population.
     RequesterRendezvousMaxRecordsSource(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError),
     /// Existing explicit-capacity combined production population failed.
@@ -680,8 +681,10 @@ impl From<LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError>
     }
 }
 
-impl From<LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError>
-    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+impl
+    From<
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
+    > for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
 {
     fn from(
         error: LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
