@@ -1001,7 +1001,7 @@ impl std::error::Error
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ConfiguredPopulation(error) => Some(error),
-            Self::Bootstrap(error) => Some(error),
+            Self::Bootstrap(_) => None,
         }
     }
 }
