@@ -963,3 +963,130 @@ where
         );
     run_with_remote_process_companion(operation)
 }
+
+/// Bounded failure while composing configured production population with higher-owner companion assembly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-MV materializes the MU-selected two-stage configured-population companion error before separately gated executable caller wiring"
+)]
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError
+{
+    /// Existing configured production population failed before companion assembly.
+    ConfiguredPopulation(
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError,
+    ),
+    /// Existing higher-owner Linux remote-companion assembly failed after population success.
+    Bootstrap(LinuxAgentBootstrapStartFailure),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::ConfiguredPopulation(_) => {
+                "production durable requester/rendezvous configured population failed before companion assembly"
+            }
+            Self::Bootstrap(_) => {
+                "production durable requester/rendezvous higher-owner companion assembly failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ConfiguredPopulation(error) => Some(error),
+            Self::Bootstrap(_) => None,
+        }
+    }
+}
+
+impl From<LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError,
+    ) -> Self {
+        Self::ConfiguredPopulation(error)
+    }
+}
+
+impl From<LinuxAgentBootstrapStartFailure>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError
+{
+    fn from(error: LinuxAgentBootstrapStartFailure) -> Self {
+        Self::Bootstrap(error)
+    }
+}
+
+/// Populates configured production inputs and assembles the existing dormant higher-owner companion.
+///
+/// The helper invokes the existing C03e-MT configured production-population helper exactly once and
+/// awaits it exactly once. Population failure short-circuits before C03e-LX. Only after successful
+/// population does it move the exact returned higher-owner inputs by value into the existing C03e-LX
+/// projection-capable companion assembly exactly once. The caller-supplied expected-request receiver,
+/// admission timing and callbacks are forwarded unchanged to MT. No alternate population path, retry,
+/// fallback, synthetic channel, concrete provenance selection, executable invocation site,
+/// listener/readiness publication, or runtime/network activation is introduced.
+///
+/// # Errors
+///
+/// Existing C03e-MT configured-population failures are preserved as `ConfiguredPopulation`; existing
+/// Linux companion bootstrap failures are preserved as `Bootstrap`. C03e-LX is never called after a
+/// population failure.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MV materializes the MU-selected dormant configured-population to higher-owner companion composition before separately gated executable caller wiring"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_remote_process_companion_from_configured_production_sources<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+>
+where
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(DeviceId, RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection)
+        + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+{
+    let inputs =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+        .await?;
+    run_with_production_durable_reachability_requester_rendezvous_remote_process_companion_with_production_durable_capability_projection(
+        inputs,
+    )
+    .map_err(Into::into)
+}
