@@ -28,11 +28,14 @@ use crate::linux_bootstrap::{
     LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentProductionRemoteProcessInputPopulationError, LinuxAgentRemotePeerDeviceSourceError,
+    LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
     linux_agent_remote_process_operation_inputs_from_production_worker_limit,
-    load_linux_agent_remote_peer_device_id_from_env, run_with_remote_process_companion,
+    load_linux_agent_remote_peer_device_id_from_env,
+    load_linux_agent_remote_requester_rendezvous_max_records_from_env,
+    run_with_remote_process_companion,
 };
 use crate::production_durable_registry_custody_bootstrap::{
     ProductionDurablePeerCapabilityAuthorityPopulationError,
@@ -626,6 +629,127 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
             requester_rendezvous_runtime_owner,
         ),
     )
+}
+
+/// Bounded failure while composing configured requester/rendezvous capacity with production population.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-MT materializes the MS-selected two-stage configured population error before separately gated executable caller wiring"
+)]
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    /// Fixed requester/rendezvous max-records source failed before production population.
+    RequesterRendezvousMaxRecordsSource(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError),
+    /// Existing explicit-capacity combined production population failed.
+    Population(
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
+    ),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::RequesterRendezvousMaxRecordsSource(_) => {
+                "production requester/rendezvous max-records source failed"
+            }
+            Self::Population(_) => {
+                "production durable requester/rendezvous configured population failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::RequesterRendezvousMaxRecordsSource(error) => Some(error),
+            Self::Population(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    fn from(error: LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError) -> Self {
+        Self::RequesterRendezvousMaxRecordsSource(error)
+    }
+}
+
+impl
+    From<
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
+    > for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
+    ) -> Self {
+        Self::Population(error)
+    }
+}
+
+/// Populates one dormant durable requester/rendezvous owner from the fixed configured capacity source.
+///
+/// The helper reads the existing C03e-MR requester/rendezvous max-records environment source exactly
+/// once. Only after source success does it invoke the existing C03e-MP explicit-capacity combined
+/// population helper exactly once with the unchanged target `usize`. Zero is not pre-validated here;
+/// the existing provider/runtime construction remains the sole semantic authority for non-zero
+/// capacity. No retry, fallback, alternate source, worker-limit alias, caller wiring, startup
+/// mapping, operation invocation, listener/readiness publication, or runtime/network activation is
+/// introduced.
+///
+/// # Errors
+///
+/// Source acquisition failures are preserved as `RequesterRendezvousMaxRecordsSource`; existing MP
+/// failures remain nested intact as `Population`. MP is never called after source failure.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-MT materializes the MS-selected dormant configured-capacity composition wrapper before separately gated executable caller wiring"
+)]
+pub(crate) async fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        ProductionRemoteCapabilityDenyAllPolicy,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError,
+> {
+    let max_records = load_linux_agent_remote_requester_rendezvous_max_records_from_env()?;
+    let inputs =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_production_sources_with_explicit_nonzero_capacity(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+            max_records,
+        )
+        .await?;
+    Ok(inputs)
 }
 
 /// Non-cloneable dormant process-lifetime owner for one production durable capability authority.
