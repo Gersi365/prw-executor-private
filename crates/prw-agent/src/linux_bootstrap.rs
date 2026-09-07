@@ -388,7 +388,7 @@ impl LinuxAgentBootstrapCleanup {
     }
 }
 
-/// Signal-mask restoration evidence exposed to the bootstrap facade.
+/// Signal-mask restoration evidence exposed to the Agent binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentBootstrapSignalMaskRestore {
     /// No signal mask had been changed on this failure path.
@@ -400,7 +400,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr failure contract.
+    /// Returns the bounded token used by the initial stderr summary contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
