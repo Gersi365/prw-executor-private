@@ -82,6 +82,10 @@ impl LinuxAgentProductionRemoteCapabilityDispatcher {
     }
 
     // Keep the pure command projection testable without constructing transport/session authority.
+    #[allow(
+        dead_code,
+        reason = "C03e-NB command projection remains dormant until separately gated caller composition"
+    )]
     fn dispatch_command(
         &self,
         command: &BridgeCommand,
@@ -113,6 +117,10 @@ impl LinuxAgentProductionRemoteCapabilityDispatcher {
 
 /// Bounded zero-data failure for provider-backed commands outside the selected adapter surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-NB dispatch errors remain dormant until separately gated caller composition"
+)]
 pub(crate) enum LinuxAgentProductionRemoteCapabilityDispatchError {
     UnsupportedProviderFamily,
 }
