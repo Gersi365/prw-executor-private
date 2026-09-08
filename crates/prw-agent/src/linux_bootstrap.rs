@@ -3060,3 +3060,208 @@ mod tests {
         );
     }
 }
+
+/// Fixed non-secret process configuration name for the production expected-device
+/// scheduling-consumption terminal-record bound.
+#[allow(
+    dead_code,
+    reason = "C03e-NN materializes the NM-selected fixed expected-device scheduling-consumption max-records environment source before separately gated ledger representation and population composition"
+)]
+pub(crate) const PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS_ENV: &str =
+    "PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS";
+
+/// Bounded failure while acquiring or validating expected-device scheduling-consumption capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-NN materializes the NM-selected bounded scheduling-consumption capacity source error before separately gated ledger representation"
+)]
+pub(crate) enum LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured value is empty, malformed, or outside target `usize`.
+    InvalidValue,
+}
+
+impl std::fmt::Display
+    for LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => {
+                "remote expected-device scheduling-consumption max-records configuration missing"
+            }
+            Self::NonUnicode => {
+                "remote expected-device scheduling-consumption max-records configuration encoding invalid"
+            }
+            Self::InvalidValue => {
+                "remote expected-device scheduling-consumption max-records configuration invalid"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError
+{
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-NN materializes the NM-selected strict ASCII-decimal scheduling-consumption max-records parser before separately gated ledger representation"
+)]
+fn parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
+    value: Option<OsString>,
+) -> Result<usize, LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError> {
+    let value = value.ok_or(
+        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::Missing,
+    )?;
+    let value = value.into_string().map_err(|_| {
+        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::NonUnicode
+    })?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(
+            LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue,
+        );
+    }
+    value.parse::<usize>().map_err(|_| {
+        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue
+    })
+}
+
+/// Loads the explicitly configured production expected-device scheduling-consumption record bound.
+///
+/// The exact Unicode value must contain ASCII decimal digits only and is converted fail-closed to
+/// target `usize`. Zero is returned unchanged; the separately gated future scheduling-consumption
+/// ledger constructor remains the sole semantic authority for its non-zero capacity invariant.
+/// This source performs no trimming, fallback, retry, alternate-variable lookup, requester-provider
+/// capacity aliasing, worker-limit aliasing, channel-capacity aliasing, cache, refresh, ledger
+/// construction, population composition, or runtime activation.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is missing, non-Unicode, empty, malformed, or outside
+/// target `usize`. The bounded error surface does not expose the configured value.
+#[allow(
+    dead_code,
+    reason = "C03e-NN materializes the NM-selected fixed scheduling-consumption max-records environment loader before separately gated ledger representation and population composition"
+)]
+pub(crate) fn load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env()
+-> Result<usize, LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError> {
+    parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
+        std::env::var_os(PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS_ENV),
+    )
+}
+
+#[cfg(test)]
+mod expected_device_scheduling_consumption_capacity_source_tests {
+    use std::ffi::OsString;
+
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
+
+    use super::{
+        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
+        PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS_ENV,
+        load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env,
+        parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value,
+    };
+
+    #[test]
+    fn source_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<
+                usize,
+                LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
+            >,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(
+            PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS_ENV,
+            "PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS"
+        );
+        assert_signature(
+            load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env,
+        );
+    }
+
+    #[test]
+    fn source_rejects_missing_empty_and_malformed_values() {
+        assert_eq!(
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(None),
+            Err(LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::Missing)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(Some(
+                OsString::new(),
+            )),
+            Err(
+                LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue
+            )
+        );
+
+        for malformed in [" 1", "1 ", "+1", "-1", "1.0", "1_0", "1e1", "1a"] {
+            assert_eq!(
+                parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
+                    Some(OsString::from(malformed)),
+                ),
+                Err(
+                    LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue
+                )
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(Some(
+                OsString::from_vec(vec![0xff]),
+            )),
+            Err(
+                LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::NonUnicode
+            )
+        );
+    }
+
+    #[test]
+    fn source_preserves_zero_and_exact_magnitude() {
+        for (value, expected) in [
+            ("0", 0),
+            ("0000", 0),
+            ("17", 17),
+            ("00017", 17),
+        ] {
+            assert_eq!(
+                parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
+                    Some(OsString::from(value)),
+                ),
+                Ok(expected)
+            );
+        }
+        assert_eq!(
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(Some(
+                OsString::from(usize::MAX.to_string()),
+            )),
+            Ok(usize::MAX)
+        );
+    }
+
+    #[test]
+    fn source_rejects_target_usize_overflow() {
+        let overflow = format!("{}0", usize::MAX);
+        assert_eq!(
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(Some(
+                OsString::from(overflow),
+            )),
+            Err(
+                LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue
+            )
+        );
+    }
+}
