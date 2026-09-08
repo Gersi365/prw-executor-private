@@ -3115,9 +3115,8 @@ impl std::error::Error
 fn parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
     value: Option<OsString>,
 ) -> Result<usize, LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError> {
-    let value = value.ok_or(
-        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::Missing,
-    )?;
+    let value = value
+        .ok_or(LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::Missing)?;
     let value = value.into_string().map_err(|_| {
         LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::NonUnicode
     })?;
@@ -3231,12 +3230,7 @@ mod expected_device_scheduling_consumption_capacity_source_tests {
 
     #[test]
     fn source_preserves_zero_and_exact_magnitude() {
-        for (value, expected) in [
-            ("0", 0),
-            ("0000", 0),
-            ("17", 17),
-            ("00017", 17),
-        ] {
+        for (value, expected) in [("0", 0), ("0000", 0), ("17", 17), ("00017", 17)] {
             assert_eq!(
                 parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
                     Some(OsString::from(value)),
@@ -3245,9 +3239,9 @@ mod expected_device_scheduling_consumption_capacity_source_tests {
             );
         }
         assert_eq!(
-            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(Some(
-                OsString::from(usize::MAX.to_string()),
-            )),
+            parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_value(
+                Some(OsString::from(usize::MAX.to_string()),)
+            ),
             Ok(usize::MAX)
         );
     }
