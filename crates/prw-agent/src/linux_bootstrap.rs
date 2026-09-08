@@ -17,7 +17,7 @@ use prw_connectivity::PeerConnectivityIdentity;
 use prw_core::DeviceId;
 use prw_network::PrivateDnsConfig;
 use prw_policy::{BoundedLocalReadPolicy, PolicyEvaluator};
-use prw_remote_bridge::CapabilityDispatcher;
+use prw_remote_bridge::{AuthorizedCapabilityRequest, BridgeCommand, CapabilityDispatcher};
 use prw_session::SessionAuthenticationService;
 use tokio::sync::mpsc;
 
@@ -41,7 +41,9 @@ use crate::linux_identity::termination_signal::{
 };
 use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
-use crate::local_commands::status_snapshot::{LocalAgentRuntimeState, LocalAgentStatusSnapshot};
+use crate::local_commands::status_snapshot::{
+    LocalAgentRuntimeState, LocalAgentStatusSnapshot, codec::encode_status_snapshot,
+};
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
     RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
@@ -60,6 +62,76 @@ use crate::remote_session_capability_runtime::{
         RemoteSessionSupervisorShutdownPublisher,
     },
 };
+
+/// Dormant owned status-only adapter selected by C03e-NA.
+#[allow(
+    dead_code,
+    reason = "C03e-NB materializes the owned dispatcher before separately gated caller composition"
+)]
+pub(crate) struct LinuxAgentProductionRemoteCapabilityDispatcher {
+    status_snapshot: LocalAgentStatusSnapshot,
+}
+
+impl LinuxAgentProductionRemoteCapabilityDispatcher {
+    #[allow(
+        dead_code,
+        reason = "production dispatcher construction remains deferred after C03e-NB"
+    )]
+    pub(crate) const fn new(status_snapshot: LocalAgentStatusSnapshot) -> Self {
+        Self { status_snapshot }
+    }
+
+    // Keep the pure command projection testable without constructing transport/session authority.
+    fn dispatch_command(
+        &self,
+        command: &BridgeCommand,
+    ) -> Result<Vec<u8>, LinuxAgentProductionRemoteCapabilityDispatchError> {
+        match command {
+            BridgeCommand::AgentStatus => Ok(encode_status_snapshot(self.status_snapshot).to_vec()),
+            BridgeCommand::FileList(_)
+            | BridgeCommand::FileStat(_)
+            | BridgeCommand::FileCreate { .. }
+            | BridgeCommand::DirectoryCreate(_)
+            | BridgeCommand::UploadBegin(_)
+            | BridgeCommand::UploadResume(_)
+            | BridgeCommand::UploadChunk { .. }
+            | BridgeCommand::UploadFinalize(_)
+            | BridgeCommand::UploadAbort(_)
+            | BridgeCommand::DownloadChunk { .. }
+            | BridgeCommand::TerminalOpen { .. }
+            | BridgeCommand::TerminalInput { .. }
+            | BridgeCommand::TerminalResize { .. }
+            | BridgeCommand::TerminalRead { .. }
+            | BridgeCommand::TerminalClose(_)
+            | BridgeCommand::ForwardOpen { .. }
+            | BridgeCommand::ForwardClose(_) => {
+                Err(LinuxAgentProductionRemoteCapabilityDispatchError::UnsupportedProviderFamily)
+            }
+        }
+    }
+}
+
+/// Bounded zero-data failure for provider-backed commands outside the selected adapter surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinuxAgentProductionRemoteCapabilityDispatchError {
+    UnsupportedProviderFamily,
+}
+
+impl std::fmt::Display for LinuxAgentProductionRemoteCapabilityDispatchError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("remote capability provider family unsupported")
+    }
+}
+
+impl std::error::Error for LinuxAgentProductionRemoteCapabilityDispatchError {}
+
+impl CapabilityDispatcher for LinuxAgentProductionRemoteCapabilityDispatcher {
+    type Error = LinuxAgentProductionRemoteCapabilityDispatchError;
+
+    fn dispatch(&mut self, request: &AuthorizedCapabilityRequest) -> Result<Vec<u8>, Self::Error> {
+        self.dispatch_command(request.command())
+    }
+}
 
 /// Fixed non-secret process configuration name for the production remote endpoint bind address.
 pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
@@ -1934,6 +2006,145 @@ mod tests {
             RemoteSessionSupervisorShutdownPublish,
         },
     };
+
+    mod production_remote_capability_dispatcher {
+        use std::net::{IpAddr, Ipv4Addr};
+
+        use prw_file_service::RemotePath;
+        use prw_file_transfer::{TransferId, UploadPlan};
+        use prw_forwarding::{
+            ForwardTarget, LoopbackBind, LoopbackFamily, PortForwardId, TcpForwardSpec,
+        };
+        use prw_remote_bridge::{BridgeCommand, CapabilityDispatcher};
+        use prw_terminal::{TerminalGeometry, TerminalProfile, TerminalSessionId};
+
+        use super::super::{
+            LinuxAgentProductionRemoteCapabilityDispatchError,
+            LinuxAgentProductionRemoteCapabilityDispatcher,
+        };
+        use crate::local_commands::status_snapshot::{
+            LocalAgentRuntimeState, LocalAgentStatusSnapshot,
+            codec::{decode_status_snapshot, encode_status_snapshot},
+        };
+
+        #[test]
+        fn owned_snapshot_satisfies_worker_dispatcher_bound_after_caller_scope_ends() {
+            fn assert_worker_bound<D: CapabilityDispatcher + Send + 'static>(dispatcher: D) -> D {
+                dispatcher
+            }
+
+            let dispatcher = {
+                let snapshot = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Degraded);
+                assert_worker_bound(LinuxAgentProductionRemoteCapabilityDispatcher::new(
+                    snapshot,
+                ))
+            };
+            assert_eq!(
+                dispatcher.dispatch_command(&BridgeCommand::AgentStatus),
+                Ok(vec![3, 0, 1, 0, 0])
+            );
+        }
+
+        #[test]
+        fn every_status_state_returns_exact_existing_five_byte_body_without_framing() {
+            for state in [
+                LocalAgentRuntimeState::Starting,
+                LocalAgentRuntimeState::Ready,
+                LocalAgentRuntimeState::Degraded,
+                LocalAgentRuntimeState::Stopping,
+            ] {
+                let snapshot = LocalAgentStatusSnapshot::current(state);
+                let dispatcher = LinuxAgentProductionRemoteCapabilityDispatcher::new(snapshot);
+                let result = dispatcher
+                    .dispatch_command(&BridgeCommand::AgentStatus)
+                    .expect("status projection");
+
+                assert_eq!(result.len(), 5);
+                assert_eq!(result, encode_status_snapshot(snapshot));
+                assert_eq!(decode_status_snapshot(&result), Ok(snapshot));
+            }
+        }
+
+        #[test]
+        fn every_provider_backed_command_fails_closed_with_zero_data_error() {
+            let path = RemotePath::parse("unavailable/item").expect("relative path");
+            let transfer_id = TransferId::new([0x31; 16]);
+            let plan =
+                UploadPlan::new(transfer_id, path.clone(), 1, [0x32; 32]).expect("upload plan");
+            let session_id = TerminalSessionId::new(17).expect("terminal id");
+            let geometry = TerminalGeometry::new(80, 24).expect("terminal geometry");
+            let forward_id = PortForwardId::new(19).expect("forward id");
+            let spec = TcpForwardSpec::new(
+                LoopbackBind::new(LoopbackFamily::Ipv4, 8080).expect("loopback bind"),
+                ForwardTarget::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)), 443)
+                    .expect("forward target"),
+            );
+            let commands = [
+                BridgeCommand::FileList(path.clone()),
+                BridgeCommand::FileStat(path.clone()),
+                BridgeCommand::FileCreate {
+                    path: path.clone(),
+                    contents: b"private contents".to_vec(),
+                },
+                BridgeCommand::DirectoryCreate(path.clone()),
+                BridgeCommand::UploadBegin(plan.clone()),
+                BridgeCommand::UploadResume(plan),
+                BridgeCommand::UploadChunk {
+                    transfer_id,
+                    offset: 0,
+                    chunk: vec![1],
+                },
+                BridgeCommand::UploadFinalize(transfer_id),
+                BridgeCommand::UploadAbort(transfer_id),
+                BridgeCommand::DownloadChunk {
+                    path,
+                    offset: 0,
+                    requested_len: 1,
+                },
+                BridgeCommand::TerminalOpen {
+                    session_id,
+                    profile: TerminalProfile::BashShell,
+                    geometry,
+                },
+                BridgeCommand::TerminalInput {
+                    session_id,
+                    bytes: b"private input".to_vec(),
+                },
+                BridgeCommand::TerminalResize {
+                    session_id,
+                    geometry,
+                },
+                BridgeCommand::TerminalRead {
+                    session_id,
+                    maximum_bytes: 1,
+                },
+                BridgeCommand::TerminalClose(session_id),
+                BridgeCommand::ForwardOpen { forward_id, spec },
+                BridgeCommand::ForwardClose(forward_id),
+            ];
+            let snapshot = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Stopping);
+            let dispatcher = LinuxAgentProductionRemoteCapabilityDispatcher::new(snapshot);
+
+            for command in commands {
+                let error = dispatcher
+                    .dispatch_command(&command)
+                    .expect_err("unsupported family");
+                assert_eq!(
+                    error,
+                    LinuxAgentProductionRemoteCapabilityDispatchError::UnsupportedProviderFamily
+                );
+                assert_eq!(
+                    error.to_string(),
+                    "remote capability provider family unsupported"
+                );
+                assert!(std::error::Error::source(&error).is_none());
+            }
+            assert_eq!(
+                dispatcher.dispatch_command(&BridgeCommand::AgentStatus),
+                Ok(encode_status_snapshot(snapshot).to_vec())
+            );
+        }
+    }
 
     struct TestDispatcher;
 
