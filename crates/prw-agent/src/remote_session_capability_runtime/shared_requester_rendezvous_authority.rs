@@ -794,3 +794,178 @@ mod tests {
         std::hint::black_box(adapter);
     }
 }
+
+/// Dormant process-local representation of terminal expected-device scheduling consumption.
+///
+/// C03e-NO materializes only the C03e-NL/NM-selected private representation primitive. This module
+/// is intentionally not exported and is not attached to [`SharedRequesterRendezvousAuthority`]. It
+/// performs no environment read, requester/rendezvous provider mutation, scheduling grant creation,
+/// expected-device request construction, runtime activation, persistence, eviction or cleanup.
+#[allow(
+    dead_code,
+    reason = "C03e-NO materializes the selected private scheduling-consumption ledger representation before separately gated owner/constructor/population integration"
+)]
+mod expected_device_scheduling_consumption_ledger {
+    use prw_core::{DeviceId, SessionId};
+
+    /// Exact terminal-consumption identity selected by C03e-NL.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ExpectedDeviceSchedulingConsumptionKey {
+        requester_session_id: SessionId,
+        target_device_id: DeviceId,
+    }
+
+    impl ExpectedDeviceSchedulingConsumptionKey {
+        const fn new(requester_session_id: SessionId, target_device_id: DeviceId) -> Self {
+            Self {
+                requester_session_id,
+                target_device_id,
+            }
+        }
+    }
+
+    /// Bounded representation-level failure for terminal scheduling-consumption state.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ExpectedDeviceSchedulingConsumptionLedgerError {
+        /// Zero is not a usable terminal-consumption ledger capacity.
+        InvalidCapacity,
+        /// The exact requester-session plus target-device key was already committed.
+        AlreadyConsumed,
+        /// A new distinct key cannot be retained because the finite bound is full.
+        CapacityExhausted,
+    }
+
+    impl std::fmt::Display for ExpectedDeviceSchedulingConsumptionLedgerError {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(match self {
+                Self::InvalidCapacity => "expected-device scheduling-consumption capacity invalid",
+                Self::AlreadyConsumed => "expected-device scheduling authority already consumed",
+                Self::CapacityExhausted => {
+                    "expected-device scheduling-consumption capacity exhausted"
+                }
+            })
+        }
+    }
+
+    impl std::error::Error for ExpectedDeviceSchedulingConsumptionLedgerError {}
+
+    /// Finite process-local identity set for terminal expected-device scheduling consumption.
+    ///
+    /// Records are never removed, evicted, expired or compacted by this representation. The
+    /// semantic linearization point is successful insertion by [`Self::commit_if_absent`].
+    #[derive(Debug)]
+    struct ExpectedDeviceSchedulingConsumptionLedger {
+        max_records: usize,
+        consumed: Vec<ExpectedDeviceSchedulingConsumptionKey>,
+    }
+
+    impl ExpectedDeviceSchedulingConsumptionLedger {
+        const fn new(
+            max_records: usize,
+        ) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
+            if max_records == 0 {
+                return Err(ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity);
+            }
+
+            Ok(Self {
+                max_records,
+                consumed: Vec::new(),
+            })
+        }
+
+        fn commit_if_absent(
+            &mut self,
+            key: ExpectedDeviceSchedulingConsumptionKey,
+        ) -> Result<(), ExpectedDeviceSchedulingConsumptionLedgerError> {
+            if self.consumed.iter().any(|existing| existing == &key) {
+                return Err(ExpectedDeviceSchedulingConsumptionLedgerError::AlreadyConsumed);
+            }
+            if self.consumed.len() >= self.max_records {
+                return Err(ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted);
+            }
+
+            self.consumed.push(key);
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use prw_core::{DeviceId, SessionId};
+
+        use super::{
+            ExpectedDeviceSchedulingConsumptionKey, ExpectedDeviceSchedulingConsumptionLedger,
+            ExpectedDeviceSchedulingConsumptionLedgerError,
+        };
+
+        fn key(requester: &str, target: &str) -> ExpectedDeviceSchedulingConsumptionKey {
+            ExpectedDeviceSchedulingConsumptionKey::new(
+                SessionId::new(requester).expect("valid requester session id"),
+                DeviceId::new(target).expect("valid target device id"),
+            )
+        }
+
+        #[test]
+        fn constructor_rejects_zero_capacity_and_accepts_positive_capacity() {
+            assert!(matches!(
+                ExpectedDeviceSchedulingConsumptionLedger::new(0),
+                Err(ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity)
+            ));
+            assert!(ExpectedDeviceSchedulingConsumptionLedger::new(1).is_ok());
+        }
+
+        #[test]
+        fn exact_requester_session_and_target_device_pair_is_the_only_key_identity() {
+            let mut ledger =
+                ExpectedDeviceSchedulingConsumptionLedger::new(3).expect("positive capacity");
+
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-a")),
+                Ok(())
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-b")),
+                Ok(())
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-b", "target-a")),
+                Ok(())
+            );
+            assert_eq!(ledger.consumed.len(), 3);
+        }
+
+        #[test]
+        fn duplicate_is_classified_before_capacity_exhaustion() {
+            let mut ledger =
+                ExpectedDeviceSchedulingConsumptionLedger::new(1).expect("positive capacity");
+            let consumed = key("requester-a", "target-a");
+
+            assert_eq!(ledger.commit_if_absent(consumed.clone()), Ok(()));
+            assert_eq!(
+                ledger.commit_if_absent(consumed),
+                Err(ExpectedDeviceSchedulingConsumptionLedgerError::AlreadyConsumed)
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-b", "target-b")),
+                Err(ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted)
+            );
+            assert_eq!(ledger.consumed.len(), 1);
+        }
+
+        #[test]
+        fn failed_commits_do_not_mutate_terminal_consumption_state() {
+            let mut ledger =
+                ExpectedDeviceSchedulingConsumptionLedger::new(1).expect("positive capacity");
+
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-a")),
+                Ok(())
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-b", "target-b")),
+                Err(ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted)
+            );
+            assert_eq!(ledger.consumed, vec![key("requester-a", "target-a")]);
+        }
+    }
+}
