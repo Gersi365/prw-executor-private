@@ -697,7 +697,7 @@ mod tests {
             RequesterRendezvousPostTerminalResponseSerialLifecycleError::from,
         );
         assert_requester_response_lifecycle_error_conversion(
-            RequesterRendezvousPostTerminalDrAcknowledgementResponseCompositionError::from,
+            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError::from,
         );
     }
 
