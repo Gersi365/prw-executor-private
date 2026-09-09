@@ -399,7 +399,7 @@ impl std::error::Error for ExpectedDeviceSchedulingAuthorityDerivationError {
     }
 }
 
-fn map_expected_device_scheduling_consumption_error(
+const fn map_expected_device_scheduling_consumption_error(
     error: expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError,
 ) -> ExpectedDeviceSchedulingAuthorityDerivationError {
     match error {
@@ -526,7 +526,8 @@ impl SharedRequesterRendezvousAuthority {
     /// impossible constructor-only consumption-state classification is observed.
     #[allow(
         dead_code,
-        reason = "C03e-NS materializes dormant scheduling-authority derivation before separately gated caller/result-custody integration"
+        clippy::significant_drop_tightening,
+        reason = "C03e-NS intentionally retains the requester guard across fresh current-authority reauthorization and terminal consumption to preserve the NR-selected lock order and atomic derivation boundary"
     )]
     pub(super) async fn derive_expected_device_scheduling_authority<
         P: PolicyEvaluator + Send + Sync,
