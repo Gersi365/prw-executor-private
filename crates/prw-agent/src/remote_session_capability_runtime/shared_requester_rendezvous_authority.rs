@@ -860,9 +860,7 @@ mod expected_device_scheduling_consumption_ledger {
     }
 
     impl ExpectedDeviceSchedulingConsumptionLedger {
-        fn new(
-            max_records: usize,
-        ) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
+        fn new(max_records: usize) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
             if max_records == 0 {
                 return Err(ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity);
             }
@@ -919,9 +917,18 @@ mod expected_device_scheduling_consumption_ledger {
             let mut ledger =
                 ExpectedDeviceSchedulingConsumptionLedger::new(3).expect("positive capacity");
 
-            assert_eq!(ledger.commit_if_absent(key("requester-a", "target-a")), Ok(()));
-            assert_eq!(ledger.commit_if_absent(key("requester-a", "target-b")), Ok(()));
-            assert_eq!(ledger.commit_if_absent(key("requester-b", "target-a")), Ok(()));
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-a")),
+                Ok(())
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-b")),
+                Ok(())
+            );
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-b", "target-a")),
+                Ok(())
+            );
             assert_eq!(ledger.consumed.len(), 3);
         }
 
@@ -948,7 +955,10 @@ mod expected_device_scheduling_consumption_ledger {
             let mut ledger =
                 ExpectedDeviceSchedulingConsumptionLedger::new(1).expect("positive capacity");
 
-            assert_eq!(ledger.commit_if_absent(key("requester-a", "target-a")), Ok(()));
+            assert_eq!(
+                ledger.commit_if_absent(key("requester-a", "target-a")),
+                Ok(())
+            );
             assert_eq!(
                 ledger.commit_if_absent(key("requester-b", "target-b")),
                 Err(ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted)
