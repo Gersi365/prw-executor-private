@@ -31,28 +31,48 @@ use super::super::{
     validate_persistent_worker_capacity,
 };
 use super::{
+    RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion,
     RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
     recoverable_persistent_requester_rendezvous_worker::{
-        RecoverablePersistentWorkerEntry, RecoverableRequesterAwareWorkerCompletion,
-        RecoverableRequesterAwareWorkerEntry, drain_recoverable_workers,
-        reap_ready_recoverable_workers, request_all_recoverable_worker_cancellations,
+        RecoverablePersistentWorkerCompletion, RecoverablePersistentWorkerEntry,
+        RecoverableRequesterAwareWorkerCompletion, RecoverableRequesterAwareWorkerEntry,
+        drain_recoverable_workers, reap_ready_recoverable_workers,
+        request_all_recoverable_worker_cancellations,
     },
 };
 use crate::{
     candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
     production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
     remote_session_capability_runtime::{
-        RemoteSessionRealAdmissionError, SharedCurrentCapabilityAuthority,
-        SharedRequesterRendezvousAuthority, admit_expected_remote_device_session,
-        remote_session_worker_cancellation_pair,
-        requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
-        requester_rendezvous_retained_custody_dr_continuation::run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability,
+        AuthenticatedRemoteSessionRuntimeOwner, RemoteSessionRealAdmissionError,
+        SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
+        admit_expected_remote_device_session, remote_session_worker_cancellation_pair,
+        requester_rendezvous_retained_custody_dr_continuation::{
+            RequesterRendezvousProductionDurableSchedulingWorkerStop,
+            run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
+            run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability,
+            run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling,
+        },
     },
     remote_transport_runtime::AgentRemoteTransportRuntime,
 };
 
 type ActiveRecoverableRequesterAwareWorkers =
     HashMap<DeviceId, RecoverableRequesterAwareWorkerEntry>;
+
+type RecoverableSchedulingRequesterAwareWorkerEntry = RecoverablePersistentWorkerEntry<
+    AuthenticatedRemoteSessionRuntimeOwner,
+    RequesterRendezvousProductionDurableSchedulingWorkerStop,
+>;
+
+type RecoverableSchedulingRequesterAwareWorkerCompletion = RecoverablePersistentWorkerCompletion<
+    DeviceId,
+    AuthenticatedRemoteSessionRuntimeOwner,
+    RequesterRendezvousProductionDurableSchedulingWorkerStop,
+>;
+
+type ActiveRecoverableSchedulingRequesterAwareWorkers =
+    HashMap<DeviceId, RecoverableSchedulingRequesterAwareWorkerEntry>;
 
 enum RepeatedRecoverableSupervisorEvent<C> {
     Shutdown,
@@ -199,6 +219,67 @@ where
     .await
 }
 
+fn publish_recoverable_scheduling_completion<C>(
+    completion: RecoverableSchedulingRequesterAwareWorkerCompletion,
+    on_completion: &mut C,
+) where
+    C: FnMut(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
+{
+    let (device_id, session_owner, result) = completion.into_parts();
+    on_completion(
+        RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion::new(
+            device_id,
+            session_owner,
+            result,
+        ),
+    );
+}
+
+fn reap_requester_aware_scheduling_workers<C>(
+    active: &mut ActiveRecoverableSchedulingRequesterAwareWorkers,
+    context: &mut Context<'_>,
+    on_completion: &mut C,
+) where
+    C: FnMut(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
+{
+    let mut publish =
+        |completion| publish_recoverable_scheduling_completion(completion, on_completion);
+    reap_ready_recoverable_workers(active, context, &mut publish);
+}
+
+fn request_all_requester_aware_scheduling_worker_cancellations(
+    active: &ActiveRecoverableSchedulingRequesterAwareWorkers,
+) {
+    request_all_recoverable_worker_cancellations(active);
+}
+
+async fn drain_requester_aware_scheduling_workers<C>(
+    active: &mut ActiveRecoverableSchedulingRequesterAwareWorkers,
+    on_completion: &mut C,
+) where
+    C: FnMut(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
+{
+    let mut publish =
+        |completion| publish_recoverable_scheduling_completion(completion, on_completion);
+    drain_recoverable_workers(active, &mut publish).await;
+}
+
+async fn drain_inflight_scheduling_admission<A, C>(
+    active: &mut ActiveRecoverableSchedulingRequesterAwareWorkers,
+    mut admission: Pin<&mut A>,
+    on_completion: &mut C,
+) -> A::Output
+where
+    A: Future,
+    C: FnMut(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
+{
+    poll_fn(|context| {
+        reap_requester_aware_scheduling_workers(active, context, on_completion);
+        admission.as_mut().poll(context)
+    })
+    .await
+}
+
 fn spawn_recoverable_requester_aware_worker<P, D, T, S>(
     admission: RemoteSessionWorkerAdmission<D, T>,
     authority: &SharedCurrentCapabilityAuthority<P>,
@@ -274,6 +355,56 @@ where
         );
         let result =
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability(
+                session_owner,
+                capability_authority.as_ref(),
+                &requester_dr_authority,
+                policy_source.as_ref(),
+                &requester_rendezvous_authority,
+                verifier_time_unix_seconds,
+                &mut dispatcher,
+                cancellation_signal.into_cancelled(),
+            )
+            .await;
+        drop(owner_guard);
+        result
+    });
+
+    RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
+}
+
+#[allow(
+    dead_code,
+    clippy::needless_pass_by_value,
+    reason = "C03e-NY materializes the NX-selected dormant scheduling-specific production-durable persistent worker entry without migrating historical callers"
+)]
+fn spawn_recoverable_requester_aware_worker_with_production_durable_scheduling<P, D, T, S>(
+    admission: RemoteSessionWorkerAdmission<D, T>,
+    capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &Arc<S>,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+) -> RecoverableSchedulingRequesterAwareWorkerEntry
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> u64 + Send + 'static,
+    S: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+{
+    let requester_dr_authority = (*requester_dr_authority).clone();
+    let policy_source = Arc::clone(policy_source);
+    let requester_rendezvous_authority = requester_rendezvous_authority.clone();
+    let (session_owner, mut dispatcher, verifier_time_unix_seconds) = admission.into_parts();
+    let owner_cell = Arc::new(Mutex::new(Some(session_owner)));
+    let worker_owner_cell = Arc::clone(&owner_cell);
+    let (cancellation_controller, cancellation_signal) = remote_session_worker_cancellation_pair();
+
+    let worker_handle = tokio::spawn(async move {
+        let mut owner_guard = worker_owner_cell.lock().await;
+        let session_owner = owner_guard.as_mut().expect(
+            "persistent scheduling-aware requester worker must borrow retained authenticated-session owner",
+        );
+        let result =
+            run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling(
                 session_owner,
                 capability_authority.as_ref(),
                 &requester_dr_authority,
