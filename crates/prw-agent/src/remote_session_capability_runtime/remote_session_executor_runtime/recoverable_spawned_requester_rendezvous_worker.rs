@@ -647,8 +647,7 @@ mod tests {
                 RemoteBridgeError::SessionExpired,
             ),
         );
-        let result =
-            Ok(RequesterRendezvousProductionDurableSchedulingWorkerStop::Failed(failure));
+        let result = Ok(RequesterRendezvousProductionDurableSchedulingWorkerStop::Failed(failure));
 
         assert_eq!(
             select_recoverable_requester_aware_scheduling_peer_disposition(&result),
