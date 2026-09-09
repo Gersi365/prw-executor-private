@@ -268,33 +268,80 @@ impl From<ProductionReachabilityOwnerCustodyLookupError>
     }
 }
 
-/// Cloneable handle to exactly one process-local requester/rendezvous runtime owner.
+/// Bounded construction failure for one shared requester/rendezvous authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SharedRequesterRendezvousAuthorityConstructionError(
+    expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError,
+);
+
+impl fmt::Display for SharedRequesterRendezvousAuthorityConstructionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .write_str("shared requester/rendezvous scheduling-consumption construction failed")
+    }
+}
+
+impl std::error::Error for SharedRequesterRendezvousAuthorityConstructionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+/// Process-local requester/rendezvous plus terminal scheduling-consumption state under one mutex.
+#[allow(
+    dead_code,
+    reason = "C03e-NQ attaches the selected scheduling-consumption ledger before separately gated scheduling-authority derivation consumes it"
+)]
+struct SharedRequesterRendezvousState {
+    runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+    expected_device_scheduling_consumption_ledger:
+        expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedger,
+}
+
+/// Cloneable handle to exactly one process-local requester/rendezvous composite authority state.
 ///
-/// Clones share only the outer [`Arc`]. The existing runtime owner and its provider state are never
-/// cloned or snapshotted. Operation callers cannot obtain the raw mutex, guard, runtime owner, or
-/// provider.
+/// Clones share only the outer [`Arc`]. The existing runtime owner, provider state and terminal
+/// scheduling-consumption state are never cloned or snapshotted. Operation callers cannot obtain the
+/// raw mutex, guard, runtime owner, provider, or scheduling ledger.
 pub struct SharedRequesterRendezvousAuthority {
-    runtime_owner: Arc<Mutex<CandidatePublicationRequesterRendezvousRuntimeOwner>>,
+    state: Arc<Mutex<SharedRequesterRendezvousState>>,
 }
 
 impl Clone for SharedRequesterRendezvousAuthority {
     fn clone(&self) -> Self {
         Self {
-            runtime_owner: Arc::clone(&self.runtime_owner),
+            state: Arc::clone(&self.state),
         }
     }
 }
 
 impl SharedRequesterRendezvousAuthority {
-    /// Takes by-value custody of the exact existing requester/rendezvous runtime owner.
+    /// Takes by-value custody of the exact existing requester/rendezvous runtime owner and explicit
+    /// scheduling-consumption capacity.
     ///
+    /// The exact capacity is forwarded unchanged to the existing C03e-NO ledger constructor once.
     /// Construction performs no registration, authorization, I/O, task creation, readiness
-    /// publication, peer disposition, or provider cloning.
-    #[must_use]
-    pub fn new(runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner) -> Self {
-        Self {
-            runtime_owner: Arc::new(Mutex::new(runtime_owner)),
-        }
+    /// publication, peer disposition, provider cloning, scheduling grant creation or ledger commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded construction error when the existing ledger constructor rejects the exact
+    /// scheduling-consumption capacity. No partial shared owner escapes.
+    pub fn new(
+        runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+        expected_device_scheduling_consumption_max_records: usize,
+    ) -> Result<Self, SharedRequesterRendezvousAuthorityConstructionError> {
+        let expected_device_scheduling_consumption_ledger =
+            expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedger::new(
+                expected_device_scheduling_consumption_max_records,
+            )
+            .map_err(SharedRequesterRendezvousAuthorityConstructionError)?;
+        Ok(Self {
+            state: Arc::new(Mutex::new(SharedRequesterRendezvousState {
+                runtime_owner,
+                expected_device_scheduling_consumption_ledger,
+            })),
+        })
     }
 
     /// Runs the exact DI -> DP -> DK -> DN requester-start composition under FO lock ordering.
@@ -319,14 +366,14 @@ impl SharedRequesterRendezvousAuthority {
         policy_source: &S,
         intent: RequesterRendezvousStartIntent,
     ) -> Result<(), RequesterRendezvousStartCompositionError> {
-        let mut runtime_owner = self.runtime_owner.lock().await;
+        let mut state = self.state.lock().await;
 
         authority
             .with_current_authority(|registry, _current_capability_policy| {
                 validate_authorize_and_register_requester_rendezvous_start(
                     registry,
                     policy_source,
-                    &mut runtime_owner,
+                    &mut state.runtime_owner,
                     intent,
                 )
             })
@@ -342,8 +389,10 @@ impl SharedRequesterRendezvousAuthority {
         &self,
         publisher_device_id: &DeviceId,
     ) -> Result<AuthorizedRequesterRendezvous, RequesterRendezvousAuthorityError> {
-        let mut runtime_owner = self.runtime_owner.lock().await;
-        runtime_owner.authorize_current_requester_rendezvous_for_publisher(publisher_device_id)
+        let mut state = self.state.lock().await;
+        state
+            .runtime_owner
+            .authorize_current_requester_rendezvous_for_publisher(publisher_device_id)
     }
 
     /// Reacquires shared requester authority only to retire and remove one exact committed record.
@@ -355,11 +404,13 @@ impl SharedRequesterRendezvousAuthority {
         &self,
         identity: RequesterRendezvousCommittedCleanupIdentity,
     ) -> Result<(), RequesterRendezvousLifecycleError> {
-        let mut runtime_owner = self.runtime_owner.lock().await;
-        runtime_owner.cleanup_committed_requester_rendezvous_record(
-            &identity.requester_session_id,
-            &identity.expected_publisher_device_id,
-        )
+        let mut state = self.state.lock().await;
+        state
+            .runtime_owner
+            .cleanup_committed_requester_rendezvous_record(
+                &identity.requester_session_id,
+                &identity.expected_publisher_device_id,
+            )
     }
 
     async fn commit_then_cleanup<T, E, C>(
@@ -597,7 +648,9 @@ mod tests {
             .expect("explicit non-zero provider capacity");
         SharedRequesterRendezvousAuthority::new(
             CandidatePublicationRequesterRendezvousRuntimeOwner::new(provider),
+            capacity,
         )
+        .expect("explicit non-zero scheduling-consumption capacity")
     }
 
     fn unknown_cleanup_identity() -> RequesterRendezvousCommittedCleanupIdentity {
@@ -621,7 +674,20 @@ mod tests {
         let authority = authority_with_capacity(2);
         let clone = authority.clone();
 
-        assert!(Arc::ptr_eq(&authority.runtime_owner, &clone.runtime_owner));
+        assert!(Arc::ptr_eq(&authority.state, &clone.state));
+    }
+
+    #[test]
+    fn shared_authority_rejects_zero_scheduling_consumption_capacity() {
+        let provider = InMemoryRequesterRendezvousAuthorityProvider::new(1)
+            .expect("explicit non-zero provider capacity");
+        assert!(
+            SharedRequesterRendezvousAuthority::new(
+                CandidatePublicationRequesterRendezvousRuntimeOwner::new(provider),
+                0,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -634,7 +700,7 @@ mod tests {
             block_on(authority.authorize_current_for_publisher(&publisher_device_id)),
             Err(RequesterRendezvousAuthorityError::Missing)
         );
-        assert!(authority.runtime_owner.try_lock().is_ok());
+        assert!(authority.state.try_lock().is_ok());
     }
 
     #[test]
@@ -643,7 +709,7 @@ mod tests {
         let identity = unknown_cleanup_identity();
 
         let result = block_on(authority.commit_then_cleanup(identity, async || {
-            assert!(authority.runtime_owner.try_lock().is_ok());
+            assert!(authority.state.try_lock().is_ok());
             Ok::<u8, ()>(7)
         }));
 
@@ -651,7 +717,7 @@ mod tests {
             result,
             Ok((7, Err(RequesterRendezvousLifecycleError::RecordUnknown)))
         );
-        assert!(authority.runtime_owner.try_lock().is_ok());
+        assert!(authority.state.try_lock().is_ok());
     }
 
     #[test]
@@ -660,12 +726,12 @@ mod tests {
         let identity = unknown_cleanup_identity();
 
         let result = block_on(authority.commit_then_cleanup(identity, async || {
-            assert!(authority.runtime_owner.try_lock().is_ok());
+            assert!(authority.state.try_lock().is_ok());
             Err::<u8, _>("commit failed")
         }));
 
         assert_eq!(result, Err("commit failed"));
-        assert!(authority.runtime_owner.try_lock().is_ok());
+        assert!(authority.state.try_lock().is_ok());
     }
 
     #[test]
@@ -797,13 +863,14 @@ mod tests {
 
 /// Dormant process-local representation of terminal expected-device scheduling consumption.
 ///
-/// C03e-NO materializes only the C03e-NL/NM-selected private representation primitive. This module
-/// is intentionally not exported and is not attached to [`SharedRequesterRendezvousAuthority`]. It
-/// performs no environment read, requester/rendezvous provider mutation, scheduling grant creation,
-/// expected-device request construction, runtime activation, persistence, eviction or cleanup.
+/// C03e-NO materializes the C03e-NL/NM-selected private representation primitive. C03e-NQ attaches
+/// one instance to the shared requester/rendezvous composite state without exposing a scheduling
+/// mint/commit API. The module performs no environment read, requester/rendezvous provider mutation,
+/// scheduling grant creation, expected-device request construction, runtime activation, persistence,
+/// eviction or cleanup.
 #[allow(
     dead_code,
-    reason = "C03e-NO materializes the selected private scheduling-consumption ledger representation before separately gated owner/constructor/population integration"
+    reason = "C03e-NQ integrates the selected scheduling-consumption ledger under shared requester custody before separately gated scheduling-authority derivation"
 )]
 mod expected_device_scheduling_consumption_ledger {
     use prw_core::{DeviceId, SessionId};
@@ -826,7 +893,7 @@ mod expected_device_scheduling_consumption_ledger {
 
     /// Bounded representation-level failure for terminal scheduling-consumption state.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum ExpectedDeviceSchedulingConsumptionLedgerError {
+    pub(super) enum ExpectedDeviceSchedulingConsumptionLedgerError {
         /// Zero is not a usable terminal-consumption ledger capacity.
         InvalidCapacity,
         /// The exact requester-session plus target-device key was already committed.
@@ -854,13 +921,13 @@ mod expected_device_scheduling_consumption_ledger {
     /// Records are never removed, evicted, expired or compacted by this representation. The
     /// semantic linearization point is successful insertion by [`Self::commit_if_absent`].
     #[derive(Debug)]
-    struct ExpectedDeviceSchedulingConsumptionLedger {
+    pub(super) struct ExpectedDeviceSchedulingConsumptionLedger {
         max_records: usize,
         consumed: Vec<ExpectedDeviceSchedulingConsumptionKey>,
     }
 
     impl ExpectedDeviceSchedulingConsumptionLedger {
-        const fn new(
+        pub(super) const fn new(
             max_records: usize,
         ) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
             if max_records == 0 {

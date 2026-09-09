@@ -27,12 +27,15 @@ use crate::linux_bootstrap::{
     LinuxAgentBootstrapStartFailure, LinuxAgentBootstrapWithRemoteReport,
     LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
-    LinuxAgentProductionRemoteProcessInputPopulationError, LinuxAgentRemotePeerDeviceSourceError,
+    LinuxAgentProductionRemoteProcessInputPopulationError,
+    LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
+    LinuxAgentRemotePeerDeviceSourceError,
     LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
     linux_agent_remote_process_operation_inputs_from_production_worker_limit,
+    load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env,
     load_linux_agent_remote_peer_device_id_from_env,
     load_linux_agent_remote_requester_rendezvous_max_records_from_env,
     run_with_remote_process_companion,
@@ -49,7 +52,7 @@ use crate::remote_session_capability_runtime::{
     RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
     RemoteSessionRepeatedAdmissionFailure,
     RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
-    SharedCurrentCapabilityAuthority,
+    SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
 };
 
 /// Non-cloneable dormant pre-requester owner for one same-custody production reachability pair.
@@ -357,8 +360,8 @@ pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterPolicyRemotePr
 
 /// Populates one dormant pre-requester owner plus one explicit empty requester policy source.
 ///
-/// This wrapper first invokes the existing C03e-MH population helper exactly once. Only after that
-/// succeeds does it construct exactly one empty [`BoundedRequesterRendezvousStartPolicySource`]
+/// This wrapper first invokes the existing C03e-MH requester-policy population exactly once. Only
+/// after that succeeds does it construct exactly one empty [`BoundedRequesterRendezvousStartPolicySource`]
 /// through `Default`. The exact successful MH owner and exact empty source are then moved by value
 /// into one private non-cloneable carrier. No requester binding is added and no policy lookup is
 /// performed during population.
@@ -370,7 +373,7 @@ pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterPolicyRemotePr
 /// # Errors
 ///
 /// Returns the existing C03e-MD population error unchanged. Empty requester-policy source
-/// construction is infallible, so no new error variant, retry, fallback or recovery path is added.
+/// construction is infallible, so this wrapper adds no error variant, retry, fallback or recovery path.
 #[allow(
     clippy::future_not_send,
     clippy::type_complexity,
@@ -445,19 +448,11 @@ pub(crate) fn linux_agent_production_requester_rendezvous_runtime_owner_from_exp
     ))
 }
 
-/// Joins existing requester-policy and requester/rendezvous runtime custody into the existing
-/// production durable requester/rendezvous owner without invoking either authority lane.
-///
-/// This helper consumes the exact C03e-MJ requester-policy carrier and one already-populated
-/// requester/rendezvous runtime owner by value. It destructures only existing private custody,
-/// constructs the existing inner production requester/rendezvous owner exactly once, then moves that
-/// exact inner owner and the exact raw durable capability authority into the existing outer durable
-/// higher-owner constructor exactly once. It performs no I/O, policy evaluation, provider mutation,
-/// capacity selection, registration, current-grant selection, cleanup, caller wiring, listener or
-/// runtime/network activation.
+/// Joins existing requester-policy and one preconstructed shared requester/rendezvous authority
+/// into the existing production durable requester/rendezvous owner without invoking either lane.
 #[allow(
     dead_code,
-    reason = "C03e-MN materializes the MM-selected dormant by-value requester/rendezvous custody join before separately gated combined production population and executable caller wiring"
+    reason = "C03e-NQ migrates the existing-custody join to one preconstructed shared requester authority before separately gated scheduling-authority derivation"
 )]
 pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_existing_custody<
     D,
@@ -471,7 +466,7 @@ pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_r
         LinuxAgentProductionDurableReachabilityRequesterPolicyRemoteProcessOperationInputs<
             D, T, F, C, R, E,
         >,
-    requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+    requester_rendezvous_authority: SharedRequesterRendezvousAuthority,
 ) -> LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
     ProductionRemoteCapabilityDenyAllPolicy,
     D,
@@ -493,7 +488,7 @@ pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_r
         LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
             production_inputs,
             requester_policy_source,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
         );
     LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
         requester_rendezvous_inputs,
@@ -505,7 +500,7 @@ pub(crate) fn linux_agent_production_durable_reachability_requester_rendezvous_r
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(
     dead_code,
-    reason = "C03e-MP materializes the MO-selected bounded two-source combined population error before separately gated concrete capacity provenance and executable caller wiring"
+    reason = "C03e-NQ extends the existing combined population error with one bounded shared-owner construction lane"
 )]
 pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError
 {
@@ -513,6 +508,8 @@ pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousRemote
     ProductionSources(LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError),
     /// Explicit requester/rendezvous runtime-owner construction failed.
     RequesterRendezvousRuntime(RequesterRendezvousLifecycleError),
+    /// Shared requester/rendezvous scheduling-consumption owner construction failed.
+    SharedRequesterRendezvousAuthorityConstruction,
 }
 
 impl std::fmt::Display
@@ -526,6 +523,9 @@ impl std::fmt::Display
             Self::RequesterRendezvousRuntime(_) => {
                 "production requester/rendezvous runtime population failed"
             }
+            Self::SharedRequesterRendezvousAuthorityConstruction => {
+                "production shared requester/rendezvous authority construction failed"
+            }
         })
     }
 }
@@ -537,6 +537,7 @@ impl std::error::Error
         match self {
             Self::ProductionSources(error) => Some(error),
             Self::RequesterRendezvousRuntime(error) => Some(error),
+            Self::SharedRequesterRendezvousAuthorityConstruction => None,
         }
     }
 }
@@ -560,29 +561,12 @@ impl From<RequesterRendezvousLifecycleError>
 }
 
 /// Populates one final dormant durable requester/rendezvous owner from existing production sources
-/// plus one explicit caller-owned provider capacity.
-///
-/// The helper first invokes the existing C03e-MJ requester-policy population exactly once. Only
-/// after that succeeds does it invoke the existing C03e-ML requester/rendezvous runtime-owner
-/// constructor exactly once with the unchanged explicit `max_records`. Only after both fallible
-/// stages succeed does it invoke the existing C03e-MN custody join exactly once. The returned owner
-/// remains dormant and retains the existing fail-closed current capability policy.
-///
-/// This helper selects no concrete capacity provenance, performs no requester-policy evaluation,
-/// provider registration or mutation, current-grant selection, cleanup, callback invocation,
-/// executable caller wiring, listener/readiness publication, or runtime/network activation.
-///
-/// # Errors
-///
-/// Returns only the bounded C03e-MP two-source population error. MJ failures are preserved as
-/// `ProductionSources`; ML failures are preserved as `RequesterRendezvousRuntime`. ML is not called
-/// after an MJ failure, MN is not called unless both fallible stages succeed, and no retry, fallback,
-/// rollback, partial owner or synthetic recovery path is introduced.
+/// plus explicit requester-provider and scheduling-consumption capacities.
 #[allow(
     clippy::future_not_send,
     clippy::type_complexity,
     dead_code,
-    reason = "C03e-MP materializes the MO-selected dormant explicit-capacity combined production-population wrapper before separately gated concrete capacity provenance and executable caller wiring"
+    reason = "C03e-NQ integrates explicit requester and scheduling capacities into one preconstructed shared authority without activating scheduling"
 )]
 pub(crate) async fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_production_sources_with_explicit_nonzero_capacity<
     D,
@@ -598,6 +582,7 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
     on_rejection: R,
     on_admission_failure: E,
     max_records: usize,
+    expected_device_scheduling_consumption_max_records: usize,
 ) -> Result<
     LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs<
         ProductionRemoteCapabilityDenyAllPolicy,
@@ -623,24 +608,36 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
         linux_agent_production_requester_rendezvous_runtime_owner_from_explicit_nonzero_capacity(
             max_records,
         )?;
+    let requester_rendezvous_authority = SharedRequesterRendezvousAuthority::new(
+        requester_rendezvous_runtime_owner,
+        expected_device_scheduling_consumption_max_records,
+    )
+    .map_err(|_| {
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError::SharedRequesterRendezvousAuthorityConstruction
+    })?;
     Ok(
         linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_existing_custody(
             requester_policy_inputs,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
         ),
     )
 }
 
-/// Bounded failure while composing configured requester/rendezvous capacity with production population.
+/// Bounded failure while composing configured requester/rendezvous and scheduling-consumption
+/// capacities with production population.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(
     dead_code,
-    reason = "C03e-MT materializes the MS-selected two-stage configured population error before separately gated executable caller wiring"
+    reason = "C03e-NQ extends configured population with the independently selected scheduling-consumption capacity source"
 )]
 pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
 {
     /// Fixed requester/rendezvous max-records source failed before production population.
     RequesterRendezvousMaxRecordsSource(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError),
+    /// Fixed expected-device scheduling-consumption max-records source failed before production population.
+    ExpectedDeviceSchedulingConsumptionMaxRecordsSource(
+        LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
+    ),
     /// Existing explicit-capacity combined production population failed.
     Population(
         LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessInputPopulationError,
@@ -655,6 +652,9 @@ impl std::fmt::Display
             Self::RequesterRendezvousMaxRecordsSource(_) => {
                 "production requester/rendezvous max-records source failed"
             }
+            Self::ExpectedDeviceSchedulingConsumptionMaxRecordsSource(_) => {
+                "production expected-device scheduling-consumption max-records source failed"
+            }
             Self::Population(_) => {
                 "production durable requester/rendezvous configured population failed"
             }
@@ -668,6 +668,7 @@ impl std::error::Error
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::RequesterRendezvousMaxRecordsSource(error) => Some(error),
+            Self::ExpectedDeviceSchedulingConsumptionMaxRecordsSource(error) => Some(error),
             Self::Population(error) => Some(error),
         }
     }
@@ -678,6 +679,16 @@ impl From<LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError>
 {
     fn from(error: LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError) -> Self {
         Self::RequesterRendezvousMaxRecordsSource(error)
+    }
+}
+
+impl From<LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError
+{
+    fn from(
+        error: LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
+    ) -> Self {
+        Self::ExpectedDeviceSchedulingConsumptionMaxRecordsSource(error)
     }
 }
 
@@ -693,25 +704,12 @@ impl
     }
 }
 
-/// Populates one dormant durable requester/rendezvous owner from the fixed configured capacity source.
-///
-/// The helper reads the existing C03e-MR requester/rendezvous max-records environment source exactly
-/// once. Only after source success does it invoke the existing C03e-MP explicit-capacity combined
-/// population helper exactly once with the unchanged target `usize`. Zero is not pre-validated here;
-/// the existing provider/runtime construction remains the sole semantic authority for non-zero
-/// capacity. No retry, fallback, alternate source, worker-limit alias, caller wiring, startup
-/// mapping, operation invocation, listener/readiness publication, or runtime/network activation is
-/// introduced.
-///
-/// # Errors
-///
-/// Source acquisition failures are preserved as `RequesterRendezvousMaxRecordsSource`; existing MP
-/// failures remain nested intact as `Population`. MP is never called after source failure.
+/// Populates one dormant durable requester/rendezvous owner from both fixed configured capacities.
 #[allow(
     clippy::future_not_send,
     clippy::type_complexity,
     dead_code,
-    reason = "C03e-MT materializes the MS-selected dormant configured-capacity composition wrapper before separately gated executable caller wiring"
+    reason = "C03e-NQ materializes the selected requester-capacity then scheduling-capacity configured population order before separately gated scheduling-authority derivation"
 )]
 pub(crate) async fn linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources<
     D,
@@ -739,6 +737,8 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
     LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError,
 > {
     let max_records = load_linux_agent_remote_requester_rendezvous_max_records_from_env()?;
+    let expected_device_scheduling_consumption_max_records =
+        load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env()?;
     let inputs =
         linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_production_sources_with_explicit_nonzero_capacity(
             expected_requests,
@@ -747,6 +747,7 @@ pub(crate) async fn linux_agent_production_durable_reachability_requester_rendez
             on_rejection,
             on_admission_failure,
             max_records,
+            expected_device_scheduling_consumption_max_records,
         )
         .await?;
     Ok(inputs)
@@ -1026,24 +1027,17 @@ impl From<LinuxAgentBootstrapStartFailure>
 
 /// Populates configured production inputs and assembles the existing dormant higher-owner companion.
 ///
-/// The helper invokes the existing C03e-MT configured production-population helper exactly once and
-/// awaits it exactly once. Population failure short-circuits before C03e-LX. Only after successful
+/// The helper invokes the existing configured production-population helper exactly once and awaits
+/// it exactly once. Population failure short-circuits before C03e-LX. Only after successful
 /// population does it move the exact returned higher-owner inputs by value into the existing C03e-LX
-/// projection-capable companion assembly exactly once. The caller-supplied expected-request receiver,
-/// admission timing and callbacks are forwarded unchanged to MT. No alternate population path, retry,
-/// fallback, synthetic channel, concrete provenance selection, executable invocation site,
-/// listener/readiness publication, or runtime/network activation is introduced.
-///
-/// # Errors
-///
-/// Existing C03e-MT configured-population failures are preserved as `ConfiguredPopulation`; existing
-/// Linux companion bootstrap failures are preserved as `Bootstrap`. C03e-LX is never called after a
-/// population failure.
+/// projection-capable companion assembly exactly once. No alternate population path, retry,
+/// fallback, synthetic channel, executable invocation site, listener/readiness publication, or
+/// runtime/network activation is introduced.
 #[allow(
     clippy::future_not_send,
     clippy::type_complexity,
     dead_code,
-    reason = "C03e-MV materializes the MU-selected dormant configured-population to higher-owner companion composition before separately gated executable caller wiring"
+    reason = "C03e-MV materializes dormant configured-population to higher-owner companion composition; C03e-NQ preserves that caller boundary unchanged"
 )]
 pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_remote_process_companion_from_configured_production_sources<
     D,
