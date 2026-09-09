@@ -480,7 +480,7 @@ pub enum LinuxAgentBootstrapSignalMaskRestore {
 }
 
 impl LinuxAgentBootstrapSignalMaskRestore {
-    /// Returns the bounded token used by the initial stderr summary contract.
+    /// Returns the bounded token used by the initial stderr failure contract.
     #[must_use]
     pub const fn token(self) -> &'static str {
         match self {
@@ -505,49 +505,49 @@ pub struct LinuxAgentBootstrapCounters {
 }
 
 impl LinuxAgentBootstrapCounters {
-    /// Returns completed readiness steps.
+    /// Returns the number of readiness-step attempts.
     #[must_use]
     pub const fn readiness_steps(self) -> u64 {
         self.readiness_steps
     }
 
-    /// Returns readiness steps that armed listener interest.
+    /// Returns the number of listener-ready transitions.
     #[must_use]
     pub const fn listener_armed_steps(self) -> u64 {
         self.listener_armed_steps
     }
 
-    /// Returns processed runtime wake outcomes.
+    /// Returns the number of wake-descriptor observations.
     #[must_use]
     pub const fn runtime_wakes(self) -> u64 {
         self.runtime_wakes
     }
 
-    /// Returns surfaced wait interruptions.
+    /// Returns the number of interrupted blocking waits.
     #[must_use]
     pub const fn wait_interruptions(self) -> u64 {
         self.wait_interruptions
     }
 
-    /// Returns total bounded scheduling attempts.
+    /// Returns the number of bounded scheduling attempts.
     #[must_use]
     pub const fn scheduling_attempts(self) -> u64 {
         self.scheduling_attempts
     }
 
-    /// Returns total workers registered during the runtime lifetime.
+    /// Returns the number of registered local workers.
     #[must_use]
     pub const fn workers_registered(self) -> u64 {
         self.workers_registered
     }
 
-    /// Returns total classified worker completions.
+    /// Returns the number of observed worker completions.
     #[must_use]
     pub const fn worker_completions(self) -> u64 {
         self.worker_completions
     }
 
-    /// Returns same-UID peer authorization rejections handled connection-locally.
+    /// Returns the number of accepted peers rejected before worker registration.
     #[must_use]
     pub const fn peer_rejections(self) -> u64 {
         self.peer_rejections
@@ -564,31 +564,31 @@ pub struct LinuxAgentBootstrapReport {
 }
 
 impl LinuxAgentBootstrapReport {
-    /// Returns the high-level terminal class.
+    /// Returns the bounded high-level terminal class.
     #[must_use]
     pub const fn terminal(self) -> LinuxAgentBootstrapTerminal {
         self.terminal
     }
 
-    /// Returns memory-bounded lifetime counters.
+    /// Returns the memory-bounded process counters.
     #[must_use]
     pub const fn counters(self) -> LinuxAgentBootstrapCounters {
         self.counters
     }
 
-    /// Returns listener/socket cleanup evidence.
+    /// Returns the listener/socket cleanup result.
     #[must_use]
     pub const fn cleanup(self) -> LinuxAgentBootstrapCleanup {
         self.cleanup
     }
 
-    /// Returns exact signal-mask restoration evidence.
+    /// Returns the signal-mask restoration result.
     #[must_use]
     pub const fn signal_mask_restore(self) -> LinuxAgentBootstrapSignalMaskRestore {
         self.signal_mask_restore
     }
 
-    /// Returns whether the locked Phase 101 binary exit contract classifies this report as success.
+    /// Returns whether the fixed initial process profile considers the report successful.
     #[must_use]
     pub const fn is_success(self) -> bool {
         self.terminal.is_normal()
@@ -1288,13 +1288,12 @@ where
 
 /// Crate-private production requester/rendezvous process-operation lifetime custody selected by C03e-IH.
 ///
-/// Construction joins only already-typed, already-owned values. It performs no requester-policy
-/// evaluation, requester/rendezvous provider mutation, credential read, endpoint bind, listener
-/// activation, readiness publication, candidate publication, traversal, dialing, or durable-owner
-/// mutation. The owner is intentionally non-cloneable.
+/// C03e-NQ migrates only the production durable lineage from raw runtime-owner custody to one
+/// already-constructed shared requester/rendezvous authority. Construction remains side-effect-free
+/// and activates no requester policy, provider, scheduling authority, listener, or runtime behavior.
 #[allow(
     dead_code,
-    reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+    reason = "C03e-NQ migrates production requester/rendezvous custody to one preconstructed shared authority"
 )]
 pub(crate) struct LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
     P,
@@ -1308,7 +1307,7 @@ pub(crate) struct LinuxAgentProductionReachabilityRequesterRendezvousRemoteProce
     production_inputs:
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
     requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
-    requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+    requester_rendezvous_authority: SharedRequesterRendezvousAuthority,
 }
 
 impl<P, D, T, F, C, R, E>
@@ -1322,11 +1321,11 @@ impl<P, D, T, F, C, R, E>
         E,
     >
 {
-    /// Consumes the exact production operation inputs and requester/rendezvous custody values.
+    /// Consumes the exact production operation inputs and preconstructed requester/rendezvous custody.
     #[must_use]
     #[allow(
         dead_code,
-        reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+        reason = "C03e-NQ retains one preconstructed shared requester authority without invoking it"
     )]
     pub(crate) const fn new(
         production_inputs: LinuxAgentProductionReachabilityRemoteProcessOperationInputs<
@@ -1339,12 +1338,12 @@ impl<P, D, T, F, C, R, E>
             E,
         >,
         requester_rendezvous_start_policy_source: BoundedRequesterRendezvousStartPolicySource,
-        requester_rendezvous_runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
+        requester_rendezvous_authority: SharedRequesterRendezvousAuthority,
     ) -> Self {
         Self {
             production_inputs,
             requester_rendezvous_start_policy_source,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
         }
     }
 }
@@ -1352,12 +1351,12 @@ impl<P, D, T, F, C, R, E>
 /// Builds one dormant production operation that retains requester/rendezvous custody by value.
 ///
 /// Factory construction delegates exactly once to the existing C03e-IG production operation and
-/// otherwise performs ownership composition only. Requester-policy and requester/rendezvous
-/// provider behavior remain uninvoked; the returned one-shot closure explicitly releases those
+/// otherwise performs ownership composition only. Requester-policy and shared requester/rendezvous
+/// authority behavior remain uninvoked; the returned one-shot closure explicitly releases those
 /// custody values immediately before delegating to the unchanged production operation.
 #[allow(
     dead_code,
-    reason = "C03e-II materializes the IH-selected production/requester-rendezvous custody join before separately gated executable assembly"
+    reason = "C03e-NQ preserves dormant non-projection production custody with the preconstructed shared authority"
 )]
 pub(crate) fn linux_agent_production_reachability_requester_rendezvous_remote_process_operation<
     P,
@@ -1390,12 +1389,12 @@ where
     let LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs {
         production_inputs,
         requester_rendezvous_start_policy_source,
-        requester_rendezvous_runtime_owner,
+        requester_rendezvous_authority,
     } = inputs;
     let operation = linux_agent_production_reachability_remote_process_operation(production_inputs);
 
     move |publisher| {
-        drop(requester_rendezvous_runtime_owner);
+        drop(requester_rendezvous_authority);
         drop(requester_rendezvous_start_policy_source);
         operation(publisher);
     }
@@ -1405,10 +1404,9 @@ where
 /// capability callback projection selected by C03e-LS.
 ///
 /// Factory construction performs ownership adaptation only: the retained bounded requester policy
-/// source is wrapped once in `Arc`, and the retained requester/rendezvous runtime owner is consumed
-/// once into the existing shared authority. Credential/provider I/O, endpoint bind, controller
-/// publication and lifecycle drive remain deferred until a separately gated caller invokes the
-/// returned one-shot closure.
+/// source is wrapped once in `Arc`, while the already-preconstructed shared authority is retained
+/// unchanged. Credential/provider I/O, endpoint bind, controller publication and lifecycle drive
+/// remain deferred until a separately gated caller invokes the returned one-shot closure.
 ///
 /// Runtime invocation preserves the existing production stage ordering and calls the C03e-LR
 /// projection-capable production endpoint lifecycle exactly once. Completion, rejection and
@@ -1416,7 +1414,7 @@ where
 /// callback policy, retry, reconnect, readiness publication or executable activation is added.
 #[allow(
     dead_code,
-    reason = "C03e-LT materializes the LS-selected dormant Linux projection operation before separately gated higher-owner caller migration"
+    reason = "C03e-NQ removes duplicate shared-authority construction from dormant projection operation assembly"
 )]
 pub(crate) fn linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection<
     P,
@@ -1456,12 +1454,10 @@ where
     let LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs {
         production_inputs,
         requester_rendezvous_start_policy_source,
-        requester_rendezvous_runtime_owner,
+        requester_rendezvous_authority,
     } = inputs;
     let requester_rendezvous_start_policy_source =
         Arc::new(requester_rendezvous_start_policy_source);
-    let requester_rendezvous_authority =
-        SharedRequesterRendezvousAuthority::new(requester_rendezvous_runtime_owner);
 
     move |publisher| {
         let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
@@ -2008,7 +2004,7 @@ mod tests {
         RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
         RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
         RemoteSessionRepeatedAdmissionFailure, RemoteSessionSupervisorShutdownController,
-        SharedCurrentCapabilityAuthority,
+        SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
         remote_session_process_lifecycle_control::{
             RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
             RemoteSessionSupervisorShutdownPublish,
@@ -2890,15 +2886,18 @@ mod tests {
         );
         let requester_rendezvous_start_policy_source =
             super::BoundedRequesterRendezvousStartPolicySource::default();
-        let requester_rendezvous_runtime_owner =
+        let requester_rendezvous_authority = SharedRequesterRendezvousAuthority::new(
             super::CandidatePublicationRequesterRendezvousRuntimeOwner::new(
                 prw_remote_bridge::requester_rendezvous_in_memory_provider::InMemoryRequesterRendezvousAuthorityProvider::new(1)
                     .expect("explicit non-zero requester/rendezvous provider capacity"),
-            );
+            ),
+            1,
+        )
+        .expect("explicit non-zero scheduling-consumption capacity");
         let inputs = super::LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs::new(
             production_inputs,
             requester_rendezvous_start_policy_source,
-            requester_rendezvous_runtime_owner,
+            requester_rendezvous_authority,
         );
 
         let operation = super::linux_agent_production_reachability_requester_rendezvous_remote_process_operation(inputs);
