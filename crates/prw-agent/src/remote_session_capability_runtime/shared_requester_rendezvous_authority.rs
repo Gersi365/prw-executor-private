@@ -270,7 +270,7 @@ impl From<ProductionReachabilityOwnerCustodyLookupError>
 
 /// Bounded construction failure for one shared requester/rendezvous authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SharedRequesterRendezvousAuthorityConstructionError(
+pub struct SharedRequesterRendezvousAuthorityConstructionError(
     expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError,
 );
 
