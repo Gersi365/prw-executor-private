@@ -36,8 +36,8 @@ use super::{
     recoverable_persistent_requester_rendezvous_worker::{
         RecoverablePersistentWorkerCompletion, RecoverablePersistentWorkerEntry,
         RecoverableRequesterAwareWorkerCompletion, RecoverableRequesterAwareWorkerEntry,
-        drain_recoverable_workers, poll_one_ready_recoverable_worker, reap_ready_recoverable_workers,
-        request_all_recoverable_worker_cancellations,
+        drain_recoverable_workers, poll_one_ready_recoverable_worker,
+        reap_ready_recoverable_workers, request_all_recoverable_worker_cancellations,
     },
 };
 use crate::{
