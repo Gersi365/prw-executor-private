@@ -29,7 +29,8 @@ use crate::linux_bootstrap::{
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentProductionRemoteProcessInputPopulationError,
     LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
-    LinuxAgentRemotePeerDeviceSourceError, LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
+    LinuxAgentRemotePeerDeviceSourceError,
+    LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
     LinuxAgentRemoteSupervisorShutdownPublisher,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
@@ -255,9 +256,8 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
     LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
 > {
     let session_authentication = SessionAuthenticationService::new();
-    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources(
+    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_session_authentication(
         capability_authority,
-        session_authentication,
         expected_requests,
         admission_timing,
         on_completion,
