@@ -144,7 +144,9 @@ impl CandidatePublicationTerminalResultProjection {
     }
 
     /// Returns post-commit requester cleanup disposition when a durable commit occurred.
-    pub(crate) const fn cleanup_result(self) -> Option<Result<(), RequesterRendezvousLifecycleError>> {
+    pub(crate) const fn cleanup_result(
+        self,
+    ) -> Option<Result<(), RequesterRendezvousLifecycleError>> {
         self.cleanup
     }
 
@@ -369,16 +371,12 @@ impl fmt::Display for ExpectedDeviceSchedulingAuthorityDerivationError {
             Self::RegistryValidation(_) => {
                 "expected-device scheduling derivation registry validation failed"
             }
-            Self::PolicySource(_) => {
-                "expected-device scheduling derivation policy source failed"
-            }
+            Self::PolicySource(_) => "expected-device scheduling derivation policy source failed",
             Self::PolicyAuthorization(_) => {
                 "expected-device scheduling derivation policy authorization failed"
             }
             Self::AlreadyConsumed => "expected-device scheduling authority already consumed",
-            Self::CapacityExhausted => {
-                "expected-device scheduling-consumption capacity exhausted"
-            }
+            Self::CapacityExhausted => "expected-device scheduling-consumption capacity exhausted",
             Self::ConsumptionStateInvariant => {
                 "expected-device scheduling-consumption invariant state failed"
             }
@@ -571,10 +569,7 @@ impl SharedRequesterRendezvousAuthority {
             .with_current_authority(|registry, _current_capability_policy| {
                 let validated = validate_current_requester_rendezvous_start_intent(
                     registry,
-                    RequesterRendezvousStartIntent::new(
-                        requester_session,
-                        exact_target_device_id,
-                    ),
+                    RequesterRendezvousStartIntent::new(requester_session, exact_target_device_id),
                 )
                 .map_err(ExpectedDeviceSchedulingAuthorityDerivationError::RegistryValidation)?;
 
@@ -587,13 +582,10 @@ impl SharedRequesterRendezvousAuthority {
                 let committed_target_device_id = validated.target_device_id().clone();
 
                 {
-                    let _authorized = policy_authorize_requester_rendezvous_start(
-                        validated,
-                        evaluator,
-                    )
-                    .map_err(
-                        ExpectedDeviceSchedulingAuthorityDerivationError::PolicyAuthorization,
-                    )?;
+                    let _authorized =
+                        policy_authorize_requester_rendezvous_start(validated, evaluator).map_err(
+                            ExpectedDeviceSchedulingAuthorityDerivationError::PolicyAuthorization,
+                        )?;
                 }
 
                 state
@@ -858,9 +850,10 @@ mod tests {
     use super::{
         CandidatePublicationPostCommitRequesterCleanupOutcome,
         CandidatePublicationTerminalFrameComposition, CandidatePublicationTerminalResultProjection,
-        CurrentMeshCandidatePublicationExecutionError, ExpectedDeviceSchedulingAuthorityDerivationError,
-        ExpectedDeviceSchedulingAuthorityGrant, RequesterRendezvousCommittedCleanupIdentity,
-        SharedRequesterRendezvousAuthority, compose_candidate_publication_terminal_result_frame,
+        CurrentMeshCandidatePublicationExecutionError,
+        ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
+        RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority,
+        compose_candidate_publication_terminal_result_frame,
         map_expected_device_scheduling_consumption_error,
         project_candidate_publication_terminal_parts,
         project_candidate_publication_terminal_result,
@@ -928,8 +921,7 @@ mod tests {
     fn scheduling_authority_grant_preserves_exact_terminal_identity() {
         let requester_session_id =
             SessionId::new("ns-requester-session").expect("valid requester session id");
-        let target_device_id =
-            DeviceId::new("ns-target-device").expect("valid target device id");
+        let target_device_id = DeviceId::new("ns-target-device").expect("valid target device id");
         let grant = ExpectedDeviceSchedulingAuthorityGrant::new(
             requester_session_id.clone(),
             target_device_id.clone(),
