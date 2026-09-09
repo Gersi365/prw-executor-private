@@ -28,6 +28,7 @@ use tokio::sync::{Notify, mpsc};
 use super::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+    RequesterRendezvousProductionDurableSchedulingWorkerStop,
 };
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
@@ -545,6 +546,88 @@ impl RemoteSessionEndpointLifecycleRuntime {
 
         executor
             .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_capability(
+                max_active_workers,
+                &transport,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown.into_shutdown(),
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            )
+    }
+
+    /// Consumes this endpoint owner and delegates once to the existing scheduling-aware durable
+    /// executor endpoint lifecycle while preserving exact scheduling terminal custody.
+    ///
+    /// The retained endpoint transport is borrowed only for that one executor invocation and the
+    /// retained supervisor-shutdown signal is consumed exactly once. This dormant propagation seam
+    /// constructs no expected-device request, channel, identifier, dispatcher, timing source, task,
+    /// listener, readiness state, or executable activation. It does not project, clone, reconstruct,
+    /// remint, or otherwise widen the existing scheduling terminal/grant custody.
+    #[allow(
+        dead_code,
+        reason = "C03e-OD materializes the OC-selected dormant scheduling-aware endpoint-owner propagation before separately gated producer/channel composition"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-OD forwards the exact existing scheduling-aware executor boundary inputs without introducing a new aggregate"
+    )]
+    pub(super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_scheduling<
+        P,
+        D,
+        T,
+        PS,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ),
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let Self {
+            mut executor,
+            transport,
+            supervisor_shutdown,
+        } = self;
+
+        executor
+            .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_scheduling(
                 max_active_workers,
                 &transport,
                 authority,
