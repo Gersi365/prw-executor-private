@@ -276,7 +276,8 @@ pub(crate) struct SharedRequesterRendezvousAuthorityConstructionError(
 
 impl fmt::Display for SharedRequesterRendezvousAuthorityConstructionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("shared requester/rendezvous scheduling-consumption construction failed")
+        formatter
+            .write_str("shared requester/rendezvous scheduling-consumption construction failed")
     }
 }
 
@@ -404,10 +405,12 @@ impl SharedRequesterRendezvousAuthority {
         identity: RequesterRendezvousCommittedCleanupIdentity,
     ) -> Result<(), RequesterRendezvousLifecycleError> {
         let mut state = self.state.lock().await;
-        state.runtime_owner.cleanup_committed_requester_rendezvous_record(
-            &identity.requester_session_id,
-            &identity.expected_publisher_device_id,
-        )
+        state
+            .runtime_owner
+            .cleanup_committed_requester_rendezvous_record(
+                &identity.requester_session_id,
+                &identity.expected_publisher_device_id,
+            )
     }
 
     async fn commit_then_cleanup<T, E, C>(
