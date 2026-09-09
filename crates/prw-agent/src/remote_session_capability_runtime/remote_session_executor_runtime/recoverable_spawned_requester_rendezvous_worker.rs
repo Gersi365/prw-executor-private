@@ -319,7 +319,7 @@ const fn select_scheduling_terminal_acknowledgement_peer_disposition(
     dead_code,
     reason = "C03e-NY materializes exact scheduling-aware terminal classification before consuming recovered owner custody"
 )]
-fn select_recoverable_requester_aware_scheduling_peer_disposition(
+const fn select_recoverable_requester_aware_scheduling_peer_disposition(
     result: &Result<
         RequesterRendezvousProductionDurableSchedulingWorkerStop,
         RemoteSessionSpawnedWorkerJoinError,
