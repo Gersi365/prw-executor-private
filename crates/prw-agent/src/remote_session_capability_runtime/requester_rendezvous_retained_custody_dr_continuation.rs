@@ -31,13 +31,13 @@ use prw_remote_bridge::{
     },
 };
 
+use super::shared_requester_rendezvous_authority::{
+    ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
+};
 use super::{
     AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,
     SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
-};
-use super::shared_requester_rendezvous_authority::{
-    ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
 };
 use crate::candidate_publication_requester_rendezvous_start_intent::{
     composition::RequesterRendezvousStartCompositionError,
@@ -195,10 +195,8 @@ pub(super) struct RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome {
         ExpectedDeviceSchedulingAuthorityGrant,
         ExpectedDeviceSchedulingAuthorityDerivationError,
     >,
-    acknowledgement_result: Result<
-        (),
-        RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
-    >,
+    acknowledgement_result:
+        Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
 }
 
 #[allow(
