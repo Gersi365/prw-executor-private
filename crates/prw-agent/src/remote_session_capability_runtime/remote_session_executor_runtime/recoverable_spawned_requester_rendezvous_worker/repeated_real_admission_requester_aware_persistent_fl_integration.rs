@@ -36,7 +36,7 @@ use super::{
     recoverable_persistent_requester_rendezvous_worker::{
         RecoverablePersistentWorkerCompletion, RecoverablePersistentWorkerEntry,
         RecoverableRequesterAwareWorkerCompletion, RecoverableRequesterAwareWorkerEntry,
-        drain_recoverable_workers, reap_ready_recoverable_workers,
+        drain_recoverable_workers, poll_one_ready_recoverable_worker, reap_ready_recoverable_workers,
         request_all_recoverable_worker_cancellations,
     },
 };
@@ -233,6 +233,29 @@ fn publish_recoverable_scheduling_completion<C>(
             result,
         ),
     );
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-OI materializes the OH-selected dormant scheduling-specific single-completion adapter before separately gated producer-driver migration"
+)]
+fn poll_one_requester_aware_scheduling_worker(
+    active: &mut ActiveRecoverableSchedulingRequesterAwareWorkers,
+    context: &mut Context<'_>,
+) -> Poll<RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion> {
+    match poll_one_ready_recoverable_worker(active, context) {
+        Poll::Pending => Poll::Pending,
+        Poll::Ready(completion) => {
+            let (device_id, session_owner, result) = completion.into_parts();
+            Poll::Ready(
+                RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion::new(
+                    device_id,
+                    session_owner,
+                    result,
+                ),
+            )
+        }
+    }
 }
 
 fn reap_requester_aware_scheduling_workers<C>(
