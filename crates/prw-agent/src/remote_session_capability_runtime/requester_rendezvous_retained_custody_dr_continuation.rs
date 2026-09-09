@@ -36,6 +36,9 @@ use super::{
     AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,
     SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
 };
+use super::shared_requester_rendezvous_authority::{
+    ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
+};
 use crate::candidate_publication_requester_rendezvous_start_intent::{
     composition::RequesterRendezvousStartCompositionError,
     policy_source::RequesterRendezvousStartPolicySource,
@@ -173,6 +176,99 @@ pub(super) enum RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop
     Cancelled,
     /// Existing FJ lifecycle semantics reached one exact typed ingress or requester-response failure.
     Failed(RequesterRendezvousPostTerminalResponseSerialLifecycleError),
+}
+
+/// Orthogonal terminal custody produced after one successful requester/rendezvous DR registration.
+///
+/// The scheduling channel owns the exact C03e-NS one-shot grant or exact derivation error by value.
+/// The acknowledgement channel independently records the existing requester acknowledgement
+/// composition/I/O disposition. This carrier is intentionally neither `Copy` nor `Clone`; it owns no
+/// requester transaction, stream, channel, dispatcher, timing value, admission session ID, PRWM
+/// request ID, endpoint, or reachability authority.
+#[derive(Debug, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-NW materializes dormant scheduling-terminal caller custody before separately gated higher-owner propagation"
+)]
+pub(super) struct RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome {
+    scheduling_result: Result<
+        ExpectedDeviceSchedulingAuthorityGrant,
+        ExpectedDeviceSchedulingAuthorityDerivationError,
+    >,
+    acknowledgement_result: Result<
+        (),
+        RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+    >,
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-NW retains exact orthogonal scheduling and acknowledgement channels for a separately gated higher owner"
+)]
+impl RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome {
+    const fn new(
+        scheduling_result: Result<
+            ExpectedDeviceSchedulingAuthorityGrant,
+            ExpectedDeviceSchedulingAuthorityDerivationError,
+        >,
+        acknowledgement_result: Result<
+            (),
+            RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+        >,
+    ) -> Self {
+        Self {
+            scheduling_result,
+            acknowledgement_result,
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn scheduling_result(
+        &self,
+    ) -> &Result<
+        ExpectedDeviceSchedulingAuthorityGrant,
+        ExpectedDeviceSchedulingAuthorityDerivationError,
+    > {
+        &self.scheduling_result
+    }
+
+    #[must_use]
+    pub(super) const fn acknowledgement_result(
+        &self,
+    ) -> &Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError> {
+        &self.acknowledgement_result
+    }
+
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        Result<
+            ExpectedDeviceSchedulingAuthorityGrant,
+            ExpectedDeviceSchedulingAuthorityDerivationError,
+        >,
+        Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
+    ) {
+        (self.scheduling_result, self.acknowledgement_result)
+    }
+}
+
+/// Production-specific terminal result for the dormant scheduling-aware requester worker.
+///
+/// The historical requester worker stop remains unchanged and `Copy`/`Clone`. This distinct result
+/// can instead own the non-Clone scheduling terminal carrier by value without retrofitting scheduling
+/// semantics into historical callers.
+#[derive(Debug, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-NW materializes the dormant production scheduling-aware worker stop before separately gated higher-owner propagation"
+)]
+pub(super) enum RequesterRendezvousProductionDurableSchedulingWorkerStop {
+    /// Caller-owned cancellation won before any scheduling result existed.
+    Cancelled,
+    /// Existing ingress/requester-response lifecycle failed before any scheduling result existed.
+    Failed(RequesterRendezvousPostTerminalResponseSerialLifecycleError),
+    /// Requester/rendezvous DR succeeded and exact scheduling plus acknowledgement custody exists.
+    SchedulingTerminal(RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome),
 }
 
 /// Consumes one exact retained DR continuation and completes exactly one terminal acknowledgement
@@ -501,6 +597,134 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
     }
 }
 
+/// Runs the NV-selected dormant production-durable requester lifecycle that may derive exactly one
+/// expected-device scheduling authority after successful requester/rendezvous DR registration.
+///
+/// This sibling deliberately leaves the existing production-durable worker above unchanged. Before
+/// requester handoff it reuses the exact durable ingress/cancellation race. After handoff it preserves
+/// requester `SessionId` and target `DeviceId` only as non-authorizing operation selectors, runs the
+/// exact existing DR continuation once, and branches on the already-completed DR result.
+///
+/// A DR failure never invokes scheduling derivation: the existing rejected acknowledgement is
+/// completed exactly as today, then the historical post-ack cancellation/next-ingress behavior is
+/// preserved. A DR success invokes the existing C03e-NS scheduling derivation exactly once before
+/// acknowledgement framing/I/O, retains the grant or typed derivation error by value, attempts the
+/// unchanged requester acknowledgement exactly once, and returns both terminal channels upward
+/// before any cancellation poll or next ingress cycle.
+///
+/// This seam constructs no expected-device admission request, sender, channel, admission `SessionId`,
+/// PRWM request ID or timing value, and performs no peer close, higher-owner migration, runtime
+/// activation, retry/remint, deployment or merge.
+#[allow(
+    dead_code,
+    reason = "C03e-NW materializes the NV-selected dormant scheduling-aware sibling before separately gated higher-owner propagation"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "C03e-NW preserves distinct durable ingress, requester DR and scheduling-derivation authority inputs without introducing an aggregate"
+)]
+pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> u64 + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    C: Future<Output = ()> + Send,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    capability_authority: &crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+    cancellation: C,
+) -> RequesterRendezvousProductionDurableSchedulingWorkerStop {
+    let mut cancellation = Box::pin(cancellation);
+
+    loop {
+        let cancellation_adapter = poll_fn(|context| cancellation.as_mut().poll(context));
+        let ingress_result = session_owner
+            .run_repeated_post_auth_control_stream_ingress_worker_with_production_durable_capability(
+                capability_authority,
+                &mut verifier_time_unix_seconds,
+                dispatcher,
+                cancellation_adapter,
+            )
+            .await;
+
+        let handoff = match ingress_result {
+            Ok(Some(handoff)) => handoff,
+            Ok(None) => {
+                return RequesterRendezvousProductionDurableSchedulingWorkerStop::Cancelled;
+            }
+            Err(error) => {
+                return RequesterRendezvousProductionDurableSchedulingWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+        };
+
+        let requester_session_id = handoff
+            .start_intent
+            .requester_session()
+            .session_id()
+            .clone();
+        let target_device_id = handoff.start_intent.target_device_id().clone();
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            requester_dr_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            handoff,
+        )
+        .await;
+
+        if continuation.dr_result().is_err() {
+            if let Err(error) =
+                complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation)
+                    .await
+            {
+                return RequesterRendezvousProductionDurableSchedulingWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+
+            let cancellation_ready = poll_fn(|context| {
+                Poll::Ready(matches!(
+                    cancellation.as_mut().poll(context),
+                    Poll::Ready(())
+                ))
+            })
+            .await;
+
+            if cancellation_ready {
+                return RequesterRendezvousProductionDurableSchedulingWorkerStop::Cancelled;
+            }
+
+            continue;
+        }
+
+        let scheduling_result = requester_rendezvous_authority
+            .derive_expected_device_scheduling_authority(
+                requester_dr_authority,
+                policy_source,
+                &requester_session_id,
+                &target_device_id,
+            )
+            .await;
+
+        let acknowledgement_result =
+            complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await;
+
+        return RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome::new(
+                scheduling_result,
+                acknowledgement_result,
+            ),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use prw_remote_bridge::{
@@ -511,10 +735,15 @@ mod tests {
     use super::{
         RequesterRendezvousPostTerminalResponseSerialLifecycleError,
         RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
+        RequesterRendezvousProductionDurableSchedulingWorkerStop,
+        RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome,
         RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
         complete_requester_rendezvous_terminal_dr_acknowledgement_response,
     };
-    use crate::remote_session_capability_runtime::AuthenticatedRemoteSessionPostAuthIngressTransactionError;
+    use crate::remote_session_capability_runtime::{
+        AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+        shared_requester_rendezvous_authority::ExpectedDeviceSchedulingAuthorityDerivationError,
+    };
 
     fn assert_frame_error_conversion(
         conversion: fn(
@@ -580,6 +809,35 @@ mod tests {
         assert_eq!(
             RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled,
             RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled
+        );
+    }
+
+    #[test]
+    fn scheduling_terminal_custody_preserves_derivation_and_acknowledgement_channels() {
+        let outcome = RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome::new(
+            Err(ExpectedDeviceSchedulingAuthorityDerivationError::AlreadyConsumed),
+            Ok(()),
+        );
+
+        assert_eq!(
+            outcome.scheduling_result(),
+            &Err(ExpectedDeviceSchedulingAuthorityDerivationError::AlreadyConsumed)
+        );
+        assert_eq!(outcome.acknowledgement_result(), &Ok(()));
+
+        let (scheduling_result, acknowledgement_result) = outcome.into_parts();
+        assert_eq!(
+            scheduling_result,
+            Err(ExpectedDeviceSchedulingAuthorityDerivationError::AlreadyConsumed)
+        );
+        assert_eq!(acknowledgement_result, Ok(()));
+    }
+
+    #[test]
+    fn scheduling_worker_stop_keeps_pre_derivation_cancellation_distinct() {
+        assert_eq!(
+            RequesterRendezvousProductionDurableSchedulingWorkerStop::Cancelled,
+            RequesterRendezvousProductionDurableSchedulingWorkerStop::Cancelled
         );
     }
 }
