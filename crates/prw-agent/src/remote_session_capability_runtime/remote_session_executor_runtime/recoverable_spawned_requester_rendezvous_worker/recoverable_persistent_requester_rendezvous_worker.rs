@@ -167,6 +167,45 @@ pub(super) fn reap_ready_recoverable_workers<K, O, T, C>(
     }
 }
 
+/// Polls active recoverable workers and detaches at most one terminal completion.
+///
+/// The scan stops at the first ready join so no second completed handle is consumed in the same
+/// call. Empty or entirely pending maps return [`Poll::Pending`] after registering the supplied
+/// context with every polled join handle. Owner and terminal-result custody move by value exactly
+/// once through the existing recovery and join-result mapping helpers.
+#[allow(
+    dead_code,
+    reason = "C03e-OG materializes the OF-selected one-at-a-time extraction prerequisite before separately gated async producer handoff integration"
+)]
+pub(super) fn poll_one_ready_recoverable_worker<K, O, T>(
+    active: &mut HashMap<K, RecoverablePersistentWorkerEntry<O, T>>,
+    context: &mut Context<'_>,
+) -> Poll<RecoverablePersistentWorkerCompletion<K, O, T>>
+where
+    K: Eq + Hash + Clone,
+{
+    let mut ready = None;
+
+    for (key, entry) in active.iter_mut() {
+        if let Poll::Ready(join_result) = Pin::new(&mut entry.worker_handle).poll(context) {
+            ready = Some((key.clone(), join_result));
+            break;
+        }
+    }
+
+    let Some((key, join_result)) = ready else {
+        return Poll::Pending;
+    };
+
+    let entry = active
+        .remove(&key)
+        .expect("ready persistent worker entry must remain present until single detachment");
+    let owner = recover_owner_after_terminal_join(&entry.owner_cell);
+    let result = map_worker_join_result(join_result);
+
+    Poll::Ready(RecoverablePersistentWorkerCompletion { key, owner, result })
+}
+
 pub(super) fn request_all_recoverable_worker_cancellations<K, O, T>(
     active: &HashMap<K, RecoverablePersistentWorkerEntry<O, T>>,
 ) {
@@ -315,8 +354,8 @@ mod tests {
 
     use super::{
         RecoverablePersistentWorkerEntry, RemoteSessionSpawnedWorkerJoinError,
-        RemoteSessionWorkerAdmissionRejectionReason, reap_ready_recoverable_workers,
-        run_recoverable_persistent_worker_collection,
+        RemoteSessionWorkerAdmissionRejectionReason, poll_one_ready_recoverable_worker,
+        reap_ready_recoverable_workers, run_recoverable_persistent_worker_collection,
     };
     use crate::remote_session_capability_runtime::remote_session_worker_cancellation_pair;
 
@@ -333,6 +372,12 @@ mod tests {
         WaitForCancellation,
         Panic,
     }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct NonCloneOwner(u8);
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct NonCloneResult(u8);
 
     #[allow(
         clippy::significant_drop_tightening,
@@ -365,6 +410,30 @@ mod tests {
                     panic!("intentional recoverable persistent-worker test panic");
                 }
             }
+        });
+
+        RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
+    }
+
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "C03e-OG wakeup test intentionally retains owner custody while the injected release signal keeps the join pending"
+    )]
+    fn spawn_signalled_test_entry(
+        owner: u8,
+        result: u8,
+        release: oneshot::Receiver<()>,
+    ) -> RecoverablePersistentWorkerEntry<u8, u8> {
+        let owner_cell = Arc::new(Mutex::new(Some(owner)));
+        let worker_owner_cell = Arc::clone(&owner_cell);
+        let (cancellation_controller, _cancellation_signal) =
+            remote_session_worker_cancellation_pair();
+        let worker_handle = tokio::spawn(async move {
+            let owner_guard = worker_owner_cell.lock().await;
+            assert_eq!(owner_guard.as_ref(), Some(&owner));
+            let _ = release.await;
+            drop(owner_guard);
+            result
         });
 
         RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
@@ -436,6 +505,139 @@ mod tests {
         let (key, owner, result) = completion.into_parts();
         assert_eq!(key, 2);
         assert_eq!(owner, 53);
+        assert_eq!(
+            result,
+            Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion)
+        );
+    }
+
+    #[test]
+    fn single_ready_extraction_empty_map_is_pending() {
+        let runtime = test_runtime();
+        runtime.block_on(async {
+            let mut active = std::collections::HashMap::<
+                u8,
+                RecoverablePersistentWorkerEntry<u8, u8>,
+            >::new();
+
+            poll_fn(|context| {
+                assert!(poll_one_ready_recoverable_worker(&mut active, context).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+        });
+    }
+
+    #[test]
+    fn single_ready_extraction_registers_wakeup_for_pending_join() {
+        let runtime = test_runtime();
+        let (completion, saw_pending) = runtime.block_on(async {
+            let mut active = std::collections::HashMap::new();
+            let (release_sender, release_receiver) = oneshot::channel();
+            let mut release_sender = Some(release_sender);
+            let mut saw_pending = false;
+
+            active.insert(7_u8, spawn_signalled_test_entry(91, 41, release_receiver));
+
+            let completion = poll_fn(|context| {
+                match poll_one_ready_recoverable_worker(&mut active, context) {
+                    Poll::Ready(completion) => Poll::Ready(completion),
+                    Poll::Pending => {
+                        if !saw_pending {
+                            saw_pending = true;
+                            let sender = release_sender
+                                .take()
+                                .expect("release sender exists for first pending poll");
+                            assert!(sender.send(()).is_ok());
+                        }
+                        Poll::Pending
+                    }
+                }
+            })
+            .await;
+
+            (completion, saw_pending)
+        });
+
+        assert!(saw_pending);
+        let (key, owner, result) = completion.into_parts();
+        assert_eq!(key, 7);
+        assert_eq!(owner, 91);
+        assert_eq!(result, Ok(41));
+    }
+
+    #[test]
+    fn single_ready_extraction_detaches_only_one_ready_entry_per_call() {
+        let runtime = test_runtime();
+        let mut completions = runtime.block_on(async {
+            let mut active = std::collections::HashMap::new();
+            active.insert(8_u8, spawn_test_entry(101, 51, TestWorkerMode::Immediate));
+            active.insert(9_u8, spawn_test_entry(102, 52, TestWorkerMode::Immediate));
+            tokio::task::yield_now().await;
+
+            let first = poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context))
+                .await;
+            assert_eq!(active.len(), 1);
+
+            let second = poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context))
+                .await;
+            assert!(active.is_empty());
+
+            vec![first.into_parts(), second.into_parts()]
+        });
+
+        completions.sort_by_key(|(key, _, _)| *key);
+        assert_eq!(completions, vec![(8, 101, Ok(51)), (9, 102, Ok(52))]);
+    }
+
+    #[test]
+    fn single_ready_extraction_moves_non_clone_owner_and_result() {
+        let runtime = test_runtime();
+        let completion = runtime.block_on(async {
+            let owner_cell = Arc::new(Mutex::new(Some(NonCloneOwner(111))));
+            let worker_owner_cell = Arc::clone(&owner_cell);
+            let (cancellation_controller, _cancellation_signal) =
+                remote_session_worker_cancellation_pair();
+            let worker_handle = tokio::spawn(async move {
+                let owner_guard = worker_owner_cell.lock().await;
+                assert_eq!(owner_guard.as_ref().map(|owner| owner.0), Some(111));
+                drop(owner_guard);
+                NonCloneResult(61)
+            });
+
+            let mut active = std::collections::HashMap::new();
+            active.insert(
+                10_u8,
+                RecoverablePersistentWorkerEntry::new(
+                    owner_cell,
+                    cancellation_controller,
+                    worker_handle,
+                ),
+            );
+
+            poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context)).await
+        });
+
+        let (key, owner, result) = completion.into_parts();
+        assert_eq!(key, 10);
+        assert_eq!(owner, NonCloneOwner(111));
+        assert_eq!(result, Ok(NonCloneResult(61)));
+    }
+
+    #[test]
+    fn single_ready_extraction_preserves_abnormal_join_mapping() {
+        let runtime = test_runtime();
+        let completion = runtime.block_on(async {
+            let mut active = std::collections::HashMap::new();
+            active.insert(11_u8, spawn_test_entry(121, 71, TestWorkerMode::Panic));
+            tokio::task::yield_now().await;
+
+            poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context)).await
+        });
+
+        let (key, owner, result) = completion.into_parts();
+        assert_eq!(key, 11);
+        assert_eq!(owner, 121);
         assert_eq!(
             result,
             Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion)
