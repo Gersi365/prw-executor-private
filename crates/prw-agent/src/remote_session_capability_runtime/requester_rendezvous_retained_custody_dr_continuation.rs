@@ -736,9 +736,8 @@ mod tests {
             Err(ExpectedDeviceSchedulingAuthorityDerivationError::CapacityExhausted),
             Ok(()),
         );
-        let stop = RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
-            outcome,
-        );
+        let stop =
+            RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(outcome);
 
         match stop {
             RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
