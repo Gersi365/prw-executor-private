@@ -220,7 +220,6 @@ impl RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome {
         }
     }
 
-    #[must_use]
     pub(super) const fn scheduling_result(
         &self,
     ) -> &Result<
@@ -230,7 +229,6 @@ impl RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome {
         &self.scheduling_result
     }
 
-    #[must_use]
     pub(super) const fn acknowledgement_result(
         &self,
     ) -> &Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError> {
