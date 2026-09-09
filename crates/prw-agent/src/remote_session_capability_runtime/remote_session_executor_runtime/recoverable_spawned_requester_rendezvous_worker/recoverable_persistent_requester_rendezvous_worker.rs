@@ -515,10 +515,8 @@ mod tests {
     fn single_ready_extraction_empty_map_is_pending() {
         let runtime = test_runtime();
         runtime.block_on(async {
-            let mut active = std::collections::HashMap::<
-                u8,
-                RecoverablePersistentWorkerEntry<u8, u8>,
-            >::new();
+            let mut active =
+                std::collections::HashMap::<u8, RecoverablePersistentWorkerEntry<u8, u8>>::new();
 
             poll_fn(|context| {
                 assert!(poll_one_ready_recoverable_worker(&mut active, context).is_pending());
@@ -539,22 +537,23 @@ mod tests {
 
             active.insert(7_u8, spawn_signalled_test_entry(91, 41, release_receiver));
 
-            let completion = poll_fn(|context| {
-                match poll_one_ready_recoverable_worker(&mut active, context) {
-                    Poll::Ready(completion) => Poll::Ready(completion),
-                    Poll::Pending => {
-                        if !saw_pending {
-                            saw_pending = true;
-                            let sender = release_sender
-                                .take()
-                                .expect("release sender exists for first pending poll");
-                            assert!(sender.send(()).is_ok());
+            let completion =
+                poll_fn(
+                    |context| match poll_one_ready_recoverable_worker(&mut active, context) {
+                        Poll::Ready(completion) => Poll::Ready(completion),
+                        Poll::Pending => {
+                            if !saw_pending {
+                                saw_pending = true;
+                                let sender = release_sender
+                                    .take()
+                                    .expect("release sender exists for first pending poll");
+                                assert!(sender.send(()).is_ok());
+                            }
+                            Poll::Pending
                         }
-                        Poll::Pending
-                    }
-                }
-            })
-            .await;
+                    },
+                )
+                .await;
 
             (completion, saw_pending)
         });
@@ -575,12 +574,12 @@ mod tests {
             active.insert(9_u8, spawn_test_entry(102, 52, TestWorkerMode::Immediate));
             tokio::task::yield_now().await;
 
-            let first = poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context))
-                .await;
+            let first =
+                poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context)).await;
             assert_eq!(active.len(), 1);
 
-            let second = poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context))
-                .await;
+            let second =
+                poll_fn(|context| poll_one_ready_recoverable_worker(&mut active, context)).await;
             assert!(active.is_empty());
 
             vec![first.into_parts(), second.into_parts()]
