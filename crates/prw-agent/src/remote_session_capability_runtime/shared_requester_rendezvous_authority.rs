@@ -53,7 +53,17 @@ use crate::{
             RequesterRendezvousStartCompositionError,
             validate_authorize_and_register_requester_rendezvous_start,
         },
-        policy_source::RequesterRendezvousStartPolicySource,
+        policy_admission::{
+            RequesterRendezvousStartPolicyAuthorizationError,
+            policy_authorize_requester_rendezvous_start,
+        },
+        policy_source::{
+            RequesterRendezvousStartPolicySource, RequesterRendezvousStartPolicySourceError,
+        },
+        registry_validation::{
+            RequesterRendezvousStartRegistryValidationError,
+            validate_current_requester_rendezvous_start_intent,
+        },
     },
     production_reachability_owner_custody::{
         ProductionReachabilityOwnerCustodyLookupError, ProductionReachabilityOwnerCustodyMap,
@@ -287,11 +297,125 @@ impl std::error::Error for SharedRequesterRendezvousAuthorityConstructionError {
     }
 }
 
-/// Process-local requester/rendezvous plus terminal scheduling-consumption state under one mutex.
+/// One irreversibly consumed, operation-scoped expected-device scheduling authority.
+///
+/// This carrier is constructed only after the exact requester-session/target key has been inserted
+/// into the terminal scheduling-consumption ledger. It is intentionally neither `Copy` nor `Clone`.
+/// It contains no endpoint, transport identity, request ID, admission session ID, timing value,
+/// dispatcher, sender, candidate payload, or reachability authority.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct ExpectedDeviceSchedulingAuthorityGrant {
+    requester_session_id: SessionId,
+    target_device_id: DeviceId,
+}
+
 #[allow(
     dead_code,
-    reason = "C03e-NQ attaches the selected scheduling-consumption ledger before separately gated scheduling-authority derivation consumes it"
+    reason = "C03e-NS materializes the one-shot scheduling grant before separately gated caller/result-custody integration"
 )]
+impl ExpectedDeviceSchedulingAuthorityGrant {
+    const fn new(requester_session_id: SessionId, target_device_id: DeviceId) -> Self {
+        Self {
+            requester_session_id,
+            target_device_id,
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn requester_session_id(&self) -> &SessionId {
+        &self.requester_session_id
+    }
+
+    #[must_use]
+    pub(super) const fn target_device_id(&self) -> &DeviceId {
+        &self.target_device_id
+    }
+
+    #[must_use]
+    pub(super) fn into_parts(self) -> (SessionId, DeviceId) {
+        (self.requester_session_id, self.target_device_id)
+    }
+}
+
+/// Fail-closed stage classification for dormant post-registration scheduling-authority derivation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum ExpectedDeviceSchedulingAuthorityDerivationError {
+    /// Exactly one current requester/rendezvous relationship could not be established.
+    RequesterRendezvousAuthority(RequesterRendezvousAuthorityError),
+    /// Provider-selected requester-session/target identity did not match the exact operation key.
+    OperationIdentityMismatch,
+    /// Fresh current-registry validation failed.
+    RegistryValidation(RequesterRendezvousStartRegistryValidationError),
+    /// Fresh requester-aware policy resolution failed.
+    PolicySource(RequesterRendezvousStartPolicySourceError),
+    /// Fresh requester-start policy authorization denied the operation.
+    PolicyAuthorization(RequesterRendezvousStartPolicyAuthorizationError),
+    /// The exact scheduling-consumption key was already terminally committed.
+    AlreadyConsumed,
+    /// A distinct scheduling-consumption key cannot be retained because the ledger is full.
+    CapacityExhausted,
+    /// A constructor-only consumption-state classification surfaced after valid owner construction.
+    ConsumptionStateInvariant,
+}
+
+impl fmt::Display for ExpectedDeviceSchedulingAuthorityDerivationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::RequesterRendezvousAuthority(_) => {
+                "expected-device scheduling derivation requester authority failed"
+            }
+            Self::OperationIdentityMismatch => {
+                "expected-device scheduling derivation operation identity mismatch"
+            }
+            Self::RegistryValidation(_) => {
+                "expected-device scheduling derivation registry validation failed"
+            }
+            Self::PolicySource(_) => "expected-device scheduling derivation policy source failed",
+            Self::PolicyAuthorization(_) => {
+                "expected-device scheduling derivation policy authorization failed"
+            }
+            Self::AlreadyConsumed => "expected-device scheduling authority already consumed",
+            Self::CapacityExhausted => "expected-device scheduling-consumption capacity exhausted",
+            Self::ConsumptionStateInvariant => {
+                "expected-device scheduling-consumption invariant state failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error for ExpectedDeviceSchedulingAuthorityDerivationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::RequesterRendezvousAuthority(error) => Some(error),
+            Self::RegistryValidation(error) => Some(error),
+            Self::PolicySource(error) => Some(error),
+            Self::PolicyAuthorization(error) => Some(error),
+            Self::OperationIdentityMismatch
+            | Self::AlreadyConsumed
+            | Self::CapacityExhausted
+            | Self::ConsumptionStateInvariant => None,
+        }
+    }
+}
+
+const fn map_expected_device_scheduling_consumption_error(
+    error: expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError,
+) -> ExpectedDeviceSchedulingAuthorityDerivationError {
+    match error {
+        expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity => {
+            ExpectedDeviceSchedulingAuthorityDerivationError::ConsumptionStateInvariant
+        }
+        expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError::AlreadyConsumed => {
+            ExpectedDeviceSchedulingAuthorityDerivationError::AlreadyConsumed
+        }
+        expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted => {
+            ExpectedDeviceSchedulingAuthorityDerivationError::CapacityExhausted
+        }
+    }
+}
+
+/// Process-local requester/rendezvous plus terminal scheduling-consumption state under one mutex.
 struct SharedRequesterRendezvousState {
     runtime_owner: CandidatePublicationRequesterRendezvousRuntimeOwner,
     expected_device_scheduling_consumption_ledger:
@@ -376,6 +500,107 @@ impl SharedRequesterRendezvousAuthority {
                     &mut state.runtime_owner,
                     intent,
                 )
+            })
+            .await
+    }
+
+    /// Derives one dormant one-shot expected-device scheduling authority after registration success.
+    ///
+    /// Requester/target inputs are non-authorizing operation selectors only. The requester mutex is
+    /// acquired first. Existing provider authorization is used only as an ephemeral exactly-one
+    /// current relationship witness; its candidate-publication grant is confined to a lexical block
+    /// and dropped before fresh scheduling registry/policy reauthorization. While requester custody
+    /// remains held, one fresh shared-current read spans registry validation, requester-aware
+    /// `RequesterRendezvousStart` policy authorization, terminal scheduling-consumption insertion and
+    /// infallible one-shot grant construction. Both locks are released before this method returns.
+    ///
+    /// This method performs no requester registration, candidate publication, provider cleanup,
+    /// response I/O, request construction, channel send, task spawn, retry, remint, listener/runtime
+    /// activation or deployment.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed when unique current requester authority cannot be established, the provider-held
+    /// relationship does not match the exact operation selectors, fresh registry/policy gates fail,
+    /// the terminal key was already consumed, finite consumption capacity is exhausted, or an
+    /// impossible constructor-only consumption-state classification is observed.
+    #[allow(
+        dead_code,
+        clippy::significant_drop_tightening,
+        reason = "C03e-NS intentionally retains the requester guard across fresh current-authority reauthorization and terminal consumption to preserve the NR-selected lock order and atomic derivation boundary"
+    )]
+    pub(super) async fn derive_expected_device_scheduling_authority<
+        P: PolicyEvaluator + Send + Sync,
+        S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    >(
+        &self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        policy_source: &S,
+        requester_session_id: &SessionId,
+        target_device_id: &DeviceId,
+    ) -> Result<
+        ExpectedDeviceSchedulingAuthorityGrant,
+        ExpectedDeviceSchedulingAuthorityDerivationError,
+    > {
+        let mut state = self.state.lock().await;
+
+        let (requester_session, exact_target_device_id) = {
+            let relationship = state
+                .runtime_owner
+                .authorize_current_requester_rendezvous_for_publisher(target_device_id)
+                .map_err(
+                    ExpectedDeviceSchedulingAuthorityDerivationError::RequesterRendezvousAuthority,
+                )?;
+
+            if relationship.requester_session().session_id() != requester_session_id
+                || relationship.expected_publisher_device_id() != target_device_id
+            {
+                return Err(
+                    ExpectedDeviceSchedulingAuthorityDerivationError::OperationIdentityMismatch,
+                );
+            }
+
+            (
+                relationship.requester_session().clone(),
+                relationship.expected_publisher_device_id().clone(),
+            )
+        };
+
+        authority
+            .with_current_authority(|registry, _current_capability_policy| {
+                let validated = validate_current_requester_rendezvous_start_intent(
+                    registry,
+                    RequesterRendezvousStartIntent::new(requester_session, exact_target_device_id),
+                )
+                .map_err(ExpectedDeviceSchedulingAuthorityDerivationError::RegistryValidation)?;
+
+                let evaluator = policy_source
+                    .evaluator_for_requester(validated.requester_session())
+                    .map_err(ExpectedDeviceSchedulingAuthorityDerivationError::PolicySource)?;
+
+                let committed_requester_session_id =
+                    validated.requester_session().session_id().clone();
+                let committed_target_device_id = validated.target_device_id().clone();
+
+                {
+                    let _authorized =
+                        policy_authorize_requester_rendezvous_start(validated, evaluator).map_err(
+                            ExpectedDeviceSchedulingAuthorityDerivationError::PolicyAuthorization,
+                        )?;
+                }
+
+                state
+                    .expected_device_scheduling_consumption_ledger
+                    .commit_requester_target_if_absent(
+                        committed_requester_session_id.clone(),
+                        committed_target_device_id.clone(),
+                    )
+                    .map_err(map_expected_device_scheduling_consumption_error)?;
+
+                Ok(ExpectedDeviceSchedulingAuthorityGrant::new(
+                    committed_requester_session_id,
+                    committed_target_device_id,
+                ))
             })
             .await
     }
@@ -626,8 +851,11 @@ mod tests {
     use super::{
         CandidatePublicationPostCommitRequesterCleanupOutcome,
         CandidatePublicationTerminalFrameComposition, CandidatePublicationTerminalResultProjection,
-        CurrentMeshCandidatePublicationExecutionError, RequesterRendezvousCommittedCleanupIdentity,
-        SharedRequesterRendezvousAuthority, compose_candidate_publication_terminal_result_frame,
+        CurrentMeshCandidatePublicationExecutionError,
+        ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
+        RequesterRendezvousCommittedCleanupIdentity, SharedRequesterRendezvousAuthority,
+        compose_candidate_publication_terminal_result_frame,
+        map_expected_device_scheduling_consumption_error,
         project_candidate_publication_terminal_parts,
         project_candidate_publication_terminal_result,
     };
@@ -687,6 +915,45 @@ mod tests {
                 0,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn scheduling_authority_grant_preserves_exact_terminal_identity() {
+        let requester_session_id =
+            SessionId::new("ns-requester-session").expect("valid requester session id");
+        let target_device_id = DeviceId::new("ns-target-device").expect("valid target device id");
+        let grant = ExpectedDeviceSchedulingAuthorityGrant::new(
+            requester_session_id.clone(),
+            target_device_id.clone(),
+        );
+
+        assert_eq!(grant.requester_session_id(), &requester_session_id);
+        assert_eq!(grant.target_device_id(), &target_device_id);
+        assert_eq!(grant.into_parts(), (requester_session_id, target_device_id));
+    }
+
+    #[test]
+    fn scheduling_consumption_errors_map_to_bounded_derivation_outcomes() {
+        use super::expected_device_scheduling_consumption_ledger::ExpectedDeviceSchedulingConsumptionLedgerError;
+
+        assert_eq!(
+            map_expected_device_scheduling_consumption_error(
+                ExpectedDeviceSchedulingConsumptionLedgerError::AlreadyConsumed,
+            ),
+            ExpectedDeviceSchedulingAuthorityDerivationError::AlreadyConsumed
+        );
+        assert_eq!(
+            map_expected_device_scheduling_consumption_error(
+                ExpectedDeviceSchedulingConsumptionLedgerError::CapacityExhausted,
+            ),
+            ExpectedDeviceSchedulingAuthorityDerivationError::CapacityExhausted
+        );
+        assert_eq!(
+            map_expected_device_scheduling_consumption_error(
+                ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity,
+            ),
+            ExpectedDeviceSchedulingAuthorityDerivationError::ConsumptionStateInvariant
         );
     }
 
@@ -938,6 +1205,17 @@ mod expected_device_scheduling_consumption_ledger {
                 max_records,
                 consumed: Vec::new(),
             })
+        }
+
+        pub(super) fn commit_requester_target_if_absent(
+            &mut self,
+            requester_session_id: SessionId,
+            target_device_id: DeviceId,
+        ) -> Result<(), ExpectedDeviceSchedulingConsumptionLedgerError> {
+            self.commit_if_absent(ExpectedDeviceSchedulingConsumptionKey::new(
+                requester_session_id,
+                target_device_id,
+            ))
         }
 
         fn commit_if_absent(
