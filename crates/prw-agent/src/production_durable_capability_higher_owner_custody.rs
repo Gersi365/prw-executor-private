@@ -256,8 +256,9 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
     LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
 > {
     let session_authentication = SessionAuthenticationService::new();
-    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_session_authentication(
+    linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources(
         capability_authority,
+        session_authentication,
         expected_requests,
         admission_timing,
         on_completion,
@@ -359,8 +360,8 @@ pub(crate) struct LinuxAgentProductionDurableReachabilityRequesterPolicyRemotePr
 
 /// Populates one dormant pre-requester owner plus one explicit empty requester policy source.
 ///
-/// This wrapper first invokes the existing C03e-MH population helper exactly once. Only after that
-/// succeeds does it construct exactly one empty [`BoundedRequesterRendezvousStartPolicySource`]
+/// This wrapper first invokes the existing C03e-MH requester-policy population exactly once. Only
+/// after that succeeds does it construct exactly one empty [`BoundedRequesterRendezvousStartPolicySource`]
 /// through `Default`. The exact successful MH owner and exact empty source are then moved by value
 /// into one private non-cloneable carrier. No requester binding is added and no policy lookup is
 /// performed during population.
