@@ -816,7 +816,7 @@ mod expected_device_scheduling_consumption_ledger {
     }
 
     impl ExpectedDeviceSchedulingConsumptionKey {
-        fn new(requester_session_id: SessionId, target_device_id: DeviceId) -> Self {
+        const fn new(requester_session_id: SessionId, target_device_id: DeviceId) -> Self {
             Self {
                 requester_session_id,
                 target_device_id,
@@ -860,7 +860,9 @@ mod expected_device_scheduling_consumption_ledger {
     }
 
     impl ExpectedDeviceSchedulingConsumptionLedger {
-        fn new(max_records: usize) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
+        const fn new(
+            max_records: usize,
+        ) -> Result<Self, ExpectedDeviceSchedulingConsumptionLedgerError> {
             if max_records == 0 {
                 return Err(ExpectedDeviceSchedulingConsumptionLedgerError::InvalidCapacity);
             }
