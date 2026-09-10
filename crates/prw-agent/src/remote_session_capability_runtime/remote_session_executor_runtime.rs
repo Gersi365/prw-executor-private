@@ -1123,7 +1123,7 @@ mod repeated_real_admission_supervisor {
         DuplicateActiveDevice,
     }
 
-    /// Owns one untouched pre-authentication request rejected before any AJ transaction.
+    /// Owns one untouched pre-authentication request rejected before AJ construction.
     pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
         reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
         request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
@@ -1659,9 +1659,9 @@ mod repeated_real_admission_supervisor {
             );
 
             assert_eq!(
-                result,
-                Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-            );
+            result,
+            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+        );
             assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
