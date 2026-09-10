@@ -31,6 +31,7 @@ use super::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
     RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
 };
+use super::shared_requester_rendezvous_authority::ExpectedDeviceSchedulingAuthorityGrant;
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
     RemoteSessionExpectedDeviceAdmissionRejection,
@@ -230,6 +231,92 @@ enum RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome {
 struct RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
     requester_device_id: DeviceId,
     outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome,
+}
+
+/// One exact construction-eligible scheduling continuation retained above the generic producer seam.
+///
+/// The requester `DeviceId` remains requester-side correlation only. Target expected identity and
+/// requester scheduling-session provenance remain sealed inside the exact one-shot scheduling grant.
+/// The acknowledgement result is retained orthogonally and cannot revoke or reconstruct that grant.
+#[allow(
+    dead_code,
+    reason = "C03e-OT materializes only the OS-selected dormant eligible-continuation custody before separately gated request construction, suppression and producer specialization"
+)]
+struct RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+    requester_device_id: DeviceId,
+    scheduling_grant: ExpectedDeviceSchedulingAuthorityGrant,
+    acknowledgement_result:
+        Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
+}
+
+/// Exact live-completion classification before any expected-device request construction attempt.
+///
+/// Ineligible completions are retained through the existing C03e-OR receipt without projection.
+/// Eligible custody exists only for a scheduling terminal that owns one exact issued grant.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-OT preserves exact by-value ineligible completion and one-shot eligible grant custody instead of boxing or projecting either authority-bearing family"
+)]
+enum RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification {
+    Ineligible(RemoteSessionExpectedDeviceAdmissionHandoffReceipt),
+    Eligible(RemoteSessionExpectedDeviceAdmissionEligibleContinuation),
+}
+
+/// Classifies one exact scheduling-aware requester worker completion without side effects.
+///
+/// Only `SchedulingTerminal` with an `Ok` scheduling result is eligible. The scheduling-result
+/// discriminant is inspected by borrow first so every ineligible value, including a scheduling
+/// derivation error and its orthogonal acknowledgement result, can move untouched into the existing
+/// C03e-OR receipt. Only the eligible branch consumes terminal `into_parts()` once; the grant itself
+/// remains opaque and uninspected.
+#[allow(
+    dead_code,
+    reason = "C03e-OT materializes the OS-selected pure live-completion classifier before separately gated shutdown suppression, request construction and producer specialization"
+)]
+fn classify_remote_session_expected_device_admission_live_completion(
+    requester_device_id: DeviceId,
+    completion: Result<
+        RequesterRendezvousProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification {
+    let is_eligible = matches!(
+        &completion,
+        Ok(RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            terminal_outcome
+        )) if terminal_outcome.scheduling_result().is_ok()
+    );
+
+    if !is_eligible {
+        return RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification::Ineligible(
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                requester_device_id,
+                outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::Ineligible(
+                    completion,
+                ),
+            },
+        );
+    }
+
+    let Ok(RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+        terminal_outcome,
+    )) = completion
+    else {
+        unreachable!("borrowed eligibility check requires a scheduling terminal")
+    };
+    let (scheduling_result, acknowledgement_result) = terminal_outcome.into_parts();
+    let Ok(scheduling_grant) = scheduling_result else {
+        unreachable!("borrowed eligibility check requires an issued scheduling grant")
+    };
+
+    RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification::Eligible(
+        RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant,
+            acknowledgement_result,
+        },
+    )
 }
 
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
