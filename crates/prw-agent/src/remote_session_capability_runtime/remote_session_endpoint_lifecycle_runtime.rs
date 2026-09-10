@@ -476,11 +476,9 @@ fn new_remote_session_expected_device_authentication_request_id()
 -> Result<u64, RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError> {
     let mut random_bytes =
         [0_u8; REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_AUTHENTICATION_REQUEST_ID_RANDOM_BYTES];
-    SystemRandom::new()
-        .fill(&mut random_bytes)
-        .map_err(|_| {
-            RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError::Randomness
-        })?;
+    SystemRandom::new().fill(&mut random_bytes).map_err(|_| {
+        RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError::Randomness
+    })?;
 
     let request_id = u64::from_be_bytes(random_bytes);
     if request_id == 0 {
