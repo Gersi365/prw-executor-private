@@ -434,6 +434,62 @@ fn new_remote_session_expected_device_admission_target_session_id()
         .map_err(|_| RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError::Construction)
 }
 
+const REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_AUTHENTICATION_REQUEST_ID_RANDOM_BYTES: usize = 8;
+
+/// Fail-closed source failure for one fresh expected-device PRWM authentication request ID.
+#[allow(
+    dead_code,
+    reason = "C03e-OZ materializes only the OY-selected private expected-device PRWM authentication request-ID source before separately gated request construction"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError {
+    Randomness,
+    Zero,
+}
+
+impl fmt::Display for RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::Randomness => {
+                "expected-device admission authentication request-ID randomness failed"
+            }
+            Self::Zero => "expected-device admission authentication request-ID was zero",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError {}
+
+/// Generates exactly one fresh nonzero expected-device PRWM authentication request ID.
+///
+/// This source performs exactly one OS-backed CSPRNG fill of eight bytes, converts those exact
+/// bytes to one `u64` through `u64::from_be_bytes(...)`, and fails closed if the result is zero.
+/// It performs no retry, redraw, increment, wrap, fallback, persistence, shared/static counter,
+/// PRWC reuse, SessionId derivation, scheduling-grant access, request construction, channel,
+/// producer, dispatcher, timing, authentication, or lifecycle work.
+#[allow(
+    dead_code,
+    reason = "C03e-OZ materializes only the OY-selected dormant expected-device PRWM authentication request-ID source before separately gated construction composition"
+)]
+fn new_remote_session_expected_device_authentication_request_id()
+-> Result<u64, RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError> {
+    let mut random_bytes =
+        [0_u8; REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_AUTHENTICATION_REQUEST_ID_RANDOM_BYTES];
+    SystemRandom::new()
+        .fill(&mut random_bytes)
+        .map_err(|_| {
+            RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError::Randomness
+        })?;
+
+    let request_id = u64::from_be_bytes(random_bytes);
+    if request_id == 0 {
+        return Err(RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError::Zero);
+    }
+
+    Ok(request_id)
+}
+
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
 pub struct RemoteSessionEndpointLifecycleStartupFailure {
     authority_owner: Box<ReachabilityAuthorityRuntimeOwner>,
