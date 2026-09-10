@@ -2070,3 +2070,63 @@ impl RemoteSessionExecutorRuntime {
         )
     }
 }
+
+impl RemoteSessionExecutorRuntime {
+    /// Spawns and joins exactly one owned dormant fallible verifier-time worker under this private runtime.
+    ///
+    /// The authenticated-session owner, dispatcher, verifier-time provider and cancellation future move
+    /// into one `async move` task. Exactly one clone of the shared-current authority moves into that task.
+    /// The task delegates directly to the C03e-PD fallible verifier-time worker; it does not re-enter the
+    /// C03e-PF synchronous borrowed bridge from inside the task.
+    ///
+    /// `Cancelled` and `Failed` remain normal worker terminals. Only abnormal Tokio task completion is
+    /// mapped to the existing bounded [`RemoteSessionSpawnedWorkerJoinError`].
+    #[allow(
+        dead_code,
+        reason = "C03e-PH materializes the PG-selected spawned executor compatibility seam before separately gated supervisor propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-PH preserves the PG-selected mutable executor custody boundary for this spawned compatibility seam"
+    )]
+    pub(super) fn drive_spawned_fallible_verifier_time_capability_request_worker<
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        C: Future<Output = ()> + Send + 'static,
+    >(
+        &mut self,
+        session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: D,
+        cancellation: C,
+    ) -> Result<
+        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    > {
+        let authority = (*authority).clone();
+
+        self.runtime.block_on(async move {
+            let worker_handle = tokio::spawn(async move {
+                let mut session_owner = session_owner;
+                let mut dispatcher = dispatcher;
+
+                session_owner
+                    .run_fallible_verifier_time_capability_request_worker(
+                        &authority,
+                        verifier_time_unix_seconds,
+                        &mut dispatcher,
+                        cancellation,
+                    )
+                    .await
+            });
+
+            worker_handle
+                .await
+                .map_err(|_| RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion)
+        })
+    }
+}
