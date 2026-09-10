@@ -466,7 +466,7 @@ impl std::error::Error for RemoteSessionExpectedDeviceAdmissionAuthenticationReq
 /// This source performs exactly one OS-backed CSPRNG fill of eight bytes, converts those exact
 /// bytes to one `u64` through `u64::from_be_bytes(...)`, and fails closed if the result is zero.
 /// It performs no retry, redraw, increment, wrap, fallback, persistence, shared/static counter,
-/// PRWC reuse, SessionId derivation, scheduling-grant access, request construction, channel,
+/// PRWC reuse, `SessionId` derivation, scheduling-grant access, request construction, channel,
 /// producer, dispatcher, timing, authentication, or lifecycle work.
 #[allow(
     dead_code,
