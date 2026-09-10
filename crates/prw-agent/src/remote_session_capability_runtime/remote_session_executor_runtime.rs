@@ -1198,7 +1198,7 @@ mod repeated_real_admission_supervisor {
         S: Future<Output = ()>,
     {
         if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-            return Poll::Ready(RemoteSessionPersistentSupervisorEvent::Shutdown);
+            return Poll::Ready(RepeatedSupervisorEvent::Shutdown);
         }
 
         if *request_source_open && active_len < max_active_workers {
