@@ -1393,3 +1393,103 @@ impl RemoteSessionExecutorRuntime {
         Ok(())
     }
 }
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives the OL-selected dormant cooperative scheduling producer endpoint lifecycle adapter.
+    ///
+    /// This wrapper forwards the exact borrowed lending producer, shutdown suppression mapper and
+    /// receipt observer into the C03e-OK cooperative collection exactly once. Only after that lower
+    /// driver returns does it reproduce the existing endpoint close then wait-idle law. Receipt
+    /// custody remains generic; this seam defines no concrete handoff receipt, sender owner, higher
+    /// endpoint caller, request construction, enqueue policy, or runtime activation.
+    #[allow(
+        dead_code,
+        reason = "C03e-OM materializes only the OL-selected dormant executor endpoint-lifecycle adapter before separately gated higher endpoint-owner producer forwarding"
+    )]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "C03e-OM forwards the exact cooperative scheduling endpoint authorities without introducing a new aggregate or changing lower-driver ownership"
+    )]
+    pub(in super::super::super::super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_scheduling_producer<
+        P,
+        D,
+        T,
+        PS,
+        S,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: S,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> u64 + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        S: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let result = self
+            .drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_scheduling_producer(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                producer,
+                suppress_on_shutdown,
+                observe_receipt,
+                admission_timing,
+                on_rejection,
+                on_admission_failure,
+            );
+
+        transport_runtime.close(0, b"remote endpoint shutdown");
+        self.runtime.block_on(transport_runtime.wait_idle());
+        result
+    }
+}
