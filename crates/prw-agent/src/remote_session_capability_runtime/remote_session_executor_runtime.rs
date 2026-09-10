@@ -1123,7 +1123,7 @@ mod repeated_real_admission_supervisor {
         DuplicateActiveDevice,
     }
 
-    /// Owns one untouched pre-authentication request rejected before AJ construction.
+    /// Owns one untouched pre-authentication request rejected before any AJ transaction.
     pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
         reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
         request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
@@ -1659,9 +1659,9 @@ mod repeated_real_admission_supervisor {
             );
 
             assert_eq!(
-            result,
-            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-        );
+                result,
+                Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+            );
             assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
@@ -2025,5 +2025,44 @@ impl RemoteSessionExecutorRuntime {
             .map(
                 crate::production_reachability_runtime_custody::ProductionReachabilityRuntimeCustody::from_bootstrap_composition,
             )
+    }
+}
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives exactly one borrowed dormant fallible verifier-time worker through the existing private runtime.
+    ///
+    /// The authenticated-session owner and dispatcher remain borrowed for the whole synchronous drive.
+    /// The verifier-time provider and cancellation future are forwarded unchanged into exactly one
+    /// C03e-PD worker invocation. That worker remains sole authority for verifier-time sampling,
+    /// request-loop/cancellation ordering, peer closure, and exact terminal classification.
+    ///
+    /// This bridge introduces no executor error wrapper, spawn/join behavior, supervisor propagation,
+    /// persistent result retyping, admission/request-carrier migration, provider installation, or
+    /// production caller activation.
+    #[allow(
+        dead_code,
+        reason = "C03e-PF materializes the PE-selected borrowed executor compatibility seam before separately gated spawned propagation"
+    )]
+    pub(super) fn drive_fallible_verifier_time_capability_request_worker<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError> + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop {
+        self.runtime.block_on(
+            session_owner.run_fallible_verifier_time_capability_request_worker(
+                authority,
+                verifier_time_unix_seconds,
+                dispatcher,
+                cancellation,
+            ),
+        )
     }
 }
