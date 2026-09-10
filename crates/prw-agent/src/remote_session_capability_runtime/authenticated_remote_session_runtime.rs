@@ -148,7 +148,9 @@ impl std::error::Error for AuthenticatedRemoteSessionFallibleCapabilityRequestLo
     }
 }
 
-impl From<PrwaVerifierSourceError> for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError {
+impl From<PrwaVerifierSourceError>
+    for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError
+{
     fn from(error: PrwaVerifierSourceError) -> Self {
         Self::VerifierTime(error)
     }
