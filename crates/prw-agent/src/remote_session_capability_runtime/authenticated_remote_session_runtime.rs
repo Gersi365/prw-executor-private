@@ -231,6 +231,55 @@ enum AuthenticatedRemoteSessionWorkerRaceOutcome {
     Failed(AuthenticatedRemoteSessionCapabilityTransactionError),
 }
 
+/// Terminal result for the dormant fallible verifier-time cancellation-aware worker.
+#[allow(
+    dead_code,
+    reason = "C03e-PD materializes the PC-selected fallible worker before separately gated executor migration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop {
+    /// Caller-owned cancellation won while the fallible request loop remained pending.
+    Cancelled,
+    /// The PB request loop failed first and its exact typed error is preserved unchanged.
+    Failed(AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError),
+}
+
+async fn await_fallible_capability_request_worker_stop<L, C>(
+    request_loop: L,
+    cancellation: C,
+) -> AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop
+where
+    L: Future<Output = Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>>
+        + Send,
+    C: Future<Output = ()> + Send,
+{
+    let mut request_loop = Box::pin(request_loop);
+    let mut cancellation = Box::pin(cancellation);
+    let mut request_loop_completed_cleanly = false;
+
+    poll_fn(|context| {
+        if !request_loop_completed_cleanly {
+            match request_loop.as_mut().poll(context) {
+                Poll::Ready(Ok(())) => request_loop_completed_cleanly = true,
+                Poll::Ready(Err(error)) => {
+                    return Poll::Ready(
+                        AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(error),
+                    );
+                }
+                Poll::Pending => {}
+            }
+        }
+
+        match cancellation.as_mut().poll(context) {
+            Poll::Ready(()) => Poll::Ready(
+                AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled,
+            ),
+            Poll::Pending => Poll::Pending,
+        }
+    })
+    .await
+}
+
 /// Retains one authenticated peer and its bound capability lifetime under one Agent owner.
 pub struct AuthenticatedRemoteSessionRuntimeOwner {
     peer: AuthenticatedRemotePeerConnection,
@@ -597,6 +646,58 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     }
 }
 
+impl AuthenticatedRemoteSessionRuntimeOwner {
+    /// Runs the PC-selected dormant cancellation-aware worker around the existing PB fallible loop.
+    ///
+    /// The existing PB loop is constructed exactly once and owns all verifier-time sampling and
+    /// capability-transaction failure closure. The race helper polls that loop before cancellation on
+    /// every wake. A PB failure is returned unchanged without an additional close. Cancellation can
+    /// win only while the PB loop is pending (or after its defensive clean-return latch), and the
+    /// actual request-loop storage is destroyed before this method reuses peer custody to apply the
+    /// existing code-4 shutdown close exactly once.
+    ///
+    /// This method creates no task, runtime, cancellation source, retry, replacement session, time
+    /// source, dispatcher, request carrier, readiness state or production caller activation.
+    #[allow(
+        dead_code,
+        reason = "C03e-PD materializes the PC-selected fallible worker before separately gated executor migration"
+    )]
+    pub(super) async fn run_fallible_verifier_time_capability_request_worker<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> Result<u64, PrwaVerifierSourceError> + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop {
+        let stop = {
+            let request_loop = self.run_fallible_verifier_time_capability_request_loop(
+                authority,
+                verifier_time_unix_seconds,
+                dispatcher,
+            );
+            await_fallible_capability_request_worker_stop(request_loop, cancellation).await
+        };
+
+        match stop {
+            AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled => {
+                self.peer.close(
+                    REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
+                    REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
+                );
+                AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled
+            }
+            AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(error) => {
+                AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(error)
+            }
+        }
+    }
+}
+
 /// Binds one already-authenticated logical session to its same live peer and application lease.
 ///
 /// The peer's already-revalidated [`prw_remote_bridge::remote_server_transport_runtime::TransportIdentity`]
@@ -867,6 +968,321 @@ mod tests {
                 panic!("worker failure must not be reclassified as cancellation");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod fallible_verifier_time_worker_tests {
+    use std::{
+        future::{Future, pending, ready},
+        pin::Pin,
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        },
+        task::{Context, Poll, Wake, Waker},
+    };
+
+    use prw_remote_bridge::RemoteBridgeError;
+    use prw_session::prwa_verifier_source::PrwaVerifierSourceError;
+
+    use super::{
+        AuthenticatedRemoteSessionCapabilityTransactionError,
+        AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError,
+        AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        await_fallible_capability_request_worker_stop,
+    };
+
+    struct CountingWake {
+        wakes: AtomicUsize,
+    }
+
+    impl Wake for CountingWake {
+        fn wake(self: Arc<Self>) {
+            self.wakes.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.wakes.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    struct RecordingReadyCancellation {
+        polled: Arc<AtomicBool>,
+    }
+
+    impl Future for RecordingReadyCancellation {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+            self.polled.store(true, Ordering::SeqCst);
+            Poll::Ready(())
+        }
+    }
+
+    struct RecordingPendingLoop {
+        polls: Arc<AtomicUsize>,
+        waker: Arc<Mutex<Option<Waker>>>,
+    }
+
+    impl Future for RecordingPendingLoop {
+        type Output = Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>;
+
+        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+            self.polls.fetch_add(1, Ordering::SeqCst);
+            *self.waker.lock().expect("record loop waker") = Some(context.waker().clone());
+            Poll::Pending
+        }
+    }
+
+    struct SignalledCancellation {
+        ready: Arc<AtomicBool>,
+        polls: Arc<AtomicUsize>,
+        waker: Arc<Mutex<Option<Waker>>>,
+    }
+
+    impl Future for SignalledCancellation {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+            self.polls.fetch_add(1, Ordering::SeqCst);
+            if self.ready.load(Ordering::SeqCst) {
+                Poll::Ready(())
+            } else {
+                *self.waker.lock().expect("record cancellation waker") =
+                    Some(context.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+
+    struct CountedCleanLoop {
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl Future for CountedCleanLoop {
+        type Output = Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>;
+
+        fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+            self.polls.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    struct PendingThenReadyCancellation {
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl Future for PendingThenReadyCancellation {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+            if self.polls.fetch_add(1, Ordering::SeqCst) == 0 {
+                Poll::Pending
+            } else {
+                Poll::Ready(())
+            }
+        }
+    }
+
+    struct DropTrackedPendingLoop {
+        dropped: Arc<AtomicBool>,
+    }
+
+    impl Future for DropTrackedPendingLoop {
+        type Output = Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>;
+
+        fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+            Poll::Pending
+        }
+    }
+
+    impl Drop for DropTrackedPendingLoop {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn test_waker() -> (Arc<CountingWake>, Waker) {
+        let wake = Arc::new(CountingWake {
+            wakes: AtomicUsize::new(0),
+        });
+        let waker = Waker::from(Arc::clone(&wake));
+        (wake, waker)
+    }
+
+    #[test]
+    fn ready_verifier_time_failure_wins_without_polling_ready_cancellation() {
+        let error = AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::VerifierTime(
+            PrwaVerifierSourceError::VerifierTime,
+        );
+        let cancellation_polled = Arc::new(AtomicBool::new(false));
+        let cancellation = RecordingReadyCancellation {
+            polled: Arc::clone(&cancellation_polled),
+        };
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            ready(Err(error)),
+            cancellation,
+        ));
+        let (_wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(error))
+        );
+        assert!(!cancellation_polled.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn ready_transaction_failure_wins_without_polling_ready_cancellation() {
+        let transaction_error = AuthenticatedRemoteSessionCapabilityTransactionError::Bridge(
+            RemoteBridgeError::SessionExpired,
+        );
+        let error = AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::Transaction(
+            transaction_error,
+        );
+        let cancellation_polled = Arc::new(AtomicBool::new(false));
+        let cancellation = RecordingReadyCancellation {
+            polled: Arc::clone(&cancellation_polled),
+        };
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            ready(Err(error)),
+            cancellation,
+        ));
+        let (_wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(error))
+        );
+        assert!(!cancellation_polled.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn pending_loop_allows_ready_cancellation_to_win() {
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            pending::<
+                Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>,
+            >(),
+            ready(()),
+        ));
+        let (_wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled)
+        );
+    }
+
+    #[test]
+    fn both_pending_futures_receive_context_and_cancellation_wakeup_resumes_race() {
+        let loop_polls = Arc::new(AtomicUsize::new(0));
+        let loop_waker = Arc::new(Mutex::new(None));
+        let cancellation_ready = Arc::new(AtomicBool::new(false));
+        let cancellation_polls = Arc::new(AtomicUsize::new(0));
+        let cancellation_waker = Arc::new(Mutex::new(None));
+
+        let request_loop = RecordingPendingLoop {
+            polls: Arc::clone(&loop_polls),
+            waker: Arc::clone(&loop_waker),
+        };
+        let cancellation = SignalledCancellation {
+            ready: Arc::clone(&cancellation_ready),
+            polls: Arc::clone(&cancellation_polls),
+            waker: Arc::clone(&cancellation_waker),
+        };
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            request_loop,
+            cancellation,
+        ));
+        let (wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(future.as_mut().poll(&mut context), Poll::Pending);
+        assert_eq!(loop_polls.load(Ordering::SeqCst), 1);
+        assert_eq!(cancellation_polls.load(Ordering::SeqCst), 1);
+        assert!(
+            loop_waker
+                .lock()
+                .expect("read loop waker")
+                .as_ref()
+                .is_some_and(|registered| registered.will_wake(&waker))
+        );
+        assert!(
+            cancellation_waker
+                .lock()
+                .expect("read cancellation waker")
+                .as_ref()
+                .is_some_and(|registered| registered.will_wake(&waker))
+        );
+
+        cancellation_ready.store(true, Ordering::SeqCst);
+        cancellation_waker
+            .lock()
+            .expect("take cancellation waker")
+            .take()
+            .expect("cancellation registered waker")
+            .wake();
+        assert_eq!(wake.wakes.load(Ordering::SeqCst), 1);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled)
+        );
+        assert_eq!(loop_polls.load(Ordering::SeqCst), 2);
+        assert_eq!(cancellation_polls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn clean_loop_is_polled_once_and_cancellation_alone_completes_later() {
+        let loop_polls = Arc::new(AtomicUsize::new(0));
+        let cancellation_polls = Arc::new(AtomicUsize::new(0));
+        let request_loop = CountedCleanLoop {
+            polls: Arc::clone(&loop_polls),
+        };
+        let cancellation = PendingThenReadyCancellation {
+            polls: Arc::clone(&cancellation_polls),
+        };
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            request_loop,
+            cancellation,
+        ));
+        let (_wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(future.as_mut().poll(&mut context), Poll::Pending);
+        assert_eq!(loop_polls.load(Ordering::SeqCst), 1);
+        assert_eq!(cancellation_polls.load(Ordering::SeqCst), 1);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled)
+        );
+        assert_eq!(loop_polls.load(Ordering::SeqCst), 1);
+        assert_eq!(cancellation_polls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn cancellation_drops_request_loop_storage_before_helper_returns() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let request_loop = DropTrackedPendingLoop {
+            dropped: Arc::clone(&dropped),
+        };
+        let mut future = Box::pin(await_fallible_capability_request_worker_stop(
+            request_loop,
+            ready(()),
+        ));
+        let (_wake, waker) = test_waker();
+        let mut context = Context::from_waker(&waker);
+
+        assert_eq!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled)
+        );
+        assert!(dropped.load(Ordering::SeqCst));
     }
 }
 
