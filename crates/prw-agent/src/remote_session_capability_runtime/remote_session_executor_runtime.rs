@@ -2194,3 +2194,134 @@ impl RemoteSessionExecutorRuntime {
         })
     }
 }
+
+/// One explicitly reaped fallible verifier-time persistent-worker completion with logical identity.
+#[allow(
+    dead_code,
+    reason = "C03e-PL materializes the PK-selected persistent result/ownership compatibility seam before separately gated admission propagation"
+)]
+pub(super) struct RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
+    device_id: DeviceId,
+    result: Result<
+        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-PL exposes only bounded same-module access to the selected persistent completion custody"
+)]
+impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
+    /// Returns the authenticated logical `DeviceId` that keyed the retained worker entry.
+    #[must_use]
+    pub(super) const fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
+    /// Returns the exact fallible worker/join terminal result by reference.
+    #[must_use]
+    pub(super) const fn result(
+        &self,
+    ) -> &Result<
+        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    > {
+        &self.result
+    }
+
+    /// Recovers the logical identity and exact fallible worker/join terminal result.
+    #[must_use]
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        DeviceId,
+        Result<
+            super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) {
+        (self.device_id, self.result)
+    }
+}
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives the bounded persistent collection with the dormant fallible verifier-time worker.
+    ///
+    /// The existing generic collection remains sole authority for capacity, duplicate rejection,
+    /// completion reaping, cancellation-controller custody, join-handle custody and orderly drain.
+    /// Each admitted worker receives exactly one authority clone, one existing cancellation pair,
+    /// and one direct C03e-PD fallible worker invocation. No synchronous PF/PH/PJ bridge is nested.
+    ///
+    /// `Cancelled` and `Failed(exact PB error)` remain normal worker completion values. Only
+    /// abnormal Tokio completion is represented by the existing bounded join error.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error before runtime work when
+    /// `max_active_workers` exceeds the registered-device ceiling.
+    #[allow(
+        dead_code,
+        reason = "C03e-PL materializes the PK-selected persistent compatibility seam before separately gated admission/request-carrier propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-PL preserves the PK-selected mutable executor custody shape of the historical persistent drive"
+    )]
+    pub(super) fn drive_persistent_fallible_verifier_time_remote_worker_collection<
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        S: Future<Output = ()> + Send,
+        C: FnMut(RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion),
+        R: FnMut(RemoteSessionWorkerAdmissionRejection<D, T>),
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        admissions: mpsc::Receiver<RemoteSessionWorkerAdmission<D, T>>,
+        supervisor_shutdown: S,
+        mut on_completion: C,
+        mut on_rejection: R,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError> {
+        let max_active_workers = validate_persistent_worker_capacity(max_active_workers)?;
+
+        self.runtime.block_on(run_persistent_worker_collection(
+            max_active_workers,
+            admissions,
+            supervisor_shutdown,
+            |admission| admission.logical_device_id().clone(),
+            |admission| {
+                let authority = (*authority).clone();
+                let (mut session_owner, mut dispatcher, verifier_time_unix_seconds) =
+                    admission.into_parts();
+                let (cancellation_controller, cancellation_signal) =
+                    remote_session_worker_cancellation_pair();
+                let worker_handle = tokio::spawn(async move {
+                    session_owner
+                        .run_fallible_verifier_time_capability_request_worker(
+                            &authority,
+                            verifier_time_unix_seconds,
+                            &mut dispatcher,
+                            cancellation_signal.into_cancelled(),
+                        )
+                        .await
+                });
+                (cancellation_controller, worker_handle)
+            },
+            |device_id, result| {
+                on_completion(RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
+                    device_id,
+                    result,
+                });
+            },
+            |reason, admission| {
+                on_rejection(RemoteSessionWorkerAdmissionRejection { reason, admission });
+            },
+        ));
+
+        Ok(())
+    }
+}
