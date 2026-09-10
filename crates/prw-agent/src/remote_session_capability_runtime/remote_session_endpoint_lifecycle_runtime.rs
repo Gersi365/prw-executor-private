@@ -323,9 +323,9 @@ fn classify_remote_session_expected_device_admission_live_completion(
 /// receipt without performing any lifecycle or producer work.
 ///
 /// Ineligible classification returns the exact existing receipt unchanged. Eligible classification
-/// consumes the continuation once, destroys the one-shot scheduling grant inside a lexical scope
-/// without observing either grant field, preserves the acknowledgement result unchanged, and emits
-/// only the bounded `SuppressedOnShutdown` terminal disposition.
+/// consumes the continuation once, terminally disposes the one-shot scheduling grant by value
+/// without binding or observing either grant field, preserves the acknowledgement result unchanged,
+/// and emits only the bounded `SuppressedOnShutdown` terminal disposition.
 #[allow(
     dead_code,
     reason = "C03e-OV materializes only the OU-selected synchronous shutdown-suppression receipt mapper before separately gated request construction and producer specialization"
@@ -349,13 +349,9 @@ fn map_remote_session_expected_device_admission_shutdown_suppression(
         ) => {
             let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
                 requester_device_id,
-                scheduling_grant,
+                scheduling_grant: _,
                 acknowledgement_result,
             } = continuation;
-
-            {
-                let _terminally_disposed_scheduling_grant = scheduling_grant;
-            }
 
             RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
                 requester_device_id,
