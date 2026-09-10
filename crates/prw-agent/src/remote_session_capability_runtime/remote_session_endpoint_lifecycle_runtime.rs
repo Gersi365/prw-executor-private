@@ -19,7 +19,8 @@ use std::{
     },
 };
 
-use prw_core::DeviceId;
+use aws_lc_rs::rand::{SecureRandom, SystemRandom};
+use prw_core::{DeviceId, SessionId};
 use prw_policy::PolicyEvaluator;
 use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
@@ -363,6 +364,74 @@ fn map_remote_session_expected_device_admission_shutdown_suppression(
             }
         }
     }
+}
+
+const REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_RANDOM_BYTES: usize = 32;
+const REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_HEX_BYTES: usize = 64;
+const REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_LOWER_HEX: &[u8; 16] =
+    b"0123456789abcdef";
+
+/// Fail-closed source failure for one fresh target-admission `SessionId`.
+#[allow(
+    dead_code,
+    reason = "C03e-OX materializes only the OW-selected private target-admission SessionId source before separately gated request construction"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError {
+    Randomness,
+    Construction,
+}
+
+impl fmt::Display for RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::Randomness => "expected-device admission target SessionId randomness failed",
+            Self::Construction => "expected-device admission target SessionId construction failed",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError {}
+
+/// Generates exactly one fresh server-local target-admission `SessionId`.
+///
+/// This source performs exactly one OS-backed CSPRNG fill of 32 bytes, encodes those bytes as
+/// exactly 64 lowercase hexadecimal ASCII characters, and invokes typed `SessionId::new(...)`
+/// exactly once. It performs no retry, collision replacement, persistence, registry lookup,
+/// scheduling-grant access, request construction, network, channel, producer, dispatcher, timing,
+/// authentication, or lifecycle work.
+#[allow(
+    dead_code,
+    reason = "C03e-OX materializes only the OW-selected dormant target-admission SessionId source before separately gated construction composition"
+)]
+fn new_remote_session_expected_device_admission_target_session_id()
+-> Result<SessionId, RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError> {
+    let mut random_bytes =
+        [0_u8; REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_RANDOM_BYTES];
+    SystemRandom::new()
+        .fill(&mut random_bytes)
+        .map_err(|_| RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError::Randomness)?;
+
+    let mut encoded =
+        String::with_capacity(REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_HEX_BYTES);
+    for byte in random_bytes {
+        encoded.push(char::from(
+            REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_LOWER_HEX
+                [usize::from(byte >> 4)],
+        ));
+        encoded.push(char::from(
+            REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_LOWER_HEX
+                [usize::from(byte & 0x0f)],
+        ));
+    }
+    debug_assert_eq!(
+        encoded.len(),
+        REMOTE_SESSION_EXPECTED_DEVICE_ADMISSION_TARGET_SESSION_ID_HEX_BYTES
+    );
+
+    SessionId::new(encoded)
+        .map_err(|_| RemoteSessionExpectedDeviceAdmissionTargetSessionIdSourceError::Construction)
 }
 
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
