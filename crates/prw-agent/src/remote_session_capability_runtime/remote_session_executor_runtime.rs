@@ -1264,7 +1264,7 @@ mod repeated_real_admission_supervisor {
                 Poll::Pending
             }
         })
-        .await;
+        .await
     }
 
     async fn drain_inflight_admission<A, C>(
@@ -2042,6 +2042,10 @@ impl RemoteSessionExecutorRuntime {
     #[allow(
         dead_code,
         reason = "C03e-PF materializes the PE-selected borrowed executor compatibility seam before separately gated spawned propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-PF preserves the PE-selected mutable executor custody boundary for this borrowed compatibility seam"
     )]
     pub(super) fn drive_fallible_verifier_time_capability_request_worker<
         P: PolicyEvaluator + Send + Sync,
