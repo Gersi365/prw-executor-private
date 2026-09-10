@@ -1264,7 +1264,7 @@ mod repeated_real_admission_supervisor {
                 Poll::Pending
             }
         })
-        .await
+        .await;
     }
 
     async fn drain_inflight_admission<A, C>(
