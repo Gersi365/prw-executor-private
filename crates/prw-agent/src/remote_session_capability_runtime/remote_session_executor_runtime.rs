@@ -2027,3 +2027,46 @@ impl RemoteSessionExecutorRuntime {
             )
     }
 }
+
+impl RemoteSessionExecutorRuntime {
+    /// Drives exactly one borrowed dormant fallible verifier-time worker through the existing private runtime.
+    ///
+    /// The authenticated-session owner and dispatcher remain borrowed for the whole synchronous drive.
+    /// The verifier-time provider and cancellation future are forwarded unchanged into exactly one
+    /// C03e-PD worker invocation. That worker remains sole authority for verifier-time sampling,
+    /// request-loop/cancellation ordering, peer closure, and exact terminal classification.
+    ///
+    /// This bridge introduces no executor error wrapper, spawn/join behavior, supervisor propagation,
+    /// persistent result retyping, admission/request-carrier migration, provider installation, or
+    /// production caller activation.
+    #[allow(
+        dead_code,
+        reason = "C03e-PF materializes the PE-selected borrowed executor compatibility seam before separately gated spawned propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-PF preserves the PE-selected mutable executor custody boundary for this borrowed compatibility seam"
+    )]
+    pub(super) fn drive_fallible_verifier_time_capability_request_worker<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError> + Send,
+        C: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+        cancellation: C,
+    ) -> super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop{
+        self.runtime.block_on(
+            session_owner.run_fallible_verifier_time_capability_request_worker(
+                authority,
+                verifier_time_unix_seconds,
+                dispatcher,
+                cancellation,
+            ),
+        )
+    }
+}
