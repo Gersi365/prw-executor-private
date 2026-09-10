@@ -29,6 +29,7 @@ use super::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
+    RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
 };
 use super::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
@@ -172,6 +173,63 @@ pub(crate) enum RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection
     RequesterResponseFailure,
     /// Tokio reported abnormal completion for the retained requester-aware worker task.
     AbnormalTaskCompletion,
+}
+
+/// Bounded terminal disposition for one eligible expected-device admission handoff attempt.
+///
+/// These variants classify only the handoff boundary itself. `Enqueued` means queue acceptance,
+/// while the remaining variants are terminal for the already-consumed one-shot continuation. This
+/// value owns no scheduling grant, request, identifier, dispatcher, timing source, sender, endpoint,
+/// retry handle, or other authority-bearing payload.
+#[allow(
+    dead_code,
+    reason = "C03e-OR materializes the OQ-selected dormant bounded handoff disposition before separately gated completion classification and producer composition"
+)]
+enum RemoteSessionExpectedDeviceAdmissionHandoffDisposition {
+    Enqueued,
+    ConstructionFailed,
+    ChannelClosed,
+    SuppressedOnShutdown,
+}
+
+/// Private terminal receipt outcome for one scheduling-aware requester completion.
+///
+/// `Ineligible` retains the exact original scheduling-stop/join result by value. A later separately
+/// gated classifier must prove that this value is not an eligible scheduling terminal before
+/// constructing that variant. `EligibleTerminal` retains only the exact requester acknowledgement
+/// result and one bounded handoff disposition; it cannot retain or reconstruct the consumed
+/// scheduling grant.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-OR preserves the exact OQ-selected by-value ineligible completion custody instead of boxing or projecting authority-bearing scheduling state"
+)]
+enum RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome {
+    Ineligible(
+        Result<
+            RequesterRendezvousProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ),
+    EligibleTerminal {
+        acknowledgement_result:
+            Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
+        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition,
+    },
+}
+
+/// Boundary-private concrete receipt for one expected-device admission handoff outcome.
+///
+/// The requester `DeviceId` is correlation only. Target expected-device identity remains obtainable
+/// only from a consumed construction-eligible scheduling grant and is intentionally absent here.
+/// This carrier is neither `Copy` nor `Clone` and owns exactly one private terminal outcome.
+#[allow(
+    dead_code,
+    reason = "C03e-OR materializes only the OQ-selected dormant concrete receipt representation before separately gated classifier, suppression mapper, producer specialization and runtime wiring"
+)]
+struct RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+    requester_device_id: DeviceId,
+    outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome,
 }
 
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
