@@ -1198,7 +1198,7 @@ mod repeated_real_admission_supervisor {
         S: Future<Output = ()>,
     {
         if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-            return Poll::Ready(RepeatedSupervisorEvent::Shutdown);
+            return Poll::Ready(RemoteSessionPersistentSupervisorEvent::Shutdown);
         }
 
         if *request_source_open && active_len < max_active_workers {
@@ -1264,7 +1264,7 @@ mod repeated_real_admission_supervisor {
                 Poll::Pending
             }
         })
-        .await
+        .await;
     }
 
     async fn drain_inflight_admission<A, C>(
