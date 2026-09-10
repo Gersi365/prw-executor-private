@@ -271,9 +271,9 @@ where
         }
 
         match cancellation.as_mut().poll(context) {
-            Poll::Ready(()) => Poll::Ready(
-                AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled,
-            ),
+            Poll::Ready(()) => {
+                Poll::Ready(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled)
+            }
             Poll::Pending => Poll::Pending,
         }
     })
@@ -1163,9 +1163,7 @@ mod fallible_verifier_time_worker_tests {
     #[test]
     fn pending_loop_allows_ready_cancellation_to_win() {
         let mut future = Box::pin(await_fallible_capability_request_worker_stop(
-            pending::<
-                Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>,
-            >(),
+            pending::<Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError>>(),
             ready(()),
         ));
         let (_wake, waker) = test_waker();
