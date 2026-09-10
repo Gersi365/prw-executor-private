@@ -714,7 +714,9 @@ where
     }
 
     if let Poll::Ready(receipt) = producer_future.as_mut().poll(context) {
-        return Poll::Ready(CooperativeSchedulingProducerAdmissionEvent::Receipt(receipt));
+        return Poll::Ready(CooperativeSchedulingProducerAdmissionEvent::Receipt(
+            receipt,
+        ));
     }
 
     admission
@@ -754,8 +756,7 @@ fn finish_cooperative_scheduling_admission<P, D, T, PS, E>(
         Ok(session_owner) => {
             let authenticated_device_id = session_owner.logical_device_id().clone();
             debug_assert_eq!(
-                authenticated_device_id,
-                expected_device_id,
+                authenticated_device_id, expected_device_id,
                 "AJ success must retain the expected authenticated DeviceId"
             );
             let worker_admission = RemoteSessionWorkerAdmission::new(
@@ -917,12 +918,9 @@ where
                 return CooperativeSchedulingProducerDriveOutcome::Completed;
             }
             CooperativeSchedulingProducerEvent::Request(request) => {
-                let Some((request, timing)) = prepare_expected_request(
-                    active,
-                    request,
-                    admission_timing,
-                    on_rejection,
-                ) else {
+                let Some((request, timing)) =
+                    prepare_expected_request(active, request, admission_timing, on_rejection)
+                else {
                     continue;
                 };
 
@@ -1106,12 +1104,12 @@ impl RemoteSessionExecutorRuntime {
         PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
         SH: Future<Output = ()> + Send,
         H: std::ops::AsyncFnMut(
-            DeviceId,
-            Result<
-                RequesterRendezvousProductionDurableSchedulingWorkerStop,
-                RemoteSessionSpawnedWorkerJoinError,
-            >,
-        ) -> Receipt,
+                DeviceId,
+                Result<
+                    RequesterRendezvousProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
         Q: FnMut(
             DeviceId,
             Result<
