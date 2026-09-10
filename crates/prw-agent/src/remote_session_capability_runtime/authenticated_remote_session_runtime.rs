@@ -32,6 +32,7 @@ use prw_remote_bridge::{
     remote_session_binding::BoundRemoteSession,
 };
 use prw_session::AuthenticatedDeviceSession;
+use prw_session::prwa_verifier_source::PrwaVerifierSourceError;
 
 use super::{RemoteSessionCapabilityRuntimeOwner, SharedCurrentCapabilityAuthority};
 use crate::{
@@ -113,6 +114,53 @@ impl From<CapabilityRequestWireError> for AuthenticatedRemoteSessionCapabilityTr
 impl From<RemoteBridgeError> for AuthenticatedRemoteSessionCapabilityTransactionError {
     fn from(error: RemoteBridgeError) -> Self {
         Self::Bridge(error)
+    }
+}
+
+/// Bounded terminal failure for the dormant fallible verifier-time capability-session loop.
+#[allow(
+    dead_code,
+    reason = "C03e-PB materializes the PA-selected fallible verifier-time loop before separately gated caller migration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError {
+    /// Acquiring verifier time from the existing PRWA source failed.
+    VerifierTime(PrwaVerifierSourceError),
+    /// The existing one-request capability transaction failed.
+    Transaction(AuthenticatedRemoteSessionCapabilityTransactionError),
+}
+
+impl fmt::Display for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::VerifierTime(_) => "remote capability verifier time acquisition failed",
+            Self::Transaction(_) => "remote capability request transaction failed",
+        })
+    }
+}
+
+impl std::error::Error for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::VerifierTime(error) => Some(error),
+            Self::Transaction(error) => Some(error),
+        }
+    }
+}
+
+impl From<PrwaVerifierSourceError>
+    for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError
+{
+    fn from(error: PrwaVerifierSourceError) -> Self {
+        Self::VerifierTime(error)
+    }
+}
+
+impl From<AuthenticatedRemoteSessionCapabilityTransactionError>
+    for AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError
+{
+    fn from(error: AuthenticatedRemoteSessionCapabilityTransactionError) -> Self {
+        Self::Transaction(error)
     }
 }
 
@@ -421,6 +469,59 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
         }
     }
 
+    /// Runs the PA-selected dormant capability-session loop with fallible verifier-time acquisition.
+    ///
+    /// The verifier-time provider is sampled exactly once immediately before each attempted existing
+    /// one-request capability transaction. A successful sample is forwarded unchanged. A verifier-time
+    /// source failure performs no transaction attempt, closes the retained peer exactly once with the
+    /// existing capability-session termination diagnostic, and returns the exact source error under
+    /// the bounded loop error. Existing transaction failure preserves the same close discipline and
+    /// exact transaction error. No retry, second sample, fallback, cache, saturation, clamping,
+    /// replacement session or alternate source is introduced.
+    ///
+    /// # Errors
+    ///
+    /// Returns either the exact [`PrwaVerifierSourceError`] or the exact existing
+    /// [`AuthenticatedRemoteSessionCapabilityTransactionError`] under the bounded sibling-loop error.
+    #[allow(
+        dead_code,
+        reason = "C03e-PB materializes the PA-selected dormant fallible verifier-time loop before separately gated caller migration"
+    )]
+    pub(super) async fn run_fallible_verifier_time_capability_request_loop<
+        P: PolicyEvaluator + Send + Sync,
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> Result<u64, PrwaVerifierSourceError> + Send,
+    >(
+        &mut self,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        mut verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+    ) -> Result<(), AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError> {
+        loop {
+            let now_unix_seconds = match verifier_time_unix_seconds() {
+                Ok(now_unix_seconds) => now_unix_seconds,
+                Err(error) => {
+                    self.peer.close(
+                        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
+                        REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
+                    );
+                    return Err(error.into());
+                }
+            };
+
+            if let Err(error) = self
+                .process_one_capability_request(authority, now_unix_seconds, dispatcher)
+                .await
+            {
+                self.peer.close(
+                    REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
+                    REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
+                );
+                return Err(error.into());
+            }
+        }
+    }
+
     /// Runs one cancellation-aware remote-session worker body without spawning a task.
     ///
     /// The caller supplies an executor-neutral cancellation future. This method polls the existing
@@ -555,9 +656,11 @@ mod tests {
         remote_server_transport_runtime::AuthenticatedRemotePeerConnection,
     };
     use prw_session::AuthenticatedDeviceSession;
+    use prw_session::prwa_verifier_source::PrwaVerifierSourceError;
 
     use super::{
         AuthenticatedRemoteSessionCapabilityTransactionError,
+        AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError,
         AuthenticatedRemoteSessionRuntimeOwner, AuthenticatedRemoteSessionWorkerStop,
         ProductionDurableCapabilityTransactionError, REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_SHUTDOWN_CLOSE_REASON,
@@ -675,6 +778,50 @@ mod tests {
         assert_eq!(
             error,
             ProductionDurableCapabilityTransactionError::Dispatch(inner)
+        );
+    }
+
+    #[test]
+    fn fallible_loop_error_preserves_exact_verifier_time_source() {
+        let inner = PrwaVerifierSourceError::VerifierTime;
+        let error = AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::from(inner);
+
+        assert_eq!(
+            error.to_string(),
+            "remote capability verifier time acquisition failed"
+        );
+        assert_eq!(
+            error,
+            AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::VerifierTime(inner)
+        );
+        assert_eq!(
+            error
+                .source()
+                .and_then(|source| source.downcast_ref::<PrwaVerifierSourceError>()),
+            Some(&inner)
+        );
+    }
+
+    #[test]
+    fn fallible_loop_error_preserves_exact_transaction_source() {
+        let inner = AuthenticatedRemoteSessionCapabilityTransactionError::Bridge(
+            RemoteBridgeError::SessionExpired,
+        );
+        let error = AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::from(inner);
+
+        assert_eq!(
+            error.to_string(),
+            "remote capability request transaction failed"
+        );
+        assert_eq!(
+            error,
+            AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::Transaction(inner)
+        );
+        assert_eq!(
+            error.source().and_then(|source| {
+                source.downcast_ref::<AuthenticatedRemoteSessionCapabilityTransactionError>()
+            }),
+            Some(&inner)
         );
     }
 
