@@ -2168,7 +2168,7 @@ impl RemoteSessionExecutorRuntime {
     ) -> Result<
         super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
         RemoteSessionSpawnedWorkerJoinError,
-    > {
+    >{
         let authority = (*authority).clone();
 
         self.runtime.block_on(async move {
