@@ -1039,32 +1039,78 @@ mod repeated_real_admission_supervisor {
         verifier_time_unix_seconds: T,
     }
 
-    impl<D, T> RemoteSessionWorkerAdmission<D, T> {
-        /// Creates one ownership-only admission item with no caller-supplied logical identity.
+    impl<D, T> RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
+        /// Creates one expected-device request without any caller-supplied transport identity.
         #[must_use]
         pub const fn new(
-            session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+            expected_device_id: DeviceId,
+            session_id: SessionId,
+            authentication_request_id: u64,
             dispatcher: D,
             verifier_time_unix_seconds: T,
         ) -> Self {
             Self {
-                session_owner,
+                expected_device_id,
+                session_id,
+                authentication_request_id,
                 dispatcher,
                 verifier_time_unix_seconds,
             }
         }
 
-        const fn logical_device_id(&self) -> &DeviceId {
-            self.session_owner.logical_device_id()
+        /// Returns the pre-authentication logical `DeviceId` used only for scheduling the AJ attempt.
+        #[must_use]
+        pub const fn expected_device_id(&self) -> &DeviceId {
+            &self.expected_device_id
         }
 
-        /// Recovers the untouched owned candidate parts for explicit caller cleanup or custody.
+        /// Recovers every owned request component unchanged.
         #[must_use]
-        pub fn into_parts(self) -> (AuthenticatedRemoteSessionRuntimeOwner, D, T) {
+        pub fn into_parts(self) -> (DeviceId, SessionId, u64, D, T) {
             (
-                self.session_owner,
+                self.expected_device_id,
+                self.session_id,
+                self.authentication_request_id,
                 self.dispatcher,
                 self.verifier_time_unix_seconds,
+            )
+        }
+    }
+
+    /// Fresh timing inputs sampled only when one expected-device AJ attempt actually starts.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[expect(
+        clippy::struct_field_names,
+        reason = "C03e-AL keeps explicit unix-second units on every AJ timing input"
+    )]
+    pub struct RemoteSessionRealAdmissionTiming {
+        challenge_validity_unix_seconds: Range<u64>,
+        authentication_now_unix_seconds: u64,
+        application_lease_unix_seconds: Range<u64>,
+    }
+
+    impl RemoteSessionRealAdmissionTiming {
+        /// Creates one owned timing bundle for exactly one AJ transaction.
+        #[must_use]
+        pub const fn new(
+            challenge_validity_unix_seconds: Range<u64>,
+            authentication_now_unix_seconds: u64,
+            application_lease_unix_seconds: Range<u64>,
+        ) -> Self {
+            Self {
+                challenge_validity_unix_seconds,
+                authentication_now_unix_seconds,
+                application_lease_unix_seconds,
+            }
+        }
+
+        /// Consumes the timing bundle into the exact existing AJ timing inputs.
+        #[must_use]
+        pub const fn into_parts(self) -> (Range<u64>, u64, Range<u64>) {
+            (
+                self.challenge_validity_unix_seconds,
+                self.authentication_now_unix_seconds,
+                self.application_lease_unix_seconds,
             )
         }
     }
@@ -2060,7 +2106,7 @@ impl RemoteSessionExecutorRuntime {
     ) -> Result<
         super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
         RemoteSessionSpawnedWorkerJoinError,
-    >{
+    > {
         let authority = (*authority).clone();
 
         self.runtime.block_on(async move {
