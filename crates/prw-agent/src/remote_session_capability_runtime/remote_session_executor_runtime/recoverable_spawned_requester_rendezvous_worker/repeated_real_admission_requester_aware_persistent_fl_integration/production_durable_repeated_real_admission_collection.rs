@@ -579,6 +579,10 @@ impl RemoteSessionExecutorRuntime {
     }
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "C03e-OK keeps exact by-value scheduling completion custody in the dormant cooperative idle event without introducing allocation or changing ownership semantics"
+)]
 enum CooperativeSchedulingDriverIdleEvent<C> {
     Shutdown,
     Completion(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
@@ -591,6 +595,10 @@ enum CooperativeSchedulingProducerEvent<C, R> {
     Request(C),
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "C03e-OK keeps exact by-value scheduling completion custody in the dormant cooperative admission event without introducing allocation or changing ownership semantics"
+)]
 enum CooperativeSchedulingAdmissionEvent<R> {
     Shutdown,
     Completion(RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion),
@@ -734,6 +742,10 @@ fn begin_cooperative_scheduling_driver_shutdown<C>(
     request_all_requester_aware_scheduling_worker_cancellations(active);
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "C03e-OK reuses the exact existing scheduling admission authorities at this dormant helper boundary without introducing a new aggregate"
+)]
 fn finish_cooperative_scheduling_admission<P, D, T, PS, E>(
     active: &mut ActiveRecoverableSchedulingRequesterAwareWorkers,
     result: Result<AuthenticatedRemoteSessionRuntimeOwner, RemoteSessionRealAdmissionError>,
