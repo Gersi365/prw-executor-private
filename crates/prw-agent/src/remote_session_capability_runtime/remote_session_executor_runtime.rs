@@ -2130,3 +2130,67 @@ impl RemoteSessionExecutorRuntime {
         })
     }
 }
+
+impl RemoteSessionExecutorRuntime {
+    /// Supervises exactly one owned dormant fallible verifier-time worker under this private runtime.
+    ///
+    /// The supervisor mirrors the existing bounded single-worker custody shape: it clones the
+    /// shared-current authority once, creates one existing cancellation pair, spawns one worker,
+    /// then delegates the worker handle and retained controller to the generic
+    /// `await_supervised_worker` helper. The worker delegates directly to the C03e-PD fallible
+    /// verifier-time worker rather than re-entering either synchronous fallible executor bridge.
+    ///
+    /// `Cancelled` and `Failed` remain normal worker terminals. Supervisor shutdown only requests
+    /// cancellation while the worker is still pending; worker-first race precedence and abnormal
+    /// join mapping remain owned by `await_supervised_worker`.
+    #[allow(
+        dead_code,
+        reason = "C03e-PJ materializes the PI-selected supervised executor compatibility seam before separately gated persistent propagation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        reason = "C03e-PJ preserves the PI-selected mutable executor custody boundary for this supervised compatibility seam"
+    )]
+    pub(super) fn drive_supervised_fallible_verifier_time_capability_request_worker<
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        S: Future<Output = ()> + Send,
+    >(
+        &mut self,
+        session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        verifier_time_unix_seconds: T,
+        dispatcher: D,
+        supervisor_shutdown: S,
+    ) -> Result<
+        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >{
+        let authority = (*authority).clone();
+
+        self.runtime.block_on(async move {
+            let (cancellation_controller, cancellation_signal) =
+                remote_session_worker_cancellation_pair();
+
+            let worker_handle = tokio::spawn(async move {
+                let mut session_owner = session_owner;
+                let mut dispatcher = dispatcher;
+
+                session_owner
+                    .run_fallible_verifier_time_capability_request_worker(
+                        &authority,
+                        verifier_time_unix_seconds,
+                        &mut dispatcher,
+                        cancellation_signal.into_cancelled(),
+                    )
+                    .await
+            });
+
+            await_supervised_worker(worker_handle, cancellation_controller, supervisor_shutdown)
+                .await
+        })
+    }
+}
