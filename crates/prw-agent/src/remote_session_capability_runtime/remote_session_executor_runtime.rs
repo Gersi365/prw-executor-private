@@ -1130,7 +1130,7 @@ mod repeated_real_admission_supervisor {
     }
 
     impl<D, T> RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
-        /// Returns the bounded pre-authentication rejection reason.
+        /// Returns the bounded rejection reason.
         #[must_use]
         pub const fn reason(&self) -> RemoteSessionExpectedDeviceAdmissionRejectionReason {
             self.reason
@@ -1264,7 +1264,7 @@ mod repeated_real_admission_supervisor {
                 Poll::Pending
             }
         })
-        .await;
+        .await
     }
 
     async fn drain_inflight_admission<A, C>(
@@ -2055,7 +2055,7 @@ impl RemoteSessionExecutorRuntime {
         verifier_time_unix_seconds: T,
         dispatcher: &mut D,
         cancellation: C,
-    ) -> super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop {
+    ) -> super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop{
         self.runtime.block_on(
             session_owner.run_fallible_verifier_time_capability_request_worker(
                 authority,
