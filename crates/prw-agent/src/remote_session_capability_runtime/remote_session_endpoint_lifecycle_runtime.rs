@@ -319,6 +319,52 @@ fn classify_remote_session_expected_device_admission_live_completion(
     )
 }
 
+/// Maps one shutdown-recovered scheduling completion into the concrete expected-device handoff
+/// receipt without performing any lifecycle or producer work.
+///
+/// Ineligible classification returns the exact existing receipt unchanged. Eligible classification
+/// consumes the continuation once, terminally disposes the one-shot scheduling grant by value
+/// without binding or observing either grant field, preserves the acknowledgement result unchanged,
+/// and emits only the bounded `SuppressedOnShutdown` terminal disposition.
+#[allow(
+    dead_code,
+    reason = "C03e-OV materializes only the OU-selected synchronous shutdown-suppression receipt mapper before separately gated request construction and producer specialization"
+)]
+fn map_remote_session_expected_device_admission_shutdown_suppression(
+    requester_device_id: DeviceId,
+    completion: Result<
+        RequesterRendezvousProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+    match classify_remote_session_expected_device_admission_live_completion(
+        requester_device_id,
+        completion,
+    ) {
+        RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification::Ineligible(receipt) => {
+            receipt
+        }
+        RemoteSessionExpectedDeviceAdmissionLiveCompletionClassification::Eligible(
+            continuation,
+        ) => {
+            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+                requester_device_id,
+                scheduling_grant: _,
+                acknowledgement_result,
+            } = continuation;
+
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                requester_device_id,
+                outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                    acknowledgement_result,
+                    disposition:
+                        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::SuppressedOnShutdown,
+                },
+            }
+        }
+    }
+}
+
 /// Recoverable failed startup transaction retaining the exact admitted reachability authority.
 pub struct RemoteSessionEndpointLifecycleStartupFailure {
     authority_owner: Box<ReachabilityAuthorityRuntimeOwner>,
