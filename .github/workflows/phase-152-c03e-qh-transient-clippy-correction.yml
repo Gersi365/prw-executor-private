@@ -1,0 +1,165 @@
+name: Phase 152 C03e-QH Transient Let-Else Clippy Correction
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply bounded let-else correction and self-remove
+        shell: bash
+        env:
+          BASE: 4612e6e247627e7b81f5a182e532447976f85c9f
+          PREV: e288b10c5209a101f97f44d7e4fb834305e32870
+          BRANCH: phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
+          SOURCE: crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs
+          SOURCE_BLOB: fcd123ff47658726921d40451014b17856a2d267
+          HELPER: .github/workflows/phase-152-c03e-qh-transient-clippy-correction.yml
+        run: |
+          set -euo pipefail
+
+          test "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH"
+          test "$(git rev-parse HEAD^)" = "$PREV"
+          test "$(git merge-base "$BASE" HEAD)" = "$BASE"
+          test "$(git hash-object "$SOURCE")" = "$SOURCE_BLOB"
+
+          mapfile -t pre_paths < <(git diff --name-only "$BASE"..HEAD)
+          test "${#pre_paths[@]}" -eq 2
+          printf '%s\n' "${pre_paths[@]}" | grep -Fx "$SOURCE"
+          printf '%s\n' "${pre_paths[@]}" | grep -Fx "$HELPER"
+
+          python3 - "$SOURCE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding="utf-8")
+
+          old_session = '''    let session_id = match new_remote_session_expected_device_admission_target_session_id() {
+        Ok(session_id) => session_id,
+        Err(_) => {
+            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+                requester_device_id,
+                scheduling_grant: _,
+                acknowledgement_result,
+            } = continuation;
+            return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+                RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                    requester_device_id,
+                    outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition:
+                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                    },
+                },
+            );
+        }
+    };'''
+          new_session = '''    let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                requester_device_id,
+                outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                    acknowledgement_result,
+                    disposition:
+                        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                },
+            },
+        );
+    };'''
+
+          old_auth = '''    let authentication_request_id =
+        match new_remote_session_expected_device_authentication_request_id() {
+            Ok(authentication_request_id) => authentication_request_id,
+            Err(_) => {
+                let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+                    requester_device_id,
+                    scheduling_grant: _,
+                    acknowledgement_result,
+                } = continuation;
+                return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+                    RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                        requester_device_id,
+                        outcome:
+                            RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                                acknowledgement_result,
+                                disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                            },
+                    },
+                );
+            }
+        };'''
+          new_auth = '''    let Ok(authentication_request_id) =
+        new_remote_session_expected_device_authentication_request_id()
+    else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                    },
+            },
+        );
+    };'''
+
+          if text.count(old_session) != 1:
+              raise SystemExit(f"expected one session-id match block, found {text.count(old_session)}")
+          if text.count(old_auth) != 1:
+              raise SystemExit(f"expected one auth-id match block, found {text.count(old_auth)}")
+
+          text = text.replace(old_session, new_session).replace(old_auth, new_auth)
+          path.write_text(text, encoding="utf-8", newline="\n")
+          PY
+
+          cargo fmt --all
+          cargo fmt --all -- --check
+          git diff --check
+
+          mapfile -t working_paths < <(git diff --name-only)
+          test "${#working_paths[@]}" -eq 1
+          test "${working_paths[0]}" = "$SOURCE"
+          test "$(grep -c 'let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else' "$SOURCE")" -eq 1
+          test "$(grep -c 'let Ok(authentication_request_id) =' "$SOURCE")" -eq 1
+          test "$(grep -c 'scheduling_grant.into_parts()' "$SOURCE")" -eq 1
+          test "$(grep -c 'RemoteSessionExpectedDeviceAdmissionRequest::new(' "$SOURCE")" -eq 1
+          test "$(grep -c 'current_prwa_verifier_unix_seconds()' "$SOURCE" || true)" -eq 0
+
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          git add "$SOURCE"
+          git commit -m 'C03e-QH: satisfy let-else Clippy without semantic change'
+
+          git rm "$HELPER"
+          git commit -m 'C03e-QH: remove transient Clippy correction helper'
+
+          git diff --check "$BASE"..HEAD
+          test ! -e "$HELPER"
+          mapfile -t final_paths < <(git diff --name-only "$BASE"..HEAD)
+          test "${#final_paths[@]}" -eq 1
+          test "${final_paths[0]}" = "$SOURCE"
+          test "$(git rev-list --count "$BASE"..HEAD)" -eq 8
+
+          git push origin HEAD:"$BRANCH"
