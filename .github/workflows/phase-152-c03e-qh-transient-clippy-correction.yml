@@ -21,17 +21,19 @@ jobs:
         shell: bash
         env:
           BASE: 4612e6e247627e7b81f5a182e532447976f85c9f
-          PREV: e288b10c5209a101f97f44d7e4fb834305e32870
+          PREV: d7e16ddf401c37dce59fea4c46f56106073ed2f6
           BRANCH: phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
           SOURCE: crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs
           SOURCE_BLOB: fcd123ff47658726921d40451014b17856a2d267
           HELPER: .github/workflows/phase-152-c03e-qh-transient-clippy-correction.yml
+          SCRIPT_B64: ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCBzeXMKCnBhdGggPSBQYXRoKHN5cy5hcmd2WzFdKQp0ZXh0ID0gcGF0aC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCm9sZF9zZXNzaW9uID0gIiIiICAgIGxldCBzZXNzaW9uX2lkID0gbWF0Y2ggbmV3X3JlbW90ZV9zZXNzaW9uX2V4cGVjdGVkX2RldmljZV9hZG1pc3Npb25fdGFyZ2V0X3Nlc3Npb25faWQoKSB7CiAgICAgICAgT2soc2Vzc2lvbl9pZCkgPT4gc2Vzc2lvbl9pZCwKICAgICAgICBFcnIoXykgPT4gewogICAgICAgICAgICBsZXQgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRWxpZ2libGVDb250aW51YXRpb24gewogICAgICAgICAgICAgICAgcmVxdWVzdGVyX2RldmljZV9pZCwKICAgICAgICAgICAgICAgIHNjaGVkdWxpbmdfZ3JhbnQ6IF8sCiAgICAgICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgICAgICB9ID0gY29udGludWF0aW9uOwogICAgICAgICAgICByZXR1cm4gUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uUmVxdWVzdENvbnN0cnVjdGlvbk91dGNvbWU6OkNvbnN0cnVjdGlvbkZhaWxlZCgKICAgICAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZSZWNlaXB0IHsKICAgICAgICAgICAgICAgICAgICByZXF1ZXN0ZXJfZGV2aWNlX2lkLAogICAgICAgICAgICAgICAgICAgIG91dGNvbWU6IFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZSZWNlaXB0T3V0Y29tZTo6RWxpZ2libGVUZXJtaW5hbCB7CiAgICAgICAgICAgICAgICAgICAgICAgIGFja25vd2xlZGdlbWVudF9yZXN1bHQsCiAgICAgICAgICAgICAgICAgICAgICAgIGRpc3Bvc2l0aW9uOgogICAgICAgICAgICAgICAgICAgICAgICAgICAgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZkRpc3Bvc2l0aW9uOjpDb25zdHJ1Y3Rpb25GYWlsZWQsCiAgICAgICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICk7CiAgICAgICAgfQogICAgfTsiIiIKbmV3X3Nlc3Npb24gPSAiIiIgICAgbGV0IE9rKHNlc3Npb25faWQpID0gbmV3X3JlbW90ZV9zZXNzaW9uX2V4cGVjdGVkX2RldmljZV9hZG1pc3Npb25fdGFyZ2V0X3Nlc3Npb25faWQoKSBlbHNlIHsKICAgICAgICBsZXQgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRWxpZ2libGVDb250aW51YXRpb24gewogICAgICAgICAgICByZXF1ZXN0ZXJfZGV2aWNlX2lkLAogICAgICAgICAgICBzY2hlZHVsaW5nX2dyYW50OiBfLAogICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgIH0gPSBjb250aW51YXRpb247CiAgICAgICAgcmV0dXJuIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlcXVlc3RDb25zdHJ1Y3Rpb25PdXRjb21lOjpDb25zdHJ1Y3Rpb25GYWlsZWQoCiAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZSZWNlaXB0IHsKICAgICAgICAgICAgICAgIHJlcXVlc3Rlcl9kZXZpY2VfaWQsCiAgICAgICAgICAgICAgICBvdXRjb21lOiBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmUmVjZWlwdE91dGNvbWU6OkVsaWdpYmxlVGVybWluYWwgewogICAgICAgICAgICAgICAgICAgIGFja25vd2xlZGdlbWVudF9yZXN1bHQsCiAgICAgICAgICAgICAgICAgICAgZGlzcG9zaXRpb246CiAgICAgICAgICAgICAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZEaXNwb3NpdGlvbjo6Q29uc3RydWN0aW9uRmFpbGVkLAogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgfSwKICAgICAgICApOwogICAgfTsiIiIKCm9sZF9hdXRoID0gIiIiICAgIGxldCBhdXRoZW50aWNhdGlvbl9yZXF1ZXN0X2lkID0KICAgICAgICBtYXRjaCBuZXdfcmVtb3RlX3Nlc3Npb25fZXhwZWN0ZWRfZGV2aWNlX2F1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQoKSB7CiAgICAgICAgICAgIE9rKGF1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQpID0+IGF1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQsCiAgICAgICAgICAgIEVycihfKSA9PiB7CiAgICAgICAgICAgICAgICBsZXQgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRWxpZ2libGVDb250aW51YXRpb24gewogICAgICAgICAgICAgICAgICAgIHJlcXVlc3Rlcl9kZXZpY2VfaWQsCiAgICAgICAgICAgICAgICAgICAgc2NoZWR1bGluZ19ncmFudDogXywKICAgICAgICAgICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgICAgICAgICAgfSA9IGNvbnRpbnVhdGlvbjsKICAgICAgICAgICAgICAgIHJldHVybiBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25SZXF1ZXN0Q29uc3RydWN0aW9uT3V0Y29tZTo6Q29uc3RydWN0aW9uRmFpbGVkKAogICAgICAgICAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZSZWNlaXB0IHsKICAgICAgICAgICAgICAgICAgICAgICAgcmVxdWVzdGVyX2RldmljZV9pZCwKICAgICAgICAgICAgICAgICAgICAgICAgb3V0Y29tZToKICAgICAgICAgICAgICAgICAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZSZWNlaXB0T3V0Y29tZTo6RWxpZ2libGVUZXJtaW5hbCB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYWNrbm93bGVkZ2VtZW50X3Jlc3VsdCwKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBkaXNwb3NpdGlvbjogUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZkRpc3Bvc2l0aW9uOjpDb25zdHJ1Y3Rpb25GYWlsZWQsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICApOwogICAgICAgICAgICB9CiAgICAgICAgfTsiIiIKbmV3X2F1dGggPSAiIiIgICAgbGV0IE9rKGF1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQpID0KICAgICAgICBuZXdfcmVtb3RlX3Nlc3Npb25fZXhwZWN0ZWRfZGV2aWNlX2F1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQoKQogICAgZWxzZSB7CiAgICAgICAgbGV0IFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkVsaWdpYmxlQ29udGludWF0aW9uIHsKICAgICAgICAgICAgcmVxdWVzdGVyX2RldmljZV9pZCwKICAgICAgICAgICAgc2NoZWR1bGluZ19ncmFudDogXywKICAgICAgICAgICAgYWNrbm93bGVkZ2VtZW50X3Jlc3VsdCwKICAgICAgICB9ID0gY29udGludWF0aW9uOwogICAgICAgIHJldHVybiBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25SZXF1ZXN0Q29uc3RydWN0aW9uT3V0Y29tZTo6Q29uc3RydWN0aW9uRmFpbGVkKAogICAgICAgICAgICBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmUmVjZWlwdCB7CiAgICAgICAgICAgICAgICByZXF1ZXN0ZXJfZGV2aWNlX2lkLAogICAgICAgICAgICAgICAgb3V0Y29tZToKICAgICAgICAgICAgICAgICAgICBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmUmVjZWlwdE91dGNvbWU6OkVsaWdpYmxlVGVybWluYWwgewogICAgICAgICAgICAgICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgICAgICAgICAgICAgICAgICBkaXNwb3NpdGlvbjogUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZkRpc3Bvc2l0aW9uOjpDb25zdHJ1Y3Rpb25GYWlsZWQsCiAgICAgICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgfSwKICAgICAgICApOwogICAgfTsiIiIKCmlmIHRleHQuY291bnQob2xkX3Nlc3Npb24pICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KGYiZXhwZWN0ZWQgb25lIHNlc3Npb24taWQgbWF0Y2ggYmxvY2ssIGZvdW5kIHt0ZXh0LmNvdW50KG9sZF9zZXNzaW9uKX0iKQppZiB0ZXh0LmNvdW50KG9sZF9hdXRoKSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmImV4cGVjdGVkIG9uZSBhdXRoLWlkIG1hdGNoIGJsb2NrLCBmb3VuZCB7dGV4dC5jb3VudChvbGRfYXV0aCl9IikKCnRleHQgPSB0ZXh0LnJlcGxhY2Uob2xkX3Nlc3Npb24sIG5ld19zZXNzaW9uKS5yZXBsYWNlKG9sZF9hdXRoLCBuZXdfYXV0aCkKcGF0aC53cml0ZV90ZXh0KHRleHQsIGVuY29kaW5nPSJ1dGYtOCIsIG5ld2xpbmU9IlxuIikK
         run: |
           set -euo pipefail
 
           test "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH"
           test "$(git rev-parse HEAD^)" = "$PREV"
           test "$(git merge-base "$BASE" HEAD)" = "$BASE"
+          test "$(git rev-list --count "$BASE"..HEAD)" -eq 7
           test "$(git hash-object "$SOURCE")" = "$SOURCE_BLOB"
 
           mapfile -t pre_paths < <(git diff --name-only "$BASE"..HEAD)
@@ -39,100 +41,8 @@ jobs:
           printf '%s\n' "${pre_paths[@]}" | grep -Fx "$SOURCE"
           printf '%s\n' "${pre_paths[@]}" | grep -Fx "$HELPER"
 
-          python3 - "$SOURCE" <<'PY'
-          from pathlib import Path
-          import sys
-
-          path = Path(sys.argv[1])
-          text = path.read_text(encoding="utf-8")
-
-          old_session = '''    let session_id = match new_remote_session_expected_device_admission_target_session_id() {
-        Ok(session_id) => session_id,
-        Err(_) => {
-            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                requester_device_id,
-                scheduling_grant: _,
-                acknowledgement_result,
-            } = continuation;
-            return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                    requester_device_id,
-                    outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                        acknowledgement_result,
-                        disposition:
-                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                    },
-                },
-            );
-        }
-    };'''
-          new_session = '''    let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
-        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-            requester_device_id,
-            scheduling_grant: _,
-            acknowledgement_result,
-        } = continuation;
-        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                requester_device_id,
-                outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                    acknowledgement_result,
-                    disposition:
-                        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                },
-            },
-        );
-    };'''
-
-          old_auth = '''    let authentication_request_id =
-        match new_remote_session_expected_device_authentication_request_id() {
-            Ok(authentication_request_id) => authentication_request_id,
-            Err(_) => {
-                let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                    requester_device_id,
-                    scheduling_grant: _,
-                    acknowledgement_result,
-                } = continuation;
-                return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                    RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                        requester_device_id,
-                        outcome:
-                            RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                                acknowledgement_result,
-                                disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                            },
-                    },
-                );
-            }
-        };'''
-          new_auth = '''    let Ok(authentication_request_id) =
-        new_remote_session_expected_device_authentication_request_id()
-    else {
-        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-            requester_device_id,
-            scheduling_grant: _,
-            acknowledgement_result,
-        } = continuation;
-        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                requester_device_id,
-                outcome:
-                    RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                        acknowledgement_result,
-                        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                    },
-            },
-        );
-    };'''
-
-          if text.count(old_session) != 1:
-              raise SystemExit(f"expected one session-id match block, found {text.count(old_session)}")
-          if text.count(old_auth) != 1:
-              raise SystemExit(f"expected one auth-id match block, found {text.count(old_auth)}")
-
-          text = text.replace(old_session, new_session).replace(old_auth, new_auth)
-          path.write_text(text, encoding="utf-8", newline="\n")
-          PY
+          printf '%s' "$SCRIPT_B64" | base64 -d > /tmp/qh-clippy-correction.py
+          python3 /tmp/qh-clippy-correction.py "$SOURCE"
 
           cargo fmt --all
           cargo fmt --all -- --check
@@ -160,6 +70,6 @@ jobs:
           mapfile -t final_paths < <(git diff --name-only "$BASE"..HEAD)
           test "${#final_paths[@]}" -eq 1
           test "${final_paths[0]}" = "$SOURCE"
-          test "$(git rev-list --count "$BASE"..HEAD)" -eq 8
+          test "$(git rev-list --count "$BASE"..HEAD)" -eq 9
 
           git push origin HEAD:"$BRANCH"
