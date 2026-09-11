@@ -1,0 +1,44 @@
+name: Phase 152 C03e-PR transient guarded predecessor restore
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-pr-production-requester-rendezvous-expected-device-admission-fallible-verifier-time-endpoint-lifecycle-runtime-composition-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard and restore exact PQ wrapper source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
+          CURRENT_BLOB='6ad9dde485fb772d63f794c18960ed21e782de9e'
+          PREDECESSOR='ea77266e32c29caa7e7c0fa83044006931b3a487'
+          PREDECESSOR_BLOB='e9f82f32ba875c2461513e445f81962720dc3298'
+
+          test "$(git hash-object "$SOURCE")" = "$CURRENT_BLOB"
+          git show "$PREDECESSOR:$SOURCE" > "$SOURCE"
+          test "$(git hash-object "$SOURCE")" = "$PREDECESSOR_BLOB"
+          cargo fmt --all -- --check
+          git diff --check
+
+          mapfile -t changed < <(git diff --name-only)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "$SOURCE"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$SOURCE"
+          git commit -m 'C03e-PR: restore PQ wrapper after visibility boundary discovery'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
