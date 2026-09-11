@@ -1468,6 +1468,7 @@ mod repeated_real_admission_supervisor {
         #[expect(
             clippy::too_many_arguments,
             clippy::too_many_lines,
+            clippy::needless_pass_by_ref_mut,
             reason = "C03e-PN mirrors the existing repeated real-admission supervisor input surface while changing only fallible worker/result custody"
         )]
         pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_collection<
