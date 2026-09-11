@@ -44,6 +44,11 @@ pub use real_remote_admission_transaction::{
 };
 #[allow(
     unused_imports,
+    reason = "C03e-PV materializes the C03e-PU-selected crate-visible fallible verifier-time completion projection before separately gated higher-owner caller migration"
+)]
+pub(crate) use remote_session_endpoint_lifecycle_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection;
+#[allow(
+    unused_imports,
     reason = "C03e-LP materializes the LO-reselected crate-visible completion projection before separately gated higher-owner caller migration"
 )]
 pub(crate) use remote_session_endpoint_lifecycle_runtime::RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection;
