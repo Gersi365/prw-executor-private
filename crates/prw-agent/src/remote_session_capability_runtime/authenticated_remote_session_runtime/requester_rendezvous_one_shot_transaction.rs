@@ -64,7 +64,9 @@ impl std::fmt::Display
 {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
-            Self::VerifierTime(_) => "production-durable post-auth verifier time acquisition failed",
+            Self::VerifierTime(_) => {
+                "production-durable post-auth verifier time acquisition failed"
+            }
             Self::Ingress(_) => "production-durable post-auth ingress transaction failed",
         })
     }
@@ -285,10 +287,7 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     )]
     pub(crate) async fn run_fallible_verifier_time_repeated_post_auth_control_stream_ingress_with_production_durable_capability<
         D: CapabilityDispatcher + Send,
-        T: FnMut() -> Result<
-                u64,
-                prw_session::prwa_verifier_source::PrwaVerifierSourceError,
-            > + Send,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError> + Send,
     >(
         &mut self,
         authority: &ProductionDurableCapabilityAuthority,
