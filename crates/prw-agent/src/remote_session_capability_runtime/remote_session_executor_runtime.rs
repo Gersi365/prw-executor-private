@@ -1202,7 +1202,7 @@ mod repeated_real_admission_supervisor {
         }
 
         if *request_source_open && active_len < max_active_workers {
-            match Pin::new(requests).poll_recv(context) {
+            match Pin::new(&mut requests).poll_recv(context) {
                 Poll::Ready(Some(request)) => {
                     return Poll::Ready(RepeatedSupervisorEvent::Request(request));
                 }
@@ -2226,7 +2226,7 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
     ) -> &Result<
         super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
         RemoteSessionSpawnedWorkerJoinError,
-    > {
+    >{
         &self.result
     }
 
@@ -2240,7 +2240,7 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
             super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
             RemoteSessionSpawnedWorkerJoinError,
         >,
-    ) {
+    ){
         (self.device_id, self.result)
     }
 }
@@ -2312,10 +2312,12 @@ impl RemoteSessionExecutorRuntime {
                 (cancellation_controller, worker_handle)
             },
             |device_id, result| {
-                on_completion(RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
-                    device_id,
-                    result,
-                });
+                on_completion(
+                    RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
+                        device_id,
+                        result,
+                    },
+                );
             },
             |reason, admission| {
                 on_rejection(RemoteSessionWorkerAdmissionRejection { reason, admission });
