@@ -866,6 +866,54 @@ where
     }
 }
 
+/// Runs the existing Linux remote companion with one dormant pre-requester higher-owner
+/// fallible-verifier-time operation.
+///
+/// This crate-private assembly consumes exactly one already-typed pre-requester same-custody input
+/// aggregate by value. It constructs the existing C03e-QB higher-owner fallible-verifier-time
+/// one-shot operation exactly once and passes that exact operation directly to the existing generic
+/// Linux remote-companion runner exactly once. It adds no verifier-time provider sampling,
+/// expected-request construction, requester/rendezvous join, durable authorization, callback
+/// remapping, configured-source population, executable invocation site or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-QD materializes the QC-selected dormant higher-owner fallible-verifier-time companion assembly before separately gated configured-source and executable caller composition"
+)]
+pub(crate) fn run_with_production_durable_reachability_remote_process_companion_with_fallible_verifier_time_completion_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+        P, D, T, F, C, R, E,
+    >,
+) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let operation =
+        linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection(
+            inputs,
+        );
+    run_with_remote_process_companion(operation)
+}
+
 /// Builds one dormant production operation that retains durable capability-authority custody.
 #[allow(
     dead_code,
