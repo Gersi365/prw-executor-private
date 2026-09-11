@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'C03e-PZ: add transient guarded one-path materializer'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
