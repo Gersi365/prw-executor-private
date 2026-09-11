@@ -914,6 +914,136 @@ where
     run_with_remote_process_companion(operation)
 }
 
+/// Bounded failure while composing fail-closed production-source population with the existing
+/// higher-owner fallible-verifier-time companion assembly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-QF materializes the QE-selected two-stage production-source population companion error before separately gated expected-request, verifier-time provider, dispatcher and executable caller composition"
+)]
+pub(crate) enum LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError
+{
+    /// Existing fail-closed production-source population failed before companion assembly.
+    Population(LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError),
+    /// Existing higher-owner Linux remote-companion assembly failed after population success.
+    Bootstrap(LinuxAgentBootstrapStartFailure),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Population(_) => {
+                "production durable reachability fallible-verifier-time population failed before companion assembly"
+            }
+            Self::Bootstrap(_) => {
+                "production durable reachability fallible-verifier-time companion assembly failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Population(error) => Some(error),
+            Self::Bootstrap(_) => None,
+        }
+    }
+}
+
+impl From<LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError>
+    for LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRemoteProcessInputPopulationError,
+    ) -> Self {
+        Self::Population(error)
+    }
+}
+
+impl From<LinuxAgentBootstrapStartFailure>
+    for LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError
+{
+    fn from(error: LinuxAgentBootstrapStartFailure) -> Self {
+        Self::Bootstrap(error)
+    }
+}
+
+/// Populates one fail-closed pre-requester higher-owner input and runs the existing fallible-verifier-time companion.
+///
+/// The helper invokes the existing C03e-MH production-source population exactly once and awaits it
+/// exactly once. Population failure short-circuits before C03e-QD. Only after successful population
+/// does it move the exact returned higher-owner input by value into the existing C03e-QD
+/// fallible-verifier-time companion assembly exactly once.
+///
+/// Expected-request receiver, admission timing and completion/rejection/failure callbacks remain
+/// caller-supplied and are forwarded unchanged. This helper constructs no expected-request channel,
+/// selects no dispatcher or verifier-time provider provenance, performs no verifier-time sampling,
+/// joins no requester/rendezvous custody, invokes no durable authorization, remaps no callback,
+/// adds no executable caller, and activates no listener/readiness/runtime/network behavior.
+///
+/// # Errors
+///
+/// Returns one bounded two-stage error. Existing production-source population failures are preserved
+/// in `Population`. Existing Linux bootstrap-start failures are preserved in `Bootstrap`. No retry,
+/// fallback, alternate population, synthetic owner, degraded authority, second companion or recovery
+/// path is introduced.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-QF materializes the QE-selected dormant production-source population to higher-owner fallible-verifierTime companion composition before separately gated expected-request, verifier-time provider, dispatcher and executable caller wiring"
+)]
+pub(crate) async fn run_with_production_durable_reachability_remote_process_companion_with_fallible_verifier_time_completion_projection_from_production_sources<
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityFallibleVerifierTimePopulationCompanionError,
+>
+where
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let inputs =
+        linux_agent_production_durable_reachability_remote_process_operation_inputs_from_production_sources_with_fail_closed_current_capability_authority(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+         )
+        .await?;
+    run_with_production_durable_reachability_remote_process_companion_with_fallible_verifier_time_completion_projection(
+        inputs,
+    )
+    .map_err(Into::into)
+}
+
 /// Builds one dormant production operation that retains durable capability-authority custody.
 #[allow(
     dead_code,
