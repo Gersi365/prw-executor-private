@@ -809,6 +809,63 @@ impl<P, D, T, F, C, R, E>
     }
 }
 
+/// Builds one dormant pre-requester higher-owner operation for the fallible verifier-time projection lane.
+///
+/// Factory construction consumes the existing same-custody pre-requester owner by value, builds
+/// exactly one C03e-PZ production-reachability operation from its retained production inputs, and
+/// keeps the exact raw durable capability authority captured by the returned one-shot closure.
+/// The authority is released only after the delegated lower operation returns.
+///
+/// This wrapper performs no authority clone or `Arc` adaptation, durable authorization, verifier-time
+/// provider invocation, expected-request construction, requester/rendezvous join, callback remapping,
+/// companion assembly, second runtime/teardown, readiness publication, or executable activation.
+#[allow(
+    dead_code,
+    reason = "C03e-QB materializes the QA-selected pre-requester higher-owner fallible verifier-time operation before separately gated companion and producer composition"
+)]
+pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+        P, D, T, F, C, R, E,
+    >,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs {
+        production_inputs,
+        capability_authority,
+    } = inputs;
+    let operation =
+        crate::linux_bootstrap::linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection(
+            production_inputs,
+        );
+
+    move |publisher| {
+        operation(publisher);
+        drop(capability_authority);
+    }
+}
+
 /// Builds one dormant production operation that retains durable capability-authority custody.
 #[allow(
     dead_code,
