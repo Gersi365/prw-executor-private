@@ -1670,6 +1670,86 @@ mod repeated_real_admission_supervisor {
     }
 
     impl RemoteSessionExecutorRuntime {
+        /// Drives the dormant fallible verifier-time repeated supervisor to full return and then
+        /// deterministically closes and drains the already-bound remote endpoint on the same private
+        /// current-thread runtime.
+        ///
+        /// The C03e-PN fallible repeated collection remains authoritative for request/admission,
+        /// authenticated identity, worker cancellation/join custody and fallible verifier-time worker
+        /// completion. This outer seam captures its exact result without early propagation, then reuses
+        /// the existing endpoint teardown helper so close occurs exactly once before `wait_idle()` and
+        /// the original collection result is returned unchanged.
+        ///
+        /// # Errors
+        ///
+        /// Returns the existing persistent-collection configuration error unchanged after endpoint close
+        /// and idle drain when the fallible repeated collection rejects its worker-capacity configuration.
+        #[allow(
+            dead_code,
+            reason = "C03e-PP materializes the PO-selected dormant fallible verifier-time endpoint lifecycle composition before separately gated production caller wiring"
+        )]
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "C03e-PP composes the exact C03e-PN fallible repeated-collection inputs with the existing endpoint teardown helper"
+        )]
+        pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<
+            P,
+            D,
+            T,
+            S,
+            F,
+            C,
+            R,
+            E,
+        >(
+            &mut self,
+            max_active_workers: NonZeroUsize,
+            transport_runtime: &AgentRemoteTransportRuntime,
+            authority: &SharedCurrentCapabilityAuthority<P>,
+            session_authentication: &mut SessionAuthenticationService,
+            expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+            supervisor_shutdown: S,
+            admission_timing: F,
+            on_completion: C,
+            on_rejection: R,
+            on_admission_failure: E,
+        ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+        where
+            P: PolicyEvaluator + Send + Sync + 'static,
+            D: CapabilityDispatcher + Send + 'static,
+            T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+                + Send
+                + 'static,
+            S: Future<Output = ()> + Send,
+            F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            C: FnMut(super::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion),
+            R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+            E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+        {
+            let result = self
+                .drive_repeated_real_fallible_verifier_time_remote_admission_collection(
+                    max_active_workers,
+                    transport_runtime,
+                    authority,
+                    session_authentication,
+                    expected_requests,
+                    supervisor_shutdown,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                );
+
+            finish_remote_endpoint_shutdown(
+                self,
+                result,
+                |code, reason| transport_runtime.close(code, reason),
+                transport_runtime.wait_idle(),
+            )
+        }
+    }
+
+    impl RemoteSessionExecutorRuntime {
         /// Drives repeated expected-device real admission and the persistent worker collection inside
         /// the same private current-thread runtime lifetime.
         ///
