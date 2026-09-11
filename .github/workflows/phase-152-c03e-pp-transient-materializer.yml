@@ -37,9 +37,7 @@ jobs:
           if method_name in text:
               raise SystemExit('PP endpoint lifecycle sibling already exists before materialization')
 
-          anchor = '''    impl RemoteSessionExecutorRuntime {
-              /// Drives repeated expected-device real admission and the persistent worker collection inside
-          '''
+          anchor = "    impl RemoteSessionExecutorRuntime {\n        /// Drives repeated expected-device real admission and the persistent worker collection inside\n"
           if text.count(anchor) != 1:
               raise SystemExit(f'expected exactly one insertion anchor, found {text.count(anchor)}')
 
