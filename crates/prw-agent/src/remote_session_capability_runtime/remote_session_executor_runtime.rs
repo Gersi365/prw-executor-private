@@ -1659,9 +1659,9 @@ mod repeated_real_admission_supervisor {
             );
 
             assert_eq!(
-            result,
-            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-        );
+                result,
+                Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+            );
             assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
@@ -2220,7 +2220,6 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
     }
 
     /// Returns the exact fallible worker/join terminal result by reference.
-    #[must_use]
     pub(super) const fn result(
         &self,
     ) -> &Result<
@@ -2231,7 +2230,6 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
     }
 
     /// Recovers the logical identity and exact fallible worker/join terminal result.
-    #[must_use]
     pub(super) fn into_parts(
         self,
     ) -> (
