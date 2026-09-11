@@ -1659,9 +1659,9 @@ mod repeated_real_admission_supervisor {
             );
 
             assert_eq!(
-                result,
-                Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
-            );
+            result,
+            Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
+        );
             assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
 
