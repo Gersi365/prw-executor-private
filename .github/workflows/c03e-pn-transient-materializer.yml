@@ -31,9 +31,10 @@ jobs:
 
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
           text = path.read_text(encoding='utf-8')
-          anchor = '''    impl RemoteSessionExecutorRuntime {
-              /// Drives repeated expected-device real admission and the persistent worker collection inside
-          '''
+          anchor = (
+              "    impl RemoteSessionExecutorRuntime {\n"
+              "        /// Drives repeated expected-device real admission and the persistent worker collection inside\n"
+          )
           if text.count(anchor) != 1:
               raise SystemExit(f'expected exactly one PN insertion anchor, found {text.count(anchor)}')
 
