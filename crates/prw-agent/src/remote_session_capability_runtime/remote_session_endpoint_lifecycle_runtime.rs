@@ -686,17 +686,18 @@ where
     };
 
     let dispatcher = dispatcher_factory();
-    let handoff = match construct_remote_session_expected_device_admission_request_with_fallible_verifier_time(
-        continuation,
-        dispatcher,
-    ) {
-        RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-            receipt,
-        ) => return receipt,
-        RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::Constructed(handoff) => {
-            handoff
-        }
-    };
+    let handoff =
+        match construct_remote_session_expected_device_admission_request_with_fallible_verifier_time(
+            continuation,
+            dispatcher,
+        ) {
+            RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+                receipt,
+            ) => return receipt,
+            RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::Constructed(
+                handoff,
+            ) => handoff,
+        };
 
     let RemoteSessionExpectedDeviceAdmissionConstructedHandoff {
         requester_device_id,
