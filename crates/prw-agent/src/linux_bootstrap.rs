@@ -64,6 +64,39 @@ use crate::remote_session_capability_runtime::{
     },
 };
 
+/// Dormant production status-snapshot custody selected by C03e-QI.
+///
+/// This private source captures only the exact immutable status snapshot already owned by the
+/// production runtime-input bundle. It does not mint a second snapshot, inspect host/runtime state,
+/// or own requester, admission, channel, endpoint, or retry authority.
+#[allow(
+    dead_code,
+    reason = "C03e-QJ materializes the QI-selected dormant dispatcher-source custody before separately gated producer/channel composition"
+)]
+struct LinuxAgentProductionRemoteCapabilityDispatcherSource {
+    status_snapshot: LocalAgentStatusSnapshot,
+}
+
+impl LinuxAgentProductionRemoteCapabilityDispatcherSource {
+    #[allow(
+        dead_code,
+        reason = "C03e-QJ captures only the existing production runtime-input snapshot before separately gated producer/channel composition"
+    )]
+    const fn from_runtime_inputs(inputs: LocalLinuxProductionRuntimeInputs<'_>) -> Self {
+        Self {
+            status_snapshot: inputs.status_snapshot(),
+        }
+    }
+
+    #[allow(
+        dead_code,
+        reason = "C03e-QJ constructs only a fresh existing NB dispatcher before separately gated request construction/send composition"
+    )]
+    const fn new_dispatcher(&self) -> LinuxAgentProductionRemoteCapabilityDispatcher {
+        LinuxAgentProductionRemoteCapabilityDispatcher::new(self.status_snapshot)
+    }
+}
+
 /// Dormant owned status-only adapter selected by C03e-NA.
 #[allow(
     dead_code,
