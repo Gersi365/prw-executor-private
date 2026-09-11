@@ -1124,788 +1124,791 @@ mod repeated_real_admission_supervisor {
     }
 
     /// Owns one untouched pre-authentication request rejected before AJ construction.
-pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
-    reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
-    request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
-}
-
-impl<D, T> RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
-    /// Returns the bounded pre-authentication rejection reason.
-    #[must_use]
-    pub const fn reason(&self) -> RemoteSessionExpectedDeviceAdmissionRejectionReason {
-        self.reason
+    pub struct RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
+        reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
+        request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
     }
 
-    /// Returns the untouched rejected request by reference.
-    #[must_use]
-    pub const fn request(&self) -> &RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
-        &self.request
+    impl<D, T> RemoteSessionExpectedDeviceAdmissionRejection<D, T> {
+        /// Returns the bounded pre-authentication rejection reason.
+        #[must_use]
+        pub const fn reason(&self) -> RemoteSessionExpectedDeviceAdmissionRejectionReason {
+            self.reason
+        }
+
+        /// Returns the untouched rejected request by reference.
+        #[must_use]
+        pub const fn request(&self) -> &RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
+            &self.request
+        }
+
+        /// Recovers ownership of the untouched rejected request.
+        #[must_use]
+        pub fn into_request(self) -> RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
+            self.request
+        }
     }
 
-    /// Recovers ownership of the untouched rejected request.
-    #[must_use]
-    pub fn into_request(self) -> RemoteSessionExpectedDeviceAdmissionRequest<D, T> {
-        self.request
-    }
-}
-
-/// One bounded AJ failure reported by the repeated supervisor without terminating it.
-#[derive(Debug)]
-pub struct RemoteSessionRepeatedAdmissionFailure {
-    expected_device_id: DeviceId,
-    error: RemoteSessionRealAdmissionError,
-}
-
-impl RemoteSessionRepeatedAdmissionFailure {
-    /// Returns the logical `DeviceId` that selected the failed AJ attempt.
-    #[must_use]
-    pub const fn expected_device_id(&self) -> &DeviceId {
-        &self.expected_device_id
+    /// One bounded AJ failure reported by the repeated supervisor without terminating it.
+    #[derive(Debug)]
+    pub struct RemoteSessionRepeatedAdmissionFailure {
+        expected_device_id: DeviceId,
+        error: RemoteSessionRealAdmissionError,
     }
 
-    /// Returns the exact existing AJ error unchanged.
-    #[must_use]
-    pub const fn error(&self) -> &RemoteSessionRealAdmissionError {
-        &self.error
+    impl RemoteSessionRepeatedAdmissionFailure {
+        /// Returns the logical `DeviceId` that selected the failed AJ attempt.
+        #[must_use]
+        pub const fn expected_device_id(&self) -> &DeviceId {
+            &self.expected_device_id
+        }
+
+        /// Returns the exact existing AJ error unchanged.
+        #[must_use]
+        pub const fn error(&self) -> &RemoteSessionRealAdmissionError {
+            &self.error
+        }
+
+        /// Recovers the logical `DeviceId` and exact existing AJ error.
+        #[must_use]
+        pub fn into_parts(self) -> (DeviceId, RemoteSessionRealAdmissionError) {
+            (self.expected_device_id, self.error)
+        }
     }
 
-    /// Recovers the logical `DeviceId` and exact existing AJ error.
-    #[must_use]
-    pub fn into_parts(self) -> (DeviceId, RemoteSessionRealAdmissionError) {
-        (self.expected_device_id, self.error)
-    }
-}
-
-enum RepeatedSupervisorEvent<C> {
-    Shutdown,
-    Request(C),
-}
-
-enum InFlightAdmissionEvent<R> {
-    Shutdown,
-    Complete(R),
-}
-
-fn poll_shutdown_or_expected_request<C, S>(
-    active_len: usize,
-    max_active_workers: usize,
-    request_source_open: &mut bool,
-    requests: &mut mpsc::Receiver<C>,
-    mut supervisor_shutdown: Pin<&mut S>,
-    context: &mut Context<'_>,
-) -> Poll<RepeatedSupervisorEvent<C>>
-where
-    S: Future<Output = ()>,
-{
-    if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-        return Poll::Ready(RepeatedSupervisorEvent::Shutdown);
+    enum RepeatedSupervisorEvent<C> {
+        Shutdown,
+        Request(C),
     }
 
-    if *request_source_open && active_len < max_active_workers {
-        match Pin::new(requests).poll_recv(context) {
-            Poll::Ready(Some(request)) => {
-                return Poll::Ready(RepeatedSupervisorEvent::Request(request));
+    enum InFlightAdmissionEvent<R> {
+        Shutdown,
+        Complete(R),
+    }
+
+    fn poll_shutdown_or_expected_request<C, S>(
+        active_len: usize,
+        max_active_workers: usize,
+        request_source_open: &mut bool,
+        requests: &mut mpsc::Receiver<C>,
+        mut supervisor_shutdown: Pin<&mut S>,
+        context: &mut Context<'_>,
+    ) -> Poll<RepeatedSupervisorEvent<C>>
+    where
+        S: Future<Output = ()>,
+    {
+        if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
+            return Poll::Ready(RepeatedSupervisorEvent::Shutdown);
+        }
+
+        if *request_source_open && active_len < max_active_workers {
+            match Pin::new(requests).poll_recv(context) {
+                Poll::Ready(Some(request)) => {
+                    return Poll::Ready(RepeatedSupervisorEvent::Request(request));
+                }
+                Poll::Ready(None) => *request_source_open = false,
+                Poll::Pending => {}
             }
-            Poll::Ready(None) => *request_source_open = false,
-            Poll::Pending => {}
+        }
+
+        Poll::Pending
+    }
+
+    fn poll_shutdown_or_inflight_admission<S, A>(
+        mut supervisor_shutdown: Pin<&mut S>,
+        mut admission: Pin<&mut A>,
+        context: &mut Context<'_>,
+    ) -> Poll<InFlightAdmissionEvent<A::Output>>
+    where
+        S: Future<Output = ()>,
+        A: Future,
+    {
+        if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
+            return Poll::Ready(InFlightAdmissionEvent::Shutdown);
+        }
+
+        admission
+            .as_mut()
+            .poll(context)
+            .map(InFlightAdmissionEvent::Complete)
+    }
+
+    fn reap_registered_workers<C>(
+        active: &mut ActiveRemoteWorkers,
+        context: &mut Context<'_>,
+        on_completion: &mut C,
+    ) where
+        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+    {
+        let mut report = |device_id, result| {
+            on_completion(RemoteSessionRegisteredWorkerCompletion { device_id, result });
+        };
+        reap_ready_persistent_workers(active, context, &mut report);
+    }
+
+    fn request_all_worker_cancellations(active: &ActiveRemoteWorkers) {
+        for entry in active.values() {
+            entry.cancellation_controller.request_cancellation();
         }
     }
 
-    Poll::Pending
-}
-
-fn poll_shutdown_or_inflight_admission<S, A>(
-    mut supervisor_shutdown: Pin<&mut S>,
-    mut admission: Pin<&mut A>,
-    context: &mut Context<'_>,
-) -> Poll<InFlightAdmissionEvent<A::Output>>
-where
-    S: Future<Output = ()>,
-    A: Future,
-{
-    if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-        return Poll::Ready(InFlightAdmissionEvent::Shutdown);
+    async fn drain_registered_workers<C>(active: &mut ActiveRemoteWorkers, on_completion: &mut C)
+    where
+        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+    {
+        poll_fn(|context| {
+            reap_registered_workers(active, context, on_completion);
+            if active.is_empty() {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
     }
 
-    admission
-        .as_mut()
-        .poll(context)
-        .map(InFlightAdmissionEvent::Complete)
-}
-
-fn reap_registered_workers<C>(
-    active: &mut ActiveRemoteWorkers,
-    context: &mut Context<'_>,
-    on_completion: &mut C,
-) where
-    C: FnMut(RemoteSessionRegisteredWorkerCompletion),
-{
-    let mut report = |device_id, result| {
-        on_completion(RemoteSessionRegisteredWorkerCompletion { device_id, result });
-    };
-    reap_ready_persistent_workers(active, context, &mut report);
-}
-
-fn request_all_worker_cancellations(active: &ActiveRemoteWorkers) {
-    for entry in active.values() {
-        entry.cancellation_controller.request_cancellation();
+    async fn drain_inflight_admission<A, C>(
+        active: &mut ActiveRemoteWorkers,
+        mut admission: Pin<&mut A>,
+        on_completion: &mut C,
+    ) -> A::Output
+    where
+        A: Future,
+        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+    {
+        poll_fn(|context| {
+            reap_registered_workers(active, context, on_completion);
+            admission.as_mut().poll(context)
+        })
+        .await
     }
-}
 
-async fn drain_registered_workers<C>(active: &mut ActiveRemoteWorkers, on_completion: &mut C)
-where
-    C: FnMut(RemoteSessionRegisteredWorkerCompletion),
-{
-    poll_fn(|context| {
-        reap_registered_workers(active, context, on_completion);
-        if active.is_empty() {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
+    fn prepare_expected_request<D, T, V, F, R>(
+        active: &HashMap<DeviceId, V>,
+        request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        admission_timing: &mut F,
+        on_rejection: &mut R,
+    ) -> Option<(
+        RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        RemoteSessionRealAdmissionTiming,
+    )>
+    where
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+    {
+        let expected_device_id = request.expected_device_id().clone();
+        if active.contains_key(&expected_device_id) {
+            on_rejection(RemoteSessionExpectedDeviceAdmissionRejection {
+                reason: RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice,
+                request,
+            });
+            return None;
         }
-    })
-    .await;
-}
 
-async fn drain_inflight_admission<A, C>(
-    active: &mut ActiveRemoteWorkers,
-    mut admission: Pin<&mut A>,
-    on_completion: &mut C,
-) -> A::Output
-where
-    A: Future,
-    C: FnMut(RemoteSessionRegisteredWorkerCompletion),
-{
-    poll_fn(|context| {
-        reap_registered_workers(active, context, on_completion);
-        admission.as_mut().poll(context)
-    })
-    .await
-}
-
-fn prepare_expected_request<D, T, V, F, R>(
-    active: &HashMap<DeviceId, V>,
-    request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
-    admission_timing: &mut F,
-    on_rejection: &mut R,
-) -> Option<(
-    RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
-    RemoteSessionRealAdmissionTiming,
-)>
-where
-    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
-    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
-{
-    let expected_device_id = request.expected_device_id().clone();
-    if active.contains_key(&expected_device_id) {
-        on_rejection(RemoteSessionExpectedDeviceAdmissionRejection {
-            reason: RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice,
-            request,
-        });
-        return None;
+        let timing = admission_timing(&expected_device_id);
+        Some((request, timing))
     }
 
-    let timing = admission_timing(&expected_device_id);
-    Some((request, timing))
-}
-
-fn spawn_registered_worker<P, D, T>(
-    admission: RemoteSessionWorkerAdmission<D, T>,
-    authority: &SharedCurrentCapabilityAuthority<P>,
-) -> RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>
-where
-    P: PolicyEvaluator + Send + Sync + 'static,
-    D: CapabilityDispatcher + Send + 'static,
-    T: FnMut() -> u64 + Send + 'static,
-{
-    let authority = (*authority).clone();
-    let (mut session_owner, mut dispatcher, verifier_time_unix_seconds) = admission.into_parts();
-    let (cancellation_controller, cancellation_signal) = remote_session_worker_cancellation_pair();
-    let worker_handle = tokio::spawn(async move {
-        session_owner
-            .run_capability_request_worker(
-                &authority,
-                verifier_time_unix_seconds,
-                &mut dispatcher,
-                cancellation_signal.into_cancelled(),
-            )
-            .await
-    });
-
-    RemoteSessionPersistentWorkerEntry {
-        cancellation_controller,
-        worker_handle,
-    }
-}
-
-impl RemoteSessionExecutorRuntime {
-    /// Drives repeated expected-device real admission and the persistent worker collection inside
-    /// the same private current-thread runtime lifetime.
-    ///
-    /// Ready worker completions are reaped first. Supervisor shutdown is polled before either a
-    /// new expected request or the one in-flight AJ transaction. Requests are not polled while
-    /// the active collection is full, duplicate expected `DeviceId` values are rejected before timing or
-    /// network work, and at most one AJ future exists at a time.
-    ///
-    /// When shutdown latches during AJ, all active worker cancellations are requested and the AJ
-    /// future is retained and drained rather than dropped. A post-shutdown AJ success is consumed
-    /// through the code-4 authenticated-owner close seam without worker spawn/insertion.
-    ///
-    /// # Errors
-    ///
-    /// Returns the existing persistent-collection configuration error before runtime work when
-    /// `max_active_workers` exceeds the registered-device ceiling.
-    #[expect(
-        clippy::too_many_arguments,
-        clippy::too_many_lines,
-        reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"
-    )]
-    pub fn drive_repeated_real_remote_admission_collection<P, D, T, S, F, C, R, E>(
-        &mut self,
-        max_active_workers: NonZeroUsize,
-        transport_runtime: &AgentRemoteTransportRuntime,
+    fn spawn_registered_worker<P, D, T>(
+        admission: RemoteSessionWorkerAdmission<D, T>,
         authority: &SharedCurrentCapabilityAuthority<P>,
-        session_authentication: &mut SessionAuthenticationService,
-        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
-        supervisor_shutdown: S,
-        mut admission_timing: F,
-        mut on_completion: C,
-        mut on_rejection: R,
-        mut on_admission_failure: E,
-    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    ) -> RemoteSessionPersistentWorkerEntry<AuthenticatedRemoteSessionWorkerStop>
     where
         P: PolicyEvaluator + Send + Sync + 'static,
         D: CapabilityDispatcher + Send + 'static,
         T: FnMut() -> u64 + Send + 'static,
-        S: Future<Output = ()> + Send,
-        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
-        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
-        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
-        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
     {
-        let max_active_workers = validate_persistent_worker_capacity(max_active_workers)?;
-        let mut expected_requests = expected_requests;
-
-        self.runtime.block_on(async {
-            let mut active = ActiveRemoteWorkers::new();
-            let mut supervisor_shutdown = Box::pin(supervisor_shutdown);
-            let mut request_source_open = true;
-
-            loop {
-                let event = poll_fn(|context| {
-                    reap_registered_workers(&mut active, context, &mut on_completion);
-                    poll_shutdown_or_expected_request(
-                        active.len(),
-                        max_active_workers,
-                        &mut request_source_open,
-                        &mut expected_requests,
-                        supervisor_shutdown.as_mut(),
-                        context,
-                    )
-                })
-                .await;
-
-                let RepeatedSupervisorEvent::Request(request) = event else {
-                    request_all_worker_cancellations(&active);
-                    drain_registered_workers(&mut active, &mut on_completion).await;
-                    return;
-                };
-
-                let Some((request, timing)) = prepare_expected_request(
-                    &active,
-                    request,
-                    &mut admission_timing,
-                    &mut on_rejection,
-                ) else {
-                    continue;
-                };
-
-                let (
-                    expected_device_id,
-                    session_id,
-                    authentication_request_id,
-                    dispatcher,
+        let authority = (*authority).clone();
+        let (mut session_owner, mut dispatcher, verifier_time_unix_seconds) =
+            admission.into_parts();
+        let (cancellation_controller, cancellation_signal) =
+            remote_session_worker_cancellation_pair();
+        let worker_handle = tokio::spawn(async move {
+            session_owner
+                .run_capability_request_worker(
+                    &authority,
                     verifier_time_unix_seconds,
-                ) = request.into_parts();
-                let (
-                    challenge_validity_unix_seconds,
-                    authentication_now_unix_seconds,
-                    application_lease_unix_seconds,
-                ) = timing.into_parts();
+                    &mut dispatcher,
+                    cancellation_signal.into_cancelled(),
+                )
+                .await
+        });
 
-                let mut admission = Box::pin(admit_expected_remote_device_session(
-                    transport_runtime,
-                    authority,
-                    session_authentication,
-                    &expected_device_id,
-                    session_id,
-                    challenge_validity_unix_seconds,
-                    authentication_request_id,
-                    authentication_now_unix_seconds,
-                    application_lease_unix_seconds,
-                ));
+        RemoteSessionPersistentWorkerEntry {
+            cancellation_controller,
+            worker_handle,
+        }
+    }
 
-                let admission_event = poll_fn(|context| {
-                    reap_registered_workers(&mut active, context, &mut on_completion);
-                    poll_shutdown_or_inflight_admission(
-                        supervisor_shutdown.as_mut(),
-                        admission.as_mut(),
-                        context,
-                    )
-                })
-                .await;
+    impl RemoteSessionExecutorRuntime {
+        /// Drives repeated expected-device real admission and the persistent worker collection inside
+        /// the same private current-thread runtime lifetime.
+        ///
+        /// Ready worker completions are reaped first. Supervisor shutdown is polled before either a
+        /// new expected request or the one in-flight AJ transaction. Requests are not polled while
+        /// the active collection is full, duplicate expected `DeviceId` values are rejected before timing or
+        /// network work, and at most one AJ future exists at a time.
+        ///
+        /// When shutdown latches during AJ, all active worker cancellations are requested and the AJ
+        /// future is retained and drained rather than dropped. A post-shutdown AJ success is consumed
+        /// through the code-4 authenticated-owner close seam without worker spawn/insertion.
+        ///
+        /// # Errors
+        ///
+        /// Returns the existing persistent-collection configuration error before runtime work when
+        /// `max_active_workers` exceeds the registered-device ceiling.
+        #[expect(
+            clippy::too_many_arguments,
+            clippy::too_many_lines,
+            reason = "C03e-AL intentionally materializes the AK-selected explicit supervisor inputs and callbacks"
+        )]
+        pub fn drive_repeated_real_remote_admission_collection<P, D, T, S, F, C, R, E>(
+            &mut self,
+            max_active_workers: NonZeroUsize,
+            transport_runtime: &AgentRemoteTransportRuntime,
+            authority: &SharedCurrentCapabilityAuthority<P>,
+            session_authentication: &mut SessionAuthenticationService,
+            expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+            supervisor_shutdown: S,
+            mut admission_timing: F,
+            mut on_completion: C,
+            mut on_rejection: R,
+            mut on_admission_failure: E,
+        ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+        where
+            P: PolicyEvaluator + Send + Sync + 'static,
+            D: CapabilityDispatcher + Send + 'static,
+            T: FnMut() -> u64 + Send + 'static,
+            S: Future<Output = ()> + Send,
+            F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+            R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+            E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+        {
+            let max_active_workers = validate_persistent_worker_capacity(max_active_workers)?;
+            let mut expected_requests = expected_requests;
 
-                match admission_event {
-                    InFlightAdmissionEvent::Complete(result) => {
-                        drop(admission);
-                        match result {
-                            Ok(session_owner) => {
-                                let authenticated_device_id = session_owner.logical_device_id().clone();
-                                debug_assert_eq!(
-                                    authenticated_device_id,
-                                    expected_device_id,
-                                    "AJ success must retain the expected authenticated DeviceId"
-                                );
-                                let worker_admission = RemoteSessionWorkerAdmission::new(
-                                    session_owner,
-                                    dispatcher,
-                                    verifier_time_unix_seconds,
-                                );
-                                match active.entry(authenticated_device_id) {
-                                    Entry::Vacant(slot) => {
-                                        slot.insert(spawn_registered_worker(
-                                            worker_admission,
-                                            authority,
-                                        ));
-                                    }
-                                    Entry::Occupied(_) => {
-                                        unreachable!(
-                                            "single in-flight preflight guarantees a vacant post-auth DeviceId"
-                                        );
-                                    }
-                                }
-                            }
-                            Err(error) => {
-                                on_admission_failure(RemoteSessionRepeatedAdmissionFailure {
-                                    expected_device_id,
-                                    error,
-                                });
-                            }
-                        }
-                    }
-                    InFlightAdmissionEvent::Shutdown => {
-                        request_all_worker_cancellations(&active);
-                        let result = drain_inflight_admission(
-                            &mut active,
-                            admission.as_mut(),
-                            &mut on_completion,
+            self.runtime.block_on(async {
+                let mut active = ActiveRemoteWorkers::new();
+                let mut supervisor_shutdown = Box::pin(supervisor_shutdown);
+                let mut request_source_open = true;
+
+                loop {
+                    let event = poll_fn(|context| {
+                        reap_registered_workers(&mut active, context, &mut on_completion);
+                        poll_shutdown_or_expected_request(
+                            active.len(),
+                            max_active_workers,
+                            &mut request_source_open,
+                            &mut expected_requests,
+                            supervisor_shutdown.as_mut(),
+                            context,
                         )
-                        .await;
-                        drop(admission);
+                    })
+                    .await;
 
-                        match result {
-                            Ok(session_owner) => session_owner.close_for_orderly_shutdown(),
-                            Err(error) => {
-                                on_admission_failure(RemoteSessionRepeatedAdmissionFailure {
-                                    expected_device_id,
-                                    error,
-                                });
-                            }
-                        }
-
+                    let RepeatedSupervisorEvent::Request(request) = event else {
+                        request_all_worker_cancellations(&active);
                         drain_registered_workers(&mut active, &mut on_completion).await;
                         return;
+                    };
+
+                    let Some((request, timing)) = prepare_expected_request(
+                        &active,
+                        request,
+                        &mut admission_timing,
+                        &mut on_rejection,
+                    ) else {
+                        continue;
+                    };
+
+                    let (
+                        expected_device_id,
+                        session_id,
+                        authentication_request_id,
+                        dispatcher,
+                        verifier_time_unix_seconds,
+                    ) = request.into_parts();
+                    let (
+                        challenge_validity_unix_seconds,
+                        authentication_now_unix_seconds,
+                        application_lease_unix_seconds,
+                    ) = timing.into_parts();
+
+                    let mut admission = Box::pin(admit_expected_remote_device_session(
+                        transport_runtime,
+                        authority,
+                        session_authentication,
+                        &expected_device_id,
+                        session_id,
+                        challenge_validity_unix_seconds,
+                        authentication_request_id,
+                        authentication_now_unix_seconds,
+                        application_lease_unix_seconds,
+                    ));
+
+                    let admission_event = poll_fn(|context| {
+                        reap_registered_workers(&mut active, context, &mut on_completion);
+                        poll_shutdown_or_inflight_admission(
+                            supervisor_shutdown.as_mut(),
+                            admission.as_mut(),
+                            context,
+                        )
+                    })
+                    .await;
+
+                    match admission_event {
+                        InFlightAdmissionEvent::Complete(result) => {
+                            drop(admission);
+                            match result {
+                                Ok(session_owner) => {
+                                    let authenticated_device_id =
+                                        session_owner.logical_device_id().clone();
+                                    debug_assert_eq!(
+                                        authenticated_device_id,
+                                        expected_device_id,
+                                        "AJ success must retain the expected authenticated DeviceId"
+                                    );
+                                    let worker_admission = RemoteSessionWorkerAdmission::new(
+                                        session_owner,
+                                        dispatcher,
+                                        verifier_time_unix_seconds,
+                                    );
+                                    match active.entry(authenticated_device_id) {
+                                        Entry::Vacant(slot) => {
+                                            slot.insert(spawn_registered_worker(
+                                                worker_admission,
+                                                authority,
+                                            ));
+                                        }
+                                        Entry::Occupied(_) => {
+                                            unreachable!(
+                                                "single in-flight preflight guarantees a vacant post-auth DeviceId"
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(error) => {
+                                    on_admission_failure(RemoteSessionRepeatedAdmissionFailure {
+                                        expected_device_id,
+                                        error,
+                                    });
+                                }
+                            }
+                        }
+                        InFlightAdmissionEvent::Shutdown => {
+                            request_all_worker_cancellations(&active);
+                            let result = drain_inflight_admission(
+                                &mut active,
+                                admission.as_mut(),
+                                &mut on_completion,
+                            )
+                            .await;
+                            drop(admission);
+
+                            match result {
+                                Ok(session_owner) => session_owner.close_for_orderly_shutdown(),
+                                Err(error) => {
+                                    on_admission_failure(RemoteSessionRepeatedAdmissionFailure {
+                                        expected_device_id,
+                                        error,
+                                    });
+                                }
+                            }
+
+                            drain_registered_workers(&mut active, &mut on_completion).await;
+                            return;
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        Ok(())
-    }
-    /// Drives the repeated remote-session supervisor and then deterministically closes and
-    /// drains the already-bound remote endpoint on the same private current-thread runtime.
-    ///
-    /// The existing C03e-AL supervisor is driven to full return before whole-endpoint close.
-    /// Its result is captured without early propagation so even pre-drive configuration
-    /// failure still closes the endpoint once and drives `wait_idle()` before the exact
-    /// original result is returned.
-    ///
-    /// This domain-specific seam uses only sequential private runtime drives. It exposes no
-    /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
-    ///
-    /// # Errors
-    ///
-    /// Returns the existing persistent-collection configuration error unchanged after the
-    /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
-    /// capacity configuration.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "C03e-AN composes the exact existing C03e-AL inputs with endpoint teardown"
-    )]
-    pub fn drive_repeated_real_remote_admission_endpoint_lifecycle<P, D, T, S, F, C, R, E>(
-        &mut self,
-        max_active_workers: NonZeroUsize,
-        transport_runtime: &AgentRemoteTransportRuntime,
-        authority: &SharedCurrentCapabilityAuthority<P>,
-        session_authentication: &mut SessionAuthenticationService,
-        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
-        supervisor_shutdown: S,
-        admission_timing: F,
-        on_completion: C,
-        on_rejection: R,
-        on_admission_failure: E,
-    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
-    where
-        P: PolicyEvaluator + Send + Sync + 'static,
-        D: CapabilityDispatcher + Send + 'static,
-        T: FnMut() -> u64 + Send + 'static,
-        S: Future<Output = ()> + Send,
-        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
-        C: FnMut(RemoteSessionRegisteredWorkerCompletion),
-        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
-        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
-    {
-        let result = self.drive_repeated_real_remote_admission_collection(
-            max_active_workers,
-            transport_runtime,
-            authority,
-            session_authentication,
-            expected_requests,
-            supervisor_shutdown,
-            admission_timing,
-            on_completion,
-            on_rejection,
-            on_admission_failure,
-        );
+            Ok(())
+        }
+        /// Drives the repeated remote-session supervisor and then deterministically closes and
+        /// drains the already-bound remote endpoint on the same private current-thread runtime.
+        ///
+        /// The existing C03e-AL supervisor is driven to full return before whole-endpoint close.
+        /// Its result is captured without early propagation so even pre-drive configuration
+        /// failure still closes the endpoint once and drives `wait_idle()` before the exact
+        /// original result is returned.
+        ///
+        /// This domain-specific seam uses only sequential private runtime drives. It exposes no
+        /// generic `block_on`, runtime handle, second runtime, readiness or activation surface.
+        ///
+        /// # Errors
+        ///
+        /// Returns the existing persistent-collection configuration error unchanged after the
+        /// deterministic endpoint close and idle drain when the C03e-AL drive rejects its worker
+        /// capacity configuration.
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "C03e-AN composes the exact existing C03e-AL inputs with endpoint teardown"
+        )]
+        pub fn drive_repeated_real_remote_admission_endpoint_lifecycle<P, D, T, S, F, C, R, E>(
+            &mut self,
+            max_active_workers: NonZeroUsize,
+            transport_runtime: &AgentRemoteTransportRuntime,
+            authority: &SharedCurrentCapabilityAuthority<P>,
+            session_authentication: &mut SessionAuthenticationService,
+            expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+            supervisor_shutdown: S,
+            admission_timing: F,
+            on_completion: C,
+            on_rejection: R,
+            on_admission_failure: E,
+        ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+        where
+            P: PolicyEvaluator + Send + Sync + 'static,
+            D: CapabilityDispatcher + Send + 'static,
+            T: FnMut() -> u64 + Send + 'static,
+            S: Future<Output = ()> + Send,
+            F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+            C: FnMut(RemoteSessionRegisteredWorkerCompletion),
+            R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+            E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+        {
+            let result = self.drive_repeated_real_remote_admission_collection(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            );
 
-        finish_remote_endpoint_shutdown(
-            self,
-            result,
-            |code, reason| transport_runtime.close(code, reason),
-            transport_runtime.wait_idle(),
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        cell::{Cell, RefCell},
-        collections::HashMap,
-        future::{Future, pending, ready},
-        pin::Pin,
-        rc::Rc,
-        task::{Context, Poll, Waker},
-    };
-
-    use prw_core::{DeviceId, SessionId};
-    use prw_registry::RegistryError;
-    use tokio::{runtime::Builder, sync::mpsc};
-
-    use super::{
-        ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,
-        REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,
-        RemoteSessionExpectedDeviceAdmissionRejectionReason,
-        RemoteSessionExpectedDeviceAdmissionRequest,
-        RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
-        RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-        RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
-        drain_registered_workers, finish_remote_endpoint_shutdown,
-        poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
-        prepare_expected_request, remote_session_worker_cancellation_pair,
-        request_all_worker_cancellations,
-    };
-    use crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionWorkerStop;
-
-    fn device_id(value: &str) -> DeviceId {
-        DeviceId::new(value).expect("test DeviceId is nonempty")
+            finish_remote_endpoint_shutdown(
+                self,
+                result,
+                |code, reason| transport_runtime.close(code, reason),
+                transport_runtime.wait_idle(),
+            )
+        }
     }
 
-    fn session_id(value: &str) -> SessionId {
-        SessionId::new(value).expect("test SessionId is nonempty")
-    }
+    #[cfg(test)]
+    mod tests {
+        use std::{
+            cell::{Cell, RefCell},
+            collections::HashMap,
+            future::{Future, pending, ready},
+            pin::Pin,
+            rc::Rc,
+            task::{Context, Poll, Waker},
+        };
 
-    fn test_timing() -> RemoteSessionRealAdmissionTiming {
-        RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
-    }
+        use prw_core::{DeviceId, SessionId};
+        use prw_registry::RegistryError;
+        use tokio::{runtime::Builder, sync::mpsc};
 
-    #[test]
-    fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
-        let executor = RemoteSessionExecutorRuntime::new()
-            .expect("test current-thread executor constructs");
-        let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
-        let close_events = Rc::clone(&events);
-        let idle_events = Rc::clone(&events);
-        let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
-            RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
-        );
+        use super::{
+            ActiveRemoteWorkers, InFlightAdmissionEvent, REMOTE_ENDPOINT_SHUTDOWN_CODE,
+            REMOTE_ENDPOINT_SHUTDOWN_REASON, RemoteSessionExecutorRuntime,
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest,
+            RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
+            RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+            RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
+            drain_registered_workers, finish_remote_endpoint_shutdown,
+            poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
+            prepare_expected_request, remote_session_worker_cancellation_pair,
+            request_all_worker_cancellations,
+        };
+        use crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionWorkerStop;
 
-        let result = finish_remote_endpoint_shutdown(
-            &executor,
-            original,
-            move |code, reason| {
-                assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
-                assert_eq!(code, 0);
-                assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
-                assert_eq!(reason, b"remote endpoint shutdown");
-                close_events.borrow_mut().push("close");
-            },
-            async move {
-                idle_events.borrow_mut().push("idle");
-            },
-        );
+        fn device_id(value: &str) -> DeviceId {
+            DeviceId::new(value).expect("test DeviceId is nonempty")
+        }
 
-        assert_eq!(
+        fn session_id(value: &str) -> SessionId {
+            SessionId::new(value).expect("test SessionId is nonempty")
+        }
+
+        fn test_timing() -> RemoteSessionRealAdmissionTiming {
+            RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
+        }
+
+        #[test]
+        fn endpoint_finish_closes_once_before_idle_and_preserves_original_error() {
+            let executor = RemoteSessionExecutorRuntime::new()
+                .expect("test current-thread executor constructs");
+            let events = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+            let close_events = Rc::clone(&events);
+            let idle_events = Rc::clone(&events);
+            let original: Result<(), RemoteSessionPersistentCollectionConfigError> = Err(
+                RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit,
+            );
+
+            let result = finish_remote_endpoint_shutdown(
+                &executor,
+                original,
+                move |code, reason| {
+                    assert_eq!(code, REMOTE_ENDPOINT_SHUTDOWN_CODE);
+                    assert_eq!(code, 0);
+                    assert_eq!(reason, REMOTE_ENDPOINT_SHUTDOWN_REASON);
+                    assert_eq!(reason, b"remote endpoint shutdown");
+                    close_events.borrow_mut().push("close");
+                },
+                async move {
+                    idle_events.borrow_mut().push("idle");
+                },
+            );
+
+            assert_eq!(
             result,
             Err(RemoteSessionPersistentCollectionConfigError::CapacityExceedsRegisteredDeviceLimit)
         );
-        assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
-    }
-
-    struct TrackedReadyFuture {
-        polls: Rc<Cell<usize>>,
-        drops: Rc<Cell<usize>>,
-    }
-
-    impl Future for TrackedReadyFuture {
-        type Output = u8;
-
-        fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
-            self.polls.set(self.polls.get() + 1);
-            Poll::Ready(7)
+            assert_eq!(events.borrow().as_slice(), ["close", "idle"]);
         }
-    }
 
-    impl Drop for TrackedReadyFuture {
-        fn drop(&mut self) {
-            self.drops.set(self.drops.get() + 1);
+        struct TrackedReadyFuture {
+            polls: Rc<Cell<usize>>,
+            drops: Rc<Cell<usize>>,
         }
-    }
 
-    #[test]
-    fn full_capacity_does_not_poll_expected_request_source() {
-        let (sender, mut receiver) = mpsc::channel(1);
-        assert!(sender.try_send(41_u8).is_ok());
-        let mut request_source_open = true;
-        let mut shutdown = Box::pin(pending::<()>());
-        let mut context = Context::from_waker(Waker::noop());
+        impl Future for TrackedReadyFuture {
+            type Output = u8;
 
-        let result = poll_shutdown_or_expected_request(
-            1,
-            1,
-            &mut request_source_open,
-            &mut receiver,
-            shutdown.as_mut(),
-            &mut context,
-        );
-
-        assert!(matches!(result, Poll::Pending));
-        assert_eq!(receiver.try_recv(), Ok(41_u8));
-    }
-
-    #[test]
-    fn closed_expected_request_source_does_not_fabricate_shutdown() {
-        let (sender, mut receiver) = mpsc::channel::<u8>(1);
-        drop(sender);
-        let mut request_source_open = true;
-        let mut shutdown = Box::pin(pending::<()>());
-        let mut context = Context::from_waker(Waker::noop());
-
-        let result = poll_shutdown_or_expected_request(
-            0,
-            1,
-            &mut request_source_open,
-            &mut receiver,
-            shutdown.as_mut(),
-            &mut context,
-        );
-
-        assert!(matches!(result, Poll::Pending));
-        assert!(!request_source_open);
-    }
-
-    #[test]
-    fn duplicate_expected_device_is_rejected_before_timing_sample() {
-        let duplicate = device_id("duplicate-device");
-        let mut active = HashMap::<DeviceId, u8>::new();
-        active.insert(duplicate.clone(), 1_u8);
-        let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
-            duplicate.clone(),
-            session_id("duplicate-session"),
-            1,
-            9_u8,
-            10_u8,
-        );
-        let timing_samples = Rc::new(Cell::new(0_usize));
-        let timing_samples_for_factory = Rc::clone(&timing_samples);
-        let mut timing_factory = move |_device_id: &DeviceId| {
-            timing_samples_for_factory.set(timing_samples_for_factory.get() + 1);
-            test_timing()
-        };
-        let mut rejection = None;
-
-        let prepared =
-            prepare_expected_request(&active, request, &mut timing_factory, &mut |observed| {
-                rejection = Some(observed);
-            });
-
-        assert!(prepared.is_none());
-        assert_eq!(timing_samples.get(), 0);
-        let rejection = rejection.expect("duplicate request rejected");
-        assert_eq!(
-            rejection.reason(),
-            RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice
-        );
-        assert_eq!(rejection.request().expected_device_id(), &duplicate);
-    }
-
-    #[test]
-    fn timing_is_sampled_once_only_for_request_that_can_start() {
-        let expected = device_id("fresh-device");
-        let active = HashMap::<DeviceId, u8>::new();
-        let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
-            expected,
-            session_id("fresh-session"),
-            2,
-            11_u8,
-            12_u8,
-        );
-        let timing_samples = Rc::new(Cell::new(0_usize));
-        let timing_samples_for_factory = Rc::clone(&timing_samples);
-        let mut timing_factory = move |_device_id: &DeviceId| {
-            timing_samples_for_factory.set(timing_samples_for_factory.get() + 1);
-            test_timing()
-        };
-
-        let prepared = prepare_expected_request(
-            &active,
-            request,
-            &mut timing_factory,
-            &mut |_rejection| panic!("fresh DeviceId must not be rejected"),
-        );
-
-        assert!(prepared.is_some());
-        assert_eq!(timing_samples.get(), 1);
-    }
-
-    #[test]
-    fn shutdown_wins_same_poll_without_polling_or_dropping_ready_admission() {
-        let polls = Rc::new(Cell::new(0_usize));
-        let drops = Rc::new(Cell::new(0_usize));
-        let mut admission = Box::pin(TrackedReadyFuture {
-            polls: Rc::clone(&polls),
-            drops: Rc::clone(&drops),
-        });
-        let mut shutdown = Box::pin(ready(()));
-        let mut context = Context::from_waker(Waker::noop());
-
-        let result = poll_shutdown_or_inflight_admission(
-            shutdown.as_mut(),
-            admission.as_mut(),
-            &mut context,
-        );
-
-        assert!(matches!(
-            result,
-            Poll::Ready(InFlightAdmissionEvent::Shutdown)
-        ));
-        assert_eq!(polls.get(), 0);
-        assert_eq!(drops.get(), 0);
-
-        let mut pending_shutdown = Box::pin(pending::<()>());
-        let result = poll_shutdown_or_inflight_admission(
-            pending_shutdown.as_mut(),
-            admission.as_mut(),
-            &mut context,
-        );
-        assert!(matches!(
-            result,
-            Poll::Ready(InFlightAdmissionEvent::Complete(7))
-        ));
-        assert_eq!(polls.get(), 1);
-        assert_eq!(drops.get(), 0);
-        drop(admission);
-        assert_eq!(drops.get(), 1);
-    }
-
-    #[test]
-    fn ready_shutdown_wins_before_prequeued_expected_request() {
-        let (sender, mut receiver) = mpsc::channel(1);
-        assert!(sender.try_send(77_u8).is_ok());
-        let mut request_source_open = true;
-        let mut shutdown = Box::pin(ready(()));
-        let mut context = Context::from_waker(Waker::noop());
-
-        let result = poll_shutdown_or_expected_request(
-            0,
-            1,
-            &mut request_source_open,
-            &mut receiver,
-            shutdown.as_mut(),
-            &mut context,
-        );
-
-        assert!(matches!(
-            result,
-            Poll::Ready(RepeatedSupervisorEvent::Shutdown)
-        ));
-        assert_eq!(receiver.try_recv(), Ok(77_u8));
-    }
-
-    #[test]
-    fn all_active_controllers_are_requested_before_drain() {
-        let runtime = Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("test runtime constructs");
-
-        runtime.block_on(async {
-            let mut active = ActiveRemoteWorkers::new();
-            for value in [1_u8, 2_u8] {
-                let (controller, signal) = remote_session_worker_cancellation_pair();
-                let worker_handle = tokio::spawn(async move {
-                    signal.into_cancelled().await;
-                    AuthenticatedRemoteSessionWorkerStop::Cancelled
-                });
-                active.insert(
-                    device_id(&format!("shutdown-device-{value}")),
-                    RemoteSessionPersistentWorkerEntry {
-                        cancellation_controller: controller,
-                        worker_handle,
-                    },
-                );
+            fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+                self.polls.set(self.polls.get() + 1);
+                Poll::Ready(7)
             }
+        }
 
-            request_all_worker_cancellations(&active);
-            let mut completions = Vec::new();
-            drain_registered_workers(&mut active, &mut |completion| {
-                completions.push(completion);
-            })
-            .await;
+        impl Drop for TrackedReadyFuture {
+            fn drop(&mut self) {
+                self.drops.set(self.drops.get() + 1);
+            }
+        }
 
-            assert!(active.is_empty());
-            assert_eq!(completions.len(), 2);
-            assert!(completions.into_iter().all(|completion| {
-                completion.result() == Ok(AuthenticatedRemoteSessionWorkerStop::Cancelled)
-            }));
-        });
+        #[test]
+        fn full_capacity_does_not_poll_expected_request_source() {
+            let (sender, mut receiver) = mpsc::channel(1);
+            assert!(sender.try_send(41_u8).is_ok());
+            let mut request_source_open = true;
+            let mut shutdown = Box::pin(pending::<()>());
+            let mut context = Context::from_waker(Waker::noop());
+
+            let result = poll_shutdown_or_expected_request(
+                1,
+                1,
+                &mut request_source_open,
+                &mut receiver,
+                shutdown.as_mut(),
+                &mut context,
+            );
+
+            assert!(matches!(result, Poll::Pending));
+            assert_eq!(receiver.try_recv(), Ok(41_u8));
+        }
+
+        #[test]
+        fn closed_expected_request_source_does_not_fabricate_shutdown() {
+            let (sender, mut receiver) = mpsc::channel::<u8>(1);
+            drop(sender);
+            let mut request_source_open = true;
+            let mut shutdown = Box::pin(pending::<()>());
+            let mut context = Context::from_waker(Waker::noop());
+
+            let result = poll_shutdown_or_expected_request(
+                0,
+                1,
+                &mut request_source_open,
+                &mut receiver,
+                shutdown.as_mut(),
+                &mut context,
+            );
+
+            assert!(matches!(result, Poll::Pending));
+            assert!(!request_source_open);
+        }
+
+        #[test]
+        fn duplicate_expected_device_is_rejected_before_timing_sample() {
+            let duplicate = device_id("duplicate-device");
+            let mut active = HashMap::<DeviceId, u8>::new();
+            active.insert(duplicate.clone(), 1_u8);
+            let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
+                duplicate.clone(),
+                session_id("duplicate-session"),
+                1,
+                9_u8,
+                10_u8,
+            );
+            let timing_samples = Rc::new(Cell::new(0_usize));
+            let timing_samples_for_factory = Rc::clone(&timing_samples);
+            let mut timing_factory = move |_device_id: &DeviceId| {
+                timing_samples_for_factory.set(timing_samples_for_factory.get() + 1);
+                test_timing()
+            };
+            let mut rejection = None;
+
+            let prepared =
+                prepare_expected_request(&active, request, &mut timing_factory, &mut |observed| {
+                    rejection = Some(observed);
+                });
+
+            assert!(prepared.is_none());
+            assert_eq!(timing_samples.get(), 0);
+            let rejection = rejection.expect("duplicate request rejected");
+            assert_eq!(
+                rejection.reason(),
+                RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice
+            );
+            assert_eq!(rejection.request().expected_device_id(), &duplicate);
+        }
+
+        #[test]
+        fn timing_is_sampled_once_only_for_request_that_can_start() {
+            let expected = device_id("fresh-device");
+            let active = HashMap::<DeviceId, u8>::new();
+            let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
+                expected,
+                session_id("fresh-session"),
+                2,
+                11_u8,
+                12_u8,
+            );
+            let timing_samples = Rc::new(Cell::new(0_usize));
+            let timing_samples_for_factory = Rc::clone(&timing_samples);
+            let mut timing_factory = move |_device_id: &DeviceId| {
+                timing_samples_for_factory.set(timing_samples_for_factory.get() + 1);
+                test_timing()
+            };
+
+            let prepared = prepare_expected_request(
+                &active,
+                request,
+                &mut timing_factory,
+                &mut |_rejection| panic!("fresh DeviceId must not be rejected"),
+            );
+
+            assert!(prepared.is_some());
+            assert_eq!(timing_samples.get(), 1);
+        }
+
+        #[test]
+        fn shutdown_wins_same_poll_without_polling_or_dropping_ready_admission() {
+            let polls = Rc::new(Cell::new(0_usize));
+            let drops = Rc::new(Cell::new(0_usize));
+            let mut admission = Box::pin(TrackedReadyFuture {
+                polls: Rc::clone(&polls),
+                drops: Rc::clone(&drops),
+            });
+            let mut shutdown = Box::pin(ready(()));
+            let mut context = Context::from_waker(Waker::noop());
+
+            let result = poll_shutdown_or_inflight_admission(
+                shutdown.as_mut(),
+                admission.as_mut(),
+                &mut context,
+            );
+
+            assert!(matches!(
+                result,
+                Poll::Ready(InFlightAdmissionEvent::Shutdown)
+            ));
+            assert_eq!(polls.get(), 0);
+            assert_eq!(drops.get(), 0);
+
+            let mut pending_shutdown = Box::pin(pending::<()>());
+            let result = poll_shutdown_or_inflight_admission(
+                pending_shutdown.as_mut(),
+                admission.as_mut(),
+                &mut context,
+            );
+            assert!(matches!(
+                result,
+                Poll::Ready(InFlightAdmissionEvent::Complete(7))
+            ));
+            assert_eq!(polls.get(), 1);
+            assert_eq!(drops.get(), 0);
+            drop(admission);
+            assert_eq!(drops.get(), 1);
+        }
+
+        #[test]
+        fn ready_shutdown_wins_before_prequeued_expected_request() {
+            let (sender, mut receiver) = mpsc::channel(1);
+            assert!(sender.try_send(77_u8).is_ok());
+            let mut request_source_open = true;
+            let mut shutdown = Box::pin(ready(()));
+            let mut context = Context::from_waker(Waker::noop());
+
+            let result = poll_shutdown_or_expected_request(
+                0,
+                1,
+                &mut request_source_open,
+                &mut receiver,
+                shutdown.as_mut(),
+                &mut context,
+            );
+
+            assert!(matches!(
+                result,
+                Poll::Ready(RepeatedSupervisorEvent::Shutdown)
+            ));
+            assert_eq!(receiver.try_recv(), Ok(77_u8));
+        }
+
+        #[test]
+        fn all_active_controllers_are_requested_before_drain() {
+            let runtime = Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime constructs");
+
+            runtime.block_on(async {
+                let mut active = ActiveRemoteWorkers::new();
+                for value in [1_u8, 2_u8] {
+                    let (controller, signal) = remote_session_worker_cancellation_pair();
+                    let worker_handle = tokio::spawn(async move {
+                        signal.into_cancelled().await;
+                        AuthenticatedRemoteSessionWorkerStop::Cancelled
+                    });
+                    active.insert(
+                        device_id(&format!("shutdown-device-{value}")),
+                        RemoteSessionPersistentWorkerEntry {
+                            cancellation_controller: controller,
+                            worker_handle,
+                        },
+                    );
+                }
+
+                request_all_worker_cancellations(&active);
+                let mut completions = Vec::new();
+                drain_registered_workers(&mut active, &mut |completion| {
+                    completions.push(completion);
+                })
+                .await;
+
+                assert!(active.is_empty());
+                assert_eq!(completions.len(), 2);
+                assert!(completions.into_iter().all(|completion| {
+                    completion.result() == Ok(AuthenticatedRemoteSessionWorkerStop::Cancelled)
+                }));
+            });
+        }
+
+        #[test]
+        fn repeated_failure_preserves_expected_device_and_original_aj_variant() {
+            let expected = device_id("failed-device");
+            let failure = RemoteSessionRepeatedAdmissionFailure {
+                expected_device_id: expected.clone(),
+                error: RemoteSessionRealAdmissionError::Registry(RegistryError::DeviceUnknown),
+            };
+
+            assert_eq!(failure.expected_device_id(), &expected);
+            assert!(matches!(
+                failure.error(),
+                RemoteSessionRealAdmissionError::Registry(RegistryError::DeviceUnknown)
+            ));
+        }
     }
-
-    #[test]
-    fn repeated_failure_preserves_expected_device_and_original_aj_variant() {
-        let expected = device_id("failed-device");
-        let failure = RemoteSessionRepeatedAdmissionFailure {
-            expected_device_id: expected.clone(),
-            error: RemoteSessionRealAdmissionError::Registry(RegistryError::DeviceUnknown),
-        };
-
-        assert_eq!(failure.expected_device_id(), &expected);
-        assert!(matches!(
-            failure.error(),
-            RemoteSessionRealAdmissionError::Registry(RegistryError::DeviceUnknown)
-        ));
-    }
-}
 }
 
 impl RemoteSessionExecutorRuntime {
@@ -2217,6 +2220,7 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
     }
 
     /// Returns the exact fallible worker/join terminal result by reference.
+    #[must_use]
     pub(super) const fn result(
         &self,
     ) -> &Result<
@@ -2227,6 +2231,7 @@ impl RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion {
     }
 
     /// Recovers the logical identity and exact fallible worker/join terminal result.
+    #[must_use]
     pub(super) fn into_parts(
         self,
     ) -> (
