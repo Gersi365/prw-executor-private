@@ -25,6 +25,7 @@ jobs:
           SOURCE: crates/prw-agent/src/production_durable_capability_higher_owner_custody.rs
           SOURCE_BLOB: 5c8943a43f100bcfea2e63056ed368ac3dbdeb2b
           HELPER: .github/workflows/phase-152-c03e-qb-transient-materializer.yml
+          BLOCK_B64: Ly8vIEJ1aWxkcyBvbmUgZG9ybWFudCBwcmUtcmVxdWVzdGVyIGhpZ2hlci1vd25lciBvcGVyYXRpb24gZm9yIHRoZSBmYWxsaWJsZSB2ZXJpZmllci10aW1lIHByb2plY3Rpb24gbGFuZS4KLy8vCi8vLyBGYWN0b3J5IGNvbnN0cnVjdGlvbiBjb25zdW1lcyB0aGUgZXhpc3Rpbmcgc2FtZS1jdXN0b2R5IHByZS1yZXF1ZXN0ZXIgb3duZXIgYnkgdmFsdWUsIGJ1aWxkcwovLy8gZXhhY3RseSBvbmUgQzAzZS1QWiBwcm9kdWN0aW9uLXJlYWNoYWJpbGl0eSBvcGVyYXRpb24gZnJvbSBpdHMgcmV0YWluZWQgcHJvZHVjdGlvbiBpbnB1dHMsIGFuZAovLy8ga2VlcHMgdGhlIGV4YWN0IHJhdyBkdXJhYmxlIGNhcGFiaWxpdHkgYXV0aG9yaXR5IGNhcHR1cmVkIGJ5IHRoZSByZXR1cm5lZCBvbmUtc2hvdCBjbG9zdXJlLgovLy8gVGhlIGF1dGhvcml0eSBpcyByZWxlYXNlZCBvbmx5IGFmdGVyIHRoZSBkZWxlZ2F0ZWQgbG93ZXIgb3BlcmF0aW9uIHJldHVybnMuCi8vLwovLy8gVGhpcyB3cmFwcGVyIHBlcmZvcm1zIG5vIGF1dGhvcml0eSBjbG9uZSBvciBgQXJjYCBhZGFwdGF0aW9uLCBkdXJhYmxlIGF1dGhvcml6YXRpb24sIHZlcmlmaWVyLXRpbWUKLy8vIHByb3ZpZGVyIGludm9jYXRpb24sIGV4cGVjdGVkLXJlcXVlc3QgY29uc3RydWN0aW9uLCByZXF1ZXN0ZXIvcmVuZGV6dm91cyBqb2luLCBjYWxsYmFjayByZW1hcHBpbmcsCi8vLyBjb21wYW5pb24gYXNzZW1ibHksIHNlY29uZCBydW50aW1lL3RlYXJkb3duLCByZWFkaW5lc3MgcHVibGljYXRpb24sIG9yIGV4ZWN1dGFibGUgYWN0aXZhdGlvbi4KI1thbGxvdygKICAgIGRlYWRfY29kZSwKICAgIHJlYXNvbiA9ICJDMDNlLVFCIG1hdGVyaWFsaXplcyB0aGUgUUEtc2VsZWN0ZWQgcHJlLXJlcXVlc3RlciBoaWdoZXItb3duZXIgZmFsbGlibGUgdmVyaWZpZXItdGltZSBvcGVyYXRpb24gYmVmb3JlIHNlcGFyYXRlbHkgZ2F0ZWQgY29tcGFuaW9uIGFuZCBwcm9kdWNlciBjb21wb3NpdGlvbiIKKV0KcHViKGNyYXRlKSBmbiBsaW51eF9hZ2VudF9wcm9kdWN0aW9uX2R1cmFibGVfcmVhY2hhYmlsaXR5X3JlbW90ZV9wcm9jZXNzX29wZXJhdGlvbl93aXRoX2ZhbGxpYmxlX3ZlcmlmaWVyX3RpbWVfY29tcGxldGlvbl9wcm9qZWN0aW9uPAogICAgUCwKICAgIEQsCiAgICBULAogICAgRiwKICAgIEMsCiAgICBSLAogICAgRSwKPigKICAgIGlucHV0czogTGludXhBZ2VudFByb2R1Y3Rpb25EdXJhYmxlUmVhY2hhYmlsaXR5UmVtb3RlUHJvY2Vzc09wZXJhdGlvbklucHV0czwKICAgICAgICBQLCBELCBULCBGLCBDLCBSLCBFLAogICAgPiwKKSAtPiBpbXBsIEZuT25jZShMaW51eEFnZW50UmVtb3RlU3VwZXJ2aXNvclNodXRkb3duUHVibGlzaGVyKSArIFNlbmQgKyAnc3RhdGljCndoZXJlCiAgICBQOiBQb2xpY3lFdmFsdWF0b3IgKyBTZW5kICsgU3luYyArICdzdGF0aWMsCiAgICBEOiBDYXBhYmlsaXR5RGlzcGF0Y2hlciArIFNlbmQgKyAnc3RhdGljLAogICAgVDogRm5NdXQoKSAtPiBSZXN1bHQ8dTY0LCBwcndfc2Vzc2lvbjo6cHJ3YV92ZXJpZmllcl9zb3VyY2U6OlByd2FWZXJpZmllclNvdXJjZUVycm9yPgogICAgICAgICsgU2VuZAogICAgICAgICsgJ3N0YXRpYywKICAgIEY6IEZuTXV0KCZEZXZpY2VJZCkgLT4gUmVtb3RlU2Vzc2lvblJlYWxBZG1pc3Npb25UaW1pbmcgKyBTZW5kICsgJ3N0YXRpYywKICAgIEM6IEZuTXV0KAogICAgICAgICAgICBEZXZpY2VJZCwKICAgICAgICAgICAgY3JhdGU6OnJlbW90ZV9zZXNzaW9uX2NhcGFiaWxpdHlfcnVudGltZTo6UmVtb3RlU2Vzc2lvbkZhbGxpYmxlVmVyaWZpZXJUaW1lRW5kcG9pbnRMaWZlY3ljbGVDb21wbGV0aW9uUHJvamVjdGlvbiwKICAgICAgICApICsgU2VuZAogICAgICAgICsgJ3N0YXRpYywKICAgIFI6IEZuTXV0KFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlamVjdGlvbjxELCBUPikgKyBTZW5kICsgJ3N0YXRpYywKICAgIEU6IEZuTXV0KFJlbW90ZVNlc3Npb25SZXBlYXRlZEFkbWlzc2lvbkZhaWx1cmUpICsgU2VuZCArICdzdGF0aWMsCnsKICAgIGxldCBMaW51eEFnZW50UHJvZHVjdGlvbkR1cmFibGVSZWFjaGFiaWxpdHlSZW1vdGVQcm9jZXNzT3BlcmF0aW9uSW5wdXRzIHsKICAgICAgICBwcm9kdWN0aW9uX2lucHV0cywKICAgICAgICBjYXBhYmlsaXR5X2F1dGhvcml0eSwKICAgIH0gPSBpbnB1dHM7CiAgICBsZXQgb3BlcmF0aW9uID0KICAgICAgICBjcmF0ZTo6bGludXhfYm9vdHN0cmFwOjpsaW51eF9hZ2VudF9wcm9kdWN0aW9uX3JlYWNoYWJpbGl0eV9yZW1vdGVfcHJvY2Vzc19vcGVyYXRpb25fd2l0aF9mYWxsaWJsZV92ZXJpZmllcl90aW1lX2NvbXBsZXRpb25fcHJvamVjdGlvbigKICAgICAgICAgICAgcHJvZHVjdGlvbl9pbnB1dHMsCiAgICAgICAgKTsKCiAgICBtb3ZlIHxwdWJsaXNoZXJ8IHsKICAgICAgICBvcGVyYXRpb24ocHVibGlzaGVyKTsKICAgICAgICBkcm9wKGNhcGFiaWxpdHlfYXV0aG9yaXR5KTsKICAgIH0KfQo=
         run: |
           set -euo pipefail
 
@@ -46,10 +47,12 @@ jobs:
           test "$(grep -cF "$lower" "$SOURCE" || true)" -eq 0
           test "$(grep -cF "$marker" "$SOURCE" || true)" -eq 1
 
-          python3 - <<'PY'
+          printf '%s' "$BLOCK_B64" | base64 -d > /tmp/qb-block.rs
+          python3 - "$SOURCE" /tmp/qb-block.rs <<'PY'
           from pathlib import Path
-
-          source = Path("crates/prw-agent/src/production_durable_capability_higher_owner_custody.rs")
+          import sys
+          source = Path(sys.argv[1])
+          block = Path(sys.argv[2]).read_text(encoding="utf-8")
           text = source.read_text(encoding="utf-8")
           marker = "/// Builds one dormant production operation that retains durable capability-authority custody."
           target = "pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<"
@@ -57,67 +60,7 @@ jobs:
           assert text.count(marker) == 1
           assert text.count(target) == 0
           assert text.count(lower) == 0
-
-          block = r'''/// Builds one dormant pre-requester higher-owner operation for the fallible verifier-time projection lane.
-///
-/// Factory construction consumes the existing same-custody pre-requester owner by value, builds
-/// exactly one C03e-PZ production-reachability operation from its retained production inputs, and
-/// keeps the exact raw durable capability authority captured by the returned one-shot closure.
-/// The authority is released only after the delegated lower operation returns.
-///
-/// This wrapper performs no authority clone or `Arc` adaptation, durable authorization, verifier-time
-/// provider invocation, expected-request construction, requester/rendezvous join, callback remapping,
-/// companion assembly, second runtime/teardown, readiness publication, or executable activation.
-#[allow(
-    dead_code,
-    reason = "C03e-QB materializes the QA-selected pre-requester higher-owner fallible verifier-time operation before separately gated companion and producer composition"
-)]
-pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<
-    P,
-    D,
-    T,
-    F,
-    C,
-    R,
-    E,
->(
-    inputs: LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
-        P, D, T, F, C, R, E,
-    >,
-) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
-where
-    P: PolicyEvaluator + Send + Sync + 'static,
-    D: CapabilityDispatcher + Send + 'static,
-    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
-        + Send
-        + 'static,
-    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
-    C: FnMut(
-            DeviceId,
-            crate::remote_session_capability_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
-        ) + Send
-        + 'static,
-    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
-    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
-{
-    let LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs {
-        production_inputs,
-        capability_authority,
-    } = inputs;
-    let operation =
-        crate::linux_bootstrap::linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection(
-            production_inputs,
-        );
-
-    move |publisher| {
-        operation(publisher);
-        drop(capability_authority);
-    }
-}
-'''
-
-          text = text.replace(marker, block + "\n" + marker, 1)
-          source.write_text(text, encoding="utf-8")
+          source.write_text(text.replace(marker, block + "\n" + marker, 1), encoding="utf-8")
           PY
 
           rustup component add rustfmt
