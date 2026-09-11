@@ -1202,7 +1202,7 @@ mod repeated_real_admission_supervisor {
         }
 
         if *request_source_open && active_len < max_active_workers {
-            match Pin::new(&mut requests).poll_recv(context) {
+            match Pin::new(requests).poll_recv(context) {
                 Poll::Ready(Some(request)) => {
                     return Poll::Ready(RepeatedSupervisorEvent::Request(request));
                 }
