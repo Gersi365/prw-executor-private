@@ -10,14 +10,14 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'C03e-QH: add transient guarded one-path materializer'
+    if: "github.event.head_commit.message == 'C03e-QH: correct transient workflow condition quoting'"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact QH branch
         uses: actions/checkout@v4
         with:
           ref: phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
-          fetch-depth: 2
+          fetch-depth: 5
 
       - name: Guard exact predecessor and source
         shell: bash
@@ -26,7 +26,8 @@ jobs:
           QG='4612e6e247627e7b81f5a182e532447976f85c9f'
           SRC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
           WF='.github/workflows/phase-152-c03e-qh-transient-guarded-one-path-materializer.yml'
-          test "$(git rev-parse HEAD^)" = "$QG"
+          test "$(git merge-base "$QG" HEAD)" = "$QG"
+          test "$(git rev-list --count "$QG"..HEAD)" -eq 2
           test "$(git diff --name-only "$QG"..HEAD)" = "$WF"
           test "$(git hash-object "$SRC")" = '3b5537d7c176cc8ca1d34f65d47a71c7297effac'
 
@@ -234,5 +235,5 @@ where
           git commit -m 'C03e-QH: remove transient one-path materializer'
           git diff --check "$QG"..HEAD
           test "$(git diff --name-only "$QG"..HEAD)" = "$SRC"
-          test "$(git rev-list --count "$QG"..HEAD)" -eq 3
+          test "$(git rev-list --count "$QG"..HEAD)" -eq 4
           git push origin "HEAD:$BRANCH"
