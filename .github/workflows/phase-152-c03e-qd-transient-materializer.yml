@@ -1,0 +1,101 @@
+name: Phase 152 C03e-QD Transient Guarded One-Path Materializer
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-qd-production-durable-reachability-fallible-verifier-time-higher-owner-companion-assembly-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize selected higher-owner companion seam
+        shell: bash
+        env:
+          BASE: c3f096aeb65eb144ad254b2860080c8b156012cf
+          BRANCH: phase-152-c03e-qd-production-durable-reachability-fallible-verifier-time-higher-owner-companion-assembly-source-materialization
+          SOURCE: crates/prw-agent/src/production_durable_capability_higher_owner_custody.rs
+          SOURCE_BLOB: ca9dfef2794859b9cb772cac7e59c9a33329168b
+          HELPER: .github/workflows/phase-152-c03e-qd-transient-materializer.yml
+          BLOCK_B64: Ly8vIFJ1bnMgdGhlIGV4aXN0aW5nIExpbnV4IHJlbW90ZSBjb21wYW5pb24gd2l0aCBvbmUgZG9ybWFudCBwcmUtcmVxdWVzdGVyIGhpZ2hlci1vd25lcgovLy8gZmFsbGlibGUtdmVyaWZpZXItdGltZSBvcGVyYXRpb24uCi8vLwovLy8gVGhpcyBjcmF0ZS1wcml2YXRlIGFzc2VtYmx5IGNvbnN1bWVzIGV4YWN0bHkgb25lIGFscmVhZHktdHlwZWQgcHJlLXJlcXVlc3RlciBzYW1lLWN1c3RvZHkgaW5wdXQKLy8vIGFnZ3JlZ2F0ZSBieSB2YWx1ZS4gSXQgY29uc3RydWN0cyB0aGUgZXhpc3RpbmcgQzAzZS1RQiBoaWdoZXItb3duZXIgZmFsbGlibGUtdmVyaWZpZXItdGltZQovLy8gb25lLXNob3Qgb3BlcmF0aW9uIGV4YWN0bHkgb25jZSBhbmQgcGFzc2VzIHRoYXQgZXhhY3Qgb3BlcmF0aW9uIGRpcmVjdGx5IHRvIHRoZSBleGlzdGluZyBnZW5lcmljCi8vLyBMaW51eCByZW1vdGUtY29tcGFuaW9uIHJ1bm5lciBleGFjdGx5IG9uY2UuIEl0IGFkZHMgbm8gdmVyaWZpZXItdGltZSBwcm92aWRlciBzYW1wbGluZywKLy8vIGV4cGVjdGVkLXJlcXVlc3QgY29uc3RydWN0aW9uLCByZXF1ZXN0ZXIvcmVuZGV6dm91cyBqb2luLCBkdXJhYmxlIGF1dGhvcml6YXRpb24sIGNhbGxiYWNrCi8vLyByZW1hcHBpbmcsIGNvbmZpZ3VyZWQtc291cmNlIHBvcHVsYXRpb24sIGV4ZWN1dGFibGUgaW52b2NhdGlvbiBzaXRlIG9yIHJ1bnRpbWUgYWN0aXZhdGlvbi4KI1thbGxvdygKICAgIGRlYWRfY29kZSwKICAgIHJlYXNvbiA9ICJDMDNlLVFEIG1hdGVyaWFsaXplcyB0aGUgUUMtc2VsZWN0ZWQgZG9ybWFudCBoaWdoZXItb3duZXIgZmFsbGlibGUtdmVyaWZpZXItdGltZSBjb21wYW5pb24gYXNzZW1ibHkgYmVmb3JlIHNlcGFyYXRlbHkgZ2F0ZWQgY29uZmlndXJlZC1zb3VyY2UgYW5kIGV4ZWN1dGFibGUgY2FsbGVyIGNvbXBvc2l0aW9uIgopXQpwdWIoY3JhdGUpIGZuIHJ1bl93aXRoX3Byb2R1Y3Rpb25fZHVyYWJsZV9yZWFjaGFiaWxpdHlfcmVtb3RlX3Byb2Nlc3NfY29tcGFuaW9uX3dpdGhfZmFsbGlibGVfdmVyaWZpZXJfdGltZV9jb21wbGV0aW9uX3Byb2plY3Rpb248CiAgICBQLAogICAgRCwKICAgIFQsCiAgICBGLAogICAgQywKICAgIFIsCiAgICBFLAo+KAogICAgaW5wdXRzOiBMaW51eEFnZW50UHJvZHVjdGlvbkR1cmFibGVSZWFjaGFiaWxpdHlSZW1vdGVQcm9jZXNzT3BlcmF0aW9uSW5wdXRzPAogICAgICAgIFAsIEQsIFQsIEYsIEMsIFIsIEUsCiAgICA+LAopIC0+IFJlc3VsdDxMaW51eEFnZW50Qm9vdHN0cmFwV2l0aFJlbW90ZVJlcG9ydCwgTGludXhBZ2VudEJvb3RzdHJhcFN0YXJ0RmFpbHVyZT4Kd2hlcmUKICAgIFA6IFBvbGljeUV2YWx1YXRvciArIFNlbmQgKyBTeW5jICsgJ3N0YXRpYywKICAgIEQ6IENhcGFiaWxpdHlEaXNwYXRjaGVyICsgU2VuZCArICdzdGF0aWMsCiAgICBUOiBGbk11dCgpIC0+IFJlc3VsdDx1NjQsIHByd19zZXNzaW9uOjpwcndhX3ZlcmlmaWVyX3NvdXJjZTo6UHJ3YVZlcmlmaWVyU291cmNlRXJyb3I+CiAgICAgICAgKyBTZW5kCiAgICAgICAgKyAnc3RhdGljLAogICAgRjogRm5NdXQoJkRldmljZUlkKSAtPiBSZW1vdGVTZXNzaW9uUmVhbEFkbWlzc2lvblRpbWluZyArIFNlbmQgKyAnc3RhdGljLAogICAgQzogRm5NdXQoCiAgICAgICAgICAgIERldmljZUlkLAogICAgICAgICAgICBjcmF0ZTo6cmVtb3RlX3Nlc3Npb25fY2FwYWJpbGl0eV9ydW50aW1lOjpSZW1vdGVTZXNzaW9uRmFsbGlibGVWZXJpZmllclRpbWVFbmRwb2ludExpZmVjeWNsZUNvbXBsZXRpb25Qcm9qZWN0aW9uLAogICAgICAgICkgKyBTZW5kCiAgICAgICAgKyAnc3RhdGljLAogICAgUjogRm5NdXQoUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uUmVqZWN0aW9uPEQsIFQ+KSArIFNlbmQgKyAnc3RhdGljLAogICAgRTogRm5NdXQoUmVtb3RlU2Vzc2lvblJlcGVhdGVkQWRtaXNzaW9uRmFpbHVyZSkgKyBTZW5kICsgJ3N0YXRpYywKewogICAgbGV0IG9wZXJhdGlvbiA9CiAgICAgICAgbGludXhfYWdlbnRfcHJvZHVjdGlvbl9kdXJhYmxlX3JlYWNoYWJpbGl0eV9yZW1vdGVfcHJvY2Vzc19vcGVyYXRpb25fd2l0aF9mYWxsaWJsZV92ZXJpZmllcl90aW1lX2NvbXBsZXRpb25fcHJvamVjdGlvbigKICAgICAgICAgICAgaW5wdXRzLAogICAgICAgICk7CiAgICBydW5fd2l0aF9yZW1vdGVfcHJvY2Vzc19jb21wYW5pb24ob3BlcmF0aW9uKQp9Cg==
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          test "$(git merge-base "$BASE" HEAD)" = "$BASE"
+          test "$(git rev-parse "HEAD:$SOURCE")" = "$SOURCE_BLOB"
+
+          mapfile -t pre_paths < <(git diff --name-only "$BASE..HEAD")
+          test "${#pre_paths[@]}" -eq 1
+          test "${pre_paths[0]}" = "$HELPER"
+
+          target='pub(crate) fn run_with_production_durable_reachability_remote_process_companion_with_fallible_verifier_time_completion_projection<'
+          existing='pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<'
+          delegate='linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection('
+          marker='/// Builds one dormant production operation that retains durable capability-authority custody.'
+
+          test "$(grep -cF "$target" "$SOURCE" || true)" -eq 0
+          test "$(grep -cF "$existing" "$SOURCE" || true)" -eq 1
+          test "$(grep -cF "$delegate" "$SOURCE" || true)" -eq 0
+          test "$(grep -cF "$marker" "$SOURCE" || true)" -eq 1
+
+          printf '%s' "$BLOCK_B64" | base64 -d > /tmp/qd-block.rs
+          python3 - "$SOURCE" /tmp/qd-block.rs <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1])
+          block = Path(sys.argv[2]).read_text(encoding="utf-8")
+          text = source.read_text(encoding="utf-8")
+          marker = "/// Builds one dormant production operation that retains durable capability-authority custody."
+          target = "pub(crate) fn run_with_production_durable_reachability_remote_process_companion_with_fallible_verifier_time_completion_projection<"
+          existing = "pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<"
+          delegate = "linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection("
+          assert text.count(marker) == 1
+          assert text.count(target) == 0
+          assert text.count(existing) == 1
+          assert text.count(delegate) == 0
+          source.write_text(text.replace(marker, block + "\n" + marker, 1), encoding="utf-8")
+          PY
+
+          rustup component add rustfmt
+          cargo fmt --all
+          cargo fmt --all -- --check
+          git diff --check
+
+          test "$(grep -cF "$target" "$SOURCE" || true)" -eq 1
+          test "$(grep -cF "$existing" "$SOURCE" || true)" -eq 1
+          test "$(grep -cF "$delegate" "$SOURCE" || true)" -eq 1
+
+          git diff --unified=0 -- "$SOURCE" | grep '^+' | grep -v '^+++' > /tmp/qd-added-lines.txt || true
+          if grep -E 'Arc::(new|clone)|authorize_capability_transaction|SharedRequesterRendezvousAuthority|sender\.send|block_on|current_prwa_verifier_unix_seconds' /tmp/qd-added-lines.txt; then
+            echo "forbidden selected-boundary widening detected" >&2
+            exit 1
+          fi
+
+          mapfile -t source_paths < <(git diff --name-only)
+          test "${#source_paths[@]}" -eq 1
+          test "${source_paths[0]}" = "$SOURCE"
+
+          git add "$SOURCE"
+          git commit -m "C03e-QD: materialize durable reachability fallible verifier-time higher-owner companion"
+
+          git rm "$HELPER"
+          git commit -m "C03e-QD: remove transient one-path materializer"
+
+          test ! -e "$HELPER"
+          mapfile -t final_paths < <(git diff --name-only "$BASE..HEAD")
+          test "${#final_paths[@]}" -eq 1
+          test "${final_paths[0]}" = "$SOURCE"
+
+          git push origin HEAD:"$BRANCH"
