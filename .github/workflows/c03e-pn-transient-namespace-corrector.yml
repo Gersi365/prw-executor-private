@@ -28,18 +28,42 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
           text = path.read_text(encoding='utf-8')
+          start_marker = '    type FallibleVerifierTimeActiveRemoteWorkers = HashMap<'
+          end_marker = (
+              '    impl RemoteSessionExecutorRuntime {\n'
+              '        /// Drives repeated expected-device real admission and the persistent worker collection inside\n'
+          )
+          if text.count(start_marker) != 1:
+              raise SystemExit(f'expected exactly one PN start marker, found {text.count(start_marker)}')
+          if text.count(end_marker) != 1:
+              raise SystemExit(f'expected exactly one historical end marker, found {text.count(end_marker)}')
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          prefix = text[:start]
+          region = text[start:end]
+          suffix = text[end:]
+
           old = 'super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop'
           new = 'crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop'
-          if text.count(old) != 2:
-              raise SystemExit(f'expected exactly two PN namespace references, found {text.count(old)}')
-          corrected = text.replace(old, new)
-          if corrected.count(new) < 2:
-              raise SystemExit('PN namespace correction did not materialize twice')
+          if region.count(old) != 2:
+              raise SystemExit(f'expected exactly two PN-region namespace references, found {region.count(old)}')
+          outside_before = prefix.count(old) + suffix.count(old)
+          corrected_region = region.replace(old, new)
+          if corrected_region.count(old) != 0 or corrected_region.count(new) != 2:
+              raise SystemExit('PN-region namespace correction was not exact')
+          corrected = prefix + corrected_region + suffix
+          outside_after = corrected[:start].count(old) + corrected[start + len(corrected_region):].count(old)
+          if outside_after != outside_before:
+              raise SystemExit('namespace correction changed old-path count outside PN region')
           path.write_text(corrected, encoding='utf-8')
           PY
 
+          CHANGED="$(git diff --name-only)"
+          test "$CHANGED" = "$TARGET"
+          cargo fmt --all
           CHANGED="$(git diff --name-only)"
           test "$CHANGED" = "$TARGET"
           cargo fmt --all -- --check
