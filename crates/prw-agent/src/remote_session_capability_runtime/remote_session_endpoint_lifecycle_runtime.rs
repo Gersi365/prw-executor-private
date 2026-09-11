@@ -26,6 +26,10 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::{Notify, mpsc};
 
+use super::authenticated_remote_session_runtime::{
+    AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError,
+    AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+};
 use super::remote_session_executor_runtime::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion;
 use super::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
@@ -175,6 +179,24 @@ pub(crate) enum RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection
     /// The existing requester-aware serial lifecycle stopped on one requester response failure.
     RequesterResponseFailure,
     /// Tokio reported abnormal completion for the retained requester-aware worker task.
+    AbnormalTaskCompletion,
+}
+
+/// Bounded crate-visible terminal family for one fallible verifier-time endpoint worker completion.
+#[allow(
+    dead_code,
+    clippy::redundant_pub_crate,
+    reason = "C03e-PV preserves the exact C03e-PU-selected pub(crate) completion projection in the private child before separately gated higher-owner caller migration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection {
+    /// Caller-owned cancellation won at the existing fallible verifier-time worker boundary.
+    Cancelled,
+    /// The existing PRWA verifier-time source failed.
+    VerifierTimeFailure,
+    /// The existing capability transaction failed after verifier-time acquisition.
+    TransactionFailure,
+    /// Tokio reported abnormal completion for the retained worker task.
     AbnormalTaskCompletion,
 }
 
@@ -855,6 +877,88 @@ impl RemoteSessionEndpointLifecycleRuntime {
             supervisor_shutdown.into_shutdown(),
             admission_timing,
             on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+    }
+
+    /// Consumes this endpoint owner and exposes only the C03e-PU-selected bounded fallible
+    /// verifier-time completion family.
+    ///
+    /// The existing C03e-PT lifecycle remains sole owner of endpoint/executor behavior. This
+    /// adapter invokes it exactly once, forwards every non-completion input and callback
+    /// unchanged, and projects only the raw persistent-worker completion while preserving the
+    /// authenticated owner-derived `DeviceId` unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-PV materializes the C03e-PU-selected dormant completion projection before separately gated provider installation and higher-owner caller migration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-PV preserves the exact C03e-PT lifecycle inputs while projecting only completion"
+    )]
+    pub(crate) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        mut on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(DeviceId, RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection),
+        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+    {
+        self.drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle(
+            max_active_workers,
+            authority,
+            session_authentication,
+            expected_requests,
+            admission_timing,
+            |completion| {
+                let (device_id, result) = completion.into_parts();
+                let projection = match result {
+                    Ok(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Cancelled) => {
+                        RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection::Cancelled
+                    }
+                    Ok(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(
+                        AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::VerifierTime(_),
+                    )) => {
+                        RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection::VerifierTimeFailure
+                    }
+                    Ok(AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop::Failed(
+                        AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError::Transaction(_),
+                    )) => {
+                        RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection::TransactionFailure
+                    }
+                    Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion) => {
+                        RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection::AbnormalTaskCompletion
+                    }
+                };
+                on_completion(device_id, projection);
+            },
             on_rejection,
             on_admission_failure,
         )
