@@ -1,0 +1,57 @@
+name: C03e-PN transient namespace corrector
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-pn-production-requester-rendezvous-expected-device-admission-fallible-verifier-time-repeated-real-admission-persistent-collection-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PN branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard and correct only the two PN namespace references
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET='crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
+          EXPECTED_BLOB='6ac0ac08794c12674ee220468702afa8637d32e2'
+          ACTUAL_BLOB="$(git hash-object "$TARGET")"
+          test "$ACTUAL_BLOB" = "$EXPECTED_BLOB"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs')
+          text = path.read_text(encoding='utf-8')
+          old = 'super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop'
+          new = 'crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected exactly two PN namespace references, found {text.count(old)}')
+          corrected = text.replace(old, new)
+          if corrected.count(new) < 2:
+              raise SystemExit('PN namespace correction did not materialize twice')
+          path.write_text(corrected, encoding='utf-8')
+          PY
+
+          CHANGED="$(git diff --name-only)"
+          test "$CHANGED" = "$TARGET"
+          cargo fmt --all -- --check
+          git diff --check
+
+      - name: Commit correction and remove transient workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Gersi365'
+          git config user.email 'Gersi365@outlook.com'
+          rm .github/workflows/c03e-pn-transient-namespace-corrector.yml
+          git add crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs .github/workflows/c03e-pn-transient-namespace-corrector.yml
+          git commit -m 'C03e-PN: correct fallible worker terminal namespace'
+          git push origin HEAD:phase-152-c03e-pn-production-requester-rendezvous-expected-device-admission-fallible-verifier-time-repeated-real-admission-persistent-collection-source-materialization
