@@ -43,6 +43,60 @@ const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_CODE: u32 = 6;
 const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
     b"remote requester-aware session terminated";
 
+/// Bounded terminal failure for the dormant fallible-verifier-time production-durable repeated
+/// post-authenticated ingress loop.
+#[allow(
+    dead_code,
+    reason = "C03e-QR materializes the QQ-selected typed fallible verifier-time ingress error before separately gated cancellation and higher-worker propagation"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(crate) enum AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
+{
+    /// Acquiring verifier time from the caller-supplied fallible source failed before stream accept.
+    VerifierTime(prw_session::prwa_verifier_source::PrwaVerifierSourceError),
+    /// The existing C03e-KM production-durable one-transaction ingress seam failed.
+    Ingress(AuthenticatedRemoteSessionPostAuthIngressTransactionError),
+}
+
+impl std::fmt::Display
+    for AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::VerifierTime(_) => "production-durable post-auth verifier time acquisition failed",
+            Self::Ingress(_) => "production-durable post-auth ingress transaction failed",
+        })
+    }
+}
+
+impl std::error::Error
+    for AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::VerifierTime(error) => Some(error),
+            Self::Ingress(error) => Some(error),
+        }
+    }
+}
+
+impl From<prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+    for AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
+{
+    fn from(error: prw_session::prwa_verifier_source::PrwaVerifierSourceError) -> Self {
+        Self::VerifierTime(error)
+    }
+}
+
+impl From<AuthenticatedRemoteSessionPostAuthIngressTransactionError>
+    for AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
+{
+    fn from(error: AuthenticatedRemoteSessionPostAuthIngressTransactionError) -> Self {
+        Self::Ingress(error)
+    }
+}
+
 impl AuthenticatedRemoteSessionRuntimeOwner {
     /// Processes one already-read typed post-authenticated ingress through production durable
     /// capability authority while preserving existing requester and candidate family semantics.
@@ -191,6 +245,61 @@ impl AuthenticatedRemoteSessionRuntimeOwner {
     > {
         loop {
             let now_unix_seconds = verifier_time_unix_seconds();
+            match self
+                .process_one_post_auth_control_stream_ingress_with_production_durable_capability(
+                    authority,
+                    now_unix_seconds,
+                    dispatcher,
+                )
+                .await?
+            {
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::CapabilityProcessed => {}
+                AuthenticatedRemoteSessionPostAuthIngressOutcome::RequesterRendezvous(handoff) => {
+                    return Ok(*handoff);
+                }
+            }
+        }
+    }
+
+    /// Repeats the production-durable one-transaction post-authenticated ingress seam with a fallible
+    /// verifier-time source while preserving the exact C03e-KM transaction boundary.
+    ///
+    /// The fallible source is sampled exactly once immediately before each prospective C03e-KM
+    /// invocation. A verifier-time failure terminates before KM can accept a stream. A successful
+    /// sample is forwarded unchanged as KM's existing concrete `u64`; capability success alone starts
+    /// another serial iteration and a requester/rendezvous outcome returns exact handoff custody.
+    ///
+    /// This sibling does not modify or reimplement KM, add cancellation, run requester DR or
+    /// scheduling derivation, create a task/channel, retry a failed sample, cache/default verifier
+    /// time, or activate a runtime caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError::VerifierTime`]
+    /// for the exact first verifier-time source failure before stream acceptance. Returns
+    /// [`AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError::Ingress`]
+    /// for the exact first existing C03e-KM transaction error without flattening its nested provenance.
+    #[allow(
+        dead_code,
+        reason = "C03e-QR materializes the QQ-selected dormant fallible verifier-time production-durable repeated ingress loop before separately gated cancellation or higher-worker propagation"
+    )]
+    pub(crate) async fn run_fallible_verifier_time_repeated_post_auth_control_stream_ingress_with_production_durable_capability<
+        D: CapabilityDispatcher + Send,
+        T: FnMut() -> Result<
+                u64,
+                prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+            > + Send,
+    >(
+        &mut self,
+        authority: &ProductionDurableCapabilityAuthority,
+        mut verifier_time_unix_seconds: T,
+        dispatcher: &mut D,
+    ) -> Result<
+        RequesterRendezvousResponseStreamCustodyHandoff,
+        AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
+    > {
+        loop {
+            let now_unix_seconds = verifier_time_unix_seconds()?;
             match self
                 .process_one_post_auth_control_stream_ingress_with_production_durable_capability(
                     authority,
