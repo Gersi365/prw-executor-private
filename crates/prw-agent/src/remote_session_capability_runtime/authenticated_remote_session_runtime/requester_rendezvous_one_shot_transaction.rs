@@ -51,8 +51,7 @@ const REMOTE_REQUESTER_AWARE_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError
-{
+pub enum AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError {
     /// Acquiring verifier time from the caller-supplied fallible source failed before stream accept.
     VerifierTime(prw_session::prwa_verifier_source::PrwaVerifierSourceError),
     /// The existing C03e-KM production-durable one-transaction ingress seam failed.
