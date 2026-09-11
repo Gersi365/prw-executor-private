@@ -577,48 +577,43 @@ fn construct_remote_session_expected_device_admission_request_with_fallible_veri
 where
     D: CapabilityDispatcher + Send + 'static,
 {
-    let session_id = match new_remote_session_expected_device_admission_target_session_id() {
-        Ok(session_id) => session_id,
-        Err(_) => {
-            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+    let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
                 requester_device_id,
-                scheduling_grant: _,
-                acknowledgement_result,
-            } = continuation;
-            return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                    requester_device_id,
-                    outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                        acknowledgement_result,
-                        disposition:
-                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                    },
+                outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                    acknowledgement_result,
+                    disposition:
+                        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
                 },
-            );
-        }
+            },
+        );
     };
 
-    let authentication_request_id =
-        match new_remote_session_expected_device_authentication_request_id() {
-            Ok(authentication_request_id) => authentication_request_id,
-            Err(_) => {
-                let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                    requester_device_id,
-                    scheduling_grant: _,
-                    acknowledgement_result,
-                } = continuation;
-                return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                    RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                        requester_device_id,
-                        outcome:
-                            RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                                acknowledgement_result,
-                                disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                            },
+    let Ok(authentication_request_id) =
+        new_remote_session_expected_device_authentication_request_id()
+    else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
                     },
-                );
-            }
-        };
+            },
+        );
+    };
 
     let verifier_time_unix_seconds: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
         prw_session::prwa_verifier_source::current_prwa_verifier_unix_seconds;
