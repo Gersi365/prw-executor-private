@@ -1692,7 +1692,7 @@ mod repeated_real_admission_supervisor {
             clippy::too_many_arguments,
             reason = "C03e-PP composes the exact C03e-PN fallible repeated-collection inputs with the existing endpoint teardown helper"
         )]
-        pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<
+        pub(in crate::remote_session_capability_runtime) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<
             P,
             D,
             T,

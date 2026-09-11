@@ -26,6 +26,7 @@ use prw_remote_bridge::CapabilityDispatcher;
 use prw_session::SessionAuthenticationService;
 use tokio::sync::{Notify, mpsc};
 
+use super::remote_session_executor_runtime::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion;
 use super::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
@@ -778,6 +779,74 @@ impl RemoteSessionEndpointLifecycleRuntime {
         } = self;
 
         executor.drive_repeated_real_remote_admission_endpoint_lifecycle(
+            max_active_workers,
+            &transport,
+            authority,
+            session_authentication,
+            expected_requests,
+            supervisor_shutdown.into_shutdown(),
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+    }
+
+    /// Consumes this startup owner and delegates exactly once to the C03e-PP fallible
+    /// verifier-time repeated-admission endpoint lifecycle.
+    ///
+    /// The retained endpoint transport and the existing supervisor-shutdown signal are forwarded
+    /// unchanged into the executor boundary. Endpoint close and idle-drain ordering remain owned
+    /// exclusively by C03e-PP; this wrapper adds no second teardown path or error envelope.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-PR materializes the PQ-selected dormant fallible verifier-time endpoint-owner wrapper before separately gated provider and higher-caller wiring"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-PR forwards the exact C03e-PP fallible endpoint-lifecycle inputs without introducing a new aggregate"
+    )]
+    pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion),
+        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+    {
+        let Self {
+            mut executor,
+            transport,
+            supervisor_shutdown,
+        } = self;
+
+        executor.drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle(
             max_active_workers,
             &transport,
             authority,
