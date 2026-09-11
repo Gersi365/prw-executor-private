@@ -1343,7 +1343,7 @@ mod repeated_real_admission_supervisor {
     type FallibleVerifierTimeActiveRemoteWorkers = HashMap<
     DeviceId,
     RemoteSessionPersistentWorkerEntry<
-        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
     >,
 >;
 
@@ -1410,7 +1410,7 @@ mod repeated_real_admission_supervisor {
         admission: RemoteSessionWorkerAdmission<D, T>,
         authority: &SharedCurrentCapabilityAuthority<P>,
     ) -> RemoteSessionPersistentWorkerEntry<
-        super::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
+        crate::remote_session_capability_runtime::authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
     >
     where
         P: PolicyEvaluator + Send + Sync + 'static,
