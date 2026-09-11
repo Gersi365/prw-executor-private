@@ -27,6 +27,7 @@ jobs:
           BRANCH='phase-152-c03e-pt-production-requester-rendezvous-expected-device-admission-fallible-verifier-time-endpoint-lifecycle-runtime-composition-source-materialization'
           PS_HEAD='6b5fcc46a9e2294d715daede3e3e5824ba879a3a'
           FAILED_CANDIDATE='055922095bf95d21b400bdc236c1d94ec0273301'
+          HELPER='.github/workflows/phase-152-c03e-pt-transient-materializer.yml'
           EXEC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_executor_runtime.rs'
           ENDPOINT='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
           EXPECTED_EXEC_BLOB='7ea5dbe8d6e7844d4c38ddd78c42e84311ac6d54'
@@ -34,10 +35,14 @@ jobs:
           FAILED_CANDIDATE_ENDPOINT_BLOB='6ad9dde485fb772d63f794c18960ed21e782de9e'
           TARGET='drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle'
 
-          test "$(git rev-parse HEAD^)" = "$PS_HEAD"
+          test "$(git merge-base HEAD "$PS_HEAD")" = "$PS_HEAD"
+          mapfile -t pre_source_paths < <(git diff --name-only "$PS_HEAD"...HEAD | sort)
+          test "${#pre_source_paths[@]}" -eq 1
+          test "${pre_source_paths[0]}" = "$HELPER"
+
           test "$(git hash-object "$EXEC")" = "$EXPECTED_EXEC_BLOB"
           test "$(git hash-object "$ENDPOINT")" = "$EXPECTED_ENDPOINT_BLOB"
-          test "$(git grep -c "$TARGET" -- "$ENDPOINT" || true)" = '0'
+          test "$(grep -cF "$TARGET" "$ENDPOINT" || true)" = '0'
           test "$(grep -cF 'pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<' "$EXEC")" = '1'
           test "$(git show "$FAILED_CANDIDATE:$ENDPOINT" | git hash-object --stdin)" = "$FAILED_CANDIDATE_ENDPOINT_BLOB"
 
@@ -85,7 +90,7 @@ jobs:
           test "${changed[0]}" = "$ENDPOINT"
           test "${changed[1]}" = "$EXEC"
 
-          test "$(git grep -c "$TARGET" -- "$ENDPOINT")" = '2'
+          test "$(grep -cF "$TARGET" "$ENDPOINT")" = '2'
           test "$(grep -cF 'pub(in crate::remote_session_capability_runtime) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<' "$EXEC")" = '1'
           test "$(grep -cF 'pub(super) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle<' "$EXEC" || true)" = '0'
           test "$(grep -cF 'use super::remote_session_executor_runtime::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion;' "$ENDPOINT")" = '1'
