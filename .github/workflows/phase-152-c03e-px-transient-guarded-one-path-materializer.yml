@@ -77,7 +77,7 @@ jobs:
           projection_count="$(grep -cF 'RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection' "$SOURCE")"
           echo "PX method count: $method_count"
           echo "PX projection symbol count: $projection_count"
-          test "$method_count" -eq 1
+          test "$method_count" -eq 2
           test "$projection_count" -eq 2
 
           rm "$HELPER"
