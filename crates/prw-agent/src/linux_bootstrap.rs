@@ -49,9 +49,10 @@ use crate::remote_session_capability_runtime::{
     RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
     RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
-    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
-    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-    RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionExpectedDeviceAdmissionRequest,
+    RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+    RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+    RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
     RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
     RemoteSessionSupervisorShutdownController, SharedCurrentCapabilityAuthority,
     SharedRequesterRendezvousAuthority,
@@ -1281,6 +1282,91 @@ where
                     on_rejection,
                     on_admission_failure,
                 );
+            },
+        );
+    }
+}
+
+/// Builds one dormant production-reachability operation with fallible verifier-time completion projection.
+///
+/// Factory construction moves only the already-typed production inputs into one one-shot closure.
+/// Provider sampling, endpoint bind, controller publication and lifecycle drive remain deferred until a
+/// separately gated caller invokes that closure. Runtime invocation preserves the existing production
+/// reachability composition order and delegates exactly once to the C03e-PX projection-capable wrapper.
+///
+/// No verifier-time provider installation or sampling, completion remapping, expected-request
+/// construction, requester/durable fusion, retry, second runtime, second teardown path, readiness
+/// publication or executable activation is added here.
+#[allow(
+    dead_code,
+    reason = "C03e-PZ materializes the PY-selected dormant Linux fallible verifier-time projection operation before separately gated higher-owner composition"
+)]
+pub(crate) fn linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(DeviceId, RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection)
+        + Send
+        + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    move |publisher| {
+        let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
+            peer,
+            remote_process_inputs,
+        } = inputs;
+        let LinuxAgentRemoteProcessOperationInputs {
+            bind_addr,
+            max_active_workers,
+            capability_authority,
+            mut session_authentication,
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        } = remote_process_inputs;
+
+        let _ = run_remote_process_operation_composition(
+            RemoteSessionExecutorRuntime::new,
+            move |executor| {
+                executor.bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                    &peer,
+                )
+            },
+            move |executor, runtime_custody| {
+                runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
+                    executor, bind_addr,
+                )
+            },
+            move |controller| publisher.publish(controller),
+            move |lifecycle, _publication| {
+                let _ = lifecycle
+                    .drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection(
+                        max_active_workers,
+                        &capability_authority,
+                        &mut session_authentication,
+                        expected_requests,
+                        admission_timing,
+                        on_completion,
+                        on_rejection,
+                        on_admission_failure,
+                    );
             },
         );
     }
