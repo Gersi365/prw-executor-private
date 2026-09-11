@@ -27,9 +27,11 @@ use crate::{
         RemoteSessionEndpointBoundAddressError, RemoteSessionEndpointLifecycleRuntime,
         RemoteSessionEndpointLifecycleStartupError, RemoteSessionExpectedDeviceAdmissionRejection,
         RemoteSessionExpectedDeviceAdmissionRejectionReason,
-        RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
-        RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-        RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+        RemoteSessionExpectedDeviceAdmissionRequest,
+        RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+        RemoteSessionPersistentCollectionConfigError, RemoteSessionRealAdmissionError,
+        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+        RemoteSessionRepeatedAdmissionFailure,
         RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
         SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
     },
@@ -220,6 +222,77 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
                     capability_authority,
                     policy_source,
                     requester_rendezvous_authority,
+                    session_authentication,
+                    expected_requests,
+                    admission_timing,
+                    on_completion,
+                    on_rejection,
+                    on_admission_failure,
+                )
+        })
+    }
+
+    /// Drives the fallible verifier-time endpoint completion projection while retaining reachability custody.
+    ///
+    /// This dormant crate-internal sibling consumes the production wrapper once, retains the
+    /// distinct durable production reachability owner for the complete lower C03e-PV drive, and
+    /// forwards every existing non-custody lifecycle input unchanged. Completion projection remains
+    /// owned entirely by the C03e-PV raw endpoint adapter.
+    ///
+    /// No provider sampling, callback remapping, higher-owner caller migration, retry, endpoint
+    /// rebind, readiness publication, requester/durable fusion, or executable activation occurs here.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-PX materializes the PW-selected dormant production-wrapper propagation before separately gated higher-owner composition"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-PX forwards the exact C03e-PV fallible verifier-time projection inputs through retained production reachability custody"
+    )]
+    pub(crate) fn drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection<
+        P,
+        D,
+        T,
+        F,
+        C,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        admission_timing: F,
+        on_completion: C,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        C: FnMut(DeviceId, RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection),
+        R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
+        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
+    {
+        let Self {
+            endpoint,
+            owner_custody,
+        } = self;
+
+        drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
+            endpoint
+                .drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection(
+                    max_active_workers,
+                    authority,
                     session_authentication,
                     expected_requests,
                     admission_timing,
