@@ -35,11 +35,13 @@ jobs:
           test "$(git rev-parse "HEAD:$SOURCE")" = "$EXPECTED_SOURCE_BLOB"
 
           mapfile -t pre_paths < <(git diff --name-only "$PW_HEAD"...HEAD)
+          printf 'PX pre-source paths:\n%s\n' "${pre_paths[@]}"
           test "${#pre_paths[@]}" -eq 1
           test "${pre_paths[0]}" = "$HELPER"
 
           test "$(grep -cF 'drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection' "$SOURCE")" -eq 0
           test "$(grep -cF 'RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection' "$SOURCE")" -eq 0
+          echo 'PX guards: PASS'
 
           python3 - <<'PY'
           from pathlib import Path
@@ -60,17 +62,28 @@ jobs:
           text = text.replace(impl_close_anchor, method, 1)
           source.write_text(text)
           PY
+          echo 'PX source edit: PASS'
 
+          rustup component add rustfmt --toolchain 1.97.1-x86_64-unknown-linux-gnu
+          echo 'PX rustfmt component: PASS'
           cargo fmt --all
+          echo 'PX cargo fmt: PASS'
           cargo fmt --all -- --check
+          echo 'PX cargo fmt check: PASS'
           git diff --check
+          echo 'PX diff check: PASS'
 
-          test "$(grep -cF 'drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection' "$SOURCE")" -eq 1
-          test "$(grep -cF 'RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection' "$SOURCE")" -eq 2
+          method_count="$(grep -cF 'drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle_with_completion_projection' "$SOURCE")"
+          projection_count="$(grep -cF 'RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection' "$SOURCE")"
+          echo "PX method count: $method_count"
+          echo "PX projection symbol count: $projection_count"
+          test "$method_count" -eq 1
+          test "$projection_count" -eq 2
 
           rm "$HELPER"
 
           mapfile -t final_paths < <(git diff --name-only "$PW_HEAD")
+          printf 'PX final net paths:\n%s\n' "${final_paths[@]}"
           test "${#final_paths[@]}" -eq 1
           test "${final_paths[0]}" = "$SOURCE"
 
