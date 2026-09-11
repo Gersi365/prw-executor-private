@@ -1,0 +1,152 @@
+name: Phase 152 C03e-QB Transient Guarded One-Path Materializer
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-qb-production-durable-reachability-fallible-verifier-time-higher-owner-operation-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize selected higher-owner source seam
+        shell: bash
+        env:
+          BASE: 00c3896fc9d5171b7ec3e52fb8afdee064bb3c9e
+          BRANCH: phase-152-c03e-qb-production-durable-reachability-fallible-verifier-time-higher-owner-operation-source-materialization
+          SOURCE: crates/prw-agent/src/production_durable_capability_higher_owner_custody.rs
+          SOURCE_BLOB: 5c8943a43f100bcfea2e63056ed368ac3dbdeb2b
+          HELPER: .github/workflows/phase-152-c03e-qb-transient-materializer.yml
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          test "$(git merge-base "$BASE" HEAD)" = "$BASE"
+          test "$(git rev-parse "HEAD:$SOURCE")" = "$SOURCE_BLOB"
+
+          mapfile -t pre_paths < <(git diff --name-only "$BASE..HEAD")
+          test "${#pre_paths[@]}" -eq 1
+          test "${pre_paths[0]}" = "$HELPER"
+
+          target='pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<'
+          lower='linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection('
+          marker='/// Builds one dormant production operation that retains durable capability-authority custody.'
+
+          test "$(grep -cF "$target" "$SOURCE" || true)" -eq 0
+          test "$(grep -cF "$lower" "$SOURCE" || true)" -eq 0
+          test "$(grep -cF "$marker" "$SOURCE" || true)" -eq 1
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path("crates/prw-agent/src/production_durable_capability_higher_owner_custody.rs")
+          text = source.read_text(encoding="utf-8")
+          marker = "/// Builds one dormant production operation that retains durable capability-authority custody."
+          target = "pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<"
+          lower = "linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection("
+          assert text.count(marker) == 1
+          assert text.count(target) == 0
+          assert text.count(lower) == 0
+
+          block = r'''/// Builds one dormant pre-requester higher-owner operation for the fallible verifier-time projection lane.
+///
+/// Factory construction consumes the existing same-custody pre-requester owner by value, builds
+/// exactly one C03e-PZ production-reachability operation from its retained production inputs, and
+/// keeps the exact raw durable capability authority captured by the returned one-shot closure.
+/// The authority is released only after the delegated lower operation returns.
+///
+/// This wrapper performs no authority clone or `Arc` adaptation, durable authorization, verifier-time
+/// provider invocation, expected-request construction, requester/rendezvous join, callback remapping,
+/// companion assembly, second runtime/teardown, readiness publication, or executable activation.
+#[allow(
+    dead_code,
+    reason = "C03e-QB materializes the QA-selected pre-requester higher-owner fallible verifier-time operation before separately gated companion and producer composition"
+)]
+pub(crate) fn linux_agent_production_durable_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection<
+    P,
+    D,
+    T,
+    F,
+    C,
+    R,
+    E,
+>(
+    inputs: LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs<
+        P, D, T, F, C, R, E,
+    >,
+) -> impl FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>) + Send + 'static,
+    E: FnMut(RemoteSessionRepeatedAdmissionFailure) + Send + 'static,
+{
+    let LinuxAgentProductionDurableReachabilityRemoteProcessOperationInputs {
+        production_inputs,
+        capability_authority,
+    } = inputs;
+    let operation =
+        crate::linux_bootstrap::linux_agent_production_reachability_remote_process_operation_with_fallible_verifier_time_completion_projection(
+            production_inputs,
+        );
+
+    move |publisher| {
+        operation(publisher);
+        drop(capability_authority);
+    }
+}
+'''
+
+          text = text.replace(marker, block + "\n" + marker, 1)
+          source.write_text(text, encoding="utf-8")
+          PY
+
+          rustup component add rustfmt
+          cargo fmt --all
+          cargo fmt --all -- --check
+          git diff --check
+
+          test "$(grep -cF "$target" "$SOURCE" || true)" -eq 1
+          test "$(grep -cF "$lower" "$SOURCE" || true)" -eq 1
+
+          git diff --unified=0 -- "$SOURCE" | grep '^+' | grep -v '^+++' > /tmp/qb-added-lines.txt || true
+          if grep -E 'Arc::(new|clone)|authorize_capability_transaction|SharedRequesterRendezvousAuthority|sender\.send|block_on' /tmp/qb-added-lines.txt; then
+            echo "forbidden selected-boundary widening detected" >&2
+            exit 1
+          fi
+
+          mapfile -t source_paths < <(git diff --name-only)
+          test "${#source_paths[@]}" -eq 1
+          test "${source_paths[0]}" = "$SOURCE"
+
+          git add "$SOURCE"
+          git commit -m "C03e-QB: materialize durable reachability fallible verifier-time higher-owner operation"
+
+          git rm "$HELPER"
+          git commit -m "C03e-QB: remove transient one-path materializer"
+
+          test ! -e "$HELPER"
+          mapfile -t final_paths < <(git diff --name-only "$BASE..HEAD")
+          test "${#final_paths[@]}" -eq 1
+          test "${final_paths[0]}" = "$SOURCE"
+
+          git push origin HEAD:"$BRANCH"
