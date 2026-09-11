@@ -224,7 +224,7 @@ pub(crate) async fn linux_agent_production_durable_reachability_remote_process_o
 /// exactly once. It does not begin a session, generate challenge randomness, select authentication
 /// timing, construct a service per admission/worker/session, clone or share the service, choose
 /// capability-policy provenance, create an expected-request channel, construct requester/rendezvous
-/// custody, add an invocation site, or activate runtime/listener/network behavior.
+/// custody, add no invocation site, or activate runtime/listener/network behavior.
 ///
 /// # Errors
 ///
@@ -1335,6 +1335,7 @@ struct LinuxAgentProductionExpectedDeviceAdmissionChannel<D, T> {
     receiver: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
 }
 
+#[allow(clippy::type_complexity)]
 impl<D, T> LinuxAgentProductionExpectedDeviceAdmissionChannel<D, T> {
     #[must_use]
     #[allow(
