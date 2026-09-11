@@ -10,230 +10,83 @@ permissions:
 
 jobs:
   materialize:
-    if: "github.event.head_commit.message == 'C03e-QH: correct transient workflow condition quoting'"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact QH branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
-          fetch-depth: 5
+          fetch-depth: 0
 
-      - name: Guard exact predecessor and source
+      - name: Materialize selected request construction composition
         shell: bash
+        env:
+          BASE: 4612e6e247627e7b81f5a182e532447976f85c9f
+          BRANCH: phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization
+          SOURCE: crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs
+          SOURCE_BLOB: 3b5537d7c176cc8ca1d34f65d47a71c7297effac
+          HELPER: .github/workflows/phase-152-c03e-qh-transient-guarded-one-path-materializer.yml
+          BLOCK_B64: Ly8vIENvbmNyZXRlIGZhbGxpYmxlIHZlcmlmaWVyLXRpbWUgcHJvdmlkZXIgaW5zdGFsbGVkIGludG8gb25lIGNvbnN0cnVjdGVkIGV4cGVjdGVkLWRldmljZSByZXF1ZXN0LgovLy8KLy8vIFRoaXMgaXMgdGhlIGV4aXN0aW5nIFBSV0EgdmVyaWZpZXIgd2FsbC1jbG9jayBzb3VyY2UgY2FycmllZCBhcyBhIGZ1bmN0aW9uIHBvaW50ZXIuIENvbnN0cnVjdGluZwovLy8gdGhlIHJlcXVlc3QgZG9lcyBub3QgY2FsbCBvciBzYW1wbGUgdGhlIHByb3ZpZGVyLgojW2FsbG93KAogICAgZGVhZF9jb2RlLAogICAgcmVhc29uID0gIkMwM2UtUUggbWF0ZXJpYWxpemVzIHRoZSBRRy1zZWxlY3RlZCBjb25jcmV0ZSBmYWxsaWJsZSB2ZXJpZmllci10aW1lIGZ1bmN0aW9uLXBvaW50ZXIgdHlwZSBiZWZvcmUgc2VwYXJhdGVseSBnYXRlZCBwcm9kdWNlci9zZW5kIGNvbXBvc2l0aW9uIgopXQp0eXBlIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkZhbGxpYmxlVmVyaWZpZXJUaW1lU291cmNlID0KICAgIGZuKCkgLT4gUmVzdWx0PHU2NCwgcHJ3X3Nlc3Npb246OnByd2FfdmVyaWZpZXJfc291cmNlOjpQcndhVmVyaWZpZXJTb3VyY2VFcnJvcj47CgovLy8gUG9zdC1jb25zdHJ1Y3Rpb24gY3VzdG9keSBmb3IgZXhhY3RseSBvbmUgZXhwZWN0ZWQtZGV2aWNlIGFkbWlzc2lvbiByZXF1ZXN0LgovLy8KLy8vIFJlcXVlc3RlciBgRGV2aWNlSWRgIHJlbWFpbnMgcmVxdWVzdGVyLXNpZGUgY29ycmVsYXRpb24gb25seS4gVGhlIGFja25vd2xlZGdlbWVudCByZXN1bHQgcmVtYWlucwovLy8gb3J0aG9nb25hbCB0byByZXF1ZXN0IGNvbnN0cnVjdGlvbi4gVGhpcyBjYXJyaWVyIG93bnMgbm8gc2NoZWR1bGluZyBncmFudCwgc2VuZGVyLCBjaGFubmVsLAovLy8gcmV0cnkgYXV0aG9yaXR5LCBlbmRwb2ludCwgcnVudGltZSwgb3Igc2Vjb25kIHJlcXVlc3QuCiNbYWxsb3coCiAgICBkZWFkX2NvZGUsCiAgICByZWFzb24gPSAiQzAzZS1RSCBtYXRlcmlhbGl6ZXMgb25seSB0aGUgUUctc2VsZWN0ZWQgZG9ybWFudCBjb25zdHJ1Y3RlZC1oYW5kb2ZmIGN1c3RvZHkgYmVmb3JlIHNlcGFyYXRlbHkgZ2F0ZWQgYXN5bmNocm9ub3VzIHNlbmQgY29tcG9zaXRpb24iCildCnN0cnVjdCBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25Db25zdHJ1Y3RlZEhhbmRvZmY8RD4gewogICAgcmVxdWVzdGVyX2RldmljZV9pZDogRGV2aWNlSWQsCiAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0OgogICAgICAgIFJlc3VsdDwoKSwgUmVxdWVzdGVyUmVuZGV6dm91c1Rlcm1pbmFsRHJBY2tub3dsZWRnZW1lbnRSZXNwb25zZUNvbXBvc2l0aW9uRXJyb3I+LAogICAgcmVxdWVzdDogUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uUmVxdWVzdDwKICAgICAgICBELAogICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkZhbGxpYmxlVmVyaWZpZXJUaW1lU291cmNlLAogICAgPiwKfQoKLy8vIEV4YWN0IGxvY2FsIHJlc3VsdCBvZiBvbmUgZWxpZ2libGUgZXhwZWN0ZWQtZGV2aWNlIHJlcXVlc3QtY29uc3RydWN0aW9uIGF0dGVtcHQuCi8vLwovLy8gYENvbnN0cnVjdGVkYCBtZWFucyBvbmx5IHRoYXQgb25lIHR5cGVkIHJlcXVlc3QgZXhpc3RzIHVuZGVyIGxvY2FsIG93bmVyc2hpcDsgaXQgZG9lcyBub3QgbWVhbgovLy8gcXVldWUgYWNjZXB0YW5jZS4gYENvbnN0cnVjdGlvbkZhaWxlZGAgcmV0YWlucyBvbmx5IHRoZSBleGlzdGluZyBib3VuZGVkIHRlcm1pbmFsIHJlY2VpcHQgYWZ0ZXIKLy8vIHRlcm1pbmFsIGRpc3Bvc2FsIG9mIHRoZSBzdGlsbC1zZWFsZWQgb25lLXNob3Qgc2NoZWR1bGluZyBncmFudC4KI1thbGxvdygKICAgIGRlYWRfY29kZSwKICAgIGNsaXBweTo6bGFyZ2VfZW51bV92YXJpYW50LAogICAgcmVhc29uID0gIkMwM2UtUUggbWF0ZXJpYWxpemVzIG9ubHkgdGhlIFFHLXNlbGVjdGVkIGRvcm1hbnQgY29uc3RydWN0aW9uIG91dGNvbWUgYmVmb3JlIHNlcGFyYXRlbHkgZ2F0ZWQgY2hhbm5lbC9zZW5kIGNvbXBvc2l0aW9uIgopXQplbnVtIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlcXVlc3RDb25zdHJ1Y3Rpb25PdXRjb21lPEQ+IHsKICAgIENvbnN0cnVjdGVkKFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkNvbnN0cnVjdGVkSGFuZG9mZjxEPiksCiAgICBDb25zdHJ1Y3Rpb25GYWlsZWQoUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZlJlY2VpcHQpLAp9CgovLy8gQ29uc3RydWN0cyBleGFjdGx5IG9uZSBleHBlY3RlZC1kZXZpY2UgYWRtaXNzaW9uIHJlcXVlc3QgZnJvbSBvbmUgZWxpZ2libGUgY29udGludWF0aW9uLgovLy8KLy8vIFRoZSB0d28gaW5kZXBlbmRlbnQgaWRlbnRpZmllciBzb3VyY2VzIHJ1biBiZWZvcmUgdGhlIG9uZS1zaG90IHNjaGVkdWxpbmcgZ3JhbnQgaXMgb3BlbmVkLiBPbgovLy8gZWl0aGVyIHNvdXJjZSBmYWlsdXJlLCB0aGUgZ3JhbnQgaXMgdGVybWluYWxseSBkaXNwb3NlZCB3aXRob3V0IGZpZWxkIGV4dHJhY3Rpb24gYW5kIHRoZSBleGFjdAovLy8gcmVxdWVzdGVyIGNvcnJlbGF0aW9uIHBsdXMgYWNrbm93bGVkZ2VtZW50IHJlc3VsdCBhcmUgcHJvamVjdGVkIGludG8gdGhlIGV4aXN0aW5nCi8vLyBgQ29uc3RydWN0aW9uRmFpbGVkYCByZWNlaXB0LiBPbmx5IGFmdGVyIGJvdGggaWRlbnRpZmllcnMgc3VjY2VlZCBpcyB0aGUgZ3JhbnQgY29uc3VtZWQgZXhhY3RseQovLy8gb25jZTsgdGFyZ2V0IGlkZW50aXR5IGNvbWVzIG9ubHkgZnJvbSB0aGF0IGdyYW50IHdoaWxlIHJlcXVlc3RlciBzY2hlZHVsaW5nIGBTZXNzaW9uSWRgCi8vLyBwcm92ZW5hbmNlIGlzIGRpc2NhcmRlZC4gVGhlIGV4aXN0aW5nIGZhbGxpYmxlIFBSV0EgdmVyaWZpZXItdGltZSBmdW5jdGlvbiBpcyBpbnN0YWxsZWQgYXMgYQovLy8gZnVuY3Rpb24gcG9pbnRlciB3aXRob3V0IGJlaW5nIHNhbXBsZWQuIFRoaXMgaGVscGVyIHBlcmZvcm1zIG5vIGNoYW5uZWwsIHNlbmQsIGF1dGhlbnRpY2F0aW9uLAovLy8gYWRtaXNzaW9uLCBydW50aW1lLCBlbmRwb2ludCwgcmV0cnksIGRpc3BhdGNoZXIgY29uc3RydWN0aW9uLCBvciBsaWZlY3ljbGUgd29yay4KI1thbGxvdygKICAgIGRlYWRfY29kZSwKICAgIHJlYXNvbiA9ICJDMDNlLVFIIG1hdGVyaWFsaXplcyBvbmx5IHRoZSBRRy1zZWxlY3RlZCBzeW5jaHJvbm91cyByZXF1ZXN0LWNvbnN0cnVjdGlvbiBjb21wb3NpdGlvbiBiZWZvcmUgc2VwYXJhdGVseSBnYXRlZCBwcm9kdWNlci9zZW5kIGNvbXBvc2l0aW9uIgopXQpmbiBjb25zdHJ1Y3RfcmVtb3RlX3Nlc3Npb25fZXhwZWN0ZWRfZGV2aWNlX2FkbWlzc2lvbl9yZXF1ZXN0X3dpdGhfZmFsbGlibGVfdmVyaWZpZXJfdGltZTxEPigKICAgIGNvbnRpbnVhdGlvbjogUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRWxpZ2libGVDb250aW51YXRpb24sCiAgICBkaXNwYXRjaGVyOiBELAopIC0+IFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlcXVlc3RDb25zdHJ1Y3Rpb25PdXRjb21lPEQ+CndoZXJlCiAgICBEOiBDYXBhYmlsaXR5RGlzcGF0Y2hlciArIFNlbmQgKyAnc3RhdGljLAp7CiAgICBsZXQgc2Vzc2lvbl9pZCA9IG1hdGNoIG5ld19yZW1vdGVfc2Vzc2lvbl9leHBlY3RlZF9kZXZpY2VfYWRtaXNzaW9uX3RhcmdldF9zZXNzaW9uX2lkKCkgewogICAgICAgIE9rKHNlc3Npb25faWQpID0+IHNlc3Npb25faWQsCiAgICAgICAgRXJyKF8pID0+IHsKICAgICAgICAgICAgbGV0IFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkVsaWdpYmxlQ29udGludWF0aW9uIHsKICAgICAgICAgICAgICAgIHJlcXVlc3Rlcl9kZXZpY2VfaWQsCiAgICAgICAgICAgICAgICBzY2hlZHVsaW5nX2dyYW50OiBfLAogICAgICAgICAgICAgICAgYWNrbm93bGVkZ2VtZW50X3Jlc3VsdCwKICAgICAgICAgICAgfSA9IGNvbnRpbnVhdGlvbjsKICAgICAgICAgICAgcmV0dXJuIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlcXVlc3RDb25zdHJ1Y3Rpb25PdXRjb21lOjpDb25zdHJ1Y3Rpb25GYWlsZWQoCiAgICAgICAgICAgICAgICBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmUmVjZWlwdCB7CiAgICAgICAgICAgICAgICAgICAgcmVxdWVzdGVyX2RldmljZV9pZCwKICAgICAgICAgICAgICAgICAgICBvdXRjb21lOiBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmUmVjZWlwdE91dGNvbWU6OkVsaWdpYmxlVGVybWluYWwgewogICAgICAgICAgICAgICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgICAgICAgICAgICAgICAgICBkaXNwb3NpdGlvbjoKICAgICAgICAgICAgICAgICAgICAgICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkhhbmRvZmZEaXNwb3NpdGlvbjo6Q29uc3RydWN0aW9uRmFpbGVkLAogICAgICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICApOwogICAgICAgIH0KICAgIH07CgogICAgbGV0IGF1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQgPQogICAgICAgIG1hdGNoIG5ld19yZW1vdGVfc2Vzc2lvbl9leHBlY3RlZF9kZXZpY2VfYXV0aGVudGljYXRpb25fcmVxdWVzdF9pZCgpIHsKICAgICAgICAgICAgT2soYXV0aGVudGljYXRpb25fcmVxdWVzdF9pZCkgPT4gYXV0aGVudGljYXRpb25fcmVxdWVzdF9pZCwKICAgICAgICAgICAgRXJyKF8pID0+IHsKICAgICAgICAgICAgICAgIGxldCBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25FbGlnaWJsZUNvbnRpbnVhdGlvbiB7CiAgICAgICAgICAgICAgICAgICAgcmVxdWVzdGVyX2RldmljZV9pZCwKICAgICAgICAgICAgICAgICAgICBzY2hlZHVsaW5nX2dyYW50OiBfLAogICAgICAgICAgICAgICAgICAgIGFja25vd2xlZGdlbWVudF9yZXN1bHQsCiAgICAgICAgICAgICAgICB9ID0gY29udGludWF0aW9uOwogICAgICAgICAgICAgICAgcmV0dXJuIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvblJlcXVlc3RDb25zdHJ1Y3Rpb25PdXRjb21lOjpDb25zdHJ1Y3Rpb25GYWlsZWQoCiAgICAgICAgICAgICAgICAgICAgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZlJlY2VpcHQgewogICAgICAgICAgICAgICAgICAgICAgICByZXF1ZXN0ZXJfZGV2aWNlX2lkLAogICAgICAgICAgICAgICAgICAgICAgICBvdXRjb21lOgogICAgICAgICAgICAgICAgICAgICAgICAgICAgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uSGFuZG9mZlJlY2VpcHRPdXRjb21lOjpFbGlnaWJsZVRlcm1pbmFsIHsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGRpc3Bvc2l0aW9uOiBSZW1vdGVTZXNzaW9uRXhwZWN0ZWREZXZpY2VBZG1pc3Npb25IYW5kb2ZmRGlzcG9zaXRpb246OkNvbnN0cnVjdGlvbkZhaWxlZCwKICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgICk7CiAgICAgICAgICAgIH0KICAgICAgICB9OwoKICAgIGxldCB2ZXJpZmllcl90aW1lX3VuaXhfc2Vjb25kczogUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRmFsbGlibGVWZXJpZmllclRpbWVTb3VyY2UgPQogICAgICAgIHByd19zZXNzaW9uOjpwcndhX3ZlcmlmaWVyX3NvdXJjZTo6Y3VycmVudF9wcndhX3ZlcmlmaWVyX3VuaXhfc2Vjb25kczsKCiAgICBsZXQgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uRWxpZ2libGVDb250aW51YXRpb24gewogICAgICAgIHJlcXVlc3Rlcl9kZXZpY2VfaWQsCiAgICAgICAgc2NoZWR1bGluZ19ncmFudCwKICAgICAgICBhY2tub3dsZWRnZW1lbnRfcmVzdWx0LAogICAgfSA9IGNvbnRpbnVhdGlvbjsKICAgIGxldCAoXywgZXhwZWN0ZWRfZGV2aWNlX2lkKSA9IHNjaGVkdWxpbmdfZ3JhbnQuaW50b19wYXJ0cygpOwoKICAgIGxldCByZXF1ZXN0ID0gUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uUmVxdWVzdDo6bmV3KAogICAgICAgIGV4cGVjdGVkX2RldmljZV9pZCwKICAgICAgICBzZXNzaW9uX2lkLAogICAgICAgIGF1dGhlbnRpY2F0aW9uX3JlcXVlc3RfaWQsCiAgICAgICAgZGlzcGF0Y2hlciwKICAgICAgICB2ZXJpZmllcl90aW1lX3VuaXhfc2Vjb25kcywKICAgICk7CgogICAgUmVtb3RlU2Vzc2lvbkV4cGVjdGVkRGV2aWNlQWRtaXNzaW9uUmVxdWVzdENvbnN0cnVjdGlvbk91dGNvbWU6OkNvbnN0cnVjdGVkKAogICAgICAgIFJlbW90ZVNlc3Npb25FeHBlY3RlZERldmljZUFkbWlzc2lvbkNvbnN0cnVjdGVkSGFuZG9mZiB7CiAgICAgICAgICAgIHJlcXVlc3Rlcl9kZXZpY2VfaWQsCiAgICAgICAgICAgIGFja25vd2xlZGdlbWVudF9yZXN1bHQsCiAgICAgICAgICAgIHJlcXVlc3QsCiAgICAgICAgfSwKICAgICkKfQo=
         run: |
           set -euo pipefail
-          QG='4612e6e247627e7b81f5a182e532447976f85c9f'
-          SRC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
-          WF='.github/workflows/phase-152-c03e-qh-transient-guarded-one-path-materializer.yml'
-          test "$(git merge-base "$QG" HEAD)" = "$QG"
-          test "$(git rev-list --count "$QG"..HEAD)" -eq 2
-          test "$(git diff --name-only "$QG"..HEAD)" = "$WF"
-          test "$(git hash-object "$SRC")" = '3b5537d7c176cc8ca1d34f65d47a71c7297effac'
 
-      - name: Materialize selected one-file request construction seam
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
+          test "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH"
+          test "$(git merge-base "$BASE" HEAD)" = "$BASE"
+          test "$(git rev-list --count "$BASE"..HEAD)" -eq 3
+          test "$(git hash-object "$SOURCE")" = "$SOURCE_BLOB"
+
+          mapfile -t pre_paths < <(git diff --name-only "$BASE"..HEAD)
+          test "${#pre_paths[@]}" -eq 1
+          test "${pre_paths[0]}" = "$HELPER"
+
+          printf '%s' "$BLOCK_B64" | base64 -d > /tmp/qh-block.rs
+          test "$(grep -c 'new_remote_session_expected_device_admission_target_session_id()' /tmp/qh-block.rs)" -eq 1
+          test "$(grep -c 'new_remote_session_expected_device_authentication_request_id()' /tmp/qh-block.rs)" -eq 1
+          test "$(grep -c 'scheduling_grant.into_parts()' /tmp/qh-block.rs)" -eq 1
+          test "$(grep -c 'RemoteSessionExpectedDeviceAdmissionRequest::new(' /tmp/qh-block.rs)" -eq 1
+          test "$(grep -c 'current_prwa_verifier_unix_seconds()' /tmp/qh-block.rs || true)" -eq 0
+          test "$(grep -c 'mpsc::channel' /tmp/qh-block.rs || true)" -eq 0
+          test "$(grep -c '\.send(' /tmp/qh-block.rs || true)" -eq 0
+
+          python3 - "$SOURCE" /tmp/qh-block.rs <<'PY'
           from pathlib import Path
+          import sys
 
-          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs')
-          text = path.read_text()
-          anchor = '''    Ok(request_id)\n}\n\n/// Recoverable failed startup transaction retaining the exact admitted reachability authority.'''
-          if text.count(anchor) != 1:
-              raise SystemExit(f'expected one insertion anchor, found {text.count(anchor)}')
-
-          block = r'''    Ok(request_id)
-}
-
-/// Concrete fallible verifier-time provider installed into one constructed expected-device request.
-///
-/// This is the existing PRWA verifier wall-clock source carried as a function pointer. Constructing
-/// the request does not call or sample the provider.
-#[allow(
-    dead_code,
-    reason = "C03e-QH materializes the QG-selected concrete fallible verifier-time function-pointer type before separately gated producer/send composition"
-)]
-type RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
-    fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>;
-
-/// Post-construction custody for exactly one expected-device admission request.
-///
-/// Requester `DeviceId` remains requester-side correlation only. The acknowledgement result remains
-/// orthogonal to request construction. This carrier owns no scheduling grant, sender, channel,
-/// retry authority, endpoint, runtime, or second request.
-#[allow(
-    dead_code,
-    reason = "C03e-QH materializes only the QG-selected dormant constructed-handoff custody before separately gated asynchronous send composition"
-)]
-struct RemoteSessionExpectedDeviceAdmissionConstructedHandoff<D> {
-    requester_device_id: DeviceId,
-    acknowledgement_result:
-        Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
-    request: RemoteSessionExpectedDeviceAdmissionRequest<
-        D,
-        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource,
-    >,
-}
-
-/// Exact local result of one eligible expected-device request-construction attempt.
-///
-/// `Constructed` means only that one typed request exists under local ownership; it does not mean
-/// queue acceptance. `ConstructionFailed` retains only the existing bounded terminal receipt after
-/// terminal disposal of the still-sealed one-shot scheduling grant.
-#[allow(
-    dead_code,
-    clippy::large_enum_variant,
-    reason = "C03e-QH materializes only the QG-selected dormant construction outcome before separately gated channel/send composition"
-)]
-enum RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome<D> {
-    Constructed(RemoteSessionExpectedDeviceAdmissionConstructedHandoff<D>),
-    ConstructionFailed(RemoteSessionExpectedDeviceAdmissionHandoffReceipt),
-}
-
-/// Constructs exactly one expected-device admission request from one eligible continuation.
-///
-/// The two independent identifier sources run before the one-shot scheduling grant is opened. On
-/// either source failure, the grant is terminally disposed without field extraction and the exact
-/// requester correlation plus acknowledgement result are projected into the existing
-/// `ConstructionFailed` receipt. Only after both identifiers succeed is the grant consumed exactly
-/// once; target identity comes only from that grant while requester scheduling `SessionId`
-/// provenance is discarded. The existing fallible PRWA verifier-time function is installed as a
-/// function pointer without being sampled. This helper performs no channel, send, authentication,
-/// admission, runtime, endpoint, retry, dispatcher construction, or lifecycle work.
-#[allow(
-    dead_code,
-    reason = "C03e-QH materializes only the QG-selected synchronous request-construction composition before separately gated producer/send composition"
-)]
-fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time<D>(
-    continuation: RemoteSessionExpectedDeviceAdmissionEligibleContinuation,
-    dispatcher: D,
-) -> RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome<D>
-where
-    D: CapabilityDispatcher + Send + 'static,
-{
-    let session_id = match new_remote_session_expected_device_admission_target_session_id() {
-        Ok(session_id) => session_id,
-        Err(_) => {
-            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                requester_device_id,
-                scheduling_grant: _,
-                acknowledgement_result,
-            } = continuation;
-            return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                    requester_device_id,
-                    outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                        acknowledgement_result,
-                        disposition:
-                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                    },
-                },
-            );
-        }
-    };
-
-    let authentication_request_id =
-        match new_remote_session_expected_device_authentication_request_id() {
-            Ok(authentication_request_id) => authentication_request_id,
-            Err(_) => {
-                let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                    requester_device_id,
-                    scheduling_grant: _,
-                    acknowledgement_result,
-                } = continuation;
-                return RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::ConstructionFailed(
-                    RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
-                        requester_device_id,
-                        outcome:
-                            RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome::EligibleTerminal {
-                                acknowledgement_result,
-                                disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                            },
-                    },
-                );
-            }
-        };
-
-    let verifier_time_unix_seconds: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
-        prw_session::prwa_verifier_source::current_prwa_verifier_unix_seconds;
-
-    let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-        requester_device_id,
-        scheduling_grant,
-        acknowledgement_result,
-    } = continuation;
-    let (_, expected_device_id) = scheduling_grant.into_parts();
-
-    let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
-        expected_device_id,
-        session_id,
-        authentication_request_id,
-        dispatcher,
-        verifier_time_unix_seconds,
-    );
-
-    RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome::Constructed(
-        RemoteSessionExpectedDeviceAdmissionConstructedHandoff {
-            requester_device_id,
-            acknowledgement_result,
-            request,
-        },
-    )
-}
-
-/// Recoverable failed startup transaction retaining the exact admitted reachability authority.'''
-
-          if 'current_prwa_verifier_unix_seconds()' in block:
-              raise SystemExit('QH block must bind verifier-time provider without sampling it')
-          if block.count('new_remote_session_expected_device_admission_target_session_id()') != 1:
-              raise SystemExit('target SessionId source call count must be exactly one')
-          if block.count('new_remote_session_expected_device_authentication_request_id()') != 1:
-              raise SystemExit('authentication request-ID source call count must be exactly one')
-          if block.count('scheduling_grant.into_parts()') != 1:
-              raise SystemExit('scheduling grant into_parts call count must be exactly one')
-          if block.count('RemoteSessionExpectedDeviceAdmissionRequest::new(') != 1:
-              raise SystemExit('request constructor call count must be exactly one')
-          if 'mpsc::channel' in block or '.send(' in block or 'try_send' in block or 'blocking_send' in block:
-              raise SystemExit('QH block must not contain channel/send operations')
-
-          path.write_text(text.replace(anchor, block), newline='\n')
+          source = Path(sys.argv[1])
+          block = Path(sys.argv[2]).read_text(encoding="utf-8")
+          text = source.read_text(encoding="utf-8")
+          marker = "\n/// Recoverable failed startup transaction retaining the exact admitted reachability authority."
+          if text.count(marker) != 1:
+              raise SystemExit(f"expected exactly one insertion marker, found {text.count(marker)}")
+          if "RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource" in text:
+              raise SystemExit("QH materialization already present")
+          source.write_text(text.replace(marker, "\n" + block + marker), encoding="utf-8", newline="\n")
           PY
 
-      - name: Format and guard final source ceiling
-        shell: bash
-        run: |
-          set -euo pipefail
-          SRC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
-          WF='.github/workflows/phase-152-c03e-qh-transient-guarded-one-path-materializer.yml'
           cargo fmt --all
           cargo fmt --all -- --check
           git diff --check
-          mapfile -t changed < <(git diff --name-only)
-          test "${#changed[@]}" -eq 1
-          test "${changed[0]}" = "$SRC"
-          test "$(grep -c '^fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time<D>' "$SRC")" -eq 1
-          test "$(grep -c '^type RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =' "$SRC")" -eq 1
-          test "$(grep -c 'scheduling_grant.into_parts()' "$SRC")" -eq 1
-          test "$(grep -c 'RemoteSessionExpectedDeviceAdmissionRequest::new(' "$SRC")" -eq 1
-          test -f "$WF"
 
-      - name: Commit source and self-remove transient materializer
-        shell: bash
-        run: |
-          set -euo pipefail
-          QG='4612e6e247627e7b81f5a182e532447976f85c9f'
-          BRANCH='phase-152-c03e-qh-production-expected-device-admission-fallible-verifier-time-request-construction-composition-source-materialization'
-          SRC='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
-          WF='.github/workflows/phase-152-c03e-qh-transient-guarded-one-path-materializer.yml'
+          mapfile -t working_paths < <(git diff --name-only)
+          test "${#working_paths[@]}" -eq 1
+          test "${working_paths[0]}" = "$SOURCE"
+          test "$(grep -c '^type RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =' "$SOURCE")" -eq 1
+          test "$(grep -c '^fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time<D>' "$SOURCE")" -eq 1
+          test "$(grep -c 'scheduling_grant.into_parts()' "$SOURCE")" -eq 1
+          test "$(grep -c 'RemoteSessionExpectedDeviceAdmissionRequest::new(' "$SOURCE")" -eq 1
+
           git config user.name 'Gersi365'
           git config user.email 'Gersi365@outlook.com'
-          git add "$SRC"
+          git add "$SOURCE"
           git commit -m 'C03e-QH: materialize fallible verifier-time request construction composition'
-          git rm "$WF"
+
+          git rm "$HELPER"
           git commit -m 'C03e-QH: remove transient one-path materializer'
-          git diff --check "$QG"..HEAD
-          test "$(git diff --name-only "$QG"..HEAD)" = "$SRC"
-          test "$(git rev-list --count "$QG"..HEAD)" -eq 4
-          git push origin "HEAD:$BRANCH"
+
+          git diff --check "$BASE"..HEAD
+          test ! -e "$HELPER"
+          mapfile -t final_paths < <(git diff --name-only "$BASE"..HEAD)
+          test "${#final_paths[@]}" -eq 1
+          test "${final_paths[0]}" = "$SOURCE"
+          test "$(git rev-list --count "$BASE"..HEAD)" -eq 5
+
+          git push origin HEAD:"$BRANCH"
