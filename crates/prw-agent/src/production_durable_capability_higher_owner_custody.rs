@@ -1319,3 +1319,45 @@ where
     )
     .map_err(Into::into)
 }
+
+/// Non-cloneable dormant capacity-one expected-device admission channel custody.
+///
+/// This owner creates exactly one bounded Tokio MPSC pair with capacity `1`, retains the exact
+/// returned sender and receiver without cloning either endpoint, and performs no send, request
+/// construction, dispatcher construction, scheduling-grant handling, receipt mapping, task spawn,
+/// companion invocation or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-QL materializes only the QK-selected capacity-one expected-request channel and sole-sender custody before separately gated producer/send/receiver wiring"
+)]
+struct LinuxAgentProductionExpectedDeviceAdmissionChannel<D, T> {
+    sender: mpsc::Sender<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    receiver: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+}
+
+#[allow(clippy::type_complexity)]
+impl<D, T> LinuxAgentProductionExpectedDeviceAdmissionChannel<D, T> {
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-QL materializes dormant construction before separately gated ownership transfer"
+    )]
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::channel(1);
+        Self { sender, receiver }
+    }
+
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "C03e-QL exposes only consuming ownership decomposition before separately gated producer and QF invocation wiring"
+    )]
+    fn into_parts(
+        self,
+    ) -> (
+        mpsc::Sender<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    ) {
+        (self.sender, self.receiver)
+    }
+}
