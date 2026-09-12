@@ -32,6 +32,7 @@ use super::authenticated_remote_session_runtime::{
 };
 use super::remote_session_executor_runtime::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion;
 use super::requester_rendezvous_retained_custody_dr_continuation::{
+    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
@@ -1422,6 +1423,108 @@ impl RemoteSessionEndpointLifecycleRuntime {
 
         executor
             .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_scheduling_producer(
+                max_active_workers,
+                &transport,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown.into_shutdown(),
+                producer,
+                suppress_on_shutdown,
+                observe_receipt,
+                admission_timing,
+                on_rejection,
+                on_admission_failure,
+            )
+    }
+
+    /// Consumes this endpoint owner and forwards the exact fallible-verifier-time borrowed
+    /// cooperative producer boundary.
+    ///
+    /// This endpoint owner consumes its retained executor, transport and supervisor-shutdown signal
+    /// exactly once, then delegates once to the C03e-RL executor producer endpoint lifecycle. The
+    /// producer remains caller-owned and only mutably borrowed; receipt custody remains generic.
+    /// Endpoint close and idle drain remain exclusively owned by the lower executor seam.
+    ///
+    /// This dormant forwarding seam constructs no channel, sender, expected-device request,
+    /// concrete receipt, identifier, dispatcher, timing source, task, listener, readiness state or
+    /// executable activation.
+    #[allow(
+        dead_code,
+        reason = "C03e-RN materializes only the RM-selected dormant fallible higher endpoint-owner producer forwarding before separately gated fallible concrete receipt and producer/channel composition"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-RN forwards the exact RM-selected fallible generic producer endpoint boundary without introducing a new aggregate"
+    )]
+    pub(super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer<
+        P,
+        D,
+        T,
+        PS,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let Self {
+            mut executor,
+            transport,
+            supervisor_shutdown,
+        } = self;
+
+        executor
+            .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer(
                 max_active_workers,
                 &transport,
                 authority,
