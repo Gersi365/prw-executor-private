@@ -354,6 +354,31 @@ fn publish_recoverable_fallible_verifier_time_scheduling_completion<C>(
 
 #[allow(
     dead_code,
+    reason = "C03e-RH materializes the RG-selected dormant fallible scheduling single-completion adapter before separately gated cooperative collection-driver migration"
+)]
+fn poll_one_requester_aware_fallible_verifier_time_scheduling_worker(
+    active: &mut ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+    context: &mut Context<'_>,
+) -> Poll<
+    RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+> {
+    match poll_one_ready_recoverable_worker(active, context) {
+        Poll::Pending => Poll::Pending,
+        Poll::Ready(completion) => {
+            let (device_id, session_owner, result) = completion.into_parts();
+            Poll::Ready(
+                RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion::new(
+                    device_id,
+                    session_owner,
+                    result,
+                ),
+            )
+        }
+    }
+}
+
+#[allow(
+    dead_code,
     reason = "C03e-RF materializes the RE-selected dormant fallible scheduling ready-reap adapter before separately gated collection-driver migration"
 )]
 fn reap_requester_aware_fallible_verifier_time_scheduling_workers<C>(
