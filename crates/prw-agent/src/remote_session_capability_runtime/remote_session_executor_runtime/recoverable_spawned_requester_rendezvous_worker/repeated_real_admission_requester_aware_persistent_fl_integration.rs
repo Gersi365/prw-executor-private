@@ -366,7 +366,7 @@ fn reap_requester_aware_fallible_verifier_time_scheduling_workers<C>(
     ),
 {
     let mut publish = |completion| {
-        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion)
+        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion);
     };
     reap_ready_recoverable_workers(active, context, &mut publish);
 }
@@ -394,7 +394,7 @@ async fn drain_requester_aware_fallible_verifier_time_scheduling_workers<C>(
     ),
 {
     let mut publish = |completion| {
-        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion)
+        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion);
     };
     drain_recoverable_workers(active, &mut publish).await;
 }
