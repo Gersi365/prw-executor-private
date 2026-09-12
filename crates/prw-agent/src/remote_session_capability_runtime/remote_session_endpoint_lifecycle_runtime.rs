@@ -258,6 +258,46 @@ struct RemoteSessionExpectedDeviceAdmissionHandoffReceipt {
     outcome: RemoteSessionExpectedDeviceAdmissionHandoffReceiptOutcome,
 }
 
+/// Private terminal receipt outcome for one fallible-verifier-time scheduling-aware requester completion.
+///
+/// `Ineligible` retains the exact original fallible scheduling-stop/join result by value. A later
+/// separately gated classifier must prove that this value is not an eligible scheduling terminal
+/// before constructing that variant. `EligibleTerminal` retains only the exact requester
+/// acknowledgement result and the existing bounded handoff disposition; it cannot retain or
+/// reconstruct the consumed scheduling grant.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-RP preserves the RO-selected exact by-value fallible ineligible completion custody while reusing the existing bounded handoff disposition"
+)]
+enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome {
+    Ineligible(
+        Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ),
+    EligibleTerminal {
+        acknowledgement_result:
+            Result<(), RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>,
+        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition,
+    },
+}
+
+/// Boundary-private concrete receipt for one fallible-verifier-time expected-device handoff outcome.
+///
+/// The requester `DeviceId` is correlation only. Target expected-device identity remains obtainable
+/// only from a consumed construction-eligible scheduling grant and is intentionally absent here.
+/// This carrier is neither `Copy` nor `Clone` and owns exactly one private fallible terminal outcome.
+#[allow(
+    dead_code,
+    reason = "C03e-RP materializes only the RO-selected dormant fallible concrete receipt representation before separately gated classifier, suppression mapper, producer specialization and runtime wiring"
+)]
+struct RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+    requester_device_id: DeviceId,
+    outcome: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome,
+}
+
 /// One exact construction-eligible scheduling continuation retained above the generic producer seam.
 ///
 /// The requester `DeviceId` remains requester-side correlation only. Target expected identity and
