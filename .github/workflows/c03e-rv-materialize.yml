@@ -1,0 +1,175 @@
+name: C03e-RV transient one-path materializer
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-rv-production-durable-post-auth-fallible-verifier-time-requester-rendezvous-expected-device-admission-request-construction-fallible-receipt-composition-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Guard, materialize, format, self-remove, and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='8be3516c37528348038def4f113b0d50bfc6eb19'
+          EXPECTED_BLOB='9129a78a81eab86b523136ea2982037c2214921f'
+          TARGET='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
+          WF='.github/workflows/c03e-rv-materialize.yml'
+
+          git merge-base --is-ancestor "$BASE" HEAD
+          test "$(git hash-object "$TARGET")" = "$EXPECTED_BLOB"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs')
+          text = path.read_text()
+          marker = '/// Produces at most one live expected-device admission request and returns one terminal handoff receipt.\n'
+          assert text.count(marker) == 1
+          assert 'enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>' not in text
+          assert 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>' not in text
+
+          block = r'''/// Exact local result of one eligible fallible-verifier-time expected-device request-construction attempt.
+///
+/// `Constructed` reuses the existing verifier-time-agnostic constructed-handoff custody. A
+/// `ConstructionFailed` result retains only the existing fallible terminal receipt after terminal
+/// disposal of the still-sealed one-shot scheduling grant.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-RV materializes only the RU-selected fallible request-construction outcome before separately gated async producer/send composition"
+)]
+enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D> {
+    Constructed(RemoteSessionExpectedDeviceAdmissionConstructedHandoff<D>),
+    ConstructionFailed(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt),
+}
+
+/// Constructs exactly one expected-device admission request while preserving the fallible receipt family.
+///
+/// The two independent identifier sources run before the one-shot scheduling grant is opened. On
+/// either source failure, the grant is terminally disposed without field extraction and requester
+/// correlation plus the exact acknowledgement result move into the existing fallible
+/// `ConstructionFailed` receipt. Only after both identifiers succeed is the grant consumed exactly
+/// once; target identity comes only from that grant while requester scheduling `SessionId`
+/// provenance is discarded. The existing fallible PRWA verifier-time function is installed as a
+/// function pointer without being sampled. This helper performs no channel, send, authentication,
+/// admission, runtime, endpoint, retry, dispatcher construction, or lifecycle work.
+#[allow(
+    dead_code,
+    reason = "C03e-RV materializes only the RU-selected synchronous fallible-receipt request-construction composition before separately gated producer/send composition"
+)]
+fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>(
+    continuation: RemoteSessionExpectedDeviceAdmissionEligibleContinuation,
+    dispatcher: D,
+) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>
+where
+    D: CapabilityDispatcher + Send + 'static,
+{
+    let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition:
+                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                    },
+            },
+        );
+    };
+
+    let Ok(authentication_request_id) =
+        new_remote_session_expected_device_authentication_request_id()
+    else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition:
+                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                    },
+            },
+        );
+    };
+
+    let verifier_time_unix_seconds: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
+        prw_session::prwa_verifier_source::current_prwa_verifier_unix_seconds;
+
+    let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+        requester_device_id,
+        scheduling_grant,
+        acknowledgement_result,
+    } = continuation;
+    let (_, expected_device_id) = scheduling_grant.into_parts();
+
+    let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
+        expected_device_id,
+        session_id,
+        authentication_request_id,
+        dispatcher,
+        verifier_time_unix_seconds,
+    );
+
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::Constructed(
+        RemoteSessionExpectedDeviceAdmissionConstructedHandoff {
+            requester_device_id,
+            acknowledgement_result,
+            request,
+        },
+    )
+}
+'''
+
+          text = text.replace(marker, block + '\n' + marker, 1)
+          path.write_text(text)
+          PY
+
+          cargo fmt --all
+          cargo fmt --all -- --check
+          git diff --check
+
+          test "$(grep -F -c 'enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>' "$TARGET")" = '1'
+          test "$(grep -F -c 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>' "$TARGET")" = '1'
+          test "$(grep -F -c 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time<D>' "$TARGET")" = '1'
+
+          git add "$TARGET"
+          git rm "$WF"
+
+          mapfile -t paths < <(git diff --cached --name-only "$BASE")
+          test "${#paths[@]}" = '1'
+          test "${paths[0]}" = "$TARGET"
+
+          stats="$(git diff --cached --numstat "$BASE" -- "$TARGET")"
+          additions="$(awk '{print $1}' <<<"$stats")"
+          deletions="$(awk '{print $2}' <<<"$stats")"
+          test "$additions" -gt 0
+          test "$deletions" = '0'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'C03e-RV: materialize fallible request-construction receipt composition'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
