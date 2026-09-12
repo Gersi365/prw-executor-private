@@ -804,6 +804,108 @@ where
     )
 }
 
+/// Exact local result of one eligible fallible-verifier-time expected-device request-construction attempt.
+///
+/// `Constructed` reuses the existing verifier-time-agnostic constructed-handoff custody.
+/// `ConstructionFailed` retains only the existing fallible terminal handoff receipt.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-RV materializes only the RU-selected fallible request-construction outcome before separately gated async producer/send composition"
+)]
+enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D> {
+    Constructed(RemoteSessionExpectedDeviceAdmissionConstructedHandoff<D>),
+    ConstructionFailed(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt),
+}
+
+/// Constructs exactly one expected-device admission request from one eligible continuation.
+///
+/// The two independent identifier sources run before the one-shot scheduling grant is opened. On
+/// either source failure, the grant is terminally disposed without field extraction and the exact
+/// requester correlation plus acknowledgement result are projected into the existing
+/// `ConstructionFailed` receipt. Only after both identifiers succeed is the grant consumed exactly
+/// once; target identity comes only from that grant while requester scheduling `SessionId`
+/// provenance is discarded. The existing fallible PRWA verifier-time function is installed as a
+/// function pointer without being sampled. This helper performs no channel, send, authentication,
+/// admission, runtime, endpoint, retry, dispatcher construction, or lifecycle work.
+#[allow(
+    dead_code,
+    reason = "C03e-RV materializes only the RU-selected synchronous fallible-receipt request-construction composition before separately gated producer/send composition"
+)]
+fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<
+    D,
+>(
+    continuation: RemoteSessionExpectedDeviceAdmissionEligibleContinuation,
+    dispatcher: D,
+) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>
+where
+    D: CapabilityDispatcher + Send + 'static,
+{
+    let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+                    acknowledgement_result,
+                    disposition:
+                        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                },
+            },
+        );
+    };
+
+    let Ok(authentication_request_id) =
+        new_remote_session_expected_device_authentication_request_id()
+    else {
+        let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant: _,
+            acknowledgement_result,
+        } = continuation;
+        return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
+                    },
+            },
+        );
+    };
+
+    let verifier_time_unix_seconds: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
+        prw_session::prwa_verifier_source::current_prwa_verifier_unix_seconds;
+
+    let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+        requester_device_id,
+        scheduling_grant,
+        acknowledgement_result,
+    } = continuation;
+    let (_, expected_device_id) = scheduling_grant.into_parts();
+
+    let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
+        expected_device_id,
+        session_id,
+        authentication_request_id,
+        dispatcher,
+        verifier_time_unix_seconds,
+    );
+
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::Constructed(
+        RemoteSessionExpectedDeviceAdmissionConstructedHandoff {
+            requester_device_id,
+            acknowledgement_result,
+            request,
+        },
+    )
+}
+
 /// Produces at most one live expected-device admission request and returns one terminal handoff receipt.
 ///
 /// Ineligible requester completions return their exact existing receipt without constructing a
