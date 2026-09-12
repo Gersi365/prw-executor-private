@@ -384,6 +384,80 @@ fn classify_remote_session_expected_device_admission_live_completion(
     )
 }
 
+/// Exact fallible-verifier-time live-completion classification before any request construction.
+///
+/// Ineligible completions are retained through the existing C03e-RP fallible receipt without
+/// projection. Eligible custody reuses the existing verifier-time-agnostic continuation and exists
+/// only for a scheduling terminal that owns one exact issued grant.
+#[allow(
+    dead_code,
+    clippy::large_enum_variant,
+    reason = "C03e-RR preserves exact by-value fallible ineligible completion and reuses the existing one-shot eligible continuation instead of projecting either authority-bearing family"
+)]
+enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification {
+    Ineligible(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt),
+    Eligible(RemoteSessionExpectedDeviceAdmissionEligibleContinuation),
+}
+
+/// Classifies one exact fallible-verifier-time scheduling-aware requester completion without side effects.
+///
+/// Only `SchedulingTerminal` with an `Ok` scheduling result is eligible. The scheduling-result
+/// discriminant is inspected by borrow first so every ineligible value, including a fallible
+/// lifecycle failure or scheduling derivation error with its orthogonal acknowledgement result,
+/// can move untouched into the existing C03e-RP receipt. Only the eligible branch consumes terminal
+/// `into_parts()` once; the grant itself remains opaque and uninspected.
+#[allow(
+    dead_code,
+    reason = "C03e-RR materializes the RQ-selected pure fallible live-completion classifier before separately gated shutdown suppression, request construction and producer specialization"
+)]
+fn classify_remote_session_expected_device_admission_fallible_verifier_time_live_completion(
+    requester_device_id: DeviceId,
+    completion: Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification {
+    let is_eligible = matches!(
+        &completion,
+        Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            terminal_outcome
+        )) if terminal_outcome.scheduling_result().is_ok()
+    );
+
+    if !is_eligible {
+        return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification::Ineligible(
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::Ineligible(
+                        completion,
+                    ),
+            },
+        );
+    }
+
+    let Ok(
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            terminal_outcome,
+        ),
+    ) = completion
+    else {
+        unreachable!("borrowed eligibility check requires a scheduling terminal")
+    };
+    let (scheduling_result, acknowledgement_result) = terminal_outcome.into_parts();
+    let Ok(scheduling_grant) = scheduling_result else {
+        unreachable!("borrowed eligibility check requires an issued scheduling grant")
+    };
+
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification::Eligible(
+        RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+            requester_device_id,
+            scheduling_grant,
+            acknowledgement_result,
+        },
+    )
+}
+
 /// Maps one shutdown-recovered scheduling completion into the concrete expected-device handoff
 /// receipt without performing any lifecycle or producer work.
 ///
