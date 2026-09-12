@@ -992,7 +992,7 @@ where
                         .await;
                         return CooperativeSchedulingProducerDriveOutcome::Shutdown;
                     }
-                    CooperativeSchedulingProducerEvent::Receipt(receipt) => {
+                    CooperativeSchedulingProducerAdmissionEvent::Receipt(receipt) => {
                         drop(producer_future);
                         observe_receipt(receipt);
                         let admission_event = poll_fn(|context| {
