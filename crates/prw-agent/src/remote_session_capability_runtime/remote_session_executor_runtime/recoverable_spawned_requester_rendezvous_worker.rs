@@ -414,6 +414,30 @@ const fn select_recoverable_requester_aware_scheduling_peer_disposition(
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "C03e-RD materializes the RC-selected exact fallible scheduling terminal classification before consuming recovered owner custody"
+)]
+const fn select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
+    result: &Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RecoverableRequesterAwarePeerDisposition {
+    match result {
+        Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled) => {
+            RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
+        }
+        Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(_))
+        | Err(_) => RecoverableRequesterAwarePeerDisposition::TerminalFailure,
+        Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            outcome,
+        )) => select_scheduling_terminal_acknowledgement_peer_disposition(
+            outcome.acknowledgement_result().is_ok(),
+        ),
+    }
+}
+
 /// Consumes one exact scheduling-aware repeated-admission completion through the NX-selected owner
 /// disposition law and returns only authenticated identity plus unchanged terminal result custody.
 ///
@@ -439,6 +463,45 @@ pub(super) fn dispose_recoverable_repeated_real_admission_requester_aware_schedu
     let (device_id, session_owner, result) = completion.into_parts();
 
     match select_recoverable_requester_aware_scheduling_peer_disposition(&result) {
+        RecoverableRequesterAwarePeerDisposition::OrderlyShutdown => {
+            session_owner.close_for_orderly_shutdown();
+        }
+        RecoverableRequesterAwarePeerDisposition::TerminalFailure => {
+            session_owner.close_for_requester_aware_terminal_failure();
+        }
+    }
+
+    (device_id, result)
+}
+
+/// Consumes one exact fallible-verifier-time scheduling-aware repeated-admission completion through
+/// the RC-selected owner disposition law and returns only authenticated identity plus unchanged
+/// terminal result custody.
+///
+/// Cancellation reuses the existing orderly-shutdown close seam. Exact fallible lifecycle failure
+/// and abnormal join reuse the existing requester-aware terminal-failure close seam. A scheduling
+/// terminal uses only requester acknowledgement disposition through the existing ACK-only helper;
+/// scheduling derivation success or failure never controls peer disposition. No owner, peer-reuse
+/// capability, requester cleanup authority, retry token, scheduling channel or request-construction
+/// authority crosses this boundary.
+#[allow(
+    dead_code,
+    reason = "C03e-RD materializes the RC-selected fallible scheduling higher-owner completion disposer before separately gated collection migration"
+)]
+pub(super) fn dispose_recoverable_repeated_real_admission_requester_aware_fallible_verifier_time_scheduling_worker_completion(
+    completion: RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+) -> (
+    DeviceId,
+    Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) {
+    let (device_id, session_owner, result) = completion.into_parts();
+
+    match select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
+        &result,
+    ) {
         RecoverableRequesterAwarePeerDisposition::OrderlyShutdown => {
             session_owner.close_for_orderly_shutdown();
         }
@@ -632,18 +695,27 @@ mod tests {
     use tokio::{runtime::Builder, sync::Mutex};
 
     use super::{
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
         RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
         RecoverableRequesterAwarePeerDisposition, RemoteSessionSpawnedWorkerJoinError,
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
         RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
         RequesterRendezvousProductionDurableSchedulingWorkerStop,
+        dispose_recoverable_repeated_real_admission_requester_aware_fallible_verifier_time_scheduling_worker_completion,
         dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
-        join_and_recover_owned_value, select_recoverable_requester_aware_peer_disposition,
+        join_and_recover_owned_value,
+        select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition,
+        select_recoverable_requester_aware_peer_disposition,
         select_recoverable_requester_aware_scheduling_peer_disposition,
         select_scheduling_terminal_acknowledgement_peer_disposition,
     };
     use crate::remote_session_capability_runtime::{
+        AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
         AuthenticatedRemoteSessionPostAuthIngressTransactionError,
-        requester_rendezvous_retained_custody_dr_continuation::RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+        requester_rendezvous_retained_custody_dr_continuation::{
+            RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError,
+            RequesterRendezvousPostTerminalResponseSerialLifecycleError,
+        },
     };
 
     fn assert_completion_disposer_signature(
@@ -660,10 +732,31 @@ mod tests {
         let _ = disposer;
     }
 
+    fn assert_fallible_scheduling_completion_disposer_signature(
+        disposer: fn(
+            RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+        ) -> (
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ),
+    ) {
+        let _ = disposer;
+    }
+
     #[test]
     fn completion_disposer_consumes_exact_fu_completion_shape() {
         assert_completion_disposer_signature(
             dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
+        );
+    }
+
+    #[test]
+    fn fallible_scheduling_completion_disposer_consumes_exact_rb_completion_shape() {
+        assert_fallible_scheduling_completion_disposer_signature(
+            dispose_recoverable_repeated_real_admission_requester_aware_fallible_verifier_time_scheduling_worker_completion,
         );
     }
 
@@ -738,6 +831,57 @@ mod tests {
 
         assert_eq!(
             select_recoverable_requester_aware_scheduling_peer_disposition(&result),
+            RecoverableRequesterAwarePeerDisposition::TerminalFailure
+        );
+    }
+
+    #[test]
+    fn fallible_scheduling_cancellation_selects_orderly_shutdown_peer_disposition() {
+        let result =
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled);
+
+        assert_eq!(
+            select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
+                &result,
+            ),
+            RecoverableRequesterAwarePeerDisposition::OrderlyShutdown
+        );
+    }
+
+    #[test]
+    fn fallible_scheduling_preterminal_failure_selects_terminal_failure_peer_disposition() {
+        let failure = RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError::Ingress(
+            AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError::Ingress(
+                AuthenticatedRemoteSessionPostAuthIngressTransactionError::Bridge(
+                    RemoteBridgeError::SessionExpired,
+                ),
+            ),
+        );
+        let result = Ok(
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                failure,
+            ),
+        );
+
+        assert_eq!(
+            select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
+                &result,
+            ),
+            RecoverableRequesterAwarePeerDisposition::TerminalFailure
+        );
+    }
+
+    #[test]
+    fn fallible_scheduling_abnormal_join_selects_terminal_failure_peer_disposition() {
+        let result: Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        > = Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion);
+
+        assert_eq!(
+            select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
+                &result,
+            ),
             RecoverableRequesterAwarePeerDisposition::TerminalFailure
         );
     }
