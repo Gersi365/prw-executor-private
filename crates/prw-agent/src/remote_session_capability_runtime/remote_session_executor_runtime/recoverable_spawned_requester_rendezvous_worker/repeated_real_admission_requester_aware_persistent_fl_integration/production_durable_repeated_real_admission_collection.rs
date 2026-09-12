@@ -992,7 +992,7 @@ where
                         .await;
                         return CooperativeSchedulingProducerDriveOutcome::Shutdown;
                     }
-                    CooperativeSchedulingProducerAdmissionEvent::Receipt(receipt) => {
+                    CooperativeSchedulingProducerEvent::Receipt(receipt) => {
                         drop(producer_future);
                         observe_receipt(receipt);
                         let admission_event = poll_fn(|context| {
@@ -1567,9 +1567,7 @@ where
     A: Future,
 {
     if supervisor_shutdown.as_mut().poll(context) == Poll::Ready(()) {
-        return Poll::Ready(
-            CooperativeFallibleVerifierTimeSchedulingAdmissionEvent::Shutdown,
-        );
+        return Poll::Ready(CooperativeFallibleVerifierTimeSchedulingAdmissionEvent::Shutdown);
     }
 
     if let Poll::Ready(completion) =
@@ -1679,7 +1677,8 @@ async fn drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppre
         let receipt = suppress_on_shutdown(device_id, result);
         observe_receipt(receipt);
     };
-    drain_requester_aware_fallible_verifier_time_scheduling_workers(active, &mut on_completion).await;
+    drain_requester_aware_fallible_verifier_time_scheduling_workers(active, &mut on_completion)
+        .await;
 }
 
 #[expect(
