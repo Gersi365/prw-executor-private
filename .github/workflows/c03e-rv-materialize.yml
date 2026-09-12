@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
-      - name: Guard, materialize, format, self-remove, and push
+      - name: Guard, clone validated constructor, self-remove, and push
         shell: bash
         run: |
           set -euo pipefail
@@ -35,16 +35,40 @@ jobs:
 
           path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs')
           text = path.read_text()
-          marker = '/// Produces at most one live expected-device admission request and returns one terminal handoff receipt.\n'
-          assert text.count(marker) == 1
-          assert 'enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>' not in text
-          assert 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>' not in text
+          helper_doc = '/// Constructs exactly one expected-device admission request from one eligible continuation.\n'
+          producer_doc = '/// Produces at most one live expected-device admission request and returns one terminal handoff receipt.\n'
+          old_fn = 'construct_remote_session_expected_device_admission_request_with_fallible_verifier_time'
+          new_fn = 'construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt'
+          old_outcome = 'RemoteSessionExpectedDeviceAdmissionRequestConstructionOutcome'
+          new_outcome = 'RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome'
+          old_receipt = 'RemoteSessionExpectedDeviceAdmissionHandoffReceipt'
+          new_receipt = 'RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt'
 
-          block = r'''/// Exact local result of one eligible fallible-verifier-time expected-device request-construction attempt.
+          assert text.count(helper_doc) == 1
+          assert text.count(producer_doc) == 1
+          assert text.count(f'fn {old_fn}<D>') == 1
+          assert new_outcome not in text
+          assert f'fn {new_fn}<D>' not in text
+
+          start = text.index(helper_doc)
+          end = text.index(producer_doc, start)
+          template = text[start:end]
+          assert template.count(f'fn {old_fn}<D>') == 1
+          assert template.count(old_outcome) >= 3
+          assert template.count(old_receipt) >= 2
+
+          clone = template.replace(
+              'C03e-QH materializes only the QG-selected synchronous request-construction composition before separately gated producer/send composition',
+              'C03e-RV materializes only the RU-selected synchronous fallible-receipt request-construction composition before separately gated producer/send composition',
+          )
+          clone = clone.replace(old_fn, new_fn)
+          clone = clone.replace(old_outcome, new_outcome)
+          clone = clone.replace(old_receipt, new_receipt)
+
+          enum_block = '''/// Exact local result of one eligible fallible-verifier-time expected-device request-construction attempt.
           ///
-          /// `Constructed` reuses the existing verifier-time-agnostic constructed-handoff custody. A
-          /// `ConstructionFailed` result retains only the existing fallible terminal receipt after terminal
-          /// disposal of the still-sealed one-shot scheduling grant.
+          /// `Constructed` reuses the existing verifier-time-agnostic constructed-handoff custody.
+          /// `ConstructionFailed` retains only the existing fallible terminal handoff receipt.
           #[allow(
               dead_code,
               clippy::large_enum_variant,
@@ -55,106 +79,17 @@ jobs:
               ConstructionFailed(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt),
           }
 
-          /// Constructs exactly one expected-device admission request while preserving the fallible receipt family.
-          ///
-          /// The two independent identifier sources run before the one-shot scheduling grant is opened. On
-          /// either source failure, the grant is terminally disposed without field extraction and requester
-          /// correlation plus the exact acknowledgement result move into the existing fallible
-          /// `ConstructionFailed` receipt. Only after both identifiers succeed is the grant consumed exactly
-          /// once; target identity comes only from that grant while requester scheduling `SessionId`
-          /// provenance is discarded. The existing fallible PRWA verifier-time function is installed as a
-          /// function pointer without being sampled. This helper performs no channel, send, authentication,
-          /// admission, runtime, endpoint, retry, dispatcher construction, or lifecycle work.
-          #[allow(
-              dead_code,
-              reason = "C03e-RV materializes only the RU-selected synchronous fallible-receipt request-construction composition before separately gated producer/send composition"
-          )]
-          fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>(
-              continuation: RemoteSessionExpectedDeviceAdmissionEligibleContinuation,
-              dispatcher: D,
-          ) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>
-          where
-              D: CapabilityDispatcher + Send + 'static,
-          {
-              let Ok(session_id) = new_remote_session_expected_device_admission_target_session_id() else {
-                  let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                      requester_device_id,
-                      scheduling_grant: _,
-                      acknowledgement_result,
-                  } = continuation;
-                  return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
-                      RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
-                          requester_device_id,
-                          outcome:
-                              RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
-                                  acknowledgement_result,
-                                  disposition:
-                                      RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                              },
-                      },
-                  );
-              };
-
-              let Ok(authentication_request_id) =
-                  new_remote_session_expected_device_authentication_request_id()
-              else {
-                  let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                      requester_device_id,
-                      scheduling_grant: _,
-                      acknowledgement_result,
-                  } = continuation;
-                  return RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::ConstructionFailed(
-                      RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
-                          requester_device_id,
-                          outcome:
-                              RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
-                                  acknowledgement_result,
-                                  disposition:
-                                      RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed,
-                              },
-                      },
-                  );
-              };
-
-              let verifier_time_unix_seconds: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource =
-                  prw_session::prwa_verifier_source::current_prwa_verifier_unix_seconds;
-
-              let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
-                  requester_device_id,
-                  scheduling_grant,
-                  acknowledgement_result,
-              } = continuation;
-              let (_, expected_device_id) = scheduling_grant.into_parts();
-
-              let request = RemoteSessionExpectedDeviceAdmissionRequest::new(
-                  expected_device_id,
-                  session_id,
-                  authentication_request_id,
-                  dispatcher,
-                  verifier_time_unix_seconds,
-              );
-
-              RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome::Constructed(
-                  RemoteSessionExpectedDeviceAdmissionConstructedHandoff {
-                      requester_device_id,
-                      acknowledgement_result,
-                      request,
-                  },
-              )
-          }
           '''
-          text = text.replace(marker, block + '\n' + marker, 1)
+
+          text = text[:end] + enum_block + clone + text[end:]
           path.write_text(text)
           PY
 
-          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
-          rustup run 1.97.1 rustfmt --edition 2024 "$TARGET"
-          rustup run 1.97.1 rustfmt --edition 2024 --check "$TARGET"
           git diff --check
-
           test "$(grep -F -c 'enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>' "$TARGET")" = '1'
           test "$(grep -F -c 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>' "$TARGET")" = '1'
           test "$(grep -F -c 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time<D>' "$TARGET")" = '1'
+          test "$(grep -F -c 'ConstructionFailed(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt)' "$TARGET")" = '1'
 
           git add "$TARGET"
           git rm "$WF"
