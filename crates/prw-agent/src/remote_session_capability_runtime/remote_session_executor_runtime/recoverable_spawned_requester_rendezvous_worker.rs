@@ -837,8 +837,9 @@ mod tests {
 
     #[test]
     fn fallible_scheduling_cancellation_selects_orderly_shutdown_peer_disposition() {
-        let result =
-            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled);
+        let result = Ok(
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled,
+        );
 
         assert_eq!(
             select_recoverable_requester_aware_fallible_verifier_time_scheduling_peer_disposition(
