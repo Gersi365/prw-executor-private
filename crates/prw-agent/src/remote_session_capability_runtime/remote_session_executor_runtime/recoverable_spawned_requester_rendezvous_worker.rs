@@ -248,7 +248,8 @@ impl RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion {
     dead_code,
     reason = "C03e-RB materializes the RA-selected fallible scheduling repeated-admission completion custody before separately gated owner disposition and collection migration"
 )]
-pub(super) struct RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion {
+pub(super) struct RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion
+{
     device_id: DeviceId,
     session_owner: AuthenticatedRemoteSessionRuntimeOwner,
     result: Result<
