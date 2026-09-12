@@ -655,7 +655,7 @@ impl std::error::Error for RemoteSessionExpectedDeviceAdmissionAuthenticationReq
 /// producer, dispatcher, timing, authentication, or lifecycle work.
 #[allow(
     dead_code,
-    reason = "C03e-OZ materializes only the OY-selected dormant expected-device PRWM authentication request-ID source before separately gated request construction"
+    reason = "C03e-OZ materializes only the OY-selected dormant expected-device PRWM authentication request-ID source before separately gated construction composition"
 )]
 fn new_remote_session_expected_device_authentication_request_id()
 -> Result<u64, RemoteSessionExpectedDeviceAdmissionAuthenticationRequestIdSourceError> {
