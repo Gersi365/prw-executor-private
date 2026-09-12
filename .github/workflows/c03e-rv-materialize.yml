@@ -148,8 +148,8 @@ jobs:
           PY
 
           rustup toolchain install 1.97.1 --profile minimal --component rustfmt
-          rustfmt +1.97.1 --edition 2024 "$TARGET"
-          rustfmt +1.97.1 --edition 2024 --check "$TARGET"
+          rustup run 1.97.1 rustfmt --edition 2024 "$TARGET"
+          rustup run 1.97.1 rustfmt --edition 2024 --check "$TARGET"
           git diff --check
 
           test "$(grep -F -c 'enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>' "$TARGET")" = '1'
