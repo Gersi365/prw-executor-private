@@ -710,8 +710,8 @@ mod tests {
         select_scheduling_terminal_acknowledgement_peer_disposition,
     };
     use crate::remote_session_capability_runtime::{
-        AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
         AuthenticatedRemoteSessionPostAuthIngressTransactionError,
+        authenticated_remote_session_runtime::AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
         requester_rendezvous_retained_custody_dr_continuation::{
             RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError,
             RequesterRendezvousPostTerminalResponseSerialLifecycleError,
