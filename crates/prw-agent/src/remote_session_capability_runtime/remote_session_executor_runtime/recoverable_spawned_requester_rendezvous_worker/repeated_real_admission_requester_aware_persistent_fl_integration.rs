@@ -48,7 +48,9 @@ use crate::{
         SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
         admit_expected_remote_device_session, remote_session_worker_cancellation_pair,
         requester_rendezvous_retained_custody_dr_continuation::{
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
             RequesterRendezvousProductionDurableSchedulingWorkerStop,
+            run_fallible_verifier_time_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling,
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability,
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling,
@@ -64,6 +66,12 @@ type RecoverableSchedulingRequesterAwareWorkerEntry = RecoverablePersistentWorke
     AuthenticatedRemoteSessionRuntimeOwner,
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
 >;
+
+type RecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkerEntry =
+    RecoverablePersistentWorkerEntry<
+        AuthenticatedRemoteSessionRuntimeOwner,
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+    >;
 
 type RecoverableSchedulingRequesterAwareWorkerCompletion = RecoverablePersistentWorkerCompletion<
     DeviceId,
@@ -428,6 +436,63 @@ where
         );
         let result =
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling(
+                session_owner,
+                capability_authority.as_ref(),
+                &requester_dr_authority,
+                policy_source.as_ref(),
+                &requester_rendezvous_authority,
+                verifier_time_unix_seconds,
+                &mut dispatcher,
+                cancellation_signal.into_cancelled(),
+            )
+            .await;
+        drop(owner_guard);
+        result
+    });
+
+    RecoverablePersistentWorkerEntry::new(owner_cell, cancellation_controller, worker_handle)
+}
+
+#[allow(
+    dead_code,
+    clippy::needless_pass_by_value,
+    reason = "C03e-QZ materializes the QY-selected dormant fallible scheduling-specific production-durable persistent worker entry without migrating historical callers"
+)]
+fn spawn_recoverable_fallible_verifier_time_requester_aware_worker_with_production_durable_scheduling<
+    P,
+    D,
+    T,
+    S,
+>(
+    admission: RemoteSessionWorkerAdmission<D, T>,
+    capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &Arc<S>,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+) -> RecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkerEntry
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    S: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+{
+    let requester_dr_authority = (*requester_dr_authority).clone();
+    let policy_source = Arc::clone(policy_source);
+    let requester_rendezvous_authority = requester_rendezvous_authority.clone();
+    let (session_owner, mut dispatcher, verifier_time_unix_seconds) = admission.into_parts();
+    let owner_cell = Arc::new(Mutex::new(Some(session_owner)));
+    let worker_owner_cell = Arc::clone(&owner_cell);
+    let (cancellation_controller, cancellation_signal) = remote_session_worker_cancellation_pair();
+
+    let worker_handle = tokio::spawn(async move {
+        let mut owner_guard = worker_owner_cell.lock().await;
+        let session_owner = owner_guard.as_mut().expect(
+            "persistent fallible scheduling-aware requester worker must borrow retained authenticated-session owner",
+        );
+        let result =
+            run_fallible_verifier_time_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling(
                 session_owner,
                 capability_authority.as_ref(),
                 &requester_dr_authority,
