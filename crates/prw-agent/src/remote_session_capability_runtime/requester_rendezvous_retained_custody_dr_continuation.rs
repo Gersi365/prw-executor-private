@@ -240,7 +240,8 @@ impl From<RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub(super) enum RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop {
+pub(super) enum RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop
+{
     /// Caller-owned cancellation won at one selected cancellation-safe lifecycle boundary.
     Cancelled,
     /// Exact QT ingress or existing requester-response failure terminated the lifecycle.
