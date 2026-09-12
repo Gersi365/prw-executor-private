@@ -26,6 +26,7 @@ use crate::{
         AuthenticatedRemoteSessionRuntimeOwner, SharedCurrentCapabilityAuthority,
         SharedRequesterRendezvousAuthority,
         requester_rendezvous_retained_custody_dr_continuation::{
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
             RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
             RequesterRendezvousProductionDurableSchedulingWorkerStop,
             run_requester_rendezvous_post_terminal_response_serial_lifecycle_worker,
@@ -230,6 +231,78 @@ impl RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion {
         AuthenticatedRemoteSessionRuntimeOwner,
         Result<
             RequesterRendezvousProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) {
+        (self.device_id, self.session_owner, self.result)
+    }
+}
+
+/// Ownership-bearing completion for one fallible-verifier-time production-durable scheduling-aware
+/// requester worker.
+///
+/// Authenticated logical identity, exact recovered authenticated-session owner and exact fallible
+/// scheduling worker/join terminal result remain one by-value custody envelope. This type performs no
+/// peer disposition, terminal reinterpretation, collection migration or runtime activation.
+#[allow(
+    dead_code,
+    reason = "C03e-RB materializes the RA-selected fallible scheduling repeated-admission completion custody before separately gated owner disposition and collection migration"
+)]
+pub(super) struct RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion {
+    device_id: DeviceId,
+    session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+    result: Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RB retains exact fallible scheduling completion custody for separately gated higher-owner handling"
+)]
+impl RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion {
+    pub(super) const fn new(
+        device_id: DeviceId,
+        session_owner: AuthenticatedRemoteSessionRuntimeOwner,
+        result: Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) -> Self {
+        Self {
+            device_id,
+            session_owner,
+            result,
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
+    #[must_use]
+    pub(super) const fn session_owner(&self) -> &AuthenticatedRemoteSessionRuntimeOwner {
+        &self.session_owner
+    }
+
+    pub(super) const fn result(
+        &self,
+    ) -> &Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    > {
+        &self.result
+    }
+
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        DeviceId,
+        AuthenticatedRemoteSessionRuntimeOwner,
+        Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
             RemoteSessionSpawnedWorkerJoinError,
         >,
     ) {
