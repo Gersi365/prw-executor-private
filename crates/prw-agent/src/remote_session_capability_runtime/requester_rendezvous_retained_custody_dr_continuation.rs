@@ -340,6 +340,25 @@ pub(super) enum RequesterRendezvousProductionDurableSchedulingWorkerStop {
     SchedulingTerminal(RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome),
 }
 
+/// Production-specific terminal result for the QW-selected fallible scheduling-aware requester worker.
+///
+/// This distinct stop preserves the exact QV fallible lifecycle failure channel while reusing the
+/// existing non-Clone scheduling terminal carrier by value. It introduces no scheduling error
+/// flattening or alternate terminal custody representation.
+#[derive(Debug, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-QX materializes the QW-selected dormant fallible scheduling-aware requester worker before separately gated higher-owner propagation"
+)]
+pub(super) enum RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop {
+    /// Caller-owned cancellation won before any scheduling result existed.
+    Cancelled,
+    /// Exact fallible ingress/requester-response lifecycle failed before scheduling custody existed.
+    Failed(RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError),
+    /// Requester/rendezvous DR succeeded and exact scheduling plus acknowledgement custody exists.
+    SchedulingTerminal(RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome),
+}
+
 /// Consumes one exact retained DR continuation and completes exactly one terminal acknowledgement
 /// response through the existing FD framing and FF same-stream send boundaries.
 ///
@@ -882,6 +901,134 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
             complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await;
 
         return RequesterRendezvousProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+            RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome::new(
+                scheduling_result,
+                acknowledgement_result,
+            ),
+        );
+    }
+}
+
+/// Runs the QW-selected scheduling-aware requester lifecycle with fallible verifier-time
+/// production-durable ingress while preserving the existing scheduling terminal custody law.
+///
+/// Before requester handoff, the exact QT fallible durable cancellation worker owns verifier-time
+/// acquisition and the ingress/cancellation race. After handoff, this sibling retains only the same
+/// requester `SessionId` and target `DeviceId` operation selectors used by the historical scheduling
+/// sibling, runs exact existing DR continuation once, and branches on the completed DR result.
+///
+/// A DR failure never invokes scheduling derivation: the rejected acknowledgement is completed once,
+/// then retained cancellation is checked exactly once before another QT cycle. A DR success invokes
+/// existing scheduling derivation exactly once before acknowledgement framing/I/O, retains the exact
+/// grant or typed derivation error by value, completes acknowledgement once, and returns the existing
+/// orthogonal scheduling/acknowledgement terminal carrier immediately.
+///
+/// This sibling samples no verifier time directly, accepts/reads no stream directly, constructs no
+/// admission request, sender, channel, admission `SessionId`, PRWM request ID or timing value, and
+/// performs no peer close, retry, fallback/default time, higher-owner migration, runtime activation,
+/// deployment or merge behavior.
+#[allow(
+    dead_code,
+    reason = "C03e-QX materializes the QW-selected dormant fallible scheduling-aware requester sibling before separately gated higher-owner propagation"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "QW preserves distinct durable ingress, requester DR and scheduling-derivation authority inputs without introducing an aggregate"
+)]
+pub(super) async fn run_fallible_verifier_time_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_scheduling<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError> + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    C: Future<Output = ()> + Send,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    capability_authority: &crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+    cancellation: C,
+) -> RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop {
+    let mut cancellation = Box::pin(cancellation);
+
+    loop {
+        let cancellation_adapter = poll_fn(|context| cancellation.as_mut().poll(context));
+        let ingress_result = session_owner
+            .run_fallible_verifier_time_repeated_post_auth_control_stream_ingress_worker_with_production_durable_capability(
+                capability_authority,
+                &mut verifier_time_unix_seconds,
+                dispatcher,
+                cancellation_adapter,
+            )
+            .await;
+
+        let handoff = match ingress_result {
+            Ok(Some(handoff)) => handoff,
+            Ok(None) => {
+                return RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled;
+            }
+            Err(error) => {
+                return RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+        };
+
+        let requester_session_id = handoff
+            .start_intent
+            .requester_session()
+            .session_id()
+            .clone();
+        let target_device_id = handoff.start_intent.target_device_id().clone();
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            requester_dr_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            handoff,
+        )
+        .await;
+
+        if continuation.dr_result().is_err() {
+            if let Err(error) =
+                complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation)
+                    .await
+            {
+                return RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+
+            let cancellation_ready = poll_fn(|context| {
+                Poll::Ready(matches!(
+                    cancellation.as_mut().poll(context),
+                    Poll::Ready(())
+                ))
+            })
+            .await;
+
+            if cancellation_ready {
+                return RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled;
+            }
+
+            continue;
+        }
+
+        let scheduling_result = requester_rendezvous_authority
+            .derive_expected_device_scheduling_authority(
+                requester_dr_authority,
+                policy_source,
+                &requester_session_id,
+                &target_device_id,
+            )
+            .await;
+
+        let acknowledgement_result =
+            complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await;
+
+        return RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::SchedulingTerminal(
             RequesterRendezvousSchedulingAuthorityCallerTerminalOutcome::new(
                 scheduling_result,
                 acknowledgement_result,
