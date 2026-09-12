@@ -31,6 +31,7 @@ use super::super::{
     validate_persistent_worker_capacity,
 };
 use super::{
+    RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
     RecoverableRepeatedRealAdmissionRequesterAwareSchedulingWorkerCompletion,
     RecoverableRepeatedRealAdmissionRequesterAwareWorkerCompletion,
     recoverable_persistent_requester_rendezvous_worker::{
@@ -79,8 +80,26 @@ type RecoverableSchedulingRequesterAwareWorkerCompletion = RecoverablePersistent
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
 >;
 
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling generic completion custody before separately gated collection-driver migration"
+)]
+type RecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkerCompletion =
+    RecoverablePersistentWorkerCompletion<
+        DeviceId,
+        AuthenticatedRemoteSessionRuntimeOwner,
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+    >;
+
 type ActiveRecoverableSchedulingRequesterAwareWorkers =
     HashMap<DeviceId, RecoverableSchedulingRequesterAwareWorkerEntry>;
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling active-map custody before separately gated collection-driver migration"
+)]
+type ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers =
+    HashMap<DeviceId, RecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkerEntry>;
 
 enum RepeatedRecoverableSupervisorEvent<C> {
     Shutdown,
@@ -306,6 +325,101 @@ where
 {
     poll_fn(|context| {
         reap_requester_aware_scheduling_workers(active, context, on_completion);
+        admission.as_mut().poll(context)
+    })
+    .await
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling completion publisher before separately gated collection-driver migration"
+)]
+fn publish_recoverable_fallible_verifier_time_scheduling_completion<C>(
+    completion: RecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkerCompletion,
+    on_completion: &mut C,
+) where
+    C: FnMut(
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+    ),
+{
+    let (device_id, session_owner, result) = completion.into_parts();
+    on_completion(
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion::new(
+            device_id,
+            session_owner,
+            result,
+        ),
+    );
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling ready-reap adapter before separately gated collection-driver migration"
+)]
+fn reap_requester_aware_fallible_verifier_time_scheduling_workers<C>(
+    active: &mut ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+    context: &mut Context<'_>,
+    on_completion: &mut C,
+) where
+    C: FnMut(
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+    ),
+{
+    let mut publish = |completion| {
+        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion)
+    };
+    reap_ready_recoverable_workers(active, context, &mut publish);
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling cancellation fan-out adapter before separately gated collection-driver migration"
+)]
+fn request_all_requester_aware_fallible_verifier_time_scheduling_worker_cancellations(
+    active: &ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+) {
+    request_all_recoverable_worker_cancellations(active);
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling full-drain adapter before separately gated collection-driver migration"
+)]
+async fn drain_requester_aware_fallible_verifier_time_scheduling_workers<C>(
+    active: &mut ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+    on_completion: &mut C,
+) where
+    C: FnMut(
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+    ),
+{
+    let mut publish = |completion| {
+        publish_recoverable_fallible_verifier_time_scheduling_completion(completion, on_completion)
+    };
+    drain_recoverable_workers(active, &mut publish).await;
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-RF materializes the RE-selected dormant fallible scheduling in-flight-admission drain adapter before separately gated collection-driver migration"
+)]
+async fn drain_inflight_fallible_verifier_time_scheduling_admission<A, C>(
+    active: &mut ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+    mut admission: Pin<&mut A>,
+    on_completion: &mut C,
+) -> A::Output
+where
+    A: Future,
+    C: FnMut(
+        RecoverableRepeatedRealAdmissionRequesterAwareFallibleVerifierTimeSchedulingWorkerCompletion,
+    ),
+{
+    poll_fn(|context| {
+        reap_requester_aware_fallible_verifier_time_scheduling_workers(
+            active,
+            context,
+            on_completion,
+        );
         admission.as_mut().poll(context)
     })
     .await
