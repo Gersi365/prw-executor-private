@@ -1,0 +1,63 @@
+name: C03e-RV transient formatter correction
+
+on:
+  push:
+    branches:
+      - phase-152-c03e-rv-production-durable-post-auth-fallible-verifier-time-requester-rendezvous-expected-device-admission-request-construction-fallible-receipt-composition-source-materialization
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Apply exact formatter diff, self-remove, and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='8be3516c37528348038def4f113b0d50bfc6eb19'
+          EXPECTED_BLOB='9f8f3d5b7e752e6c63273e9f4cfa658634117cfd'
+          TARGET='crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs'
+          WF='.github/workflows/c03e-rv-format-correction.yml'
+
+          git merge-base --is-ancestor "$BASE" HEAD
+          test "$(git hash-object "$TARGET")" = "$EXPECTED_BLOB"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/prw-agent/src/remote_session_capability_runtime/remote_session_endpoint_lifecycle_runtime.rs')
+          text = path.read_text()
+          old = 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>(\n'
+          new = 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<\n    D,\n>(\n'
+          assert text.count(old) == 1
+          assert text.count(new) == 0
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          git diff --check
+          test "$(grep -F -c 'fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<' "$TARGET")" = '1'
+
+          git add "$TARGET"
+          git rm "$WF"
+
+          mapfile -t paths < <(git diff --cached --name-only "$BASE")
+          test "${#paths[@]}" = '1'
+          test "${paths[0]}" = "$TARGET"
+
+          stats="$(git diff --cached --numstat "$BASE" -- "$TARGET")"
+          additions="$(awk '{print $1}' <<<"$stats")"
+          deletions="$(awk '{print $2}' <<<"$stats")"
+          test "$additions" -gt 0
+          test "$deletions" = '0'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'C03e-RV: apply exact formatter layout to fallible constructor'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
