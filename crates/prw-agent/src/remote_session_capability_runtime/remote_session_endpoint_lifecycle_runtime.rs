@@ -1180,7 +1180,7 @@ impl RemoteSessionEndpointLifecycleRuntime {
         F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
         C: FnMut(DeviceId, RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection),
         R: FnMut(RemoteSessionExpectedDeviceAdmissionRejection<D, T>),
-        E: FnMut(DeviceId, RemoteSessionRepeatedAdmissionFailure),
+        E: FnMut(RemoteSessionRepeatedAdmissionFailure),
     {
         self.drive_repeated_real_fallible_verifier_time_remote_admission_endpoint_lifecycle(
             max_active_workers,
