@@ -458,6 +458,53 @@ fn classify_remote_session_expected_device_admission_fallible_verifier_time_live
     )
 }
 
+/// Maps one shutdown-recovered fallible-verifier-time scheduling completion into the concrete
+/// expected-device handoff receipt without performing any lifecycle or producer work.
+///
+/// Ineligible classification returns the exact existing fallible receipt unchanged. Eligible
+/// classification consumes the continuation once, terminally disposes the one-shot scheduling grant
+/// by value without binding or observing either grant field, preserves the acknowledgement result
+/// unchanged, and emits only the bounded `SuppressedOnShutdown` terminal disposition.
+#[allow(
+    dead_code,
+    reason = "C03e-RT materializes only the RS-selected synchronous fallible shutdown-suppression receipt mapper before separately gated request construction and producer specialization"
+)]
+fn map_remote_session_expected_device_admission_fallible_verifier_time_shutdown_suppression(
+    requester_device_id: DeviceId,
+    completion: Result<
+        RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+        RemoteSessionSpawnedWorkerJoinError,
+    >,
+) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+    match classify_remote_session_expected_device_admission_fallible_verifier_time_live_completion(
+        requester_device_id,
+        completion,
+    ) {
+        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification::Ineligible(
+            receipt,
+        ) => receipt,
+        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClassification::Eligible(
+            continuation,
+        ) => {
+            let RemoteSessionExpectedDeviceAdmissionEligibleContinuation {
+                requester_device_id,
+                scheduling_grant: _,
+                acknowledgement_result,
+            } = continuation;
+
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+                requester_device_id,
+                outcome:
+                    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+                        acknowledgement_result,
+                        disposition:
+                            RemoteSessionExpectedDeviceAdmissionHandoffDisposition::SuppressedOnShutdown,
+                    },
+            }
+        }
+    }
+}
+
 /// Maps one shutdown-recovered scheduling completion into the concrete expected-device handoff
 /// receipt without performing any lifecycle or producer work.
 ///
