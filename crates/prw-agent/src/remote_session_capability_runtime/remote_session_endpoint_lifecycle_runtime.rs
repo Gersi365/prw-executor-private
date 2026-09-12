@@ -832,7 +832,9 @@ enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstruction
     dead_code,
     reason = "C03e-RV materializes only the RU-selected synchronous fallible-receipt request-construction composition before separately gated producer/send composition"
 )]
-fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<D>(
+fn construct_remote_session_expected_device_admission_request_with_fallible_verifier_time_and_fallible_receipt<
+    D,
+>(
     continuation: RemoteSessionExpectedDeviceAdmissionEligibleContinuation,
     dispatcher: D,
 ) -> RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeRequestConstructionOutcome<D>
