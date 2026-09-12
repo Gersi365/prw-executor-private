@@ -35,6 +35,7 @@ use super::shared_requester_rendezvous_authority::{
     ExpectedDeviceSchedulingAuthorityDerivationError, ExpectedDeviceSchedulingAuthorityGrant,
 };
 use super::{
+    AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
     AuthenticatedRemoteSessionPostAuthIngressTransactionError,
     AuthenticatedRemoteSessionRuntimeOwner, RequesterRendezvousResponseStreamCustodyHandoff,
     SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
@@ -176,6 +177,74 @@ pub(super) enum RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop
     Cancelled,
     /// Existing FJ lifecycle semantics reached one exact typed ingress or requester-response failure.
     Failed(RequesterRendezvousPostTerminalResponseSerialLifecycleError),
+}
+
+/// Failure while running the QV fallible-verifier-time production-durable requester lifecycle.
+#[allow(
+    dead_code,
+    reason = "C03e-QV materializes the QU-selected fallible requester lifecycle error before separately gated scheduling-aware or higher-owner propagation"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError {
+    /// Exact QT verifier-time or production-durable ingress failure before requester handoff.
+    Ingress(AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError),
+    /// Existing FH requester terminal response composition failed after one requester handoff.
+    RequesterResponse(RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError),
+}
+
+impl fmt::Display
+    for RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Ingress(_) => "fallible production-durable requester lifecycle ingress failed",
+            Self::RequesterResponse(_) => "requester rendezvous terminal response failed",
+        })
+    }
+}
+
+impl std::error::Error
+    for RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Ingress(error) => Some(error),
+            Self::RequesterResponse(error) => Some(error),
+        }
+    }
+}
+
+impl From<AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError>
+    for RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError
+{
+    fn from(
+        error: AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
+    ) -> Self {
+        Self::Ingress(error)
+    }
+}
+
+impl From<RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError>
+    for RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError
+{
+    fn from(error: RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError) -> Self {
+        Self::RequesterResponse(error)
+    }
+}
+
+/// Terminal result for the QV fallible-verifier-time production-durable requester worker.
+#[allow(
+    dead_code,
+    reason = "C03e-QV materializes the QU-selected dormant fallible requester lifecycle stop before separately gated scheduling-aware or higher-owner propagation"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub(super) enum RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop {
+    /// Caller-owned cancellation won at one selected cancellation-safe lifecycle boundary.
+    Cancelled,
+    /// Exact QT ingress or existing requester-response failure terminated the lifecycle.
+    Failed(RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError),
 }
 
 /// Orthogonal terminal custody produced after one successful requester/rendezvous DR registration.
@@ -589,6 +658,102 @@ pub(super) async fn run_requester_rendezvous_post_terminal_response_serial_lifec
 
         if cancellation_ready {
             return RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+        }
+    }
+}
+
+/// Runs the QU-selected requester-aware serial lifecycle with fallible verifier-time production-durable
+/// ingress while preserving the existing requester DR and terminal-response custody law.
+///
+/// Before requester handoff, the exact QT fallible durable cancellation worker owns verifier-time
+/// acquisition plus the ingress/cancellation race. One pinned caller cancellation future is retained
+/// across every serial cycle; each QT invocation receives only a temporary polling adapter over that
+/// retained future and a mutable reborrow of the caller-owned fallible verifier-time source.
+///
+/// Once one requester handoff exists, cancellation is deliberately not polled while exact existing DR
+/// continuation and terminal acknowledgement response composition run. After response success,
+/// cancellation is polled exactly once before another QT cycle may sample verifier time or accept a
+/// stream. Exact QT verifier-time/ingress failures and exact requester-response failures remain typed
+/// under distinct lifecycle channels.
+///
+/// This sibling samples no verifier time directly, accepts/reads no stream directly, creates no task,
+/// channel, queue, retry, fallback/default time, peer close, scheduling derivation, runtime activation,
+/// deployment or merge behavior.
+#[allow(
+    dead_code,
+    reason = "C03e-QV materializes the QU-selected dormant fallible verifier-time requester lifecycle before separately gated scheduling-aware or higher-owner propagation"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "QU preserves distinct durable ingress and requester DR authority lanes as explicit inputs"
+)]
+pub(super) async fn run_fallible_verifier_time_requester_rendezvous_post_terminal_response_serial_lifecycle_worker_with_production_durable_capability<
+    P: PolicyEvaluator + Send + Sync,
+    D: CapabilityDispatcher + Send,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError> + Send,
+    S: RequesterRendezvousStartPolicySource + Sync + ?Sized,
+    C: Future<Output = ()> + Send,
+>(
+    session_owner: &mut AuthenticatedRemoteSessionRuntimeOwner,
+    capability_authority: &crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
+    requester_dr_authority: &SharedCurrentCapabilityAuthority<P>,
+    policy_source: &S,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+    mut verifier_time_unix_seconds: T,
+    dispatcher: &mut D,
+    cancellation: C,
+) -> RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop {
+    let mut cancellation = Box::pin(cancellation);
+
+    loop {
+        let cancellation_adapter = poll_fn(|context| cancellation.as_mut().poll(context));
+        let ingress_result = session_owner
+            .run_fallible_verifier_time_repeated_post_auth_control_stream_ingress_worker_with_production_durable_capability(
+                capability_authority,
+                &mut verifier_time_unix_seconds,
+                dispatcher,
+                cancellation_adapter,
+            )
+            .await;
+
+        let handoff = match ingress_result {
+            Ok(Some(handoff)) => handoff,
+            Ok(None) => {
+                return RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
+            }
+            Err(error) => {
+                return RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                    error.into(),
+                );
+            }
+        };
+
+        let continuation = continue_requester_rendezvous_retained_custody_through_dr(
+            requester_dr_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            handoff,
+        )
+        .await;
+
+        if let Err(error) =
+            complete_requester_rendezvous_terminal_dr_acknowledgement_response(continuation).await
+        {
+            return RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop::Failed(
+                error.into(),
+            );
+        }
+
+        let cancellation_ready = poll_fn(|context| {
+            Poll::Ready(matches!(
+                cancellation.as_mut().poll(context),
+                Poll::Ready(())
+            ))
+        })
+        .await;
+
+        if cancellation_ready {
+            return RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleWorkerStop::Cancelled;
         }
     }
 }
