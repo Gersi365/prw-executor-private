@@ -240,7 +240,8 @@ pub(crate) enum RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservatio
     reason = "C03e-SD materializes the SC-selected bounded higher-observation family before separately gated higher-owner caller integration"
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection {
+pub(crate) enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection
+{
     Cancelled,
     VerifierTimeFailure,
     IngressFailure,
@@ -567,7 +568,7 @@ enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClass
     Eligible(RemoteSessionExpectedDeviceAdmissionEligibleContinuation),
 }
 
-/// Classifies one exact fallible-verifier-time scheduling-aware requester worker completion without side effects.
+/// Classifies one exact fallible-verifier-time scheduling-aware requester completion without side effects.
 ///
 /// Only `SchedulingTerminal` with an `Ok` scheduling result is eligible. The scheduling-result
 /// discriminant is inspected by borrow first so every ineligible value, including a fallible
