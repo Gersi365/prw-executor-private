@@ -49,6 +49,15 @@ pub use real_remote_admission_transaction::{
 pub(crate) use remote_session_endpoint_lifecycle_runtime::RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection;
 #[allow(
     unused_imports,
+    reason = "C03e-SD materializes the SC-selected bounded expected-device handoff observation family before separately gated higher-owner caller integration"
+)]
+pub(crate) use remote_session_endpoint_lifecycle_runtime::{
+    RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection,
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+    RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection,
+};
+#[allow(
+    unused_imports,
     reason = "C03e-LP materializes the LO-reselected crate-visible completion projection before separately gated higher-owner caller migration"
 )]
 pub(crate) use remote_session_endpoint_lifecycle_runtime::RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection;
