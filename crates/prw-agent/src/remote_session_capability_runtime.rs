@@ -57,6 +57,15 @@ pub use remote_session_endpoint_lifecycle_runtime::{
     RemoteSessionEndpointLifecycleStartupError, RemoteSessionEndpointLifecycleStartupFailure,
     RemoteSessionSupervisorShutdownController,
 };
+#[allow(
+    unused_imports,
+    reason = "C03e-SD materializes the SC-selected bounded expected-device handoff observation family before separately gated higher-owner caller integration"
+)]
+pub(crate) use remote_session_endpoint_lifecycle_runtime::{
+    RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection,
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+    RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection,
+};
 pub use remote_session_executor_runtime::{
     RemoteSessionExecutorRuntime, RemoteSessionExecutorRuntimeCreateError,
     RemoteSessionExpectedDeviceAdmissionRejection,
