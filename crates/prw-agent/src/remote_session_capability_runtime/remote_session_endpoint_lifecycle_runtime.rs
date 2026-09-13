@@ -28,10 +28,12 @@ use tokio::sync::{Notify, mpsc};
 
 use super::authenticated_remote_session_runtime::{
     AuthenticatedRemoteSessionFallibleCapabilityRequestLoopError,
+    AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError,
     AuthenticatedRemoteSessionFallibleVerifierTimeWorkerStop,
 };
 use super::remote_session_executor_runtime::RemoteSessionFallibleVerifierTimeRegisteredWorkerCompletion;
 use super::requester_rendezvous_retained_custody_dr_continuation::{
+    RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError,
     RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
     RequesterRendezvousPostTerminalResponseSerialLifecycleError,
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
@@ -201,6 +203,58 @@ pub(crate) enum RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProj
     AbnormalTaskCompletion,
 }
 
+/// Bounded observation of requester acknowledgement completion at the expected-device handoff seam.
+#[allow(
+    dead_code,
+    clippy::redundant_pub_crate,
+    reason = "C03e-SD materializes only the SC-selected authority-free acknowledgement observation before separately gated higher-owner integration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection {
+    Succeeded,
+    Failed,
+}
+
+/// Bounded authority-free observation of one eligible expected-device handoff disposition.
+#[allow(
+    dead_code,
+    clippy::redundant_pub_crate,
+    reason = "C03e-SD materializes only the SC-selected handoff-disposition observation before separately gated higher-owner integration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection {
+    Enqueued,
+    ConstructionFailed,
+    ChannelClosed,
+    SuppressedOnShutdown,
+}
+
+/// Bounded higher observation for one fallible-verifier-time expected-device handoff receipt.
+///
+/// This projection carries only requester correlation-adjacent terminal semantics. It owns no
+/// scheduling grant, request, dispatcher, sender, receiver, endpoint, verifier-time provider,
+/// retry authority, continuation, stream, task handle, or raw lower error payload.
+#[allow(
+    dead_code,
+    clippy::redundant_pub_crate,
+    reason = "C03e-SD materializes the SC-selected bounded higher-observation family before separately gated higher-owner caller integration"
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection {
+    Cancelled,
+    VerifierTimeFailure,
+    IngressFailure,
+    RequesterResponseFailure,
+    SchedulingDerivationFailure {
+        acknowledgement: RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection,
+    },
+    AbnormalTaskCompletion,
+    EligibleTerminal {
+        acknowledgement: RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection,
+        disposition: RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection,
+    },
+}
+
 /// Bounded terminal disposition for one eligible expected-device admission handoff attempt.
 ///
 /// These variants classify only the handoff boundary itself. `Enqueued` means queue acceptance,
@@ -296,6 +350,120 @@ enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutco
 struct RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
     requester_device_id: DeviceId,
     outcome: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome,
+}
+
+fn project_remote_session_expected_device_admission_acknowledgement(
+    acknowledgement_result: Result<
+        (),
+        RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
+    >,
+) -> RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection {
+    if acknowledgement_result.is_ok() {
+        RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection::Succeeded
+    } else {
+        RemoteSessionExpectedDeviceAdmissionAcknowledgementObservationProjection::Failed
+    }
+}
+
+const fn project_remote_session_expected_device_admission_handoff_disposition(
+    disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition,
+) -> RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection {
+    match disposition {
+        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::Enqueued => {
+            RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection::Enqueued
+        }
+        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ConstructionFailed => {
+            RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection::ConstructionFailed
+        }
+        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::ChannelClosed => {
+            RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection::ChannelClosed
+        }
+        RemoteSessionExpectedDeviceAdmissionHandoffDisposition::SuppressedOnShutdown => {
+            RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection::SuppressedOnShutdown
+        }
+    }
+}
+
+/// Consumes one private fallible handoff receipt and returns only requester correlation plus the
+/// SC-selected bounded terminal observation.
+///
+/// C03e-RR proves that `SchedulingTerminal + Ok(grant)` is eligible and therefore cannot be stored
+/// in an `Ineligible` receipt. The single unreachable arm below asserts that already-selected
+/// classifier invariant; it does not create fallback, retry, remint, replay, refund, rollback, or
+/// alternate authority semantics.
+fn project_remote_session_expected_device_admission_fallible_verifier_time_handoff_receipt(
+    receipt: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt,
+) -> (
+    DeviceId,
+    RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+) {
+    let RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
+        requester_device_id,
+        outcome,
+    } = receipt;
+
+    let projection = match outcome {
+        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::Ineligible(
+            completion,
+        ) => match completion {
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Cancelled) => {
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::Cancelled
+            }
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError::Ingress(
+                    AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError::VerifierTime(_),
+                ),
+            )) => {
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::VerifierTimeFailure
+            }
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError::Ingress(
+                    AuthenticatedRemoteSessionFallibleVerifierTimeProductionDurablePostAuthIngressError::Ingress(_),
+                ),
+            )) => {
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::IngressFailure
+            }
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::Failed(
+                RequesterRendezvousFallibleVerifierTimePostTerminalResponseSerialLifecycleError::RequesterResponse(_),
+            )) => {
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::RequesterResponseFailure
+            }
+            Ok(RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop::SchedulingTerminal(
+                terminal_outcome,
+            )) => {
+                let (scheduling_result, acknowledgement_result) = terminal_outcome.into_parts();
+                if scheduling_result.is_ok() {
+                    unreachable!(
+                        "C03e-RR guarantees an issued scheduling grant cannot enter an Ineligible receipt"
+                    );
+                }
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::SchedulingDerivationFailure {
+                    acknowledgement:
+                        project_remote_session_expected_device_admission_acknowledgement(
+                            acknowledgement_result,
+                        ),
+                }
+            }
+            Err(RemoteSessionSpawnedWorkerJoinError::AbnormalTaskCompletion) => {
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::AbnormalTaskCompletion
+            }
+        },
+        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome::EligibleTerminal {
+            acknowledgement_result,
+            disposition,
+        } => {
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection::EligibleTerminal {
+                acknowledgement:
+                    project_remote_session_expected_device_admission_acknowledgement(
+                        acknowledgement_result,
+                    ),
+                disposition:
+                    project_remote_session_expected_device_admission_handoff_disposition(disposition),
+            }
+        }
+    };
+
+    (requester_device_id, projection)
 }
 
 /// One exact construction-eligible scheduling continuation retained above the generic producer seam.
@@ -399,7 +567,7 @@ enum RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeLiveCompletionClass
     Eligible(RemoteSessionExpectedDeviceAdmissionEligibleContinuation),
 }
 
-/// Classifies one exact fallible-verifier-time scheduling-aware requester completion without side effects.
+/// Classifies one exact fallible-verifier-time scheduling-aware requester worker completion without side effects.
 ///
 /// Only `SchedulingTerminal` with an `Ok` scheduling result is eligible. The scheduling-result
 /// discriminant is inspected by borrow first so every ineligible value, including a fallible
@@ -2064,6 +2232,102 @@ impl RemoteSessionEndpointLifecycleRuntime {
                 };
                 on_completion(device_id, projection);
             },
+            on_rejection,
+            on_admission_failure,
+        )
+    }
+}
+
+impl RemoteSessionEndpointLifecycleRuntime {
+    /// Consumes this endpoint owner and exposes only the SC-selected bounded higher observation for
+    /// the existing private C03e-RZ fallible expected-device producer specialization.
+    ///
+    /// The raw receipt remains confined to this private child. Each receipt is consumed exactly once,
+    /// synchronously projected to requester `DeviceId` plus the bounded authority-free family, and
+    /// forwarded exactly once to the caller observer. Dispatcher factory and sender authority remain
+    /// borrowed exactly as in RZ; expected-request receiver transfer and shutdown suppression remain
+    /// unchanged. This adapter constructs no channel, clones no sender, invokes no higher owner, and
+    /// activates no runtime behavior by itself.
+    #[allow(
+        dead_code,
+        reason = "C03e-SD materializes only the SC-selected bounded higher-observation adapter before separately gated higher-owner integration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SD preserves the exact RZ inputs while replacing only raw receipt observation with the bounded SC-selected projection"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection<
+        P,
+        D,
+        PS,
+        DF,
+        O,
+        F,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        dispatcher_factory: &mut DF,
+        sender: &mpsc::Sender<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        mut observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        DF: FnMut() -> D,
+        O: FnMut(
+            DeviceId,
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ),
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        self.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer(
+            max_active_workers,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            dispatcher_factory,
+            sender,
+            |receipt| {
+                let (requester_device_id, projection) =
+                    project_remote_session_expected_device_admission_fallible_verifier_time_handoff_receipt(
+                        receipt,
+                    );
+                observe_receipt(requester_device_id, projection);
+            },
+            admission_timing,
             on_rejection,
             on_admission_failure,
         )
