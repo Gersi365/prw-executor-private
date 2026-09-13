@@ -97,6 +97,18 @@ impl LinuxAgentProductionRemoteCapabilityDispatcherSource {
     }
 }
 
+/// Dormant producer-owned dispatcher factory selected by C03e-SA.
+#[allow(
+    dead_code,
+    reason = "C03e-SB captures the existing dispatcher source before separately gated producer/channel composition"
+)]
+fn linux_agent_production_remote_capability_dispatcher_factory_from_runtime_inputs(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+) -> impl FnMut() -> LinuxAgentProductionRemoteCapabilityDispatcher + use<> {
+    let source = LinuxAgentProductionRemoteCapabilityDispatcherSource::from_runtime_inputs(inputs);
+    move || source.new_dispatcher()
+}
+
 /// Dormant owned status-only adapter selected by C03e-NA.
 #[allow(
     dead_code,
