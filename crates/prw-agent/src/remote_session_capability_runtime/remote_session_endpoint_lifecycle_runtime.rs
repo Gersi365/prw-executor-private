@@ -353,7 +353,7 @@ struct RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt {
     outcome: RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceiptOutcome,
 }
 
-fn project_remote_session_expected_device_admission_acknowledgement(
+const fn project_remote_session_expected_device_admission_acknowledgement(
     acknowledgement_result: Result<
         (),
         RequesterRendezvousTerminalDrAcknowledgementResponseCompositionError,
@@ -367,7 +367,7 @@ fn project_remote_session_expected_device_admission_acknowledgement(
 }
 
 const fn project_remote_session_expected_device_admission_handoff_disposition(
-    disposition: RemoteSessionExpectedDeviceAdmissionHandoffDisposition,
+    disposition: &RemoteSessionExpectedDeviceAdmissionHandoffDisposition,
 ) -> RemoteSessionExpectedDeviceAdmissionHandoffDispositionObservationProjection {
     match disposition {
         RemoteSessionExpectedDeviceAdmissionHandoffDisposition::Enqueued => {
@@ -459,7 +459,7 @@ fn project_remote_session_expected_device_admission_fallible_verifier_time_hando
                         acknowledgement_result,
                     ),
                 disposition:
-                    project_remote_session_expected_device_admission_handoff_disposition(disposition),
+                    project_remote_session_expected_device_admission_handoff_disposition(&disposition),
             }
         }
     };
@@ -2255,6 +2255,7 @@ impl RemoteSessionEndpointLifecycleRuntime {
     )]
     #[expect(
         clippy::too_many_arguments,
+        clippy::type_complexity,
         reason = "C03e-SD preserves the exact RZ inputs while replacing only raw receipt observation with the bounded SC-selected projection"
     )]
     pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection<
