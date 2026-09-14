@@ -302,6 +302,110 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
                 )
         })
     }
+
+    /// Drives the fallible-verifier-time expected-device higher-observation projection while
+    /// retaining production reachability custody.
+    ///
+    /// This dormant crate-internal sibling consumes the production wrapper once, retains the
+    /// distinct durable production reachability owner for the complete lower C03e-SD drive, and
+    /// forwards the existing expected-device producer inputs unchanged. The lower SD adapter
+    /// remains sole owner of raw receipt projection; this wrapper widens no raw receipt or error
+    /// payload.
+    ///
+    /// No channel construction/split/clone, sender minting, higher-owner invocation, provider
+    /// sampling, endpoint rebind, readiness publication, executable caller migration, or runtime
+    /// activation occurs here.
+    ///
+    /// # Errors
+    ///
+    /// Returns the existing persistent-collection configuration error unchanged.
+    #[allow(
+        dead_code,
+        reason = "C03e-SH materializes only the SG-selected dormant production-wrapper forwarding sibling before separately gated higher-owner/channel integration"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::type_complexity,
+        reason = "C03e-SH forwards the exact existing SD higher-observation inputs through retained production reachability custody"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection<
+        P,
+        D,
+        PS,
+        DF,
+        O,
+        F,
+        R,
+        E,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        dispatcher_factory: &mut DF,
+        sender: &mpsc::Sender<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        DF: FnMut() -> D,
+        O: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ),
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        let Self {
+            endpoint,
+            owner_custody,
+        } = self;
+
+        drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
+            endpoint
+                .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection(
+                    max_active_workers,
+                    authority,
+                    capability_authority,
+                    policy_source,
+                    requester_rendezvous_authority,
+                    session_authentication,
+                    expected_requests,
+                    dispatcher_factory,
+                    sender,
+                    observe_receipt,
+                    admission_timing,
+                    on_rejection,
+                    on_admission_failure,
+                )
+        })
+    }
 }
 
 /// Recoverable production endpoint-startup failure retaining complete pre-bind runtime custody.
