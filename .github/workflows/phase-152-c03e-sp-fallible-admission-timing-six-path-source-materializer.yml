@@ -23,12 +23,13 @@ jobs:
         env:
           SO_HEAD: ece909105886ffbe31c04e4aea6a0c92a0d4374c
           INITIAL_HELPER: 21cf148b65c3495bb9d972f3765e03222bf03bbc
+          PREVIOUS_CORRECTION: 3b00918eb9f3fc19878210248c890839ed3ffc9f
           BRANCH: phase-152-c03e-sp-fallible-admission-timing-six-path-source-materialization
           HELPER: .github/workflows/phase-152-c03e-sp-fallible-admission-timing-six-path-source-materializer.yml
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = "$BRANCH"
-          test "$(git rev-parse HEAD^)" = "$INITIAL_HELPER"
+          test "$(git rev-parse HEAD^)" = "$PREVIOUS_CORRECTION"
           test "$(git rev-parse "$INITIAL_HELPER^")" = "$SO_HEAD"
           test "$(git merge-base "$SO_HEAD" HEAD)" = "$SO_HEAD"
 
@@ -45,10 +46,14 @@ jobs:
           assert text.count(old_parent) == 1, text.count(old_parent)
           text = text.replace(old_parent, new_parent, 1)
 
-          old_anchor = '''          first_impl = "impl RemoteSessionExecutorRuntime {\\n"\n          helper = dedent('''\\\n'''
-          new_anchor = '''          first_impl_positions = [match.start() for match in re.finditer(r"(?m)^impl RemoteSessionExecutorRuntime \\{$", s)]\n          assert len(first_impl_positions) == 5, len(first_impl_positions)\n          first_impl_index = first_impl_positions[0]\n          helper = dedent('''\\\n'''
-          assert text.count(old_anchor) == 1, text.count(old_anchor)
-          text = text.replace(old_anchor, new_anchor, 1)
+          old_line = '          first_impl = "impl RemoteSessionExecutorRuntime {\\n"\n'
+          new_lines = (
+              '          first_impl_positions = [match.start() for match in re.finditer(r"(?m)^impl RemoteSessionExecutorRuntime \\{$", s)]\n'
+              '          assert len(first_impl_positions) == 5, len(first_impl_positions)\n'
+              '          first_impl_index = first_impl_positions[0]\n'
+          )
+          assert text.count(old_line) == 1, text.count(old_line)
+          text = text.replace(old_line, new_lines, 1)
 
           old_insert = '          s = one(s, first_impl, helper + first_impl)\n'
           new_insert = '          s = s[:first_impl_index] + helper + s[first_impl_index:]\n'
