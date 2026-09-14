@@ -494,7 +494,7 @@ impl LinuxAgentBootstrapTerminal {
     }
 }
 
-/// Listener/socket cleanup class exposed by the bootstrap facade.
+/// Listener/socket cleanup class exposed to the Agent binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxAgentBootstrapCleanup {
     /// Exact validated listener/socket cleanup completed.
@@ -971,7 +971,7 @@ pub(crate) fn linux_agent_remote_process_operation_inputs_from_production_worker
 /// endpoint bind, listener activation, readiness publication or durable-owner mutation.
 #[allow(
     dead_code,
-    reason = "C03e-IG materializes the IF-selected production process operation input owner before separately gated executable assembly"
+    reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
 )]
 pub(crate) struct LinuxAgentProductionReachabilityRemoteProcessOperationInputs<P, D, T, F, C, R, E>
 {
@@ -986,7 +986,7 @@ impl<P, D, T, F, C, R, E>
     #[must_use]
     #[allow(
         dead_code,
-        reason = "C03e-IG materializes the IF-selected production process operation input owner before separately gated executable assembly"
+        reason = "C03e-IG materializes the IF-selected production process-operation input owner before separately gated executable assembly"
     )]
     pub(crate) const fn new(
         peer: PeerConnectivityIdentity,
@@ -2658,7 +2658,9 @@ mod tests {
         assert_worker_source_conversion(
             super::LinuxAgentProductionRemoteProcessInputPopulationError::from,
         );
-        assert_bind_source_conversion(super::LinuxAgentProductionRemoteProcessInputPopulationError::from);
+        assert_bind_source_conversion(
+            super::LinuxAgentProductionRemoteProcessInputPopulationError::from,
+        );
 
         let worker = super::LinuxAgentProductionRemoteProcessInputPopulationError::from(
             LinuxAgentRemoteMaxActiveWorkersSourceError::Missing,
@@ -2765,7 +2767,10 @@ mod tests {
                 LinuxAgentRemotePeerDeviceSourceError::Missing
             )
         ));
-        assert_eq!(peer_source.to_string(), "production peer-device source failed");
+        assert_eq!(
+            peer_source.to_string(),
+            "production peer-device source failed"
+        );
         assert!(std::error::Error::source(&peer_source).is_some());
 
         let lookup = super::LinuxAgentProductionPeerInputPopulationError::from(
@@ -2777,7 +2782,10 @@ mod tests {
                 prw_registry::durable_registry_etcd_store::DurableRegistryEtcdStoreError::ReadUnavailable
             )
         ));
-        assert_eq!(lookup.to_string(), "production durable-registry peer lookup failed");
+        assert_eq!(
+            lookup.to_string(),
+            "production durable-registry peer lookup failed"
+        );
         assert!(std::error::Error::source(&lookup).is_some());
     }
 
@@ -2824,7 +2832,10 @@ mod tests {
     #[test]
     fn phase_101_policy_allows_only_existing_local_reads() {
         let policy = BoundedLocalReadPolicy::allow_local_reads();
-        assert_eq!(policy.evaluate(Capability::AgentStatusRead), Decision::Allow);
+        assert_eq!(
+            policy.evaluate(Capability::AgentStatusRead),
+            Decision::Allow
+        );
         assert_eq!(
             policy.evaluate(Capability::PrivateDnsConfigRead),
             Decision::Allow
@@ -2894,9 +2905,11 @@ mod tests {
 
     #[test]
     fn public_remote_companion_facade_has_exact_injected_operation_shape() {
-        type RemoteCompanionEntry = fn(
-            fn(LinuxAgentRemoteSupervisorShutdownPublisher),
-        ) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
+        type RemoteCompanionEntry =
+            fn(
+                fn(LinuxAgentRemoteSupervisorShutdownPublisher),
+            )
+                -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>;
 
         fn operation(_: LinuxAgentRemoteSupervisorShutdownPublisher) {}
         fn assert_signature(entry: RemoteCompanionEntry) {
