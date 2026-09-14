@@ -1361,3 +1361,85 @@ impl<D, T> LinuxAgentProductionExpectedDeviceAdmissionChannel<D, T> {
         (self.sender, self.receiver)
     }
 }
+
+/// Integrates one dormant capacity-one expected-request channel with the configured higher owner.
+///
+/// This wrapper constructs exactly one existing capacity-one channel custody and consumes it exactly
+/// once into its sole sender and receiver. The receiver moves once into the existing configured
+/// production-source population path. Only after successful population does the returned aggregate
+/// split into the exact requester/rendezvous inputs plus durable capability authority and move those
+/// values, together with the sole sender, into the existing C03e-SF runtime-input-aware Linux seam.
+/// No sender clone, spare endpoint, second channel, retry/requeue, dispatcher construction, verifier-
+/// time sampling, executable caller, listener/readiness publication, or runtime/network activation is
+/// added by this higher-owner seam.
+///
+/// # Errors
+///
+/// Configured population failures retain the existing `ConfiguredPopulation` classification and
+/// short-circuit before C03e-SF. Existing Linux bootstrap-start failures retain the existing
+/// `Bootstrap` classification. No new error type, retry, fallback, or recovery path is introduced.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-SJ materializes the SI-selected dormant higher-owner capacity-one expected-request channel integration before separately gated executable caller wiring"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources<
+    F,
+    C,
+    R,
+    E,
+>(
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+>
+where
+    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming + Send + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+            >,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+{
+    let expected_request_channel = LinuxAgentProductionExpectedDeviceAdmissionChannel::<
+        crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+    >::new();
+    let (expected_request_sender, expected_requests) = expected_request_channel.into_parts();
+    let inputs =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+        .await?;
+    let LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        requester_rendezvous_inputs,
+        capability_authority,
+    } = inputs;
+    crate::linux_bootstrap::run_with_production_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion(
+        requester_rendezvous_inputs,
+        capability_authority,
+        expected_request_sender,
+    )
+    .map_err(Into::into)
+}
