@@ -3462,7 +3462,7 @@ where
         let requester_rendezvous_start_policy_source =
             Arc::new(requester_rendezvous_start_policy_source);
 
-        let operation = move |publisher| {
+        let operation = move |publisher: LinuxAgentRemoteSupervisorShutdownPublisher| {
             let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
                 peer,
                 remote_process_inputs,
