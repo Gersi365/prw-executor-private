@@ -7,28 +7,29 @@ use super::super::{
 use super::*;
 use std::convert::Infallible;
 
-use crate::remote_session_capability_runtime::real_remote_admission_transaction::admit_expected_remote_device_session_with_fresh_verifier_time;
+use crate::remote_session_capability_runtime::real_remote_admission_transaction::{
+    admit_expected_remote_device_session_with_fresh_verifier_time,
+    admit_expected_remote_device_session_with_fresh_verifier_time_and_application_lease_policy,
+};
 
 use crate::remote_session_capability_runtime::{
     RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
+    RemoteSessionApplicationLeasePolicy, RemoteSessionProductionPreAjTiming,
 };
 use crate::remote_session_capability_runtime::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
 };
 
-fn prepare_expected_request_with_timing_result<D, T, V, F, R, TimingError, K>(
+fn prepare_expected_request_with_timing_result<D, T, V, F, R, Timing, TimingError, K>(
     active: &HashMap<DeviceId, V>,
     request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
     admission_timing: &mut F,
     on_rejection: &mut R,
     on_timing_failure: &mut K,
-) -> Option<(
-    RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
-    RemoteSessionRealAdmissionTiming,
-)>
+) -> Option<(RemoteSessionExpectedDeviceAdmissionRequest<D, T>, Timing)>
 where
-    F: FnMut(&DeviceId) -> Result<RemoteSessionRealAdmissionTiming, TimingError>,
+    F: FnMut(&DeviceId) -> Result<Timing, TimingError>,
     R: FnMut(
         RemoteSessionExpectedDeviceAdmissionRejectionReason,
         RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
@@ -1969,6 +1970,248 @@ where
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "C03e-TF preserves the existing producer/admission arbitration while replacing only the selected timing carrier and typed lease-policy admission call"
+)]
+async fn drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy<
+    P,
+    D,
+    T,
+    PS,
+    SH,
+    PF,
+    Receipt,
+    F,
+    Q,
+    O,
+    R,
+    E,
+    TimingError,
+    K,
+>(
+    mut producer_future: Pin<Box<PF>>,
+    max_active_workers: usize,
+    transport_runtime: &AgentRemoteTransportRuntime,
+    authority: &SharedCurrentCapabilityAuthority<P>,
+    capability_authority: &Arc<ProductionDurableCapabilityAuthority>,
+    policy_source: &Arc<PS>,
+    requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+    application_lease_policy: RemoteSessionApplicationLeasePolicy,
+    session_authentication: &mut SessionAuthenticationService,
+    expected_requests: &mut mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+    request_source_open: &mut bool,
+    mut supervisor_shutdown: Pin<&mut SH>,
+    active: &mut ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers,
+    admission_timing: &mut F,
+    suppress_on_shutdown: &mut Q,
+    observe_receipt: &mut O,
+    on_rejection: &mut R,
+    on_admission_failure: &mut E,
+    on_timing_failure: &mut K,
+) -> CooperativeSchedulingProducerDriveOutcome
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    D: CapabilityDispatcher + Send + 'static,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+        + Send
+        + 'static,
+    PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+    SH: Future<Output = ()> + Send,
+    PF: Future<Output = Receipt>,
+    F: FnMut(&DeviceId) -> Result<RemoteSessionProductionPreAjTiming, TimingError>,
+    Q: FnMut(
+        DeviceId,
+        Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >,
+    ) -> Receipt,
+    O: FnMut(Receipt),
+    R: FnMut(
+        RemoteSessionExpectedDeviceAdmissionRejectionReason,
+        RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+    ),
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    K: FnMut(RemoteSessionAdmissionTimingFailure<D, T, TimingError>),
+{
+    loop {
+        let event = poll_fn(|context| {
+            poll_cooperative_scheduling_producer(
+                active.len(),
+                max_active_workers,
+                request_source_open,
+                expected_requests,
+                supervisor_shutdown.as_mut(),
+                producer_future.as_mut(),
+                context,
+            )
+        })
+        .await;
+
+        match event {
+            CooperativeSchedulingProducerEvent::Shutdown => {
+                begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                    expected_requests,
+                    active,
+                );
+                let receipt = producer_future.as_mut().await;
+                drop(producer_future);
+                observe_receipt(receipt);
+                drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                    active,
+                    suppress_on_shutdown,
+                    observe_receipt,
+                )
+                .await;
+                return CooperativeSchedulingProducerDriveOutcome::Shutdown;
+            }
+            CooperativeSchedulingProducerEvent::Receipt(receipt) => {
+                drop(producer_future);
+                observe_receipt(receipt);
+                return CooperativeSchedulingProducerDriveOutcome::Completed;
+            }
+            CooperativeSchedulingProducerEvent::Request(request) => {
+                let Some((request, timing)) = prepare_expected_request_with_timing_result(
+                    active,
+                    request,
+                    admission_timing,
+                    on_rejection,
+                    on_timing_failure,
+                ) else {
+                    continue;
+                };
+
+                let (
+                    expected_device_id,
+                    session_id,
+                    authentication_request_id,
+                    dispatcher,
+                    mut verifier_time_unix_seconds,
+                ) = request.into_parts();
+                let challenge_validity_unix_seconds = timing.into_challenge_validity_unix_seconds();
+
+                let mut admission = Box::pin(
+                    admit_expected_remote_device_session_with_fresh_verifier_time_and_application_lease_policy(
+                        transport_runtime,
+                        authority,
+                        session_authentication,
+                        &expected_device_id,
+                        session_id,
+                        challenge_validity_unix_seconds,
+                        authentication_request_id,
+                        &mut verifier_time_unix_seconds,
+                        application_lease_policy,
+                    ),
+                );
+
+                let event = poll_fn(|context| {
+                    poll_cooperative_scheduling_producer_admission(
+                        supervisor_shutdown.as_mut(),
+                        producer_future.as_mut(),
+                        admission.as_mut(),
+                        context,
+                    )
+                })
+                .await;
+
+                match event {
+                    CooperativeSchedulingProducerAdmissionEvent::Shutdown => {
+                        begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                            expected_requests,
+                            active,
+                        );
+                        let (receipt, admission_result) =
+                            tokio::join!(producer_future.as_mut(), admission.as_mut());
+                        drop(producer_future);
+                        drop(admission);
+                        observe_receipt(receipt);
+                        finish_cooperative_scheduling_shutdown_admission(
+                            admission_result,
+                            expected_device_id,
+                            on_admission_failure,
+                        );
+                        drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                            active,
+                            suppress_on_shutdown,
+                            observe_receipt,
+                        )
+                        .await;
+                        return CooperativeSchedulingProducerDriveOutcome::Shutdown;
+                    }
+                    CooperativeSchedulingProducerAdmissionEvent::Receipt(receipt) => {
+                        drop(producer_future);
+                        observe_receipt(receipt);
+                        let admission_event = poll_fn(|context| {
+                            poll_shutdown_or_inflight_admission(
+                                supervisor_shutdown.as_mut(),
+                                admission.as_mut(),
+                                context,
+                            )
+                        })
+                        .await;
+
+                        match admission_event {
+                            RecoverableInFlightAdmissionEvent::Shutdown => {
+                                begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                                    expected_requests,
+                                    active,
+                                );
+                                let admission_result = admission.as_mut().await;
+                                drop(admission);
+                                finish_cooperative_scheduling_shutdown_admission(
+                                    admission_result,
+                                    expected_device_id,
+                                    on_admission_failure,
+                                );
+                                drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                                    active,
+                                    suppress_on_shutdown,
+                                    observe_receipt,
+                                )
+                                .await;
+                                return CooperativeSchedulingProducerDriveOutcome::Shutdown;
+                            }
+                            RecoverableInFlightAdmissionEvent::Complete(admission_result) => {
+                                drop(admission);
+                                finish_cooperative_fallible_verifier_time_scheduling_admission(
+                                    active,
+                                    admission_result,
+                                    expected_device_id,
+                                    dispatcher,
+                                    verifier_time_unix_seconds,
+                                    capability_authority,
+                                    authority,
+                                    policy_source,
+                                    requester_rendezvous_authority,
+                                    on_admission_failure,
+                                );
+                                return CooperativeSchedulingProducerDriveOutcome::Completed;
+                            }
+                        }
+                    }
+                    CooperativeSchedulingProducerAdmissionEvent::Admission(admission_result) => {
+                        drop(admission);
+                        finish_cooperative_fallible_verifier_time_scheduling_admission(
+                            active,
+                            admission_result,
+                            expected_device_id,
+                            dispatcher,
+                            verifier_time_unix_seconds,
+                            capability_authority,
+                            authority,
+                            policy_source,
+                            requester_rendezvous_authority,
+                            on_admission_failure,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl RemoteSessionExecutorRuntime {
     /// Drives the RI-selected dormant fallible-verifier-time cooperative scheduling producer sibling
     /// without installing a concrete producer, receipt family, endpoint caller, or runtime activation.
@@ -2314,6 +2557,348 @@ impl RemoteSessionExecutorRuntime {
         Ok(())
     }
 
+    #[allow(
+        dead_code,
+        reason = "C03e-TF materializes the TE-selected production pre-AJ timing plus typed lease-policy collection core before separately gated executable activation"
+    )]
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        clippy::needless_pass_by_value,
+        clippy::too_many_arguments,
+        clippy::too_many_lines,
+        reason = "C03e-TF preserves scheduling, producer and shutdown semantics while changing only timing and admission inputs"
+    )]
+    fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy_core<
+        P,
+        D,
+        T,
+        PS,
+        SH,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        TimingError,
+        K,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        application_lease_policy: RemoteSessionApplicationLeasePolicy,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: SH,
+        producer: &mut H,
+        mut suppress_on_shutdown: Q,
+        mut observe_receipt: O,
+        mut admission_timing: F,
+        mut on_rejection: R,
+        mut on_admission_failure: E,
+        mut on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        SH: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        F: FnMut(&DeviceId) -> Result<RemoteSessionProductionPreAjTiming, TimingError>,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(RemoteSessionAdmissionTimingFailure<D, T, TimingError>),
+    {
+        let max_active_workers = validate_persistent_worker_capacity(max_active_workers)?;
+        let mut expected_requests = expected_requests;
+
+        self.runtime.block_on(async {
+            let mut active =
+                ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers::new();
+            let mut supervisor_shutdown = Box::pin(supervisor_shutdown);
+            let mut request_source_open = true;
+
+            'supervisor: loop {
+                let event = poll_fn(|context| {
+                    poll_cooperative_fallible_verifier_time_scheduling_driver_idle(
+                        &mut active,
+                        max_active_workers,
+                        &mut request_source_open,
+                        &mut expected_requests,
+                        supervisor_shutdown.as_mut(),
+                        context,
+                    )
+                })
+                .await;
+
+                match event {
+                    CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Shutdown => {
+                        begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                            &mut expected_requests,
+                            &active,
+                        );
+                        drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                            &mut active,
+                            &mut suppress_on_shutdown,
+                            &mut observe_receipt,
+                        )
+                        .await;
+                        break;
+                    }
+                    CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Completion(
+                        completion,
+                    ) => {
+                        let (device_id, result) = super::super::dispose_recoverable_repeated_real_admission_requester_aware_fallible_verifier_time_scheduling_worker_completion(
+                            completion,
+                        );
+                        let producer_future = Box::pin(producer(device_id, result));
+                        match drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy(
+                            producer_future,
+                            max_active_workers,
+                            transport_runtime,
+                            authority,
+                            &capability_authority,
+                            &policy_source,
+                            requester_rendezvous_authority,
+                            application_lease_policy,
+                            session_authentication,
+                            &mut expected_requests,
+                            &mut request_source_open,
+                            supervisor_shutdown.as_mut(),
+                            &mut active,
+                            &mut admission_timing,
+                            &mut suppress_on_shutdown,
+                            &mut observe_receipt,
+                            &mut on_rejection,
+                            &mut on_admission_failure,
+                            &mut on_timing_failure,
+                        )
+                        .await
+                        {
+                            CooperativeSchedulingProducerDriveOutcome::Completed => {}
+                            CooperativeSchedulingProducerDriveOutcome::Shutdown => {
+                                break 'supervisor;
+                            }
+                        }
+                    }
+                    CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Request(request) => {
+                        let Some((request, timing)) = prepare_expected_request_with_timing_result(
+                            &active,
+                            request,
+                            &mut admission_timing,
+                            &mut on_rejection,
+                            &mut on_timing_failure,
+                        ) else {
+                            continue;
+                        };
+
+                        let (
+                            expected_device_id,
+                            session_id,
+                            authentication_request_id,
+                            dispatcher,
+                            mut verifier_time_unix_seconds,
+                        ) = request.into_parts();
+                        let challenge_validity_unix_seconds =
+                            timing.into_challenge_validity_unix_seconds();
+
+                        let mut admission = Box::pin(
+                            admit_expected_remote_device_session_with_fresh_verifier_time_and_application_lease_policy(
+                                transport_runtime,
+                                authority,
+                                session_authentication,
+                                &expected_device_id,
+                                session_id,
+                                challenge_validity_unix_seconds,
+                                authentication_request_id,
+                                &mut verifier_time_unix_seconds,
+                                application_lease_policy,
+                            ),
+                        );
+
+                        'admission: loop {
+                            let admission_event = poll_fn(|context| {
+                                poll_cooperative_fallible_verifier_time_scheduling_admission(
+                                    &mut active,
+                                    supervisor_shutdown.as_mut(),
+                                    admission.as_mut(),
+                                    context,
+                                )
+                            })
+                            .await;
+
+                            match admission_event {
+                                CooperativeFallibleVerifierTimeSchedulingAdmissionEvent::Shutdown => {
+                                    begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                                        &mut expected_requests,
+                                        &active,
+                                    );
+                                    let admission_result = admission.as_mut().await;
+                                    drop(admission);
+                                    finish_cooperative_scheduling_shutdown_admission(
+                                        admission_result,
+                                        expected_device_id,
+                                        &mut on_admission_failure,
+                                    );
+                                    drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                                        &mut active,
+                                        &mut suppress_on_shutdown,
+                                        &mut observe_receipt,
+                                    )
+                                    .await;
+                                    break 'supervisor;
+                                }
+                                CooperativeFallibleVerifierTimeSchedulingAdmissionEvent::Admission(
+                                    admission_result,
+                                ) => {
+                                    drop(admission);
+                                    finish_cooperative_fallible_verifier_time_scheduling_admission(
+                                        &mut active,
+                                        admission_result,
+                                        expected_device_id,
+                                        dispatcher,
+                                        verifier_time_unix_seconds,
+                                        &capability_authority,
+                                        authority,
+                                        &policy_source,
+                                        requester_rendezvous_authority,
+                                        &mut on_admission_failure,
+                                    );
+                                    break 'admission;
+                                }
+                                CooperativeFallibleVerifierTimeSchedulingAdmissionEvent::Completion(
+                                    completion,
+                                ) => {
+                                    let (device_id, result) = super::super::dispose_recoverable_repeated_real_admission_requester_aware_fallible_verifier_time_scheduling_worker_completion(
+                                        completion,
+                                    );
+                                    let mut producer_future = Box::pin(producer(device_id, result));
+                                    let event = poll_fn(|context| {
+                                        poll_cooperative_scheduling_producer_admission(
+                                            supervisor_shutdown.as_mut(),
+                                            producer_future.as_mut(),
+                                            admission.as_mut(),
+                                            context,
+                                        )
+                                    })
+                                    .await;
+
+                                    match event {
+                                        CooperativeSchedulingProducerAdmissionEvent::Shutdown => {
+                                            begin_cooperative_fallible_verifier_time_scheduling_driver_shutdown(
+                                                &mut expected_requests,
+                                                &active,
+                                            );
+                                            let (receipt, admission_result) = tokio::join!(
+                                                producer_future.as_mut(),
+                                                admission.as_mut()
+                                            );
+                                            drop(producer_future);
+                                            drop(admission);
+                                            observe_receipt(receipt);
+                                            finish_cooperative_scheduling_shutdown_admission(
+                                                admission_result,
+                                                expected_device_id,
+                                                &mut on_admission_failure,
+                                            );
+                                            drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppression(
+                                                &mut active,
+                                                &mut suppress_on_shutdown,
+                                                &mut observe_receipt,
+                                            )
+                                            .await;
+                                            break 'supervisor;
+                                        }
+                                        CooperativeSchedulingProducerAdmissionEvent::Receipt(
+                                            receipt,
+                                        ) => {
+                                            drop(producer_future);
+                                            observe_receipt(receipt);
+                                        }
+                                        CooperativeSchedulingProducerAdmissionEvent::Admission(
+                                            admission_result,
+                                        ) => {
+                                            drop(admission);
+                                            finish_cooperative_fallible_verifier_time_scheduling_admission(
+                                                &mut active,
+                                                admission_result,
+                                                expected_device_id,
+                                                dispatcher,
+                                                verifier_time_unix_seconds,
+                                                &capability_authority,
+                                                authority,
+                                                &policy_source,
+                                                requester_rendezvous_authority,
+                                                &mut on_admission_failure,
+                                            );
+                                            match drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy(
+                                                producer_future,
+                                                max_active_workers,
+                                                transport_runtime,
+                                                authority,
+                                                &capability_authority,
+                                                &policy_source,
+                                                requester_rendezvous_authority,
+                                                application_lease_policy,
+                                                session_authentication,
+                                                &mut expected_requests,
+                                                &mut request_source_open,
+                                                supervisor_shutdown.as_mut(),
+                                                &mut active,
+                                                &mut admission_timing,
+                                                &mut suppress_on_shutdown,
+                                                &mut observe_receipt,
+                                                &mut on_rejection,
+                                                &mut on_admission_failure,
+                                                &mut on_timing_failure,
+                                            )
+                                            .await
+                                            {
+                                                CooperativeSchedulingProducerDriveOutcome::Completed => {
+                                                }
+                                                CooperativeSchedulingProducerDriveOutcome::Shutdown => {
+                                                    break 'supervisor;
+                                                }
+                                            }
+                                            break 'admission;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
     /// Preserves the existing infallible admission-timing API through an explicit `Infallible` lift.
     #[allow(
         dead_code,
@@ -2502,6 +3087,110 @@ impl RemoteSessionExecutorRuntime {
             capability_authority,
             policy_source,
             requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            supervisor_shutdown,
+            producer,
+            suppress_on_shutdown,
+            observe_receipt,
+            admission_timing,
+            on_rejection,
+            on_admission_failure,
+            on_timing_failure,
+        )
+    }
+
+    /// Drives the TE-selected sibling lane with challenge-only pre-AJ timing and one validated lease policy.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-TF adds only the typed lease policy and production pre-AJ timing carrier to the existing fallible scheduling boundary"
+    )]
+    pub(in super::super::super) fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy<
+        P,
+        D,
+        T,
+        PS,
+        SH,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        application_lease_policy: RemoteSessionApplicationLeasePolicy,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: SH,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        SH: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                T,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        self.drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy_core(
+            max_active_workers,
+            transport_runtime,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            application_lease_policy,
             session_authentication,
             expected_requests,
             supervisor_shutdown,
@@ -2708,6 +3397,115 @@ impl RemoteSessionExecutorRuntime {
                 capability_authority,
                 policy_source,
                 requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                producer,
+                suppress_on_shutdown,
+                observe_receipt,
+                admission_timing,
+                on_rejection,
+                on_admission_failure,
+                on_timing_failure,
+            );
+
+        transport_runtime.close(0, b"remote endpoint shutdown");
+        self.runtime.block_on(transport_runtime.wait_idle());
+        result
+    }
+
+    /// Preserves endpoint close/idle drain for the TE-selected pre-AJ timing and typed lease-policy lane.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-TF adds only the typed lease policy and production pre-AJ timing carrier to the existing endpoint wrapper"
+    )]
+    pub(in super::super::super::super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy<
+        P,
+        D,
+        T,
+        PS,
+        S,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        application_lease_policy: RemoteSessionApplicationLeasePolicy,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: S,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        S: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                T,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        let result = self
+            .drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_pre_aj_timing_and_application_lease_policy(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                application_lease_policy,
                 session_authentication,
                 expected_requests,
                 supervisor_shutdown,
