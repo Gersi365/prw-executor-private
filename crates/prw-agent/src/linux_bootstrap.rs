@@ -46,13 +46,14 @@ use crate::local_commands::status_snapshot::{
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
-    RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
-    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionApplicationLeasePolicy, RemoteSessionEndpointLifecycleRuntime,
+    RemoteSessionExecutorRuntime, RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest,
     RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
-    RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-    RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionProductionPreAjTiming, RemoteSessionRealAdmissionError,
+    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
+    RemoteSessionRepeatedAdmissionFailure,
     RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
     RemoteSessionSupervisorShutdownController, SharedCurrentCapabilityAuthority,
     SharedRequesterRendezvousAuthority,
@@ -3642,6 +3643,150 @@ where
                             production_durable_capability_authority,
                             requester_rendezvous_start_policy_source,
                             &requester_rendezvous_authority,
+                            &mut session_authentication,
+                            expected_requests,
+                            &mut dispatcher_factory,
+                            &expected_request_sender,
+                            on_completion,
+                            admission_timing,
+                            on_rejection,
+                            on_admission_failure,
+                            on_timing_failure,
+                        );
+                },
+            );
+        };
+
+        run_with_remote_process_companion_inputs(runtime_inputs, operation)
+            .map(|(local, remote)| LinuxAgentBootstrapWithRemoteReport { local, remote })
+    })
+}
+
+/// TE-selected Linux composition sibling carrying one already-validated application lease policy.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-TF forwards the typed lease policy and challenge-only timing source without selecting raw configuration or activation"
+)]
+pub(crate) fn run_with_production_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_with_pre_aj_timing_and_application_lease_policy<
+    P,
+    F,
+    C,
+    R,
+    E,
+    Cause,
+    K,
+>(
+    inputs: LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs<
+        P,
+        LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+        F,
+        C,
+        R,
+        E,
+    >,
+    production_durable_capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+    application_lease_policy: RemoteSessionApplicationLeasePolicy,
+    expected_request_sender: mpsc::Sender<
+        RemoteSessionExpectedDeviceAdmissionRequest<
+            LinuxAgentProductionRemoteCapabilityDispatcher,
+            fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+        >,
+    >,
+    on_timing_failure: K,
+) -> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentBootstrapStartFailure>
+where
+    P: PolicyEvaluator + Send + Sync + 'static,
+    Cause: std::error::Error + Send + 'static,
+    F: FnMut(&DeviceId) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+        > + Send
+        + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+            >,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+    K: FnMut(
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingFailure<
+                LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+                crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ) + Send
+        + 'static,
+{
+    with_initial_runtime_inputs(move |runtime_inputs| {
+        let mut dispatcher_factory =
+            linux_agent_production_remote_capability_dispatcher_factory_from_runtime_inputs(
+                runtime_inputs,
+            );
+        let LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+            production_inputs,
+            requester_rendezvous_start_policy_source,
+            requester_rendezvous_authority,
+        } = inputs;
+        let requester_rendezvous_start_policy_source =
+            Arc::new(requester_rendezvous_start_policy_source);
+
+        let operation = move |publisher: LinuxAgentRemoteSupervisorShutdownPublisher| {
+            let LinuxAgentProductionReachabilityRemoteProcessOperationInputs {
+                peer,
+                remote_process_inputs,
+            } = production_inputs;
+            let LinuxAgentRemoteProcessOperationInputs {
+                bind_addr,
+                max_active_workers,
+                capability_authority,
+                mut session_authentication,
+                expected_requests,
+                admission_timing,
+                on_completion,
+                on_rejection,
+                on_admission_failure,
+            } = remote_process_inputs;
+
+            let _ = run_remote_process_operation_composition(
+                RemoteSessionExecutorRuntime::new,
+                move |executor| {
+                    executor
+                        .bootstrap_production_reachability_runtime_custody_from_systemd_credentials(
+                            &peer,
+                        )
+                },
+                move |executor, runtime_custody| {
+                    runtime_custody.bind_remote_endpoint_with_executor_from_systemd_credentials(
+                        executor, bind_addr,
+                    )
+                },
+                move |controller| publisher.publish(controller),
+                move |lifecycle, _publication| {
+                    let _ = lifecycle
+                        .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection_with_pre_aj_timing_and_application_lease_policy(
+                            max_active_workers,
+                            &capability_authority,
+                            production_durable_capability_authority,
+                            requester_rendezvous_start_policy_source,
+                            &requester_rendezvous_authority,
+                            application_lease_policy,
                             &mut session_authentication,
                             expected_requests,
                             &mut dispatcher_factory,

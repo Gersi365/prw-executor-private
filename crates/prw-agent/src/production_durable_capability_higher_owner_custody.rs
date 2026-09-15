@@ -46,11 +46,11 @@ use crate::production_durable_registry_custody_bootstrap::{
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
-    RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionApplicationLeasePolicy, RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
-    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionError,
-    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-    RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionProductionPreAjTiming,
+    RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
+    RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
     RemoteSessionRequesterAwareEndpointLifecycleCompletionProjection,
     SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
 };
@@ -1525,6 +1525,95 @@ where
     crate::linux_bootstrap::run_with_production_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_with_fallible_admission_timing(
         requester_rendezvous_inputs,
         capability_authority,
+        expected_request_sender,
+        on_timing_failure,
+    )
+    .map_err(Into::into)
+}
+
+/// TE-selected configured higher-owner sibling propagating one already-validated lease policy by value.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-TF preserves configured population and K custody while forwarding the separate typed lease policy only after population succeeds"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources_with_pre_aj_timing_and_application_lease_policy<
+    F,
+    C,
+    R,
+    E,
+    Cause,
+    K,
+>(
+    admission_timing: F,
+    application_lease_policy: RemoteSessionApplicationLeasePolicy,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+    on_timing_failure: K,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+>
+where
+    Cause: std::error::Error + Send + 'static,
+    F: FnMut(&DeviceId) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+        > + Send
+        + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+            >,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+    K: FnMut(
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingFailure<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+                crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ) + Send
+        + 'static,
+{
+    let expected_request_channel = LinuxAgentProductionExpectedDeviceAdmissionChannel::<
+        crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+    >::new();
+    let (expected_request_sender, expected_requests) = expected_request_channel.into_parts();
+    let inputs =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+        .await?;
+    let LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        requester_rendezvous_inputs,
+        capability_authority,
+    } = inputs;
+    crate::linux_bootstrap::run_with_production_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_with_pre_aj_timing_and_application_lease_policy(
+        requester_rendezvous_inputs,
+        capability_authority,
+        application_lease_policy,
         expected_request_sender,
         on_timing_failure,
     )
