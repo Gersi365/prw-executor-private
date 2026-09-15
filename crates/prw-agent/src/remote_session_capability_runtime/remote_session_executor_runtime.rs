@@ -972,8 +972,8 @@ mod tests {
 pub use repeated_real_admission_supervisor::{
     RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
-    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionTiming,
-    RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionProductionPreAjTiming,
+    RemoteSessionRealAdmissionTiming, RemoteSessionRepeatedAdmissionFailure,
 };
 
 mod repeated_real_admission_supervisor {
@@ -1112,6 +1112,28 @@ mod repeated_real_admission_supervisor {
                 self.authentication_now_unix_seconds,
                 self.application_lease_unix_seconds,
             )
+        }
+    }
+
+    /// Fresh challenge timing owned only by the future production pre-AJ admission sibling.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct RemoteSessionProductionPreAjTiming {
+        challenge_validity_unix_seconds: Range<u64>,
+    }
+
+    impl RemoteSessionProductionPreAjTiming {
+        /// Creates one production pre-AJ timing value containing only challenge validity.
+        #[must_use]
+        pub const fn new(challenge_validity_unix_seconds: Range<u64>) -> Self {
+            Self {
+                challenge_validity_unix_seconds,
+            }
+        }
+
+        /// Consumes the value into the exact challenge-validity range.
+        #[must_use]
+        pub const fn into_challenge_validity_unix_seconds(self) -> Range<u64> {
+            self.challenge_validity_unix_seconds
         }
     }
 
@@ -2020,9 +2042,9 @@ mod repeated_real_admission_supervisor {
             RemoteSessionExpectedDeviceAdmissionRejectionReason,
             RemoteSessionExpectedDeviceAdmissionRequest,
             RemoteSessionPersistentCollectionConfigError, RemoteSessionPersistentWorkerEntry,
-            RemoteSessionRealAdmissionError, RemoteSessionRealAdmissionTiming,
-            RemoteSessionRepeatedAdmissionFailure, RepeatedSupervisorEvent,
-            drain_registered_workers, finish_remote_endpoint_shutdown,
+            RemoteSessionProductionPreAjTiming, RemoteSessionRealAdmissionError,
+            RemoteSessionRealAdmissionTiming, RemoteSessionRepeatedAdmissionFailure,
+            RepeatedSupervisorEvent, drain_registered_workers, finish_remote_endpoint_shutdown,
             poll_shutdown_or_expected_request, poll_shutdown_or_inflight_admission,
             prepare_expected_request, remote_session_worker_cancellation_pair,
             request_all_worker_cancellations,
@@ -2039,6 +2061,12 @@ mod repeated_real_admission_supervisor {
 
         fn test_timing() -> RemoteSessionRealAdmissionTiming {
             RemoteSessionRealAdmissionTiming::new(10..20, 12, 10..30)
+        }
+
+        #[test]
+        fn production_pre_aj_timing_owns_only_challenge_validity_range() {
+            let timing = RemoteSessionProductionPreAjTiming::new(40..50);
+            assert_eq!(timing.into_challenge_validity_unix_seconds(), 40..50);
         }
 
         #[test]
