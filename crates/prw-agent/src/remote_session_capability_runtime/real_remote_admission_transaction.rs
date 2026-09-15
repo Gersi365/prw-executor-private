@@ -20,6 +20,7 @@ use super::{
 use crate::{
     remote_session_authentication_transaction::{
         AgentRemoteSessionAuthenticationFailure, complete_registry_bound_session_authentication,
+        complete_registry_bound_session_authentication_with_fresh_verifier_time,
     },
     remote_transport_runtime::{
         AgentRemotePeerAcceptError, AgentRemoteSessionChallengeError, AgentRemoteTransportRuntime,
@@ -203,6 +204,86 @@ where
     .map_err(Into::into)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "C03e-SZ preserves the selected AJ inputs while replacing only proof-time now with the retained request-owned verifier source"
+)]
+pub async fn admit_expected_remote_device_session_with_fresh_verifier_time<P, T>(
+    runtime: &AgentRemoteTransportRuntime,
+    authority: &SharedCurrentCapabilityAuthority<P>,
+    session_authentication: &mut SessionAuthenticationService,
+    expected_device_id: &DeviceId,
+    session_id: SessionId,
+    challenge_validity_unix_seconds: Range<u64>,
+    authentication_request_id: u64,
+    verifier_time_unix_seconds: &mut T,
+    application_lease_unix_seconds: Range<u64>,
+) -> Result<AuthenticatedRemoteSessionRuntimeOwner, RemoteSessionRealAdmissionError>
+where
+    P: PolicyEvaluator + Send + Sync,
+    T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+{
+    let expected_transport_identity = authority
+        .with_current_authority(|registry, _policy| {
+            let registered_device = registry
+                .device(expected_device_id)
+                .ok_or(RegistryError::DeviceUnknown)?;
+            let expected_transport_identity = registered_device
+                .transport_identity()
+                .ok_or(RegistryError::TransportIdentityMissing)?;
+            registry
+                .validate_transport_identity(expected_device_id, expected_transport_identity)?;
+            Ok::<_, RegistryError>(expected_transport_identity)
+        })
+        .await?;
+
+    let peer = runtime
+        .accept_authenticated_peer(expected_transport_identity)
+        .await?;
+
+    let challenge = authority
+        .with_current_authority(|registry, _policy| {
+            runtime.begin_registry_bound_session_challenge(
+                &peer,
+                registry,
+                session_authentication,
+                expected_device_id,
+                session_id,
+                challenge_validity_unix_seconds,
+            )
+        })
+        .await;
+
+    let challenge = match challenge {
+        Ok(challenge) => challenge,
+        Err(error) => {
+            peer.close(
+                REMOTE_SESSION_ADMISSION_PREPARATION_FAILURE_CLOSE_CODE,
+                REMOTE_SESSION_ADMISSION_PREPARATION_FAILURE_CLOSE_REASON,
+            );
+            return Err(error.into());
+        }
+    };
+
+    let authenticated_session =
+        complete_registry_bound_session_authentication_with_fresh_verifier_time(
+            runtime,
+            &peer,
+            session_authentication,
+            &challenge,
+            authentication_request_id,
+            verifier_time_unix_seconds,
+        )
+        .await?;
+
+    compose_authenticated_remote_session(
+        peer,
+        authenticated_session,
+        application_lease_unix_seconds,
+    )
+    .map_err(Into::into)
+}
+
 #[cfg(test)]
 mod tests {
     use prw_registry::RegistryError;
@@ -212,6 +293,7 @@ mod tests {
         REMOTE_SESSION_ADMISSION_PREPARATION_FAILURE_CLOSE_CODE,
         REMOTE_SESSION_ADMISSION_PREPARATION_FAILURE_CLOSE_REASON, RemoteSessionRealAdmissionError,
         admit_expected_remote_device_session,
+        admit_expected_remote_device_session_with_fresh_verifier_time,
     };
     use crate::{
         remote_session_authentication_transaction::AgentRemoteSessionAuthenticationFailure,
@@ -243,6 +325,14 @@ mod tests {
     #[test]
     fn transaction_surface_is_materialized_without_transport_identity_input() {
         let _ = admit_expected_remote_device_session::<prw_policy::BoundedLocalManagementPolicy>;
+    }
+
+    #[test]
+    fn fresh_verifier_time_transaction_surface_is_materialized() {
+        let _ = admit_expected_remote_device_session_with_fresh_verifier_time::<
+            prw_policy::BoundedLocalManagementPolicy,
+            fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+        >;
     }
 
     #[test]

@@ -19,7 +19,10 @@ use prw_remote_bridge::{
         send_session_authentication_message,
     },
 };
-use prw_session::{AuthenticatedDeviceSession, SessionAuthenticationService, SessionServiceError};
+use prw_session::{
+    AuthenticatedDeviceSession, SessionAuthenticationService, SessionServiceError,
+    prwa_verifier_source::PrwaVerifierSourceError,
+};
 
 use crate::remote_transport_runtime::AgentRemoteTransportRuntime;
 
@@ -41,6 +44,8 @@ pub enum AgentRemoteSessionAuthenticationPrimaryError {
     UnexpectedMessage,
     /// The wire proof referenced a different logical session identifier.
     SessionIdMismatch,
+    /// Fresh server-owned verifier time could not be observed for proof verification.
+    VerifierTime(PrwaVerifierSourceError),
     /// Existing Phase 128 proof verification or authenticated-session commit failed.
     Session(SessionServiceError),
 }
@@ -61,6 +66,9 @@ impl fmt::Display for AgentRemoteSessionAuthenticationPrimaryError {
             Self::SessionIdMismatch => {
                 formatter.write_str("remote session authentication session id mismatch")
             }
+            Self::VerifierTime(_) => {
+                formatter.write_str("remote session authentication verifier time failed")
+            }
             Self::Session(_) => formatter.write_str("remote session authentication proof failed"),
         }
     }
@@ -71,6 +79,7 @@ impl std::error::Error for AgentRemoteSessionAuthenticationPrimaryError {
         match self {
             Self::Transport(error) => Some(error),
             Self::Wire(error) => Some(error),
+            Self::VerifierTime(error) => Some(error),
             Self::Session(error) => Some(error),
             Self::RequestIdMismatch | Self::UnexpectedMessage | Self::SessionIdMismatch => None,
         }
@@ -171,6 +180,51 @@ pub async fn complete_registry_bound_session_authentication(
     request_id: u64,
     now_unix_seconds: u64,
 ) -> Result<AuthenticatedDeviceSession, AgentRemoteSessionAuthenticationFailure> {
+    let mut verifier_time_unix_seconds = || Ok(now_unix_seconds);
+    complete_registry_bound_session_authentication_with_time_source(
+        runtime,
+        peer,
+        session_authentication,
+        challenge,
+        request_id,
+        &mut verifier_time_unix_seconds,
+    )
+    .await
+}
+
+pub(crate) async fn complete_registry_bound_session_authentication_with_fresh_verifier_time<T>(
+    runtime: &AgentRemoteTransportRuntime,
+    peer: &AuthenticatedRemotePeerConnection,
+    session_authentication: &mut SessionAuthenticationService,
+    challenge: &SessionAuthChallenge,
+    request_id: u64,
+    verifier_time_unix_seconds: &mut T,
+) -> Result<AuthenticatedDeviceSession, AgentRemoteSessionAuthenticationFailure>
+where
+    T: FnMut() -> Result<u64, PrwaVerifierSourceError>,
+{
+    complete_registry_bound_session_authentication_with_time_source(
+        runtime,
+        peer,
+        session_authentication,
+        challenge,
+        request_id,
+        verifier_time_unix_seconds,
+    )
+    .await
+}
+
+async fn complete_registry_bound_session_authentication_with_time_source<T>(
+    runtime: &AgentRemoteTransportRuntime,
+    peer: &AuthenticatedRemotePeerConnection,
+    session_authentication: &mut SessionAuthenticationService,
+    challenge: &SessionAuthChallenge,
+    request_id: u64,
+    verifier_time_unix_seconds: &mut T,
+) -> Result<AuthenticatedDeviceSession, AgentRemoteSessionAuthenticationFailure>
+where
+    T: FnMut() -> Result<u64, PrwaVerifierSourceError>,
+{
     let _authority_owner_guard = runtime.authority_owner();
     let session_id = challenge.session_id();
 
@@ -243,6 +297,17 @@ pub async fn complete_registry_bound_session_authentication(
         wire_proof.nonce(),
         wire_proof.signature().clone(),
     );
+    let now_unix_seconds = match observe_fresh_proof_verifier_time(verifier_time_unix_seconds) {
+        Ok(now_unix_seconds) => now_unix_seconds,
+        Err(error) => {
+            return Err(fail_transaction(
+                peer,
+                session_authentication,
+                session_id,
+                error,
+            ));
+        }
+    };
     session_authentication
         .submit_proof(session_id, &proof, now_unix_seconds)
         .map_err(|error| {
@@ -253,6 +318,15 @@ pub async fn complete_registry_bound_session_authentication(
                 AgentRemoteSessionAuthenticationPrimaryError::Session(error),
             )
         })
+}
+
+fn observe_fresh_proof_verifier_time<T>(
+    verifier_time_unix_seconds: &mut T,
+) -> Result<u64, AgentRemoteSessionAuthenticationPrimaryError>
+where
+    T: FnMut() -> Result<u64, PrwaVerifierSourceError>,
+{
+    verifier_time_unix_seconds().map_err(AgentRemoteSessionAuthenticationPrimaryError::VerifierTime)
 }
 
 fn fail_transaction(
@@ -273,17 +347,57 @@ fn fail_transaction(
 
 #[cfg(test)]
 mod tests {
-    use prw_session::SessionServiceError;
+    use std::error::Error as _;
+
+    use prw_session::{SessionServiceError, prwa_verifier_source::PrwaVerifierSourceError};
 
     use super::{
         AgentRemoteSessionAuthenticationFailure, AgentRemoteSessionAuthenticationPrimaryError,
         SESSION_AUTHENTICATION_FAILURE_CLOSE_CODE, SESSION_AUTHENTICATION_FAILURE_CLOSE_REASON,
         complete_registry_bound_session_authentication,
+        complete_registry_bound_session_authentication_with_fresh_verifier_time,
+        observe_fresh_proof_verifier_time,
     };
 
     #[test]
     fn transaction_surface_requires_runtime_peer_service_challenge_correlation_and_time() {
         let _ = complete_registry_bound_session_authentication;
+    }
+
+    #[test]
+    fn fresh_transaction_surface_accepts_request_owned_fallible_verifier_time() {
+        let _ = complete_registry_bound_session_authentication_with_fresh_verifier_time::<
+            fn() -> Result<u64, PrwaVerifierSourceError>,
+        >;
+    }
+
+    #[test]
+    fn fresh_verifier_time_is_observed_once_and_preserves_value() {
+        let mut calls = 0_u8;
+        let mut source = || {
+            calls += 1;
+            Ok(47_u64)
+        };
+
+        let observed = observe_fresh_proof_verifier_time(&mut source);
+
+        assert_eq!(observed, Ok(47));
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn fresh_verifier_time_failure_preserves_typed_source() {
+        let mut source = || Err(PrwaVerifierSourceError::VerifierTime);
+        let error = observe_fresh_proof_verifier_time(&mut source)
+            .expect_err("fresh verifier-time failure must remain typed");
+
+        assert_eq!(
+            error,
+            AgentRemoteSessionAuthenticationPrimaryError::VerifierTime(
+                PrwaVerifierSourceError::VerifierTime
+            )
+        );
+        assert!(error.source().is_some());
     }
 
     #[test]
