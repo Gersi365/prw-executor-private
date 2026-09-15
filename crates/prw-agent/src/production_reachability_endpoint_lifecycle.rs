@@ -406,6 +406,112 @@ impl ProductionReachabilityEndpointLifecycleRuntime {
                 )
         })
     }
+
+    /// Forwards fallible admission timing through the retained production-reachability custody layer.
+    #[allow(
+        dead_code,
+        reason = "C03e-SX adds only the SW-selected fallible timing forwarding sibling while preserving retained production reachability custody"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::type_complexity,
+        reason = "C03e-SX preserves the existing higher-observation production-wrapper inputs and adds only Cause/K timing failure custody"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection_with_fallible_admission_timing<
+        P,
+        D,
+        PS,
+        DF,
+        O,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        dispatcher_factory: &mut DF,
+        sender: &mpsc::Sender<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        DF: FnMut() -> D,
+        O: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingFailure<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+                crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        let Self {
+            endpoint,
+            owner_custody,
+        } = self;
+
+        drive_with_retained_custody(endpoint, owner_custody, |endpoint| {
+            endpoint
+                .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection_with_fallible_admission_timing(
+                    max_active_workers,
+                    authority,
+                    capability_authority,
+                    policy_source,
+                    requester_rendezvous_authority,
+                    session_authentication,
+                    expected_requests,
+                    dispatcher_factory,
+                    sender,
+                    observe_receipt,
+                    admission_timing,
+                    on_rejection,
+                    on_admission_failure,
+                    on_timing_failure,
+                )
+        })
+    }
 }
 
 /// Recoverable production endpoint-startup failure retaining complete pre-bind runtime custody.

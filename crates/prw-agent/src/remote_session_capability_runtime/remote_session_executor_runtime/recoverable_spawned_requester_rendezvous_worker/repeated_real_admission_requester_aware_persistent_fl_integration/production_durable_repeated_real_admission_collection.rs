@@ -1,14 +1,55 @@
-#[allow(clippy::wildcard_imports)]
-use super::*;
+use super::super::super::RemoteSessionSpawnedWorkerJoinError;
 use super::super::{
     dispose_recoverable_repeated_real_admission_requester_aware_scheduling_worker_completion,
     dispose_recoverable_repeated_real_admission_requester_aware_worker_completion,
 };
-use super::super::super::RemoteSessionSpawnedWorkerJoinError;
+#[allow(clippy::wildcard_imports)]
+use super::*;
+use std::convert::Infallible;
+
+use crate::remote_session_capability_runtime::{
+    RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
+};
 use crate::remote_session_capability_runtime::requester_rendezvous_retained_custody_dr_continuation::{
     RequesterRendezvousPostTerminalResponseSerialLifecycleWorkerStop,
     RequesterRendezvousProductionDurableSchedulingWorkerStop,
 };
+
+fn prepare_expected_request_with_timing_result<D, T, V, F, R, TimingError, K>(
+    active: &HashMap<DeviceId, V>,
+    request: RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+    admission_timing: &mut F,
+    on_rejection: &mut R,
+    on_timing_failure: &mut K,
+) -> Option<(
+    RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+    RemoteSessionRealAdmissionTiming,
+)>
+where
+    F: FnMut(&DeviceId) -> Result<RemoteSessionRealAdmissionTiming, TimingError>,
+    R: FnMut(
+        RemoteSessionExpectedDeviceAdmissionRejectionReason,
+        RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+    ),
+    K: FnMut(RemoteSessionAdmissionTimingFailure<D, T, TimingError>),
+{
+    let expected_device_id = request.expected_device_id().clone();
+    if active.contains_key(&expected_device_id) {
+        on_rejection(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice,
+            request,
+        );
+        return None;
+    }
+
+    match admission_timing(&expected_device_id) {
+        Ok(timing) => Some((request, timing)),
+        Err(error) => {
+            on_timing_failure(RemoteSessionAdmissionTimingFailure::new(error, request));
+            None
+        }
+    }
+}
 
 impl RemoteSessionExecutorRuntime {
     #[allow(
@@ -1686,7 +1727,7 @@ async fn drain_cooperative_fallible_verifier_time_scheduling_workers_with_suppre
     clippy::too_many_lines,
     reason = "C03e-RJ keeps one already-started lending producer future lexical while reusing the exact existing producer/admission arbitration and fallible scheduling custody authorities"
 )]
-async fn drive_pending_cooperative_fallible_verifier_time_scheduling_producer<
+async fn drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_timing_result<
     P,
     D,
     T,
@@ -1699,6 +1740,8 @@ async fn drive_pending_cooperative_fallible_verifier_time_scheduling_producer<
     O,
     R,
     E,
+    TimingError,
+    K,
 >(
     mut producer_future: Pin<Box<PF>>,
     max_active_workers: usize,
@@ -1717,6 +1760,7 @@ async fn drive_pending_cooperative_fallible_verifier_time_scheduling_producer<
     observe_receipt: &mut O,
     on_rejection: &mut R,
     on_admission_failure: &mut E,
+    on_timing_failure: &mut K,
 ) -> CooperativeSchedulingProducerDriveOutcome
 where
     P: PolicyEvaluator + Send + Sync + 'static,
@@ -1727,7 +1771,7 @@ where
     PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
     SH: Future<Output = ()> + Send,
     PF: Future<Output = Receipt>,
-    F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+    F: FnMut(&DeviceId) -> Result<RemoteSessionRealAdmissionTiming, TimingError>,
     Q: FnMut(
         DeviceId,
         Result<
@@ -1741,6 +1785,7 @@ where
         RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
     ),
     E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    K: FnMut(RemoteSessionAdmissionTimingFailure<D, T, TimingError>),
 {
     loop {
         let event = poll_fn(|context| {
@@ -1779,9 +1824,13 @@ where
                 return CooperativeSchedulingProducerDriveOutcome::Completed;
             }
             CooperativeSchedulingProducerEvent::Request(request) => {
-                let Some((request, timing)) =
-                    prepare_expected_request(active, request, admission_timing, on_rejection)
-                else {
+                let Some((request, timing)) = prepare_expected_request_with_timing_result(
+                    active,
+                    request,
+                    admission_timing,
+                    on_rejection,
+                    on_timing_failure,
+                ) else {
                     continue;
                 };
 
@@ -1930,7 +1979,7 @@ impl RemoteSessionExecutorRuntime {
         clippy::too_many_lines,
         reason = "C03e-RJ preserves the exact fallible production-durable scheduling inputs while adding only the RI-selected lending producer, suppression mapper, and receipt observer"
     )]
-    pub(in super::super::super) fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer<
+    fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_timing_result<
         P,
         D,
         T,
@@ -1943,6 +1992,8 @@ impl RemoteSessionExecutorRuntime {
         F,
         R,
         E,
+        TimingError,
+        K,
     >(
         &mut self,
         max_active_workers: NonZeroUsize,
@@ -1960,6 +2011,7 @@ impl RemoteSessionExecutorRuntime {
         mut admission_timing: F,
         mut on_rejection: R,
         mut on_admission_failure: E,
+        mut on_timing_failure: K,
     ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
     where
         P: PolicyEvaluator + Send + Sync + 'static,
@@ -1984,12 +2036,13 @@ impl RemoteSessionExecutorRuntime {
             >,
         ) -> Receipt,
         O: FnMut(Receipt),
-        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        F: FnMut(&DeviceId) -> Result<RemoteSessionRealAdmissionTiming, TimingError>,
         R: FnMut(
             RemoteSessionExpectedDeviceAdmissionRejectionReason,
             RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
         ),
         E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(RemoteSessionAdmissionTimingFailure<D, T, TimingError>),
     {
         let max_active_workers = validate_persistent_worker_capacity(max_active_workers)?;
         let mut expected_requests = expected_requests;
@@ -2034,7 +2087,7 @@ impl RemoteSessionExecutorRuntime {
                             completion,
                         );
                         let producer_future = Box::pin(producer(device_id, result));
-                        match drive_pending_cooperative_fallible_verifier_time_scheduling_producer(
+                        match drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_timing_result(
                             producer_future,
                             max_active_workers,
                             transport_runtime,
@@ -2052,6 +2105,7 @@ impl RemoteSessionExecutorRuntime {
                             &mut observe_receipt,
                             &mut on_rejection,
                             &mut on_admission_failure,
+                            &mut on_timing_failure,
                         )
                         .await
                         {
@@ -2062,11 +2116,12 @@ impl RemoteSessionExecutorRuntime {
                         }
                     }
                     CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Request(request) => {
-                        let Some((request, timing)) = prepare_expected_request(
+                        let Some((request, timing)) = prepare_expected_request_with_timing_result(
                             &active,
                             request,
                             &mut admission_timing,
                             &mut on_rejection,
+                            &mut on_timing_failure,
                         ) else {
                             continue;
                         };
@@ -2211,7 +2266,7 @@ impl RemoteSessionExecutorRuntime {
                                                 requester_rendezvous_authority,
                                                 &mut on_admission_failure,
                                             );
-                                            match drive_pending_cooperative_fallible_verifier_time_scheduling_producer(
+                                            match drive_pending_cooperative_fallible_verifier_time_scheduling_producer_with_timing_result(
                                                 producer_future,
                                                 max_active_workers,
                                                 transport_runtime,
@@ -2229,6 +2284,7 @@ impl RemoteSessionExecutorRuntime {
                                                 &mut observe_receipt,
                                                 &mut on_rejection,
                                                 &mut on_admission_failure,
+                                                &mut on_timing_failure,
                                             )
                                             .await
                                             {
@@ -2250,6 +2306,207 @@ impl RemoteSessionExecutorRuntime {
         });
 
         Ok(())
+    }
+
+    /// Preserves the existing infallible admission-timing API through an explicit `Infallible` lift.
+    #[allow(
+        dead_code,
+        reason = "C03e-SX preserves the existing C03e-RJ infallible API while delegating to the shared result-capable timing core"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SX preserves the exact existing C03e-RJ signature without retaining the extracted large body"
+    )]
+    pub(in super::super::super) fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer<
+        P,
+        D,
+        T,
+        PS,
+        SH,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: SH,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        mut admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        SH: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        F: FnMut(&DeviceId) -> RemoteSessionRealAdmissionTiming,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+    {
+        self.drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_timing_result(
+            max_active_workers,
+            transport_runtime,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            supervisor_shutdown,
+            producer,
+            suppress_on_shutdown,
+            observe_receipt,
+            move |device_id| {
+                Ok::<RemoteSessionRealAdmissionTiming, Infallible>(admission_timing(device_id))
+            },
+            on_rejection,
+            on_admission_failure,
+            |failure: RemoteSessionAdmissionTimingFailure<D, T, Infallible>| {
+                let (error, _request) = failure.into_parts();
+                match error {}
+            },
+        )
+    }
+
+    /// Adds the C03e-SN-selected fallible admission-timing source and intact-request failure custody.
+    #[allow(
+        dead_code,
+        reason = "C03e-SX materializes only the selected fallible admission-timing sibling before separately gated provider or executable activation"
+    )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SX adds only Cause/K and a result-valued timing source to the exact existing C03e-RJ boundary"
+    )]
+    pub(in super::super::super) fn drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing<
+        P,
+        D,
+        T,
+        PS,
+        SH,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: SH,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        SH: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                T,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        self.drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_timing_result(
+            max_active_workers,
+            transport_runtime,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            supervisor_shutdown,
+            producer,
+            suppress_on_shutdown,
+            observe_receipt,
+            admission_timing,
+            on_rejection,
+            on_admission_failure,
+            on_timing_failure,
+        )
     }
 }
 
@@ -2353,5 +2610,485 @@ impl RemoteSessionExecutorRuntime {
         transport_runtime.close(0, b"remote endpoint shutdown");
         self.runtime.block_on(transport_runtime.wait_idle());
         result
+    }
+
+    /// Preserves endpoint close then idle-drain while forwarding the selected timing failure path.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SX adds only Cause/K and result-valued timing to the existing S5 endpoint wrapper"
+    )]
+    pub(in super::super::super::super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing<
+        P,
+        D,
+        T,
+        PS,
+        S,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        &mut self,
+        max_active_workers: NonZeroUsize,
+        transport_runtime: &AgentRemoteTransportRuntime,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        supervisor_shutdown: S,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        S: Future<Output = ()> + Send,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                T,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        let result = self
+            .drive_recoverable_repeated_real_remote_admission_collection_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing(
+                max_active_workers,
+                transport_runtime,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown,
+                producer,
+                suppress_on_shutdown,
+                observe_receipt,
+                admission_timing,
+                on_rejection,
+                on_admission_failure,
+                on_timing_failure,
+            );
+
+        transport_runtime.close(0, b"remote endpoint shutdown");
+        self.runtime.block_on(transport_runtime.wait_idle());
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        future::{Future, pending},
+        pin::{Pin, pin},
+        task::{Context, Poll, Waker},
+    };
+
+    use super::*;
+    use prw_core::SessionId;
+
+    struct TestDispatcher(u64);
+    struct TestVerifier(u64);
+
+    fn device_id(value: &str) -> DeviceId {
+        DeviceId::new(value).expect("test DeviceId must be valid")
+    }
+
+    fn session_id(value: &str) -> SessionId {
+        SessionId::new(value).expect("test SessionId must be valid")
+    }
+
+    fn request(
+        device: &str,
+        session: &str,
+        request_id: u64,
+        dispatcher: u64,
+        verifier: u64,
+    ) -> RemoteSessionExpectedDeviceAdmissionRequest<TestDispatcher, TestVerifier> {
+        RemoteSessionExpectedDeviceAdmissionRequest::new(
+            device_id(device),
+            session_id(session),
+            request_id,
+            TestDispatcher(dispatcher),
+            TestVerifier(verifier),
+        )
+    }
+
+    fn timing() -> RemoteSessionRealAdmissionTiming {
+        RemoteSessionRealAdmissionTiming::new(10..20, 15, 20..30)
+    }
+
+    #[test]
+    fn fallible_timing_duplicate_rejects_before_source_or_custodian() {
+        let expected_device_id = device_id("device-duplicate");
+        let mut active = HashMap::new();
+        active.insert(expected_device_id, true);
+        let mut timing_calls = 0_u8;
+        let mut rejection_calls = 0_u8;
+        let mut timing_failure_calls = 0_u8;
+        let result = prepare_expected_request_with_timing_result(
+            &active,
+            request("device-duplicate", "session-duplicate", 41, 51, 61),
+            &mut |_device| -> Result<RemoteSessionRealAdmissionTiming, u8> {
+                timing_calls += 1;
+                Ok(timing())
+            },
+            &mut |reason, rejected| {
+                rejection_calls += 1;
+                assert_eq!(
+                    reason,
+                    RemoteSessionExpectedDeviceAdmissionRejectionReason::DuplicateActiveDevice
+                );
+                let (device, session, request_id, dispatcher, verifier) = rejected.into_parts();
+                assert_eq!(
+                    (device.as_str(), session.as_str(), request_id),
+                    ("device-duplicate", "session-duplicate", 41)
+                );
+                assert!(dispatcher.0 == 51 && verifier.0 == 61);
+            },
+            &mut |_failure| timing_failure_calls += 1,
+        );
+        assert!(result.is_none());
+        assert_eq!(
+            (timing_calls, rejection_calls, timing_failure_calls),
+            (0, 1, 0)
+        );
+    }
+
+    #[test]
+    fn fallible_timing_vacant_success_preserves_request_and_complete_timing() {
+        let active: HashMap<DeviceId, bool> = HashMap::new();
+        let mut timing_calls = 0_u8;
+        let mut rejection_calls = 0_u8;
+        let mut timing_failure_calls = 0_u8;
+        let prepared = prepare_expected_request_with_timing_result(
+            &active,
+            request("device-success", "session-success", 42, 52, 62),
+            &mut |device| -> Result<RemoteSessionRealAdmissionTiming, u8> {
+                timing_calls += 1;
+                assert_eq!(device.as_str(), "device-success");
+                Ok(timing())
+            },
+            &mut |_reason, _rejected| rejection_calls += 1,
+            &mut |_failure| timing_failure_calls += 1,
+        );
+        let Some((request, timing)) = prepared else {
+            panic!("vacant successful timing must prepare the request");
+        };
+        let (device, session, request_id, dispatcher, verifier) = request.into_parts();
+        assert_eq!(
+            (device.as_str(), session.as_str(), request_id),
+            ("device-success", "session-success", 42)
+        );
+        assert!(dispatcher.0 == 52 && verifier.0 == 62);
+        assert_eq!(timing.into_parts(), (10..20, 15, 20..30));
+        assert_eq!(
+            (timing_calls, rejection_calls, timing_failure_calls),
+            (1, 0, 0)
+        );
+    }
+
+    #[test]
+    fn fallible_timing_vacant_failure_moves_exact_request_to_custodian_once() {
+        let active: HashMap<DeviceId, bool> = HashMap::new();
+        let mut timing_calls = 0_u8;
+        let mut rejection_calls = 0_u8;
+        let mut timing_failure_calls = 0_u8;
+        let prepared = prepare_expected_request_with_timing_result(
+            &active,
+            request("device-failure", "session-failure", 43, 53, 63),
+            &mut |_device| -> Result<RemoteSessionRealAdmissionTiming, &'static str> {
+                timing_calls += 1;
+                Err("timing-failed")
+            },
+            &mut |_reason, _rejected| rejection_calls += 1,
+            &mut |failure| {
+                timing_failure_calls += 1;
+                assert_eq!(*failure.error(), "timing-failed");
+                assert_eq!(
+                    failure.request().expected_device_id().as_str(),
+                    "device-failure"
+                );
+                let (error, request) = failure.into_parts();
+                assert_eq!(error, "timing-failed");
+                let (device, session, request_id, dispatcher, verifier) = request.into_parts();
+                assert_eq!(
+                    (device.as_str(), session.as_str(), request_id),
+                    ("device-failure", "session-failure", 43)
+                );
+                assert!(dispatcher.0 == 53 && verifier.0 == 63);
+            },
+        );
+        assert!(prepared.is_none());
+        assert_eq!(
+            (timing_calls, rejection_calls, timing_failure_calls),
+            (1, 0, 1)
+        );
+    }
+
+    #[test]
+    fn fallible_timing_idle_request_arm_delivers_failure_before_admission() {
+        let mut active =
+            ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers::new();
+        let (sender, mut receiver) = mpsc::channel(1);
+        sender
+            .try_send(request("device-idle", "session-idle", 44, 54, 64))
+            .expect("test request channel must have capacity");
+        let mut request_source_open = true;
+        let mut shutdown = pin!(pending::<()>());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let event = poll_cooperative_fallible_verifier_time_scheduling_driver_idle(
+            &mut active,
+            1,
+            &mut request_source_open,
+            &mut receiver,
+            shutdown.as_mut(),
+            &mut context,
+        );
+        let Poll::Ready(CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Request(request)) =
+            event
+        else {
+            panic!("idle poller must surface the queued request");
+        };
+        let mut timing_failure_calls = 0_u8;
+        let prepared = prepare_expected_request_with_timing_result(
+            &active,
+            request,
+            &mut |_device| -> Result<RemoteSessionRealAdmissionTiming, u8> { Err(7) },
+            &mut |_reason, _rejected| panic!("vacant idle request must not be rejected"),
+            &mut |failure| {
+                timing_failure_calls += 1;
+                let (error, request) = failure.into_parts();
+                assert_eq!(error, 7);
+                assert_eq!(request.expected_device_id().as_str(), "device-idle");
+            },
+        );
+        assert!(prepared.is_none() && active.is_empty());
+        assert_eq!(timing_failure_calls, 1);
+    }
+
+    struct ControlledReceiptFuture {
+        ready: bool,
+        polls: u8,
+        receipt: Option<u64>,
+    }
+
+    impl Future for ControlledReceiptFuture {
+        type Output = u64;
+
+        fn poll(mut self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
+            self.polls += 1;
+            if self.ready {
+                Poll::Ready(
+                    self.receipt
+                        .take()
+                        .expect("receipt may be consumed only once"),
+                )
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+
+    #[test]
+    fn fallible_timing_pending_failure_preserves_same_producer_and_eventual_receipt() {
+        let (sender, mut receiver) = mpsc::channel(1);
+        sender
+            .try_send(request("device-pending", "session-pending", 45, 55, 65))
+            .expect("test request channel must have capacity");
+        let mut request_source_open = true;
+        let mut shutdown = pin!(pending::<()>());
+        let mut producer = pin!(ControlledReceiptFuture {
+            ready: false,
+            polls: 0,
+            receipt: Some(9001)
+        });
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let event = poll_cooperative_scheduling_producer(
+            0,
+            1,
+            &mut request_source_open,
+            &mut receiver,
+            shutdown.as_mut(),
+            producer.as_mut(),
+            &mut context,
+        );
+        let Poll::Ready(CooperativeSchedulingProducerEvent::Request(request)) = event else {
+            panic!("pending producer poller must surface the queued request");
+        };
+        assert_eq!(producer.as_ref().get_ref().polls, 1);
+
+        let active: HashMap<DeviceId, bool> = HashMap::new();
+        let mut timing_failure_calls = 0_u8;
+        let prepared = prepare_expected_request_with_timing_result(
+            &active,
+            request,
+            &mut |_device| -> Result<RemoteSessionRealAdmissionTiming, u8> { Err(8) },
+            &mut |_reason, _rejected| panic!("vacant pending request must not be rejected"),
+            &mut |failure| {
+                timing_failure_calls += 1;
+                let (error, request) = failure.into_parts();
+                assert_eq!(error, 8);
+                assert_eq!(request.expected_device_id().as_str(), "device-pending");
+            },
+        );
+        assert!(prepared.is_none());
+        assert_eq!(timing_failure_calls, 1);
+        assert_eq!(producer.as_ref().get_ref().polls, 1);
+
+        producer.as_mut().get_mut().ready = true;
+        let event = poll_cooperative_scheduling_producer::<
+            RemoteSessionExpectedDeviceAdmissionRequest<TestDispatcher, TestVerifier>,
+            _,
+            _,
+            u64,
+        >(
+            0,
+            1,
+            &mut request_source_open,
+            &mut receiver,
+            shutdown.as_mut(),
+            producer.as_mut(),
+            &mut context,
+        );
+        let Poll::Ready(CooperativeSchedulingProducerEvent::Receipt(receipt)) = event else {
+            panic!("same producer future must yield its real receipt after readiness");
+        };
+        assert_eq!(receipt, 9001);
+        assert_eq!(producer.as_ref().get_ref().polls, 2);
+    }
+
+    #[test]
+    fn fallible_timing_shutdown_and_capacity_precedence_remain_unchanged() {
+        let mut active =
+            ActiveRecoverableFallibleVerifierTimeSchedulingRequesterAwareWorkers::new();
+        let (sender, mut receiver) = mpsc::channel(1);
+        sender
+            .try_send(request(
+                "device-precedence",
+                "session-precedence",
+                46,
+                56,
+                66,
+            ))
+            .expect("test request channel must have capacity");
+        let mut request_source_open = true;
+        let mut shutdown = pin!(std::future::ready(()));
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let event = poll_cooperative_fallible_verifier_time_scheduling_driver_idle(
+            &mut active,
+            1,
+            &mut request_source_open,
+            &mut receiver,
+            shutdown.as_mut(),
+            &mut context,
+        );
+        assert!(matches!(
+            event,
+            Poll::Ready(CooperativeFallibleVerifierTimeSchedulingDriverIdleEvent::Shutdown)
+        ));
+
+        let mut shutdown = pin!(pending::<()>());
+        let event = poll_cooperative_fallible_verifier_time_scheduling_driver_idle(
+            &mut active,
+            0,
+            &mut request_source_open,
+            &mut receiver,
+            shutdown.as_mut(),
+            &mut context,
+        );
+        assert!(matches!(event, Poll::Pending));
+        assert_eq!(receiver.len(), 1);
+    }
+    #[test]
+    fn fallible_timing_failure_allows_distinct_later_request_without_resampling_failed_request() {
+        let active: HashMap<DeviceId, bool> = HashMap::new();
+        let mut sampled = Vec::new();
+        let mut failed_requests = Vec::new();
+        let mut source = |device: &DeviceId| -> Result<RemoteSessionRealAdmissionTiming, u8> {
+            sampled.push(device.as_str().to_owned());
+            if device.as_str() == "device-first" {
+                Err(9)
+            } else {
+                Ok(timing())
+            }
+        };
+        let mut rejection = |_reason, _request| panic!("vacant request must not be rejected");
+        let mut custodian =
+            |failure: RemoteSessionAdmissionTimingFailure<TestDispatcher, TestVerifier, u8>| {
+                let (error, request) = failure.into_parts();
+                assert_eq!(error, 9);
+                failed_requests.push(request.expected_device_id().as_str().to_owned());
+            };
+
+        let first = prepare_expected_request_with_timing_result(
+            &active,
+            request("device-first", "session-first", 47, 57, 67),
+            &mut source,
+            &mut rejection,
+            &mut custodian,
+        );
+        assert!(first.is_none());
+        let second = prepare_expected_request_with_timing_result(
+            &active,
+            request("device-second", "session-second", 48, 58, 68),
+            &mut source,
+            &mut rejection,
+            &mut custodian,
+        );
+        let Some((request, timing)) = second else {
+            panic!("distinct later request must still prepare successfully");
+        };
+        assert_eq!(request.expected_device_id().as_str(), "device-second");
+        assert_eq!(timing.into_parts(), (10..20, 15, 20..30));
+        assert_eq!(sampled, ["device-first", "device-second"]);
+        assert_eq!(failed_requests, ["device-first"]);
     }
 }

@@ -1443,3 +1443,90 @@ where
     )
     .map_err(Into::into)
 }
+
+/// Integrates the selected fallible admission-timing source while keeping K outside population.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-SX preserves the S0 capacity-one population path and forwards K only after population succeeds"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources_with_fallible_admission_timing<
+    F,
+    C,
+    R,
+    E,
+    Cause,
+    K,
+>(
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+    on_timing_failure: K,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+>
+where
+    Cause: std::error::Error + Send + 'static,
+    F: FnMut(&DeviceId) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+        > + Send
+        + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+            >,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+    K: FnMut(
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingFailure<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+                crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ) + Send
+        + 'static,
+{
+    let expected_request_channel = LinuxAgentProductionExpectedDeviceAdmissionChannel::<
+        crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+    >::new();
+    let (expected_request_sender, expected_requests) = expected_request_channel.into_parts();
+    let inputs =
+        linux_agent_production_durable_reachability_requester_rendezvous_remote_process_operation_inputs_from_configured_production_sources(
+            expected_requests,
+            admission_timing,
+            on_completion,
+            on_rejection,
+            on_admission_failure,
+        )
+        .await?;
+    let LinuxAgentProductionDurableReachabilityRequesterRendezvousRemoteProcessOperationInputs {
+        requester_rendezvous_inputs,
+        capability_authority,
+    } = inputs;
+    crate::linux_bootstrap::run_with_production_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_with_fallible_admission_timing(
+        requester_rendezvous_inputs,
+        capability_authority,
+        expected_request_sender,
+        on_timing_failure,
+    )
+    .map_err(Into::into)
+}
