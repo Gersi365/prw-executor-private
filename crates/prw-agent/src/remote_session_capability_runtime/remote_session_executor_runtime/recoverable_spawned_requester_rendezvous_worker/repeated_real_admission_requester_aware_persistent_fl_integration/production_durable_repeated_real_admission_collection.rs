@@ -7,6 +7,8 @@ use super::super::{
 use super::*;
 use std::convert::Infallible;
 
+use crate::remote_session_capability_runtime::real_remote_admission_transaction::admit_expected_remote_device_session_with_fresh_verifier_time;
+
 use crate::remote_session_capability_runtime::{
     RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
 };
@@ -1839,25 +1841,27 @@ where
                     session_id,
                     authentication_request_id,
                     dispatcher,
-                    verifier_time_unix_seconds,
+                    mut verifier_time_unix_seconds,
                 ) = request.into_parts();
                 let (
                     challenge_validity_unix_seconds,
-                    authentication_now_unix_seconds,
+                    _authentication_now_unix_seconds,
                     application_lease_unix_seconds,
                 ) = timing.into_parts();
 
-                let mut admission = Box::pin(admit_expected_remote_device_session(
-                    transport_runtime,
-                    authority,
-                    session_authentication,
-                    &expected_device_id,
-                    session_id,
-                    challenge_validity_unix_seconds,
-                    authentication_request_id,
-                    authentication_now_unix_seconds,
-                    application_lease_unix_seconds,
-                ));
+                let mut admission = Box::pin(
+                    admit_expected_remote_device_session_with_fresh_verifier_time(
+                        transport_runtime,
+                        authority,
+                        session_authentication,
+                        &expected_device_id,
+                        session_id,
+                        challenge_validity_unix_seconds,
+                        authentication_request_id,
+                        &mut verifier_time_unix_seconds,
+                        application_lease_unix_seconds,
+                    ),
+                );
 
                 let event = poll_fn(|context| {
                     poll_cooperative_scheduling_producer_admission(
@@ -2131,25 +2135,27 @@ impl RemoteSessionExecutorRuntime {
                             session_id,
                             authentication_request_id,
                             dispatcher,
-                            verifier_time_unix_seconds,
+                            mut verifier_time_unix_seconds,
                         ) = request.into_parts();
                         let (
                             challenge_validity_unix_seconds,
-                            authentication_now_unix_seconds,
+                            _authentication_now_unix_seconds,
                             application_lease_unix_seconds,
                         ) = timing.into_parts();
 
-                        let mut admission = Box::pin(admit_expected_remote_device_session(
-                            transport_runtime,
-                            authority,
-                            session_authentication,
-                            &expected_device_id,
-                            session_id,
-                            challenge_validity_unix_seconds,
-                            authentication_request_id,
-                            authentication_now_unix_seconds,
-                            application_lease_unix_seconds,
-                        ));
+                        let mut admission = Box::pin(
+                            admit_expected_remote_device_session_with_fresh_verifier_time(
+                                transport_runtime,
+                                authority,
+                                session_authentication,
+                                &expected_device_id,
+                                session_id,
+                                challenge_validity_unix_seconds,
+                                authentication_request_id,
+                                &mut verifier_time_unix_seconds,
+                                application_lease_unix_seconds,
+                            ),
+                        );
 
                         'admission: loop {
                             let admission_event = poll_fn(|context| {
