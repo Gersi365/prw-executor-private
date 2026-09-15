@@ -51,6 +51,9 @@ use super::{
     RemoteSessionSpawnedWorkerJoinError, SharedCurrentCapabilityAuthority,
     SharedRequesterRendezvousAuthority,
 };
+use crate::remote_session_capability_runtime::{
+    RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
+};
 use crate::{
     candidate_publication_requester_rendezvous_start_intent::policy_source::RequesterRendezvousStartPolicySource,
     production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority,
@@ -2057,6 +2060,111 @@ impl RemoteSessionEndpointLifecycleRuntime {
             )
     }
 
+    /// Forwards the selected fallible admission-timing source and failure custodian unchanged.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SX adds only Cause/K and result-valued admission timing to the existing S4 forwarding boundary"
+    )]
+    pub(super) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing<
+        P,
+        D,
+        T,
+        PS,
+        H,
+        Q,
+        O,
+        Receipt,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<RemoteSessionExpectedDeviceAdmissionRequest<D, T>>,
+        producer: &mut H,
+        suppress_on_shutdown: Q,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        T: FnMut() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>
+            + Send
+            + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        H: std::ops::AsyncFnMut(
+                DeviceId,
+                Result<
+                    RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                    RemoteSessionSpawnedWorkerJoinError,
+                >,
+            ) -> Receipt,
+        Q: FnMut(
+            DeviceId,
+            Result<
+                RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+                RemoteSessionSpawnedWorkerJoinError,
+            >,
+        ) -> Receipt,
+        O: FnMut(Receipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<D, T>,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                T,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        let Self {
+            mut executor,
+            transport,
+            supervisor_shutdown,
+        } = self;
+
+        executor
+            .drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing(
+                max_active_workers,
+                &transport,
+                authority,
+                capability_authority,
+                policy_source,
+                requester_rendezvous_authority,
+                session_authentication,
+                expected_requests,
+                supervisor_shutdown.into_shutdown(),
+                producer,
+                suppress_on_shutdown,
+                observe_receipt,
+                admission_timing,
+                on_rejection,
+                on_admission_failure,
+                on_timing_failure,
+            )
+    }
+
     /// Specializes the existing fallible producer seam to the concrete fallible expected-device
     /// handoff receipt without taking ownership of dispatcher or sender authority.
     #[allow(
@@ -2146,6 +2254,110 @@ impl RemoteSessionEndpointLifecycleRuntime {
             admission_timing,
             on_rejection,
             on_admission_failure,
+        )
+    }
+
+    /// Specializes the existing expected-device producer without capturing timing-failure custody.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "C03e-SX preserves the S3 producer closure and forwards K only to the lower fallible timing sibling"
+    )]
+    fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_fallible_admission_timing<
+        P,
+        D,
+        PS,
+        DF,
+        O,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource,
+            >,
+        >,
+        dispatcher_factory: &mut DF,
+        sender: &mpsc::Sender<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource,
+            >,
+        >,
+        observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        DF: FnMut() -> D,
+        O: FnMut(RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffReceipt),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource,
+            >,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeSource,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        let mut producer = async |requester_device_id: DeviceId,
+                                  completion: Result<
+            RequesterRendezvousFallibleVerifierTimeProductionDurableSchedulingWorkerStop,
+            RemoteSessionSpawnedWorkerJoinError,
+        >| {
+            produce_remote_session_expected_device_admission_with_fallible_verifier_time_and_fallible_receipt(
+                requester_device_id,
+                completion,
+                &mut *dispatcher_factory,
+                sender,
+            )
+            .await
+        };
+
+        self.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_scheduling_producer_with_fallible_admission_timing(
+            max_active_workers,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            &mut producer,
+            map_remote_session_expected_device_admission_fallible_verifier_time_shutdown_suppression,
+            observe_receipt,
+            admission_timing,
+            on_rejection,
+            on_admission_failure,
+            on_timing_failure,
         )
     }
 
@@ -2332,6 +2544,106 @@ impl RemoteSessionEndpointLifecycleRuntime {
             admission_timing,
             on_rejection,
             on_admission_failure,
+        )
+    }
+
+    /// Preserves the bounded receipt projection while forwarding timing failure on its own K path.
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::type_complexity,
+        reason = "C03e-SX changes only admission timing and failure custody at the S2 forwarding boundary"
+    )]
+    pub(crate) fn drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_higher_observation_projection_with_fallible_admission_timing<
+        P,
+        D,
+        PS,
+        DF,
+        O,
+        F,
+        R,
+        E,
+        Cause,
+        K,
+    >(
+        self,
+        max_active_workers: NonZeroUsize,
+        authority: &SharedCurrentCapabilityAuthority<P>,
+        capability_authority: Arc<ProductionDurableCapabilityAuthority>,
+        policy_source: Arc<PS>,
+        requester_rendezvous_authority: &SharedRequesterRendezvousAuthority,
+        session_authentication: &mut SessionAuthenticationService,
+        expected_requests: mpsc::Receiver<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        dispatcher_factory: &mut DF,
+        sender: &mpsc::Sender<
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        >,
+        mut observe_receipt: O,
+        admission_timing: F,
+        on_rejection: R,
+        on_admission_failure: E,
+        on_timing_failure: K,
+    ) -> Result<(), RemoteSessionPersistentCollectionConfigError>
+    where
+        P: PolicyEvaluator + Send + Sync + 'static,
+        D: CapabilityDispatcher + Send + 'static,
+        PS: RequesterRendezvousStartPolicySource + Send + Sync + ?Sized + 'static,
+        DF: FnMut() -> D,
+        O: FnMut(
+            DeviceId,
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ),
+        Cause: std::error::Error + Send + 'static,
+        F: FnMut(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionRealAdmissionTiming,
+            RemoteSessionAdmissionTimingSourceError<Cause>,
+        >,
+        R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+            >,
+        ),
+        E: FnMut(DeviceId, RemoteSessionRealAdmissionError),
+        K: FnMut(
+            RemoteSessionAdmissionTimingFailure<
+                D,
+                fn() -> Result<u64, prw_session::prwa_verifier_source::PrwaVerifierSourceError>,
+                RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ),
+    {
+        self.drive_repeated_real_remote_admission_endpoint_lifecycle_with_production_durable_fallible_verifier_time_expected_device_admission_producer_with_fallible_admission_timing(
+            max_active_workers,
+            authority,
+            capability_authority,
+            policy_source,
+            requester_rendezvous_authority,
+            session_authentication,
+            expected_requests,
+            dispatcher_factory,
+            sender,
+            |receipt| {
+                let (requester_device_id, projection) =
+                    project_remote_session_expected_device_admission_fallible_verifier_time_handoff_receipt(
+                        receipt,
+                    );
+                observe_receipt(requester_device_id, projection);
+            },
+            admission_timing,
+            on_rejection,
+            on_admission_failure,
+            on_timing_failure,
         )
     }
 }

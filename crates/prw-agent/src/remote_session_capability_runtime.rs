@@ -16,6 +16,7 @@
 //! handoff/execution semantics have been selected. This module still does not wire the Agent binary,
 //! publish readiness, or activate a production listener lifecycle.
 
+mod admission_timing_failure;
 mod authenticated_remote_session_runtime;
 mod real_remote_admission_transaction;
 mod remote_session_endpoint_lifecycle_runtime;
@@ -38,6 +39,9 @@ mod shared_current_capability_authority;
 )]
 mod shared_requester_rendezvous_authority;
 
+pub(crate) use admission_timing_failure::{
+    RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
+};
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use real_remote_admission_transaction::{
     RemoteSessionRealAdmissionError, admit_expected_remote_device_session,
