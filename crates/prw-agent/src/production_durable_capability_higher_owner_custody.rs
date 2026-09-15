@@ -25,7 +25,7 @@ use prw_session::{
         current_prwa_verifier_unix_seconds,
     },
 };
-use tokio::sync::mpsc;
+use tokio::{runtime::Builder, sync::mpsc};
 
 use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
 use crate::candidate_publication_requester_rendezvous_start_intent::policy_source::BoundedRequesterRendezvousStartPolicySource;
@@ -1857,6 +1857,201 @@ where
         dispose_production_remote_session_admission_timing_failure,
     )
     .await
+}
+
+/// Terminally consumes one authority-free expected-device handoff completion observation.
+fn dispose_production_remote_session_handoff_completion_observation(
+    requester_device_id: DeviceId,
+    observation: crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+) {
+    let (_requester_device_id, _observation) = (requester_device_id, observation);
+}
+
+/// Terminally consumes one bounded expected-device rejection and its exact untouched request.
+fn dispose_production_remote_session_expected_device_admission_rejection(
+    reason: RemoteSessionExpectedDeviceAdmissionRejectionReason,
+    request: RemoteSessionExpectedDeviceAdmissionRequest<
+        crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, PrwaVerifierSourceError>,
+    >,
+) {
+    let (_reason, _request) = (reason, request);
+}
+
+/// Binds the TK-selected terminal C/R dispositions into the existing TJ caller-ready adapter.
+#[allow(
+    clippy::future_not_send,
+    dead_code,
+    reason = "C03e-TL materializes the TK-selected no-argument async composition before separately gated executable activation"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_disposition(
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+>{
+    run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_timing_and_failure_custody(
+        dispose_production_remote_session_handoff_completion_observation,
+        dispose_production_remote_session_expected_device_admission_rejection,
+    )
+    .await
+}
+
+/// Bounded top-level failure for the TK-selected caller-owned async runtime driver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-TL materializes the TK-selected executable-custody failure family before separately gated main.rs activation"
+)]
+pub(crate) enum LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError {
+    /// Dedicated caller-owned current-thread Tokio runtime construction failed before polling.
+    RuntimeConstruction,
+    /// Existing TJ/TH configured application-lease companion failed after runtime construction.
+    Companion(
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+    ),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::RuntimeConstruction => {
+                "production configured application-lease async runtime construction failed"
+            }
+            Self::Companion(_) => {
+                "production configured application-lease selected companion failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::RuntimeConstruction => None,
+            Self::Companion(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError>
+    for LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+    ) -> Self {
+        Self::Companion(error)
+    }
+}
+
+/// Drives one selected no-argument configured application-lease composition on one caller-owned runtime.
+#[allow(
+    dead_code,
+    reason = "C03e-TL materializes only the TK-selected synchronous runtime driver; main.rs invocation remains separately gated"
+)]
+pub(crate) fn run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_executable_custody()
+-> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+> {
+    let runtime = Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| {
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::RuntimeConstruction
+        })?;
+
+    runtime
+        .block_on(
+            run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_disposition(),
+        )
+        .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod selected_disposition_and_executable_custody_tests {
+    use std::{error::Error as _, future::Future};
+
+    use prw_core::DeviceId;
+    use prw_session::prwa_verifier_source::PrwaVerifierSourceError;
+
+    use super::{
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+        dispose_production_remote_session_expected_device_admission_rejection,
+        dispose_production_remote_session_handoff_completion_observation,
+        run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_disposition,
+        run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_executable_custody,
+    };
+    use crate::linux_bootstrap::{
+        LinuxAgentBootstrapWithRemoteReport, LinuxAgentRemoteApplicationLeasePolicySourceError,
+    };
+    use crate::remote_session_capability_runtime::{
+        RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        RemoteSessionExpectedDeviceAdmissionRejectionReason,
+        RemoteSessionExpectedDeviceAdmissionRequest,
+    };
+
+    #[test]
+    #[allow(clippy::type_complexity)]
+    fn selected_c_r_and_driver_signatures_are_exact() {
+        let c: fn(
+            DeviceId,
+            RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) = dispose_production_remote_session_handoff_completion_observation;
+        let r: fn(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<u64, PrwaVerifierSourceError>,
+            >,
+        ) = dispose_production_remote_session_expected_device_admission_rejection;
+        let driver: fn() -> Result<
+            LinuxAgentBootstrapWithRemoteReport,
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+        > = run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_executable_custody;
+
+        let _ = (c, r, driver);
+    }
+
+    #[test]
+    fn selected_no_argument_async_wrapper_has_exact_output_without_polling() {
+        fn assert_future_shape<F>(future: F)
+        where
+            F: Future<
+                Output = Result<
+                    LinuxAgentBootstrapWithRemoteReport,
+                    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+                >,
+            >,
+        {
+            drop(future);
+        }
+
+        assert_future_shape(
+            run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_disposition(),
+        );
+    }
+
+    #[test]
+    fn selected_driver_error_preserves_bounded_runtime_and_companion_custody() {
+        let runtime =
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::RuntimeConstruction;
+        assert!(runtime.source().is_none());
+
+        let companion =
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::ApplicationLeasePolicySource(
+                LinuxAgentRemoteApplicationLeasePolicySourceError::Missing,
+            );
+        let wrapped =
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::from(
+                companion,
+            );
+        assert!(wrapped.source().is_some());
+    }
 }
 
 #[cfg(test)]
