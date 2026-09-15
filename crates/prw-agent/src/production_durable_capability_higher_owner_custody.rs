@@ -18,7 +18,13 @@ use prw_remote_bridge::{
         InMemoryRequesterRendezvousAuthorityProvider, RequesterRendezvousLifecycleError,
     },
 };
-use prw_session::SessionAuthenticationService;
+use prw_session::{
+    SessionAuthenticationService,
+    prwa_verifier_source::{
+        PRWA_VERIFIER_CHALLENGE_LIFETIME_SECONDS, PrwaVerifierSourceError,
+        current_prwa_verifier_unix_seconds,
+    },
+};
 use tokio::sync::mpsc;
 
 use crate::candidate_publication_requester_rendezvous_runtime::CandidatePublicationRequesterRendezvousRuntimeOwner;
@@ -48,6 +54,7 @@ use crate::production_durable_registry_custody_bootstrap::{
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
+    RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
     RemoteSessionApplicationLeasePolicy, RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionProductionPreAjTiming,
@@ -1755,6 +1762,186 @@ where
     )
     .await
     .map_err(Into::into)
+}
+
+/// Builds the selected fresh challenge-only pre-AJ timing from one verifier-clock observation.
+fn production_remote_session_pre_aj_timing_from_verifier_clock_with<Clock>(
+    mut verifier_clock: Clock,
+) -> Result<
+    RemoteSessionProductionPreAjTiming,
+    RemoteSessionAdmissionTimingSourceError<PrwaVerifierSourceError>,
+>
+where
+    Clock: FnMut() -> Result<u64, PrwaVerifierSourceError>,
+{
+    let issued_at_unix_seconds =
+        verifier_clock().map_err(RemoteSessionAdmissionTimingSourceError::Acquisition)?;
+    let expires_at_unix_seconds = issued_at_unix_seconds
+        .checked_add(PRWA_VERIFIER_CHALLENGE_LIFETIME_SECONDS)
+        .ok_or(RemoteSessionAdmissionTimingSourceError::ArithmeticOverflow)?;
+    Ok(RemoteSessionProductionPreAjTiming::new(
+        issued_at_unix_seconds..expires_at_unix_seconds,
+    ))
+}
+
+/// Samples the selected server-local verifier clock once for one eligible pre-AJ challenge window.
+fn production_remote_session_pre_aj_timing_from_verifier_clock(
+    expected_device_id: &DeviceId,
+) -> Result<
+    RemoteSessionProductionPreAjTiming,
+    RemoteSessionAdmissionTimingSourceError<PrwaVerifierSourceError>,
+> {
+    let _ = expected_device_id;
+    production_remote_session_pre_aj_timing_from_verifier_clock_with(
+        current_prwa_verifier_unix_seconds,
+    )
+}
+
+/// Terminally consumes one exact pre-AJ timing failure and its untouched request.
+#[allow(clippy::type_complexity)]
+fn dispose_production_remote_session_admission_timing_failure(
+    failure: RemoteSessionAdmissionTimingFailure<
+        crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+        fn() -> Result<u64, PrwaVerifierSourceError>,
+        RemoteSessionAdmissionTimingSourceError<PrwaVerifierSourceError>,
+    >,
+) {
+    let (_error, _request) = failure.into_parts();
+}
+
+/// Terminally consumes one bounded real-admission failure observation after lower cleanup custody.
+fn dispose_production_remote_session_real_admission_failure(
+    expected_device_id: DeviceId,
+    error: RemoteSessionRealAdmissionError,
+) {
+    let (_expected_device_id, _error) = (expected_device_id, error);
+}
+
+/// Binds the TI-selected concrete F/E/K helpers while leaving C/R policy hooks caller supplied.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-TJ materializes only the TI-selected caller-ready adapter before separately gated async execution ownership and executable activation"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_timing_and_failure_custody<
+    C,
+    R,
+>(
+    on_completion: C,
+    on_rejection: R,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+>
+where
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<u64, PrwaVerifierSourceError>,
+            >,
+        ) + Send
+        + 'static,
+{
+    run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources_with_pre_aj_timing_and_configured_application_lease_policy(
+        production_remote_session_pre_aj_timing_from_verifier_clock,
+        on_completion,
+        on_rejection,
+        dispose_production_remote_session_real_admission_failure,
+        dispose_production_remote_session_admission_timing_failure,
+    )
+    .await
+}
+
+#[cfg(test)]
+mod selected_timing_and_failure_custody_tests {
+    use prw_core::DeviceId;
+    use prw_session::prwa_verifier_source::{
+        PRWA_VERIFIER_CHALLENGE_LIFETIME_SECONDS, PrwaVerifierSourceError,
+    };
+
+    use super::{
+        dispose_production_remote_session_admission_timing_failure,
+        dispose_production_remote_session_real_admission_failure,
+        production_remote_session_pre_aj_timing_from_verifier_clock,
+        production_remote_session_pre_aj_timing_from_verifier_clock_with,
+    };
+    use crate::remote_session_capability_runtime::{
+        RemoteSessionAdmissionTimingFailure, RemoteSessionAdmissionTimingSourceError,
+        RemoteSessionProductionPreAjTiming, RemoteSessionRealAdmissionError,
+    };
+
+    #[test]
+    fn selected_pre_aj_timing_constructs_exact_locked_window_from_one_sample() {
+        let mut calls = 0_u8;
+        let timing = production_remote_session_pre_aj_timing_from_verifier_clock_with(|| {
+            calls += 1;
+            Ok(1_000)
+        })
+        .expect("deterministic verifier sample should construct pre-AJ timing");
+
+        assert_eq!(calls, 1);
+        assert_eq!(
+            timing.into_challenge_validity_unix_seconds(),
+            1_000..1_000 + PRWA_VERIFIER_CHALLENGE_LIFETIME_SECONDS
+        );
+    }
+
+    #[test]
+    fn selected_pre_aj_timing_preserves_acquisition_error() {
+        let error = production_remote_session_pre_aj_timing_from_verifier_clock_with(|| {
+            Err(PrwaVerifierSourceError::VerifierTime)
+        })
+        .expect_err("verifier acquisition failure must fail closed");
+
+        assert!(matches!(
+            error,
+            RemoteSessionAdmissionTimingSourceError::Acquisition(
+                PrwaVerifierSourceError::VerifierTime
+            )
+        ));
+    }
+
+    #[test]
+    fn selected_pre_aj_timing_maps_checked_expiry_overflow() {
+        let error = production_remote_session_pre_aj_timing_from_verifier_clock_with(|| {
+            Ok(u64::MAX - PRWA_VERIFIER_CHALLENGE_LIFETIME_SECONDS + 1)
+        })
+        .expect_err("challenge expiry overflow must fail closed");
+
+        assert!(matches!(
+            error,
+            RemoteSessionAdmissionTimingSourceError::ArithmeticOverflow
+        ));
+    }
+
+    #[test]
+    #[allow(clippy::type_complexity)]
+    fn selected_helper_signatures_pin_exact_f_e_k_types() {
+        let f: fn(
+            &DeviceId,
+        ) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            RemoteSessionAdmissionTimingSourceError<PrwaVerifierSourceError>,
+        > = production_remote_session_pre_aj_timing_from_verifier_clock;
+        let e: fn(DeviceId, RemoteSessionRealAdmissionError) =
+            dispose_production_remote_session_real_admission_failure;
+        let k: fn(
+            RemoteSessionAdmissionTimingFailure<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<u64, PrwaVerifierSourceError>,
+                RemoteSessionAdmissionTimingSourceError<PrwaVerifierSourceError>,
+            >,
+        ) = dispose_production_remote_session_admission_timing_failure;
+
+        let _ = (f, e, k);
+    }
 }
 
 #[cfg(test)]
