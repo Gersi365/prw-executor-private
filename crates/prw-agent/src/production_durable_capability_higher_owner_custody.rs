@@ -28,6 +28,7 @@ use crate::linux_bootstrap::{
     LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
     LinuxAgentProductionReachabilityRequesterRendezvousRemoteProcessOperationInputs,
     LinuxAgentProductionRemoteProcessInputPopulationError,
+    LinuxAgentRemoteApplicationLeasePolicySourceError,
     LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError,
     LinuxAgentRemotePeerDeviceSourceError,
     LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
@@ -35,6 +36,7 @@ use crate::linux_bootstrap::{
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation,
     linux_agent_production_reachability_requester_rendezvous_remote_process_operation_with_production_durable_capability_projection,
     linux_agent_remote_process_operation_inputs_from_production_worker_limit,
+    load_linux_agent_remote_application_lease_policy_from_env,
     load_linux_agent_remote_expected_device_scheduling_consumption_max_records_from_env,
     load_linux_agent_remote_peer_device_id_from_env,
     load_linux_agent_remote_requester_rendezvous_max_records_from_env,
@@ -1618,4 +1620,177 @@ where
         on_timing_failure,
     )
     .map_err(Into::into)
+}
+
+/// TG-selected bounded failure for configured application-lease source custody above the TF sibling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected source-versus-existing-companion custody without activating an executable caller"
+)]
+pub(crate) enum LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError
+{
+    /// Fixed application-lease policy source failed before any expected-request channel exists.
+    ApplicationLeasePolicySource(LinuxAgentRemoteApplicationLeasePolicySourceError),
+    /// Existing TF configured-population/bootstrap companion failed after source success.
+    Companion(LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError),
+}
+
+impl std::fmt::Display
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::ApplicationLeasePolicySource(_) => {
+                "production application-lease policy source failed"
+            }
+            Self::Companion(_) => {
+                "production configured application-lease companion failed"
+            }
+        })
+    }
+}
+
+impl std::error::Error
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ApplicationLeasePolicySource(error) => Some(error),
+            Self::Companion(error) => Some(error),
+        }
+    }
+}
+
+impl From<LinuxAgentRemoteApplicationLeasePolicySourceError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError
+{
+    fn from(error: LinuxAgentRemoteApplicationLeasePolicySourceError) -> Self {
+        Self::ApplicationLeasePolicySource(error)
+    }
+}
+
+impl From<LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError>
+    for LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError
+{
+    fn from(
+        error: LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+    ) -> Self {
+        Self::Companion(error)
+    }
+}
+
+/// Loads one configured application-lease policy, then delegates exactly once to the existing TF sibling.
+///
+/// Source acquisition and semantic policy validation happen before the TF sibling constructs the
+/// expected-request channel or starts configured production population. Source failure therefore has
+/// process-configuration custody and cannot invoke request-owned K or admission E callbacks.
+#[allow(
+    clippy::future_not_send,
+    clippy::type_complexity,
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected configured-lease higher-owner source wrapper before separately gated executable caller activation"
+)]
+pub(crate) async fn run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources_with_pre_aj_timing_and_configured_application_lease_policy<
+    F,
+    C,
+    R,
+    E,
+    Cause,
+    K,
+>(
+    admission_timing: F,
+    on_completion: C,
+    on_rejection: R,
+    on_admission_failure: E,
+    on_timing_failure: K,
+) -> Result<
+    LinuxAgentBootstrapWithRemoteReport,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+>
+where
+    Cause: std::error::Error + Send + 'static,
+    F: FnMut(&DeviceId) -> Result<
+            RemoteSessionProductionPreAjTiming,
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+        > + Send
+        + 'static,
+    C: FnMut(
+            DeviceId,
+            crate::remote_session_capability_runtime::RemoteSessionExpectedDeviceAdmissionFallibleVerifierTimeHandoffObservationProjection,
+        ) + Send
+        + 'static,
+    R: FnMut(
+            RemoteSessionExpectedDeviceAdmissionRejectionReason,
+            RemoteSessionExpectedDeviceAdmissionRequest<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+            >,
+        ) + Send
+        + 'static,
+    E: FnMut(DeviceId, RemoteSessionRealAdmissionError) + Send + 'static,
+    K: FnMut(
+            crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingFailure<
+                crate::linux_bootstrap::LinuxAgentProductionRemoteCapabilityDispatcher,
+                fn() -> Result<
+                    u64,
+                    prw_session::prwa_verifier_source::PrwaVerifierSourceError,
+                >,
+                crate::remote_session_capability_runtime::RemoteSessionAdmissionTimingSourceError<Cause>,
+            >,
+        ) + Send
+        + 'static,
+{
+    let application_lease_policy = load_linux_agent_remote_application_lease_policy_from_env()?;
+    run_with_production_durable_reachability_requester_rendezvous_fallible_verifier_time_expected_device_admission_remote_process_companion_from_configured_production_sources_with_pre_aj_timing_and_application_lease_policy(
+        admission_timing,
+        application_lease_policy,
+        on_completion,
+        on_rejection,
+        on_admission_failure,
+        on_timing_failure,
+    )
+    .await
+    .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod configured_application_lease_policy_source_custody_tests {
+    use std::error::Error as _;
+
+    use super::{
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+    };
+    use crate::linux_bootstrap::LinuxAgentRemoteApplicationLeasePolicySourceError;
+    use crate::remote_session_capability_runtime::RemoteSessionApplicationLeasePolicyError;
+
+    #[test]
+    fn configured_application_lease_wrapper_error_preserves_source_and_companion_families() {
+        fn assert_companion_conversion(
+            convert: fn(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+            ) -> LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+        ) {
+            let _ = convert;
+        }
+
+        let source =
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::from(
+                LinuxAgentRemoteApplicationLeasePolicySourceError::Policy(
+                    RemoteSessionApplicationLeasePolicyError::InvalidLifetime,
+                ),
+            );
+        assert!(source.source().is_some());
+        assert_eq!(
+            source.to_string(),
+            "production application-lease policy source failed"
+        );
+        assert_companion_conversion(
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::from,
+        );
+    }
 }

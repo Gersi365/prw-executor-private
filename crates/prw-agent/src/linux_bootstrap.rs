@@ -46,8 +46,9 @@ use crate::local_commands::status_snapshot::{
 };
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
-    RemoteSessionApplicationLeasePolicy, RemoteSessionEndpointLifecycleRuntime,
-    RemoteSessionExecutorRuntime, RemoteSessionExpectedDeviceAdmissionRejection,
+    RemoteSessionApplicationLeasePolicy, RemoteSessionApplicationLeasePolicyError,
+    RemoteSessionEndpointLifecycleRuntime, RemoteSessionExecutorRuntime,
+    RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest,
     RemoteSessionFallibleVerifierTimeEndpointLifecycleCompletionProjection,
@@ -196,6 +197,14 @@ pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = "PRW_REMOTE_PEER_DEVICE_ID";
 
 /// Fixed non-secret process configuration name for the production remote active-worker bound.
 pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str = "PRW_REMOTE_MAX_ACTIVE_WORKERS";
+
+/// Fixed non-secret process configuration name for the production application-session lease lifetime.
+#[allow(
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected fixed application-lease environment source before separately gated executable caller activation"
+)]
+pub(crate) const PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV: &str =
+    "PRW_REMOTE_APPLICATION_LEASE_SECONDS";
 
 /// Fixed non-secret process configuration name for the production requester/rendezvous record bound.
 #[allow(
@@ -385,6 +394,88 @@ pub fn load_linux_agent_remote_max_active_workers_from_env()
 -> Result<NonZeroUsize, LinuxAgentRemoteMaxActiveWorkersSourceError> {
     parse_linux_agent_remote_max_active_workers_value(std::env::var_os(
         PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV,
+    ))
+}
+
+/// Bounded failure while acquiring or validating production application-lease configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected bounded application-lease source error before separately gated executable caller activation"
+)]
+pub(crate) enum LinuxAgentRemoteApplicationLeasePolicySourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured representation is empty, malformed, or outside `u64`.
+    InvalidValue,
+    /// The parsed whole-second value violates the authoritative lease-policy bounds.
+    Policy(RemoteSessionApplicationLeasePolicyError),
+}
+
+impl std::fmt::Display for LinuxAgentRemoteApplicationLeasePolicySourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "remote application-lease configuration missing",
+            Self::NonUnicode => "remote application-lease configuration encoding invalid",
+            Self::InvalidValue => "remote application-lease configuration invalid",
+            Self::Policy(_) => "remote application-lease policy invalid",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentRemoteApplicationLeasePolicySourceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Policy(error) => Some(error),
+            Self::Missing | Self::NonUnicode | Self::InvalidValue => None,
+        }
+    }
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected strict ASCII-decimal application-lease parser before separately gated executable caller activation"
+)]
+fn parse_linux_agent_remote_application_lease_policy_value(
+    value: Option<OsString>,
+) -> Result<RemoteSessionApplicationLeasePolicy, LinuxAgentRemoteApplicationLeasePolicySourceError>
+{
+    let value = value.ok_or(LinuxAgentRemoteApplicationLeasePolicySourceError::Missing)?;
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentRemoteApplicationLeasePolicySourceError::NonUnicode)?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue);
+    }
+    let lifetime_seconds = value
+        .parse::<u64>()
+        .map_err(|_| LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue)?;
+    RemoteSessionApplicationLeasePolicy::new(lifetime_seconds)
+        .map_err(LinuxAgentRemoteApplicationLeasePolicySourceError::Policy)
+}
+
+/// Loads and validates the explicitly configured production application-session lease policy.
+///
+/// The exact Unicode value must contain ASCII decimal digits only. The parsed `u64` is passed
+/// unchanged to [`RemoteSessionApplicationLeasePolicy::new`], which remains the sole semantic
+/// authority for the accepted lifetime range. This source performs no trimming, fallback, retry,
+/// alternate-variable lookup, cache, refresh, request construction, admission, or runtime activation.
+///
+/// # Errors
+///
+/// Fails closed when the fixed configuration is missing, non-Unicode, empty, malformed, outside
+/// `u64`, or rejected by the authoritative application-lease policy constructor. Configured values
+/// are not included in the bounded error surface.
+#[allow(
+    dead_code,
+    reason = "C03e-TH materializes the TG-selected typed application-lease environment loader before separately gated executable caller activation"
+)]
+pub(crate) fn load_linux_agent_remote_application_lease_policy_from_env()
+-> Result<RemoteSessionApplicationLeasePolicy, LinuxAgentRemoteApplicationLeasePolicySourceError> {
+    parse_linux_agent_remote_application_lease_policy_value(std::env::var_os(
+        PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV,
     ))
 }
 
@@ -2113,18 +2204,22 @@ mod tests {
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
         LinuxAgentBootstrapWithRemoteReport,
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
-        LinuxAgentRemoteBindAddressSourceError, LinuxAgentRemoteMaxActiveWorkersSourceError,
-        LinuxAgentRemotePeerDeviceSourceError, LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteApplicationLeasePolicySourceError, LinuxAgentRemoteBindAddressSourceError,
+        LinuxAgentRemoteMaxActiveWorkersSourceError, LinuxAgentRemotePeerDeviceSourceError,
+        LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
-        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_BIND_ADDR_ENV,
-        PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV,
+        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV,
+        PRW_REMOTE_BIND_ADDR_ENV, PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV,
         finalize_remote_process_companion, initial_runtime_config,
         linux_agent_production_reachability_remote_process_operation,
-        linux_agent_remote_process_operation, load_linux_agent_remote_bind_addr_from_env,
+        linux_agent_remote_process_operation,
+        load_linux_agent_remote_application_lease_policy_from_env,
+        load_linux_agent_remote_bind_addr_from_env,
         load_linux_agent_remote_max_active_workers_from_env,
         load_linux_agent_remote_peer_device_id_from_env, map_lifecycle_start_kind,
-        map_remote_shutdown_publish, parse_linux_agent_remote_bind_addr_value,
+        map_remote_shutdown_publish, parse_linux_agent_remote_application_lease_policy_value,
+        parse_linux_agent_remote_bind_addr_value,
         parse_linux_agent_remote_max_active_workers_value,
         parse_linux_agent_remote_peer_device_id_value, run,
         run_remote_process_operation_composition, run_with_remote_process_companion,
@@ -2133,10 +2228,11 @@ mod tests {
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::AgentInstanceLockError;
     use crate::remote_session_capability_runtime::{
-        RemoteSessionExpectedDeviceAdmissionRejection, RemoteSessionExpectedDeviceAdmissionRequest,
-        RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-        RemoteSessionRepeatedAdmissionFailure, RemoteSessionSupervisorShutdownController,
-        SharedCurrentCapabilityAuthority, SharedRequesterRendezvousAuthority,
+        RemoteSessionApplicationLeasePolicy, RemoteSessionExpectedDeviceAdmissionRejection,
+        RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionRealAdmissionTiming,
+        RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+        RemoteSessionSupervisorShutdownController, SharedCurrentCapabilityAuthority,
+        SharedRequesterRendezvousAuthority,
         remote_session_process_lifecycle_control::{
             RemoteSessionProcessLifecycleOwner, RemoteSessionProcessLifecycleSpawnError,
             RemoteSessionSupervisorShutdownPublish,
@@ -2536,6 +2632,115 @@ mod tests {
             .expect("target-usize maximum is a valid positive worker bound")
             .get(),
             usize::MAX
+        );
+    }
+
+    #[test]
+    fn remote_application_lease_source_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<
+                RemoteSessionApplicationLeasePolicy,
+                LinuxAgentRemoteApplicationLeasePolicySourceError,
+            >,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(
+            PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV,
+            "PRW_REMOTE_APPLICATION_LEASE_SECONDS"
+        );
+        assert_signature(load_linux_agent_remote_application_lease_policy_from_env);
+    }
+
+    #[test]
+    fn remote_application_lease_source_rejects_missing_empty_and_malformed_values() {
+        assert_eq!(
+            parse_linux_agent_remote_application_lease_policy_value(None),
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::Missing)
+        );
+        assert_eq!(
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::new())),
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue)
+        );
+        for malformed in [
+            " 1", "1 ", "+1", "-1", "1.0", "1_0", "1e1", "1s", "1a", "\t1",
+        ] {
+            assert_eq!(
+                parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from(
+                    malformed,
+                ))),
+                Err(LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue)
+            );
+        }
+        let overflow = format!("{}0", u64::MAX);
+        assert_eq!(
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from(overflow))),
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_application_lease_source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from_vec(
+                vec![0xff,]
+            ))),
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::NonUnicode)
+        );
+    }
+
+    #[test]
+    fn remote_application_lease_source_preserves_policy_semantics_and_leading_zeroes() {
+        let zero =
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from("0")));
+        assert_eq!(
+            zero,
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::Policy(
+                crate::remote_session_capability_runtime::RemoteSessionApplicationLeasePolicyError::InvalidLifetime,
+            ))
+        );
+        let zero_padded =
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from("0000")));
+        assert_eq!(zero_padded, zero);
+
+        for (raw, expected) in [("1", 1), ("0001", 1), ("3600", 3600), ("003600", 3600)] {
+            assert_eq!(
+                parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from(raw)))
+                    .expect("selected application-lease policy value")
+                    .lifetime_seconds(),
+                expected
+            );
+        }
+
+        assert_eq!(
+            parse_linux_agent_remote_application_lease_policy_value(Some(OsString::from("3601"))),
+            Err(LinuxAgentRemoteApplicationLeasePolicySourceError::Policy(
+                crate::remote_session_capability_runtime::RemoteSessionApplicationLeasePolicyError::InvalidLifetime,
+            ))
+        );
+    }
+
+    #[test]
+    fn remote_application_lease_source_error_preserves_only_policy_source_chain() {
+        use std::error::Error as _;
+
+        for error in [
+            LinuxAgentRemoteApplicationLeasePolicySourceError::Missing,
+            LinuxAgentRemoteApplicationLeasePolicySourceError::NonUnicode,
+            LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue,
+        ] {
+            assert!(error.source().is_none());
+            assert!(!error.to_string().contains("3600"));
+        }
+        let policy = LinuxAgentRemoteApplicationLeasePolicySourceError::Policy(
+            crate::remote_session_capability_runtime::RemoteSessionApplicationLeasePolicyError::InvalidLifetime,
+        );
+        assert!(policy.source().is_some());
+        assert_eq!(
+            policy.to_string(),
+            "remote application-lease policy invalid"
         );
     }
 
