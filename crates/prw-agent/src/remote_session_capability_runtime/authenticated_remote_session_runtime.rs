@@ -58,6 +58,20 @@ const REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE: u32 = 2;
     reason = "C03e-L stages the binding composition seam before separately gated operation-surface exposure"
 )]
 const REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON: &[u8] = b"remote session binding failed";
+
+/// Closes one already-authenticated peer with the existing binding-stage failure diagnostic.
+///
+/// This helper owns no error construction, pending-session abort, authenticated-session deletion,
+/// retry, lease construction, timing acquisition, policy selection or runtime activation.
+pub(super) fn close_authenticated_remote_session_binding_failure(
+    peer: &AuthenticatedRemotePeerConnection,
+) {
+    peer.close(
+        REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE,
+        REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
+    );
+}
+
 const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE: u32 = 3;
 const REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON: &[u8] =
     b"remote capability session terminated";
@@ -732,10 +746,7 @@ pub fn compose_authenticated_remote_session(
     ) {
         Ok(bound_session) => bound_session,
         Err(error) => {
-            peer.close(
-                REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE,
-                REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
-            );
+            close_authenticated_remote_session_binding_failure(&peer);
             return Err(error);
         }
     };
@@ -768,7 +779,7 @@ mod tests {
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_CODE,
         REMOTE_CAPABILITY_SESSION_TERMINATION_CLOSE_REASON,
         REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
-        compose_authenticated_remote_session,
+        close_authenticated_remote_session_binding_failure, compose_authenticated_remote_session,
     };
     use crate::{
         candidate_publication_requester_rendezvous_start_intent::{
@@ -795,6 +806,10 @@ mod tests {
             -> Result<AuthenticatedRemoteSessionRuntimeOwner, RemoteBridgeError>,
     ) {
         let _ = composition;
+    }
+
+    fn assert_binding_failure_close_signature(close: fn(&AuthenticatedRemotePeerConnection)) {
+        let _ = close;
     }
 
     fn assert_requester_rendezvous_start_intent_signature(
@@ -841,6 +856,16 @@ mod tests {
     #[test]
     fn post_auth_composition_requires_peer_session_and_separate_lease_interval() {
         assert_composition_signature(compose_authenticated_remote_session);
+    }
+
+    #[test]
+    fn binding_failure_close_helper_reuses_exact_code_two_surface() {
+        assert_binding_failure_close_signature(close_authenticated_remote_session_binding_failure);
+        assert_eq!(REMOTE_SESSION_BINDING_FAILURE_CLOSE_CODE, 2);
+        assert_eq!(
+            REMOTE_SESSION_BINDING_FAILURE_CLOSE_REASON,
+            b"remote session binding failed"
+        );
     }
 
     #[test]

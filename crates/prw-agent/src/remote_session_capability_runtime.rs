@@ -44,7 +44,9 @@ pub(crate) use admission_timing_failure::{
 };
 pub use authenticated_remote_session_runtime::AuthenticatedRemoteSessionRuntimeOwner;
 pub use real_remote_admission_transaction::{
+    RemoteSessionApplicationLeasePolicy, RemoteSessionApplicationLeasePolicyError,
     RemoteSessionRealAdmissionError, admit_expected_remote_device_session,
+    admit_expected_remote_device_session_with_fresh_verifier_time_and_application_lease_policy,
 };
 #[allow(
     unused_imports,
@@ -75,10 +77,10 @@ pub use remote_session_executor_runtime::{
     RemoteSessionExpectedDeviceAdmissionRejection,
     RemoteSessionExpectedDeviceAdmissionRejectionReason,
     RemoteSessionExpectedDeviceAdmissionRequest, RemoteSessionPersistentCollectionConfigError,
-    RemoteSessionRealAdmissionTiming, RemoteSessionRegisteredWorkerCompletion,
-    RemoteSessionRepeatedAdmissionFailure, RemoteSessionSpawnedWorkerJoinError,
-    RemoteSessionWorkerAdmission, RemoteSessionWorkerAdmissionRejection,
-    RemoteSessionWorkerAdmissionRejectionReason,
+    RemoteSessionProductionPreAjTiming, RemoteSessionRealAdmissionTiming,
+    RemoteSessionRegisteredWorkerCompletion, RemoteSessionRepeatedAdmissionFailure,
+    RemoteSessionSpawnedWorkerJoinError, RemoteSessionWorkerAdmission,
+    RemoteSessionWorkerAdmissionRejection, RemoteSessionWorkerAdmissionRejectionReason,
 };
 pub use remote_session_worker_cancellation::{
     RemoteSessionWorkerCancellationController, RemoteSessionWorkerCancellationSignal,
