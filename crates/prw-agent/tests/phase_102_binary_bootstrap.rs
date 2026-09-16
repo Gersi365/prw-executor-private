@@ -16,6 +16,7 @@ use aws_lc_rs::{
 };
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
+use prw_agent::linux_bootstrap::PRW_AGENT_EXECUTION_MODE_ENV;
 use prw_agent::local_commands::LocalAgentCommand;
 use prw_agent::local_commands::request_frame::stream::write_local_command_request;
 use prw_agent::local_commands::status_snapshot::LocalAgentRuntimeState;
@@ -109,6 +110,7 @@ impl AgentChild {
         let child = Command::new(env!("CARGO_BIN_EXE_prw-agent"))
             .env("XDG_RUNTIME_DIR", root)
             .env("CREDENTIALS_DIRECTORY", credential.path())
+            .env(PRW_AGENT_EXECUTION_MODE_ENV, "local_only")
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
@@ -124,10 +126,27 @@ impl AgentChild {
         let child = Command::new(env!("CARGO_BIN_EXE_prw-agent"))
             .env_remove("XDG_RUNTIME_DIR")
             .env("CREDENTIALS_DIRECTORY", credential.path())
+            .env(PRW_AGENT_EXECUTION_MODE_ENV, "local_only")
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .expect("Phase 102 Agent binary spawns without XDG runtime env");
+        Self {
+            child: Some(child),
+            _credential: credential,
+        }
+    }
+
+    fn spawn_without_execution_mode(root: &Path) -> Self {
+        let credential = TempCredentialDirectory::new();
+        let child = Command::new(env!("CARGO_BIN_EXE_prw-agent"))
+            .env("XDG_RUNTIME_DIR", root)
+            .env("CREDENTIALS_DIRECTORY", credential.path())
+            .env_remove(PRW_AGENT_EXECUTION_MODE_ENV)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Phase 102 Agent binary spawns without execution mode");
         Self {
             child: Some(child),
             _credential: credential,
@@ -221,6 +240,7 @@ fn assert_success_terminal(output: &Output, terminal: &str) {
     assert!(line.contains("exit=success"));
     assert!(line.contains("cleanup=clean"));
     assert!(line.contains("signal_mask_restore=restored"));
+    assert!(!line.contains("remote_companion="));
     assert!(!line.contains("payload="));
 }
 
@@ -304,6 +324,19 @@ fn prove_missing_runtime_root_failure() {
     assert!(line.contains("signal_mask_restore=restored"));
 }
 
+fn prove_missing_execution_mode_failure() {
+    let root = TempRuntimeRoot::new("missing-execution-mode");
+    let child = AgentChild::spawn_without_execution_mode(root.path());
+    let output = child.finish();
+    assert!(!output.status.success());
+    let line = stderr_line(&output);
+    assert_eq!(
+        line,
+        "prw-agent event=startup_failure kind=execution_mode exit=failure signal_mask_restore=not_applicable"
+    );
+    assert_socket_absent(&root);
+}
+
 fn prove_wrong_mode_runtime_root_failure() {
     let root = TempRuntimeRoot::new("wrong-mode");
     fs::set_permissions(root.path(), Permissions::from_mode(0o755))
@@ -325,6 +358,7 @@ fn standalone_binary_bootstrap_contract_is_proven_sequentially() {
     prove_sigint();
     prove_real_local_request();
     prove_second_instance_exclusion();
+    prove_missing_execution_mode_failure();
     prove_missing_runtime_root_failure();
     prove_wrong_mode_runtime_root_failure();
 }

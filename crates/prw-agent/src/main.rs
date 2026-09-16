@@ -34,38 +34,89 @@ fn main() -> ExitCode {
         sha256_hex(device_identity_signer.public_identity_sha256())
     );
 
-    match prw_agent::linux_bootstrap::run() {
-        Ok(report) => {
-            let counters = report.counters();
-            let success = report.is_success();
-            eprintln!(
-                "prw-agent event=terminal terminal={} exit={} readiness_steps={} listener_armed_steps={} runtime_wakes={} wait_interruptions={} scheduling_attempts={} workers_registered={} worker_completions={} peer_rejections={} cleanup={} signal_mask_restore={}",
-                report.terminal().token(),
-                if success { "success" } else { "failure" },
-                counters.readiness_steps(),
-                counters.listener_armed_steps(),
-                counters.runtime_wakes(),
-                counters.wait_interruptions(),
-                counters.scheduling_attempts(),
-                counters.workers_registered(),
-                counters.worker_completions(),
-                counters.peer_rejections(),
-                report.cleanup().token(),
-                report.signal_mask_restore().token(),
-            );
-            if success {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
+    let Ok(execution_mode) = prw_agent::linux_bootstrap::load_linux_agent_execution_mode_from_env()
+    else {
+        eprintln!(
+            "prw-agent event=startup_failure kind=execution_mode exit=failure signal_mask_restore=not_applicable"
+        );
+        return ExitCode::FAILURE;
+    };
+
+    match execution_mode {
+        prw_agent::linux_bootstrap::LinuxAgentExecutionMode::LocalOnly => {
+            match prw_agent::linux_bootstrap::run() {
+                Ok(report) => {
+                    let counters = report.counters();
+                    let success = report.is_success();
+                    eprintln!(
+                        "prw-agent event=terminal terminal={} exit={} readiness_steps={} listener_armed_steps={} runtime_wakes={} wait_interruptions={} scheduling_attempts={} workers_registered={} worker_completions={} peer_rejections={} cleanup={} signal_mask_restore={}",
+                        report.terminal().token(),
+                        if success { "success" } else { "failure" },
+                        counters.readiness_steps(),
+                        counters.listener_armed_steps(),
+                        counters.runtime_wakes(),
+                        counters.wait_interruptions(),
+                        counters.scheduling_attempts(),
+                        counters.workers_registered(),
+                        counters.worker_completions(),
+                        counters.peer_rejections(),
+                        report.cleanup().token(),
+                        report.signal_mask_restore().token(),
+                    );
+                    if success {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(failure) => {
+                    eprintln!(
+                        "prw-agent event=startup_failure kind={} exit=failure signal_mask_restore={}",
+                        failure.kind().token(),
+                        failure.signal_mask_restore().token(),
+                    );
+                    ExitCode::FAILURE
+                }
             }
         }
-        Err(failure) => {
-            eprintln!(
-                "prw-agent event=startup_failure kind={} exit=failure signal_mask_restore={}",
-                failure.kind().token(),
-                failure.signal_mask_restore().token(),
-            );
-            ExitCode::FAILURE
+        prw_agent::linux_bootstrap::LinuxAgentExecutionMode::ConfiguredRemote => {
+            match prw_agent::linux_bootstrap::run_with_configured_production_remote_companion() {
+                Ok(report) => {
+                    let local = report.local();
+                    let remote = report.remote();
+                    let counters = local.counters();
+                    let success = local.is_success() && remote.is_success();
+                    eprintln!(
+                        "prw-agent event=terminal terminal={} exit={} readiness_steps={} listener_armed_steps={} runtime_wakes={} wait_interruptions={} scheduling_attempts={} workers_registered={} worker_completions={} peer_rejections={} cleanup={} signal_mask_restore={} remote_companion={}",
+                        local.terminal().token(),
+                        if success { "success" } else { "failure" },
+                        counters.readiness_steps(),
+                        counters.listener_armed_steps(),
+                        counters.runtime_wakes(),
+                        counters.wait_interruptions(),
+                        counters.scheduling_attempts(),
+                        counters.workers_registered(),
+                        counters.worker_completions(),
+                        counters.peer_rejections(),
+                        local.cleanup().token(),
+                        local.signal_mask_restore().token(),
+                        remote.token(),
+                    );
+                    if success {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(failure) => {
+                    eprintln!(
+                        "prw-agent event=startup_failure kind={} exit=failure signal_mask_restore={}",
+                        failure.kind().token(),
+                        failure.signal_mask_restore().token(),
+                    );
+                    ExitCode::FAILURE
+                }
+            }
         }
     }
 }
