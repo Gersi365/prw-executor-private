@@ -195,6 +195,71 @@ impl CapabilityDispatcher for LinuxAgentProductionRemoteCapabilityDispatcher {
     }
 }
 
+/// Fixed non-secret process configuration name for selecting the Agent executable lane.
+pub const PRW_AGENT_EXECUTION_MODE_ENV: &str = "PRW_AGENT_EXECUTION_MODE";
+
+/// Explicit process-owned Agent executable lane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentExecutionMode {
+    /// Preserve the historical local-only Linux bootstrap lane.
+    LocalOnly,
+    /// Enter the configured-production remote companion lane.
+    ConfiguredRemote,
+}
+
+/// Bounded failure while acquiring the explicit process execution mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LinuxAgentExecutionModeSourceError {
+    /// The fixed configuration value is absent.
+    Missing,
+    /// The operating-system value is not valid Unicode.
+    NonUnicode,
+    /// The configured representation is not one of the two exact selected tokens.
+    InvalidValue,
+}
+
+impl std::fmt::Display for LinuxAgentExecutionModeSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "agent execution mode configuration missing",
+            Self::NonUnicode => "agent execution mode configuration encoding invalid",
+            Self::InvalidValue => "agent execution mode configuration invalid",
+        })
+    }
+}
+
+impl std::error::Error for LinuxAgentExecutionModeSourceError {}
+
+fn parse_linux_agent_execution_mode_value(
+    value: Option<OsString>,
+) -> Result<LinuxAgentExecutionMode, LinuxAgentExecutionModeSourceError> {
+    let value = value.ok_or(LinuxAgentExecutionModeSourceError::Missing)?;
+    let value = value
+        .into_string()
+        .map_err(|_| LinuxAgentExecutionModeSourceError::NonUnicode)?;
+    match value.as_str() {
+        "local_only" => Ok(LinuxAgentExecutionMode::LocalOnly),
+        "configured_remote" => Ok(LinuxAgentExecutionMode::ConfiguredRemote),
+        _ => Err(LinuxAgentExecutionModeSourceError::InvalidValue),
+    }
+}
+
+/// Loads the explicit process execution mode from the fixed non-secret environment source.
+///
+/// The value must be exactly `local_only` or `configured_remote`. This loader performs one
+/// environment read and no trimming, case folding, aliasing, defaulting, inference, retry, or
+/// fallback. It does not start either executable lane.
+///
+/// # Errors
+///
+/// Fails closed when the fixed source is missing, non-Unicode, or not one of the exact selected
+/// values. Raw configured values are never included in the bounded error surface.
+pub fn load_linux_agent_execution_mode_from_env()
+-> Result<LinuxAgentExecutionMode, LinuxAgentExecutionModeSourceError> {
+    parse_linux_agent_execution_mode_value(std::env::var_os(PRW_AGENT_EXECUTION_MODE_ENV))
+}
+
 /// Fixed non-secret process configuration name for the production remote endpoint bind address.
 pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
 
@@ -2526,23 +2591,26 @@ mod tests {
         LinuxAgentBootstrapCleanup, LinuxAgentBootstrapCounters, LinuxAgentBootstrapReport,
         LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
         LinuxAgentBootstrapStartKind, LinuxAgentBootstrapTerminal,
-        LinuxAgentBootstrapWithRemoteReport,
+        LinuxAgentBootstrapWithRemoteReport, LinuxAgentExecutionMode,
+        LinuxAgentExecutionModeSourceError,
         LinuxAgentProductionReachabilityRemoteProcessOperationInputs,
         LinuxAgentRemoteApplicationLeasePolicySourceError, LinuxAgentRemoteBindAddressSourceError,
         LinuxAgentRemoteMaxActiveWorkersSourceError, LinuxAgentRemotePeerDeviceSourceError,
         LinuxAgentRemoteProcessCompanionFinalization,
         LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessOperationInputs,
         LinuxAgentRemoteProcessThreadFinalization, LinuxAgentRemoteSupervisorShutdownPublish,
-        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV,
-        PRW_REMOTE_BIND_ADDR_ENV, PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV,
+        LinuxAgentRemoteSupervisorShutdownPublisher, PRW_AGENT_EXECUTION_MODE_ENV,
+        PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV, PRW_REMOTE_BIND_ADDR_ENV,
+        PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV, PRW_REMOTE_PEER_DEVICE_ID_ENV,
         finalize_remote_process_companion, initial_runtime_config,
         linux_agent_production_reachability_remote_process_operation,
-        linux_agent_remote_process_operation,
+        linux_agent_remote_process_operation, load_linux_agent_execution_mode_from_env,
         load_linux_agent_remote_application_lease_policy_from_env,
         load_linux_agent_remote_bind_addr_from_env,
         load_linux_agent_remote_max_active_workers_from_env,
         load_linux_agent_remote_peer_device_id_from_env, map_lifecycle_start_kind,
-        map_remote_shutdown_publish, parse_linux_agent_remote_application_lease_policy_value,
+        map_remote_shutdown_publish, parse_linux_agent_execution_mode_value,
+        parse_linux_agent_remote_application_lease_policy_value,
         parse_linux_agent_remote_bind_addr_value,
         parse_linux_agent_remote_max_active_workers_value,
         parse_linux_agent_remote_peer_device_id_value, run,
@@ -2739,6 +2807,83 @@ mod tests {
         F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
     {
         drop(operation);
+    }
+
+    #[test]
+    fn execution_mode_source_public_reader_has_exact_selected_shape() {
+        fn assert_signature(
+            reader: fn() -> Result<LinuxAgentExecutionMode, LinuxAgentExecutionModeSourceError>,
+        ) {
+            let _ = reader;
+        }
+
+        assert_eq!(PRW_AGENT_EXECUTION_MODE_ENV, "PRW_AGENT_EXECUTION_MODE");
+        assert_signature(load_linux_agent_execution_mode_from_env);
+    }
+
+    #[test]
+    fn execution_mode_source_accepts_only_exact_selected_values() {
+        assert_eq!(
+            parse_linux_agent_execution_mode_value(Some(OsString::from("local_only"))),
+            Ok(LinuxAgentExecutionMode::LocalOnly)
+        );
+        assert_eq!(
+            parse_linux_agent_execution_mode_value(Some(OsString::from("configured_remote"))),
+            Ok(LinuxAgentExecutionMode::ConfiguredRemote)
+        );
+
+        for rejected in [
+            "",
+            "local",
+            "remote",
+            "LOCAL_ONLY",
+            "CONFIGURED_REMOTE",
+            "local-only",
+            "configured-remote",
+            " local_only",
+            "local_only ",
+            " configured_remote",
+            "configured_remote ",
+        ] {
+            assert_eq!(
+                parse_linux_agent_execution_mode_value(Some(OsString::from(rejected))),
+                Err(LinuxAgentExecutionModeSourceError::InvalidValue)
+            );
+        }
+        assert_eq!(
+            parse_linux_agent_execution_mode_value(None),
+            Err(LinuxAgentExecutionModeSourceError::Missing)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execution_mode_source_rejects_non_unicode_value() {
+        assert_eq!(
+            parse_linux_agent_execution_mode_value(Some(OsString::from_vec(vec![0xff]))),
+            Err(LinuxAgentExecutionModeSourceError::NonUnicode)
+        );
+    }
+
+    #[test]
+    fn execution_mode_source_errors_are_bounded_and_source_free() {
+        for (error, expected) in [
+            (
+                LinuxAgentExecutionModeSourceError::Missing,
+                "agent execution mode configuration missing",
+            ),
+            (
+                LinuxAgentExecutionModeSourceError::NonUnicode,
+                "agent execution mode configuration encoding invalid",
+            ),
+            (
+                LinuxAgentExecutionModeSourceError::InvalidValue,
+                "agent execution mode configuration invalid",
+            ),
+        ] {
+            assert_eq!(error.to_string(), expected);
+            assert!(std::error::Error::source(&error).is_none());
+        }
     }
 
     #[test]
