@@ -44,6 +44,12 @@ use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::{
     LocalAgentRuntimeState, LocalAgentStatusSnapshot, codec::encode_status_snapshot,
 };
+use crate::production_durable_capability_higher_owner_custody::{
+    LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+    run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_executable_custody,
+};
 use crate::production_durable_registry_runtime_custody::ProductionDurableCapabilityAuthority;
 use crate::remote_session_capability_runtime::{
     RemoteSessionApplicationLeasePolicy, RemoteSessionApplicationLeasePolicyError,
@@ -810,6 +816,106 @@ impl LinuxAgentBootstrapStartFailure {
     #[must_use]
     pub const fn signal_mask_restore(self) -> LinuxAgentBootstrapSignalMaskRestore {
         self.signal_mask_restore
+    }
+}
+
+/// Bounded startup-failure class for the configured production remote executable facade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxAgentConfiguredProductionRemoteStartKind {
+    /// The dedicated caller-owned Tokio runtime could not be constructed.
+    RemoteRuntime,
+    /// The fixed production application-lease configuration failed validation.
+    RemoteApplicationLease,
+    /// Remaining configured production population failed before Linux bootstrap assembly.
+    RemoteConfiguration,
+    /// Existing Linux bootstrap assembly failed after configured production population succeeded.
+    Bootstrap(LinuxAgentBootstrapStartKind),
+}
+
+impl LinuxAgentConfiguredProductionRemoteStartKind {
+    /// Returns the bounded token selected for executable startup diagnostics.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::RemoteRuntime => "remote_runtime",
+            Self::RemoteApplicationLease => "remote_application_lease",
+            Self::RemoteConfiguration => "remote_configuration",
+            Self::Bootstrap(kind) => kind.token(),
+        }
+    }
+}
+
+/// Bounded public failure projection for configured production remote startup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LinuxAgentConfiguredProductionRemoteStartFailure {
+    kind: LinuxAgentConfiguredProductionRemoteStartKind,
+    signal_mask_restore: LinuxAgentBootstrapSignalMaskRestore,
+}
+
+impl LinuxAgentConfiguredProductionRemoteStartFailure {
+    const fn new(
+        kind: LinuxAgentConfiguredProductionRemoteStartKind,
+        signal_mask_restore: LinuxAgentBootstrapSignalMaskRestore,
+    ) -> Self {
+        Self {
+            kind,
+            signal_mask_restore,
+        }
+    }
+
+    /// Returns the bounded configured-production startup class.
+    #[must_use]
+    pub const fn kind(self) -> LinuxAgentConfiguredProductionRemoteStartKind {
+        self.kind
+    }
+
+    /// Returns existing signal-mask rollback evidence when Linux bootstrap owned it.
+    #[must_use]
+    pub const fn signal_mask_restore(self) -> LinuxAgentBootstrapSignalMaskRestore {
+        self.signal_mask_restore
+    }
+}
+
+impl std::fmt::Display for LinuxAgentConfiguredProductionRemoteStartFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("configured production remote startup failed")
+    }
+}
+
+impl std::error::Error for LinuxAgentConfiguredProductionRemoteStartFailure {}
+
+const fn map_configured_production_remote_start_failure(
+    error: LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+) -> LinuxAgentConfiguredProductionRemoteStartFailure {
+    match error {
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::RuntimeConstruction => {
+            LinuxAgentConfiguredProductionRemoteStartFailure::new(
+                LinuxAgentConfiguredProductionRemoteStartKind::RemoteRuntime,
+                LinuxAgentBootstrapSignalMaskRestore::NotApplicable,
+            )
+        }
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::ApplicationLeasePolicySource(_),
+        ) => LinuxAgentConfiguredProductionRemoteStartFailure::new(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteApplicationLease,
+            LinuxAgentBootstrapSignalMaskRestore::NotApplicable,
+        ),
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::Companion(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError::ConfiguredPopulation(_),
+            ),
+        ) => LinuxAgentConfiguredProductionRemoteStartFailure::new(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteConfiguration,
+            LinuxAgentBootstrapSignalMaskRestore::NotApplicable,
+        ),
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::Companion(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError::Bootstrap(failure),
+            ),
+        ) => LinuxAgentConfiguredProductionRemoteStartFailure::new(
+            LinuxAgentConfiguredProductionRemoteStartKind::Bootstrap(failure.kind()),
+            failure.signal_mask_restore(),
+        ),
     }
 }
 
@@ -1828,6 +1934,46 @@ pub enum LinuxAgentRemoteProcessCompanionFinalization {
     },
 }
 
+impl LinuxAgentRemoteProcessCompanionFinalization {
+    /// Returns the bounded configured-executable diagnostic token for remote finalization.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::SpawnFailed => "spawn_failed",
+            Self::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            } => "shutdown_requested_joined",
+            Self::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Panicked,
+            } => "shutdown_requested_panicked",
+            Self::Finalized {
+                controller:
+                    LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            } => "unavailable_before_endpoint_startup_joined",
+            Self::Finalized {
+                controller:
+                    LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Panicked,
+            } => "unavailable_before_endpoint_startup_panicked",
+        }
+    }
+
+    /// Returns whether remote finalization satisfies the selected executable success law.
+    #[must_use]
+    pub const fn is_success(self) -> bool {
+        matches!(
+            self,
+            Self::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            }
+        )
+    }
+}
+
 /// Existing local bootstrap report plus secondary injected-remote-companion evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LinuxAgentBootstrapWithRemoteReport {
@@ -1911,6 +2057,184 @@ where
         run_with_remote_process_companion_inputs(inputs, operation)
             .map(|(local, remote)| LinuxAgentBootstrapWithRemoteReport { local, remote })
     })
+}
+
+/// Runs the selected configured production remote companion behind the public Linux bootstrap facade.
+///
+/// This facade delegates exactly once to the existing C03e-TL synchronous higher-owner driver and
+/// projects its crate-private error family into the bounded public startup classification selected
+/// by C03e-TM. It constructs no additional runtime, performs no retry or fallback, and remains
+/// dormant until a separately authorized `main.rs` activation checkpoint.
+///
+/// # Errors
+///
+/// Returns a bounded configured-production startup failure without exposing private source chains,
+/// raw configuration values, transport coordinates, request/session identifiers, or verifier time.
+pub fn run_with_configured_production_remote_companion()
+-> Result<LinuxAgentBootstrapWithRemoteReport, LinuxAgentConfiguredProductionRemoteStartFailure> {
+    run_with_production_durable_reachability_requester_rendezvous_configured_application_lease_companion_with_selected_executable_custody()
+        .map_err(map_configured_production_remote_start_failure)
+}
+
+#[cfg(test)]
+mod configured_production_remote_facade_tests {
+    use std::error::Error as _;
+
+    use super::{
+        LinuxAgentBootstrapSignalMaskRestore, LinuxAgentBootstrapStartFailure,
+        LinuxAgentBootstrapStartKind, LinuxAgentBootstrapWithRemoteReport,
+        LinuxAgentConfiguredProductionRemoteStartFailure,
+        LinuxAgentConfiguredProductionRemoteStartKind,
+        LinuxAgentRemoteApplicationLeasePolicySourceError,
+        LinuxAgentRemoteProcessCompanionFinalization,
+        LinuxAgentRemoteProcessControllerFinalization, LinuxAgentRemoteProcessThreadFinalization,
+        LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError,
+        map_configured_production_remote_start_failure,
+        run_with_configured_production_remote_companion,
+    };
+    use crate::production_durable_capability_higher_owner_custody::{
+        LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError,
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError,
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError,
+        LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError,
+    };
+
+    #[test]
+    fn public_facade_has_exact_selected_result_shape_without_invocation() {
+        let entry: fn() -> Result<
+            LinuxAgentBootstrapWithRemoteReport,
+            LinuxAgentConfiguredProductionRemoteStartFailure,
+        > = run_with_configured_production_remote_companion;
+        let _ = entry;
+    }
+
+    #[test]
+    fn configured_start_tokens_and_failure_surface_are_bounded() {
+        assert_eq!(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteRuntime.token(),
+            "remote_runtime"
+        );
+        assert_eq!(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteApplicationLease.token(),
+            "remote_application_lease"
+        );
+        assert_eq!(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteConfiguration.token(),
+            "remote_configuration"
+        );
+        assert_eq!(
+            LinuxAgentConfiguredProductionRemoteStartKind::Bootstrap(
+                LinuxAgentBootstrapStartKind::RuntimeRoot
+            )
+            .token(),
+            "runtime_root"
+        );
+        let failure = LinuxAgentConfiguredProductionRemoteStartFailure::new(
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteRuntime,
+            LinuxAgentBootstrapSignalMaskRestore::NotApplicable,
+        );
+        assert_eq!(
+            failure.to_string(),
+            "configured production remote startup failed"
+        );
+        assert!(failure.source().is_none());
+    }
+
+    #[test]
+    fn private_driver_failures_map_to_selected_public_classes() {
+        let runtime = map_configured_production_remote_start_failure(
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::RuntimeConstruction,
+        );
+        assert_eq!(
+            runtime.kind(),
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteRuntime
+        );
+        assert_eq!(
+            runtime.signal_mask_restore(),
+            LinuxAgentBootstrapSignalMaskRestore::NotApplicable
+        );
+
+        let application_lease = map_configured_production_remote_start_failure(
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::ApplicationLeasePolicySource(
+                    LinuxAgentRemoteApplicationLeasePolicySourceError::Missing,
+                ),
+            ),
+        );
+        assert_eq!(
+            application_lease.kind(),
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteApplicationLease
+        );
+
+        let configured_population =
+            LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationError::RequesterRendezvousMaxRecordsSource(
+                LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::Missing,
+            );
+        let remote_configuration = map_configured_production_remote_start_failure(
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::Companion(
+                    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError::ConfiguredPopulation(configured_population),
+                ),
+            ),
+        );
+        assert_eq!(
+            remote_configuration.kind(),
+            LinuxAgentConfiguredProductionRemoteStartKind::RemoteConfiguration
+        );
+        assert_eq!(
+            remote_configuration.signal_mask_restore(),
+            LinuxAgentBootstrapSignalMaskRestore::NotApplicable
+        );
+
+        let bootstrap = LinuxAgentBootstrapStartFailure::new(
+            LinuxAgentBootstrapStartKind::RuntimeDirectory,
+            LinuxAgentBootstrapSignalMaskRestore::Restored,
+        );
+        let bootstrap_projection = map_configured_production_remote_start_failure(
+            LinuxAgentProductionConfiguredApplicationLeaseSelectedExecutableCustodyError::Companion(
+                LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredApplicationLeaseCompanionError::Companion(
+                    LinuxAgentProductionDurableReachabilityRequesterRendezvousConfiguredPopulationCompanionError::Bootstrap(bootstrap),
+                ),
+            ),
+        );
+        assert_eq!(
+            bootstrap_projection.kind(),
+            LinuxAgentConfiguredProductionRemoteStartKind::Bootstrap(
+                LinuxAgentBootstrapStartKind::RuntimeDirectory
+            )
+        );
+        assert_eq!(
+            bootstrap_projection.signal_mask_restore(),
+            LinuxAgentBootstrapSignalMaskRestore::Restored
+        );
+    }
+
+    #[test]
+    fn remote_finalization_tokens_and_success_law_are_exact() {
+        let cases = [
+            (LinuxAgentRemoteProcessCompanionFinalization::SpawnFailed, "spawn_failed", false),
+            (LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            }, "shutdown_requested_joined", true),
+            (LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::ShutdownRequested,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Panicked,
+            }, "shutdown_requested_panicked", false),
+            (LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Joined,
+            }, "unavailable_before_endpoint_startup_joined", false),
+            (LinuxAgentRemoteProcessCompanionFinalization::Finalized {
+                controller: LinuxAgentRemoteProcessControllerFinalization::UnavailableBeforeEndpointStartup,
+                thread: LinuxAgentRemoteProcessThreadFinalization::Panicked,
+            }, "unavailable_before_endpoint_startup_panicked", false),
+        ];
+        for (finalization, token, success) in cases {
+            assert_eq!(finalization.token(), token);
+            assert_eq!(finalization.is_success(), success);
+        }
+    }
 }
 
 /// Runs the fixed local profile with the already-typed production/requester-rendezvous companion.
