@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 aws-lc-rs = { version = "=1.18.0", default-features = false, features = ["alloc", "non-fips"] }
+prw-agent-configuration = { path = "../prw-agent-configuration" }
 prw-connectivity = { path = "../prw-connectivity" }
 prw-control-plane = { path = "../prw-control-plane" }
 prw-core = { path = "../prw-core" }

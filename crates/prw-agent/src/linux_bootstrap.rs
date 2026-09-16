@@ -7,7 +7,7 @@
 
 use std::{
     ffi::OsString,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     num::{NonZeroU16, NonZeroUsize},
     sync::Arc,
     time::Duration,
@@ -196,7 +196,7 @@ impl CapabilityDispatcher for LinuxAgentProductionRemoteCapabilityDispatcher {
 }
 
 /// Fixed non-secret process configuration name for selecting the Agent executable lane.
-pub const PRW_AGENT_EXECUTION_MODE_ENV: &str = "PRW_AGENT_EXECUTION_MODE";
+pub const PRW_AGENT_EXECUTION_MODE_ENV: &str = prw_agent_configuration::PRW_AGENT_EXECUTION_MODE;
 
 /// Explicit process-owned Agent executable lane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,11 +238,16 @@ fn parse_linux_agent_execution_mode_value(
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentExecutionModeSourceError::NonUnicode)?;
-    match value.as_str() {
-        "local_only" => Ok(LinuxAgentExecutionMode::LocalOnly),
-        "configured_remote" => Ok(LinuxAgentExecutionMode::ConfiguredRemote),
-        _ => Err(LinuxAgentExecutionModeSourceError::InvalidValue),
-    }
+    let mode = prw_agent_configuration::validate_agent_execution_mode(&value)
+        .map_err(|_| LinuxAgentExecutionModeSourceError::InvalidValue)?;
+    Ok(match mode {
+        prw_agent_configuration::AgentExecutionMode::LocalOnly => {
+            LinuxAgentExecutionMode::LocalOnly
+        }
+        prw_agent_configuration::AgentExecutionMode::ConfiguredRemote => {
+            LinuxAgentExecutionMode::ConfiguredRemote
+        }
+    })
 }
 
 /// Loads the explicit process execution mode from the fixed non-secret environment source.
@@ -261,13 +266,14 @@ pub fn load_linux_agent_execution_mode_from_env()
 }
 
 /// Fixed non-secret process configuration name for the production remote endpoint bind address.
-pub const PRW_REMOTE_BIND_ADDR_ENV: &str = "PRW_REMOTE_BIND_ADDR";
+pub const PRW_REMOTE_BIND_ADDR_ENV: &str = prw_agent_configuration::PRW_REMOTE_BIND_ADDR;
 
 /// Fixed non-secret process configuration name for the production remote peer logical device.
-pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = "PRW_REMOTE_PEER_DEVICE_ID";
+pub const PRW_REMOTE_PEER_DEVICE_ID_ENV: &str = prw_agent_configuration::PRW_REMOTE_PEER_DEVICE_ID;
 
 /// Fixed non-secret process configuration name for the production remote active-worker bound.
-pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str = "PRW_REMOTE_MAX_ACTIVE_WORKERS";
+pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str =
+    prw_agent_configuration::PRW_REMOTE_MAX_ACTIVE_WORKERS;
 
 /// Fixed non-secret process configuration name for the production application-session lease lifetime.
 #[allow(
@@ -275,7 +281,7 @@ pub const PRW_REMOTE_MAX_ACTIVE_WORKERS_ENV: &str = "PRW_REMOTE_MAX_ACTIVE_WORKE
     reason = "C03e-TH materializes the TG-selected fixed application-lease environment source before separately gated executable caller activation"
 )]
 pub(crate) const PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV: &str =
-    "PRW_REMOTE_APPLICATION_LEASE_SECONDS";
+    prw_agent_configuration::PRW_REMOTE_APPLICATION_LEASE_SECONDS;
 
 /// Fixed non-secret process configuration name for the production requester/rendezvous record bound.
 #[allow(
@@ -283,7 +289,7 @@ pub(crate) const PRW_REMOTE_APPLICATION_LEASE_SECONDS_ENV: &str =
     reason = "C03e-MR materializes the MQ-selected fixed requester/rendezvous max-records environment source before separately gated population composition"
 )]
 pub(crate) const PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS_ENV: &str =
-    "PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS";
+    prw_agent_configuration::PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS;
 
 /// Stable failure while acquiring or validating production remote bind-address configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -316,23 +322,20 @@ fn parse_linux_agent_remote_bind_addr_value(
     value: Option<OsString>,
 ) -> Result<SocketAddr, LinuxAgentRemoteBindAddressSourceError> {
     let value = value.ok_or(LinuxAgentRemoteBindAddressSourceError::Unavailable)?;
-    if value.is_empty() {
-        return Err(LinuxAgentRemoteBindAddressSourceError::Unavailable);
-    }
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemoteBindAddressSourceError::EncodingInvalid)?;
-    let address = value
-        .parse::<SocketAddr>()
-        .map_err(|_| LinuxAgentRemoteBindAddressSourceError::SocketAddressInvalid)?;
-    let ip = address.ip();
-    if ip.is_unspecified()
-        || ip.is_multicast()
-        || matches!(ip, IpAddr::V4(ipv4) if ipv4 == Ipv4Addr::BROADCAST)
-    {
-        return Err(LinuxAgentRemoteBindAddressSourceError::AddressNotBindAdvertisable);
-    }
-    Ok(address)
+    prw_agent_configuration::validate_remote_bind_addr(&value).map_err(|error| match error {
+        prw_agent_configuration::RemoteBindAddressValidationError::Unavailable => {
+            LinuxAgentRemoteBindAddressSourceError::Unavailable
+        }
+        prw_agent_configuration::RemoteBindAddressValidationError::SocketAddressInvalid => {
+            LinuxAgentRemoteBindAddressSourceError::SocketAddressInvalid
+        }
+        prw_agent_configuration::RemoteBindAddressValidationError::AddressNotBindAdvertisable => {
+            LinuxAgentRemoteBindAddressSourceError::AddressNotBindAdvertisable
+        }
+    })
 }
 
 /// Loads the explicitly configured production remote bind address from the process environment.
@@ -386,11 +389,8 @@ fn parse_linux_agent_remote_peer_device_id_value(
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemotePeerDeviceSourceError::NonUnicode)?;
-    DeviceId::new(value).map_err(|error| match error {
-        prw_core::IdentifierError::Empty => {
-            LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier
-        }
-    })
+    prw_agent_configuration::validate_remote_peer_device_id(&value)
+        .map_err(|_| LinuxAgentRemotePeerDeviceSourceError::InvalidIdentifier)
 }
 
 /// Loads the explicitly configured production remote peer logical device from the process environment.
@@ -442,13 +442,8 @@ fn parse_linux_agent_remote_max_active_workers_value(
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemoteMaxActiveWorkersSourceError::NonUnicode)?;
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue);
-    }
-    let parsed = value
-        .parse::<usize>()
-        .map_err(|_| LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)?;
-    NonZeroUsize::new(parsed).ok_or(LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
+    prw_agent_configuration::validate_remote_max_active_workers(&value)
+        .map_err(|_| LinuxAgentRemoteMaxActiveWorkersSourceError::InvalidValue)
 }
 
 /// Loads the explicitly configured production remote active-worker bound from the process environment.
@@ -517,12 +512,19 @@ fn parse_linux_agent_remote_application_lease_policy_value(
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemoteApplicationLeasePolicySourceError::NonUnicode)?;
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue);
-    }
-    let lifetime_seconds = value
-        .parse::<u64>()
-        .map_err(|_| LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue)?;
+    let lifetime_seconds = prw_agent_configuration::validate_remote_application_lease_seconds(
+        &value,
+    )
+    .map_err(|error| match error {
+        prw_agent_configuration::ApplicationLeaseValidationError::InvalidValue => {
+            LinuxAgentRemoteApplicationLeasePolicySourceError::InvalidValue
+        }
+        prw_agent_configuration::ApplicationLeaseValidationError::OutOfRange => {
+            LinuxAgentRemoteApplicationLeasePolicySourceError::Policy(
+                RemoteSessionApplicationLeasePolicyError::InvalidLifetime,
+            )
+        }
+    })?;
     RemoteSessionApplicationLeasePolicy::new(lifetime_seconds)
         .map_err(LinuxAgentRemoteApplicationLeasePolicySourceError::Policy)
 }
@@ -590,11 +592,7 @@ fn parse_linux_agent_remote_requester_rendezvous_max_records_value(
     let value = value
         .into_string()
         .map_err(|_| LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::NonUnicode)?;
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue);
-    }
-    value
-        .parse::<usize>()
+    prw_agent_configuration::validate_remote_requester_rendezvous_max_records(&value)
         .map_err(|_| LinuxAgentRemoteRequesterRendezvousMaxRecordsSourceError::InvalidValue)
 }
 
@@ -3873,7 +3871,7 @@ mod tests {
     reason = "C03e-NN materializes the NM-selected fixed expected-device scheduling-consumption max-records environment source before separately gated ledger representation and population composition"
 )]
 pub(crate) const PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS_ENV: &str =
-    "PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS";
+    prw_agent_configuration::PRW_REMOTE_EXPECTED_DEVICE_SCHEDULING_CONSUMPTION_MAX_RECORDS;
 
 /// Bounded failure while acquiring or validating expected-device scheduling-consumption capacity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3925,12 +3923,10 @@ fn parse_linux_agent_remote_expected_device_scheduling_consumption_max_records_v
     let value = value.into_string().map_err(|_| {
         LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::NonUnicode
     })?;
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(
-            LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue,
-        );
-    }
-    value.parse::<usize>().map_err(|_| {
+    prw_agent_configuration::validate_remote_expected_device_scheduling_consumption_max_records(
+        &value,
+    )
+    .map_err(|_| {
         LinuxAgentRemoteExpectedDeviceSchedulingConsumptionMaxRecordsSourceError::InvalidValue
     })
 }
