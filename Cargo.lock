@@ -2539,6 +2539,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "nix",
+ "prw-agent-configuration",
  "prw-connectivity",
  "prw-control-plane",
  "prw-core",
@@ -2556,6 +2557,15 @@ dependencies = [
  "prw-terminal",
  "rustix",
  "tokio",
+]
+
+[[package]]
+name = "prw-agent-configuration"
+version = "0.1.0"
+dependencies = [
+ "prw-core",
+ "prw-remote-bridge",
+ "rustix",
 ]
 
 [[package]]
