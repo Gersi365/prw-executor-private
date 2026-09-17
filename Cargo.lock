@@ -2569,6 +2569,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-agent-package-reconciliation"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "rustix",
+]
+
+[[package]]
 name = "prw-agent-systemd-orchestration"
 version = "0.1.0"
 dependencies = [
