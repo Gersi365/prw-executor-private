@@ -2569,6 +2569,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prw-agent-systemd-orchestration"
+version = "0.1.0"
+dependencies = [
+ "prw-agent",
+ "prw-agent-configuration",
+ "rustix",
+]
+
+[[package]]
 name = "prw-connectivity"
 version = "0.1.0"
 dependencies = [
