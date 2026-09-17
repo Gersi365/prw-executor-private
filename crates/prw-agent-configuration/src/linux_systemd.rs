@@ -143,6 +143,71 @@ impl ManagedSystemdWriteResult {
     }
 }
 
+/// Opaque one-use recovery authority for one verified managed-file transaction.
+///
+/// The token deliberately exposes neither raw snapshot bytes nor arbitrary filesystem paths.
+/// Dropping it performs no rollback; callers that need post-write activation recovery must consume
+/// it through [`restore_recoverable_managed_systemd_configuration`].
+pub struct RecoverableManagedSystemdTransaction {
+    before_mode: LeafSnapshot,
+    before_remote: LeafSnapshot,
+    committed_mode: LeafSnapshot,
+    committed_remote: LeafSnapshot,
+    committed_execution_mode: AgentExecutionMode,
+}
+
+impl fmt::Debug for RecoverableManagedSystemdTransaction {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RecoverableManagedSystemdTransaction")
+            .field("committed_execution_mode", &self.committed_execution_mode)
+            .finish_non_exhaustive()
+    }
+}
+
+impl RecoverableManagedSystemdTransaction {
+    /// Returns the execution mode whose exact managed state was committed.
+    #[must_use]
+    pub const fn committed_execution_mode(&self) -> AgentExecutionMode {
+        self.committed_execution_mode
+    }
+}
+
+/// Successful managed-file commit plus opaque one-use post-write recovery authority.
+pub struct RecoverableManagedSystemdWrite {
+    result: ManagedSystemdWriteResult,
+    recovery: RecoverableManagedSystemdTransaction,
+}
+
+impl fmt::Debug for RecoverableManagedSystemdWrite {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RecoverableManagedSystemdWrite")
+            .field("result", &self.result)
+            .field("recovery", &self.recovery)
+            .finish()
+    }
+}
+
+impl RecoverableManagedSystemdWrite {
+    /// Returns the verified managed-file result without exposing recovery internals.
+    #[must_use]
+    pub const fn result(&self) -> ManagedSystemdWriteResult {
+        self.result
+    }
+
+    /// Splits the verified result from its one-use recovery authority.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        ManagedSystemdWriteResult,
+        RecoverableManagedSystemdTransaction,
+    ) {
+        (self.result, self.recovery)
+    }
+}
+
 /// Bounded failure for the TV-selected managed-file transaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -223,10 +288,27 @@ pub fn apply_managed_systemd_configuration(
     context: &IntendedUserSystemdContext,
     desired: &ManagedAgentConfiguration,
 ) -> Result<ManagedSystemdWriteResult, ManagedSystemdConfigurationError> {
+    apply_managed_systemd_configuration_recoverable(context, desired).map(|write| write.result())
+}
+
+/// Commits and verifies desired managed-file state while retaining opaque exact rollback authority.
+///
+/// The returned recovery token is created only after exact post-commit reopen verification and a
+/// second secure snapshot of the committed state. No service-manager operation is performed.
+///
+/// # Errors
+///
+/// Has the same fail-closed filesystem, custody and serialization behavior as
+/// [`apply_managed_systemd_configuration`]. Any failure before token return rolls managed files back
+/// through the existing in-process writer rollback path.
+pub fn apply_managed_systemd_configuration_recoverable(
+    context: &IntendedUserSystemdContext,
+    desired: &ManagedAgentConfiguration,
+) -> Result<RecoverableManagedSystemdWrite, ManagedSystemdConfigurationError> {
     validate_current_user(context)?;
     let unit_paths = discover_user_unit_search_paths(context)?;
     let mut event_sink = |_| {};
-    apply_with_unit_paths(
+    apply_recoverable_with_unit_paths(
         context,
         desired,
         &unit_paths,
@@ -244,14 +326,26 @@ fn validate_current_user(
     Ok(())
 }
 
+fn configure_unit_path_discovery_environment(
+    command: &mut Command,
+    context: &IntendedUserSystemdContext,
+) {
+    command
+        .env_clear()
+        .env("HOME", &context.home_dir)
+        .env("XDG_CONFIG_HOME", &context.xdg_config_root)
+        .env("LC_ALL", "C")
+        .env("LANG", "C");
+}
+
 fn discover_user_unit_search_paths(
     context: &IntendedUserSystemdContext,
 ) -> Result<Vec<PathBuf>, ManagedSystemdConfigurationError> {
-    let output = Command::new(SYSTEMD_ANALYZE_PATH)
+    let mut command = Command::new(SYSTEMD_ANALYZE_PATH);
+    configure_unit_path_discovery_environment(&mut command, context);
+    let output = command
         .arg("--user")
         .arg("unit-paths")
-        .env("HOME", &context.home_dir)
-        .env("XDG_CONFIG_HOME", &context.xdg_config_root)
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -811,6 +905,7 @@ fn commit_desired_state(
     Ok(())
 }
 
+#[cfg(test)]
 fn apply_with_unit_paths(
     context: &IntendedUserSystemdContext,
     desired: &ManagedAgentConfiguration,
@@ -818,6 +913,86 @@ fn apply_with_unit_paths(
     event_sink: &mut impl FnMut(WriterEvent),
     fault: FaultInjection,
 ) -> Result<ManagedSystemdWriteResult, ManagedSystemdConfigurationError> {
+    apply_recoverable_with_unit_paths(context, desired, unit_paths, event_sink, fault)
+        .map(|write| write.result())
+}
+
+fn stage_desired_state(
+    directory: &ManagedDirectory,
+    desired: &ManagedAgentConfiguration,
+    uid: u32,
+) -> Result<(Option<StagedFile>, Option<StagedFile>), ManagedSystemdConfigurationError> {
+    let mode_bytes = render_execution_mode_drop_in(desired.mode()).as_bytes();
+    let remote_rendered = match desired {
+        ManagedAgentConfiguration::LocalOnly => None,
+        ManagedAgentConfiguration::ConfiguredRemote(bundle) => {
+            Some(render_configured_remote_drop_in(bundle)?)
+        }
+    };
+    let mode_stage = Some(stage_bytes(directory, "mode", mode_bytes, uid)?);
+    let remote_stage = match remote_rendered.as_deref() {
+        Some(bytes) => match stage_bytes(directory, "remote", bytes.as_bytes(), uid) {
+            Ok(staged) => Some(staged),
+            Err(error) => {
+                cleanup_stage(directory, mode_stage.as_ref());
+                return Err(error);
+            }
+        },
+        None => None,
+    };
+    Ok((mode_stage, remote_stage))
+}
+
+fn snapshot_committed_state_or_rollback(
+    directory: &ManagedDirectory,
+    context: &IntendedUserSystemdContext,
+    desired: &ManagedAgentConfiguration,
+    before_mode: &LeafSnapshot,
+    before_remote: &LeafSnapshot,
+    fault: FaultInjection,
+) -> Result<(LeafSnapshot, LeafSnapshot), ManagedSystemdConfigurationError> {
+    let Ok(committed_mode) = snapshot_leaf(
+        directory,
+        EXECUTION_MODE_DROPIN_NAME,
+        LeafKind::ExecutionMode,
+        context.uid,
+    ) else {
+        return Err(fail_with_rollback(
+            directory,
+            desired,
+            before_mode,
+            before_remote,
+            context.uid,
+            ManagedSystemdConfigurationError::PostCommitVerification,
+            fault,
+        ));
+    };
+    let Ok(committed_remote) = snapshot_leaf(
+        directory,
+        CONFIGURED_REMOTE_INPUTS_DROPIN_NAME,
+        LeafKind::ConfiguredRemote,
+        context.uid,
+    ) else {
+        return Err(fail_with_rollback(
+            directory,
+            desired,
+            before_mode,
+            before_remote,
+            context.uid,
+            ManagedSystemdConfigurationError::PostCommitVerification,
+            fault,
+        ));
+    };
+    Ok((committed_mode, committed_remote))
+}
+
+fn apply_recoverable_with_unit_paths(
+    context: &IntendedUserSystemdContext,
+    desired: &ManagedAgentConfiguration,
+    unit_paths: &[PathBuf],
+    event_sink: &mut impl FnMut(WriterEvent),
+    fault: FaultInjection,
+) -> Result<RecoverableManagedSystemdWrite, ManagedSystemdConfigurationError> {
     validate_current_user(context)?;
     let directory = open_managed_directory(context)?;
     let before_mode = snapshot_leaf(
@@ -834,25 +1009,7 @@ fn apply_with_unit_paths(
     )?;
     preflight_external_configuration(&directory, unit_paths)?;
 
-    let mode_bytes = render_execution_mode_drop_in(desired.mode()).as_bytes();
-    let remote_rendered = match desired {
-        ManagedAgentConfiguration::LocalOnly => None,
-        ManagedAgentConfiguration::ConfiguredRemote(bundle) => {
-            Some(render_configured_remote_drop_in(bundle)?)
-        }
-    };
-
-    let mut mode_stage = Some(stage_bytes(&directory, "mode", mode_bytes, context.uid)?);
-    let mut remote_stage = match remote_rendered.as_deref() {
-        Some(bytes) => match stage_bytes(&directory, "remote", bytes.as_bytes(), context.uid) {
-            Ok(staged) => Some(staged),
-            Err(error) => {
-                cleanup_stage(&directory, mode_stage.as_ref());
-                return Err(error);
-            }
-        },
-        None => None,
-    };
+    let (mut mode_stage, mut remote_stage) = stage_desired_state(&directory, desired, context.uid)?;
 
     let current_mode = snapshot_leaf(
         &directory,
@@ -920,9 +1077,122 @@ fn apply_with_unit_paths(
         ));
     }
 
-    Ok(ManagedSystemdWriteResult {
+    let (committed_mode, committed_remote) = snapshot_committed_state_or_rollback(
+        &directory,
+        context,
+        desired,
+        &before_mode,
+        &before_remote,
+        fault,
+    )?;
+    let result = ManagedSystemdWriteResult {
         mode: desired.mode(),
+    };
+    Ok(RecoverableManagedSystemdWrite {
+        result,
+        recovery: RecoverableManagedSystemdTransaction {
+            before_mode,
+            before_remote,
+            committed_mode,
+            committed_remote,
+            committed_execution_mode: desired.mode(),
+        },
     })
+}
+
+/// Restores the exact pretransaction managed-file state from one opaque recovery token.
+///
+/// The token is consumed by value. Restore first reopens both managed leaves through the same
+/// directory-FD/NOFOLLOW custody and refuses to proceed unless their exact state still equals the
+/// token's verified committed state. No service-manager operation is performed.
+///
+/// # Errors
+///
+/// Fails closed on user/custody mismatch, post-write drift, unsafe metadata, foreign content or any
+/// staging/durability/restore failure.
+pub fn restore_recoverable_managed_systemd_configuration(
+    context: &IntendedUserSystemdContext,
+    recovery: RecoverableManagedSystemdTransaction,
+) -> Result<(), ManagedSystemdConfigurationError> {
+    let RecoverableManagedSystemdTransaction {
+        before_mode,
+        before_remote,
+        committed_mode,
+        committed_remote,
+        committed_execution_mode,
+    } = recovery;
+    validate_current_user(context)?;
+    let directory = open_managed_directory(context)?;
+    let current_mode = snapshot_leaf(
+        &directory,
+        EXECUTION_MODE_DROPIN_NAME,
+        LeafKind::ExecutionMode,
+        context.uid,
+    )
+    .map_err(|_| ManagedSystemdConfigurationError::Rollback)?;
+    let current_remote = snapshot_leaf(
+        &directory,
+        CONFIGURED_REMOTE_INPUTS_DROPIN_NAME,
+        LeafKind::ConfiguredRemote,
+        context.uid,
+    )
+    .map_err(|_| ManagedSystemdConfigurationError::Rollback)?;
+    if current_mode != committed_mode || current_remote != committed_remote {
+        return Err(ManagedSystemdConfigurationError::Rollback);
+    }
+
+    match committed_execution_mode {
+        AgentExecutionMode::ConfiguredRemote => {
+            restore_leaf(
+                &directory,
+                EXECUTION_MODE_DROPIN_NAME,
+                LeafKind::ExecutionMode,
+                &before_mode,
+                context.uid,
+            )?;
+            restore_leaf(
+                &directory,
+                CONFIGURED_REMOTE_INPUTS_DROPIN_NAME,
+                LeafKind::ConfiguredRemote,
+                &before_remote,
+                context.uid,
+            )?;
+        }
+        AgentExecutionMode::LocalOnly => {
+            restore_leaf(
+                &directory,
+                CONFIGURED_REMOTE_INPUTS_DROPIN_NAME,
+                LeafKind::ConfiguredRemote,
+                &before_remote,
+                context.uid,
+            )?;
+            restore_leaf(
+                &directory,
+                EXECUTION_MODE_DROPIN_NAME,
+                LeafKind::ExecutionMode,
+                &before_mode,
+                context.uid,
+            )?;
+        }
+    }
+    let restored_mode = snapshot_leaf(
+        &directory,
+        EXECUTION_MODE_DROPIN_NAME,
+        LeafKind::ExecutionMode,
+        context.uid,
+    )
+    .map_err(|_| ManagedSystemdConfigurationError::Rollback)?;
+    let restored_remote = snapshot_leaf(
+        &directory,
+        CONFIGURED_REMOTE_INPUTS_DROPIN_NAME,
+        LeafKind::ConfiguredRemote,
+        context.uid,
+    )
+    .map_err(|_| ManagedSystemdConfigurationError::Rollback)?;
+    if restored_mode != before_mode || restored_remote != before_remote {
+        return Err(ManagedSystemdConfigurationError::Rollback);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1319,6 +1589,110 @@ mod tests {
         assert!(!fragment_text_conflicts(
             "[Service]\nEnvironment=UNRELATED=value\nLoadCredentialEncrypted=identity:/path\n"
         ));
+    }
+
+    #[test]
+    fn unit_path_discovery_child_environment_is_explicit_and_cleared() {
+        let sandbox = Sandbox::new();
+        let mut command = Command::new("/usr/bin/env");
+        command.env("SYSTEMD_UNIT_PATH", "/tmp/prw-ty-poison").env(
+            "DBUS_SESSION_BUS_ADDRESS",
+            "unix:path=/tmp/prw-ty-poison-bus",
+        );
+        configure_unit_path_discovery_environment(&mut command, &sandbox.context);
+        let output = command.output().expect("sanitized env child runs");
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).expect("env output utf8");
+        let mut lines = text.lines().collect::<Vec<_>>();
+        lines.sort_unstable();
+        let mut expected = vec![
+            format!("HOME={}", sandbox.context.home_dir().display()),
+            format!(
+                "XDG_CONFIG_HOME={}",
+                sandbox.context.xdg_config_root().display()
+            ),
+            "LANG=C".to_owned(),
+            "LC_ALL=C".to_owned(),
+        ];
+        expected.sort_unstable();
+        assert_eq!(lines, expected);
+        assert!(!text.contains("SYSTEMD_UNIT_PATH="));
+        assert!(!text.contains("DBUS_SESSION_BUS_ADDRESS="));
+    }
+
+    #[test]
+    fn recoverable_token_restores_exact_prior_managed_state() {
+        let sandbox = Sandbox::new();
+        sandbox.write_managed(
+            EXECUTION_MODE_DROPIN_NAME,
+            render_execution_mode_drop_in(AgentExecutionMode::LocalOnly).as_bytes(),
+        );
+        let before_mode =
+            fs::read(sandbox.managed.join(EXECUTION_MODE_DROPIN_NAME)).expect("before mode");
+        let desired = ManagedAgentConfiguration::ConfiguredRemote(Box::new(bundle("peer-token")));
+        let mut events = Vec::new();
+        let write = apply_recoverable_with_unit_paths(
+            &sandbox.context,
+            &desired,
+            &sandbox.unit_paths(),
+            &mut |event| events.push(event),
+            FaultInjection::None,
+        )
+        .expect("recoverable write");
+        assert_eq!(write.result().mode(), AgentExecutionMode::ConfiguredRemote);
+        assert_eq!(
+            events,
+            [
+                WriterEvent::CommitRemoteInputs,
+                WriterEvent::CommitExecutionMode
+            ]
+        );
+        let (_, recovery) = write.into_parts();
+        restore_recoverable_managed_systemd_configuration(&sandbox.context, recovery)
+            .expect("exact restore");
+        assert_eq!(
+            fs::read(sandbox.managed.join(EXECUTION_MODE_DROPIN_NAME)).expect("restored mode"),
+            before_mode
+        );
+        assert!(
+            !sandbox
+                .managed
+                .join(CONFIGURED_REMOTE_INPUTS_DROPIN_NAME)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn recoverable_restore_refuses_postcommit_drift_without_takeover() {
+        let sandbox = Sandbox::new();
+        sandbox.write_managed(
+            EXECUTION_MODE_DROPIN_NAME,
+            render_execution_mode_drop_in(AgentExecutionMode::LocalOnly).as_bytes(),
+        );
+        let desired = ManagedAgentConfiguration::ConfiguredRemote(Box::new(bundle("peer-drift")));
+        let write = apply_recoverable_with_unit_paths(
+            &sandbox.context,
+            &desired,
+            &sandbox.unit_paths(),
+            &mut |_| {},
+            FaultInjection::None,
+        )
+        .expect("recoverable write");
+        sandbox.write_managed(
+            EXECUTION_MODE_DROPIN_NAME,
+            render_execution_mode_drop_in(AgentExecutionMode::LocalOnly).as_bytes(),
+        );
+        let drifted =
+            fs::read(sandbox.managed.join(EXECUTION_MODE_DROPIN_NAME)).expect("drifted mode");
+        let (_, recovery) = write.into_parts();
+        assert_eq!(
+            restore_recoverable_managed_systemd_configuration(&sandbox.context, recovery),
+            Err(ManagedSystemdConfigurationError::Rollback)
+        );
+        assert_eq!(
+            fs::read(sandbox.managed.join(EXECUTION_MODE_DROPIN_NAME)).expect("still drifted"),
+            drifted
+        );
     }
 
     #[test]

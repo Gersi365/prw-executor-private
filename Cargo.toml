@@ -27,6 +27,7 @@ members = [
     "crates/prw-remote-transport",
     "crates/prw-remote-bridge",
     "crates/prw-agent-configuration",
+    "crates/prw-agent-systemd-orchestration",
     "crates/prw-agent",
     "apps/desktop",
 ]
