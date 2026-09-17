@@ -1877,10 +1877,7 @@ fn capture_external_systemd_fragment_custody_with_unit_paths(
     })
 }
 
-fn external_metadata_identity_matches(
-    left: &std::fs::Metadata,
-    right: &std::fs::Metadata,
-) -> bool {
+fn external_metadata_identity_matches(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
     left.is_file()
         && right.is_file()
         && left.dev() == right.dev()
@@ -1912,7 +1909,9 @@ fn capture_external_fragment(
         return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
     }
 
-    let mut bytes = Vec::with_capacity(before.len() as usize);
+    let capacity = usize::try_from(before.len())
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    let mut bytes = Vec::with_capacity(capacity);
     (&mut file)
         .take(EXTERNAL_FRAGMENT_MAX_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -1983,7 +1982,13 @@ mod external_custody_tests {
             let user_unit = config.join("systemd/user");
             let drop_ins = user_unit.join(MANAGED_DIRECTORY_NAME);
             fs::create_dir_all(&drop_ins).expect("external custody test directories");
-            for path in [&root, &config, &config.join("systemd"), &user_unit, &drop_ins] {
+            for path in [
+                &root,
+                &config,
+                &config.join("systemd"),
+                &user_unit,
+                &drop_ins,
+            ] {
                 fs::set_permissions(path, fs::Permissions::from_mode(0o700))
                     .expect("external custody test directory mode");
             }
@@ -2054,7 +2059,10 @@ mod external_custody_tests {
             &sandbox.unit_paths(),
         )
         .expect("unchanged custody reproves");
-        assert_eq!(fs::read(&identity).expect("identity bytes after reproof"), before_identity);
+        assert_eq!(
+            fs::read(&identity).expect("identity bytes after reproof"),
+            before_identity
+        );
         let debug = format!("{custody:?}");
         assert!(!debug.contains("identity"));
         assert!(!debug.contains("50-external"));
@@ -2156,11 +2164,9 @@ mod external_custody_tests {
         let second_unit_path = sandbox.root.join("second-unit-path");
         fs::create_dir_all(&second_unit_path).expect("second unit path");
         let ordered = vec![sandbox.user_unit.clone(), second_unit_path.clone()];
-        let order_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
-            &sandbox.context,
-            &ordered,
-        )
-        .expect("ordered search path baseline");
+        let order_baseline =
+            capture_external_systemd_fragment_custody_with_unit_paths(&sandbox.context, &ordered)
+                .expect("ordered search path baseline");
         assert!(
             reprove_external_systemd_fragment_custody_with_unit_paths(
                 &sandbox.context,
@@ -2200,7 +2206,9 @@ mod external_custody_tests {
     fn configured_external_custody_bounds_fail_closed() {
         let per_file = CustodySandbox::new();
         let large = per_file.drop_ins.join("50-large.conf");
-        let oversized = vec![b'x'; EXTERNAL_FRAGMENT_MAX_FILE_BYTES as usize + 1];
+        let per_file_limit = usize::try_from(EXTERNAL_FRAGMENT_MAX_FILE_BYTES)
+            .expect("external fragment per-file limit fits usize");
+        let oversized = vec![b'x'; per_file_limit + 1];
         CustodySandbox::write_file(&large, &oversized, 0o600);
         assert!(
             capture_external_systemd_fragment_custody_with_unit_paths(
@@ -2224,7 +2232,7 @@ mod external_custody_tests {
         );
 
         let total = CustodySandbox::new();
-        let one_megabyte = vec![b'x'; EXTERNAL_FRAGMENT_MAX_FILE_BYTES as usize];
+        let one_megabyte = vec![b'x'; per_file_limit];
         for index in 0..9 {
             let path = total.drop_ins.join(format!("{index:02}-total.conf"));
             CustodySandbox::write_file(&path, &one_megabyte, 0o600);

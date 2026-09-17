@@ -500,6 +500,57 @@ mod linux {
         ExternalDrift,
     }
 
+    fn fail_after_manager_mutation<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        recovery: B::Recovery,
+        baseline: &UnitStatus,
+        external_custody: &B::ExternalCustody,
+        restart_attempted: bool,
+        original: OrchestrationError,
+    ) -> Result<(), OrchestrationError> {
+        match rollback_after_manager_mutation(
+            context,
+            backend,
+            recovery,
+            baseline,
+            external_custody,
+            restart_attempted,
+        )? {
+            RollbackDisposition::Restored => Err(original),
+            RollbackDisposition::ExternalDrift => {
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            }
+        }
+    }
+
+    fn reprove_or_restore_managed_files<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        recovery: B::Recovery,
+        external_custody: &B::ExternalCustody,
+    ) -> Result<B::Recovery, OrchestrationError> {
+        if backend
+            .reprove_external_custody(context, external_custody)
+            .is_err()
+        {
+            backend.restore(context, recovery)?;
+            Err(OrchestrationError::ExternalConfigurationDrift)
+        } else {
+            Ok(recovery)
+        }
+    }
+
+    fn require_external_reproof<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        external_custody: &B::ExternalCustody,
+    ) -> Result<(), OrchestrationError> {
+        backend
+            .reprove_external_custody(context, external_custody)
+            .map_err(|_| OrchestrationError::ExternalConfigurationDrift)
+    }
+
     fn reconfigure_active<B: ActivationBackend>(
         context: &UserContext,
         desired: &ManagedAgentConfiguration,
@@ -515,68 +566,46 @@ mod linux {
         let external_custody = backend.capture_external_custody(context)?;
         let recovery = backend.write_recoverable(context, desired)?;
 
-        if backend
-            .reprove_external_custody(context, &external_custody)
-            .is_err()
-        {
-            backend.restore(context, recovery)?;
-            return Err(OrchestrationError::ExternalConfigurationDrift);
-        }
+        let recovery =
+            reprove_or_restore_managed_files(context, backend, recovery, &external_custody)?;
         if backend.verify_target(context).is_err() {
             backend.restore(context, recovery)?;
             return Err(OrchestrationError::TargetVerify);
         }
-        if backend
-            .reprove_external_custody(context, &external_custody)
-            .is_err()
-        {
-            backend.restore(context, recovery)?;
-            return Err(OrchestrationError::ExternalConfigurationDrift);
-        }
+        let recovery =
+            reprove_or_restore_managed_files(context, backend, recovery, &external_custody)?;
         if backend.daemon_reload(context).is_err() {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 false,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::DaemonReload),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::DaemonReload,
+            );
         }
         let Ok(post_reload) = backend.status(context) else {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 false,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::PostReloadState),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::PostReloadState,
+            );
         };
         if !loaded_topology_matches(context, desired, &baseline, &post_reload) {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 false,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::PostReloadState),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::PostReloadState,
+            );
         }
         if backend
             .reprove_external_custody(context, &external_custody)
@@ -589,60 +618,43 @@ mod linux {
             return Err(OrchestrationError::ExternalConfigurationDrift);
         }
         if backend.try_restart(context).is_err() {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 true,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::TryRestart),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::TryRestart,
+            );
         }
         let Ok(post_restart) = backend.wait_ready(
             context,
             &baseline.unit_file_state,
             Some(&baseline.invocation_id),
         ) else {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 true,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::PostRestartReadiness),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::PostRestartReadiness,
+            );
         };
         if !loaded_topology_matches(context, desired, &baseline, &post_restart) {
-            return match rollback_after_manager_mutation(
+            return fail_after_manager_mutation(
                 context,
                 backend,
                 recovery,
                 &baseline,
                 &external_custody,
                 true,
-            )? {
-                RollbackDisposition::Restored => Err(OrchestrationError::PostRestartReadiness),
-                RollbackDisposition::ExternalDrift => {
-                    Err(OrchestrationError::ExternalConfigurationDrift)
-                }
-            };
+                OrchestrationError::PostRestartReadiness,
+            );
         }
-        if backend
-            .reprove_external_custody(context, &external_custody)
-            .is_err()
-        {
-            return Err(OrchestrationError::ExternalConfigurationDrift);
-        }
+        require_external_reproof(context, backend, &external_custody)?;
         Ok(())
     }
 
@@ -734,7 +746,9 @@ mod linux {
         }
         let managed_membership_matches = match desired {
             ManagedAgentConfiguration::LocalOnly => !current.drop_in_paths.contains(&remote),
-            ManagedAgentConfiguration::ConfiguredRemote(_) => current.drop_in_paths.contains(&remote),
+            ManagedAgentConfiguration::ConfiguredRemote(_) => {
+                current.drop_in_paths.contains(&remote)
+            }
         };
         managed_membership_matches
             && foreign_drop_in_sequence(&current.drop_in_paths, &mode, &remote)
@@ -1151,7 +1165,7 @@ mod linux {
             fn reprove_external_custody(
                 &mut self,
                 _: &UserContext,
-                _: &Self::ExternalCustody,
+                (): &Self::ExternalCustody,
             ) -> Result<(), OrchestrationError> {
                 self.events.push(Event::ExternalReprove);
                 let unchanged = if self.external_reproofs.is_empty() {
@@ -1756,10 +1770,7 @@ mod linux {
                 ),
                 Err(OrchestrationError::ExternalConfigurationDrift)
             );
-            assert_eq!(
-                backend.events.last(),
-                Some(&Event::ExternalReprove)
-            );
+            assert_eq!(backend.events.last(), Some(&Event::ExternalReprove));
             assert_eq!(
                 backend
                     .events
@@ -1925,7 +1936,8 @@ mod linux {
         }
 
         #[test]
-        fn post_restart_foreign_topology_drift_invokes_rollback_when_external_custody_is_unchanged() {
+        fn post_restart_foreign_topology_drift_invokes_rollback_when_external_custody_is_unchanged()
+        {
             let (root, config, runtime) = sandbox();
             let uid = getuid().as_raw();
             let mut env = FakeEnv::local_only(&root, &config);
@@ -2114,9 +2126,11 @@ mod linux {
                 OrchestrationError::ExternalConfigurationDrift.to_string(),
                 "external_configuration_drift"
             );
-            assert!(!OrchestrationError::ExternalConfigurationDrift
-                .to_string()
-                .contains('/'));
+            assert!(
+                !OrchestrationError::ExternalConfigurationDrift
+                    .to_string()
+                    .contains('/')
+            );
         }
 
         #[test]
