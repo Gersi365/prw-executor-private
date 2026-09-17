@@ -25,7 +25,7 @@ use rustix::{
         AtFlags, Mode, OFlags, RenameFlags, ResolveFlags, fchmod, open, openat, openat2,
         renameat_with, unlinkat,
     },
-    process::geteuid,
+    process::{geteuid, getuid},
 };
 
 /// The sole semantic operation accepted by the administrative binary.
@@ -215,7 +215,7 @@ struct ProductionPolicy {
     required_euid: u32,
     package_uid: u32,
     package_gid: u32,
-    require_nonroot_stage_owner: bool,
+    stage_owner_uid: u32,
     old_agent_hash: String,
     new_agent_hash: String,
     unit_hash: String,
@@ -229,7 +229,7 @@ impl ProductionPolicy {
             required_euid: 0,
             package_uid: 0,
             package_gid: 0,
-            require_nonroot_stage_owner: true,
+            stage_owner_uid: getuid().as_raw(),
             old_agent_hash: OLD_AGENT_SHA256.to_owned(),
             new_agent_hash: NEW_AGENT_SHA256.to_owned(),
             unit_hash: VENDOR_UNIT_SHA256.to_owned(),
@@ -425,7 +425,8 @@ fn open_validated_stage(
         .map_err(|_| ReconciliationError::StageCustodyInvalid)?;
     if !metadata.is_dir()
         || metadata.mode() & 0o7777 != STAGE_MODE
-        || (policy.require_nonroot_stage_owner && metadata.uid() == 0)
+        || policy.stage_owner_uid == 0
+        || metadata.uid() != policy.stage_owner_uid
         || metadata.mode() & 0o022 != 0
     {
         return Err(ReconciliationError::StageCustodyInvalid);
@@ -951,7 +952,7 @@ mod tests {
                 required_euid: uid,
                 package_uid: uid,
                 package_gid: gid,
-                require_nonroot_stage_owner: false,
+                stage_owner_uid: uid,
                 old_agent_hash: hash_bytes(&old_bytes),
                 new_agent_hash: hash_bytes(&new_bytes),
                 unit_hash: hash_bytes(&unit_bytes),
@@ -1225,6 +1226,24 @@ mod tests {
         )
         .expect_err("mode drift");
         assert_eq!(error, ReconciliationError::InstalledAgentInvalid);
+    }
+
+    #[test]
+    fn rejects_stage_owner_mismatch() {
+        let mut fixture = Fixture::new();
+        fixture.policy.stage_owner_uid = fixture.policy.stage_owner_uid.saturating_add(1);
+        let error = reconcile_with(
+            &fixture.layout,
+            &fixture.policy,
+            &fixture.stage,
+            FaultInjection::None,
+        )
+        .expect_err("stage owner mismatch");
+        assert_eq!(error, ReconciliationError::StageCustodyInvalid);
+        assert_eq!(
+            fs::read(fixture.destination()).expect("destination"),
+            fixture.old_bytes
+        );
     }
 
     #[test]
