@@ -96,6 +96,7 @@ mod linux {
         PRW_REMOTE_REQUESTER_RENDEZVOUS_MAX_RECORDS, validate_agent_execution_mode,
     };
     use rustix::{
+        fs::{Mode, OFlags, open},
         net::sockopt::socket_peercred,
         process::{geteuid, getuid},
     };
@@ -261,12 +262,28 @@ mod linux {
         if !path.is_absolute() {
             return Err(OrchestrationError::SameUserContext);
         }
-        let metadata =
-            fs::symlink_metadata(path).map_err(|_| OrchestrationError::SameUserContext)?;
-        if metadata.file_type().is_symlink()
-            || !metadata.is_dir()
-            || metadata.uid() != uid
-            || metadata.mode() & 0o777 != PRIVATE_DIRECTORY_MODE
+        let before = fs::symlink_metadata(path).map_err(|_| OrchestrationError::SameUserContext)?;
+        if before.file_type().is_symlink()
+            || !before.is_dir()
+            || before.uid() != uid
+            || before.mode() & 0o777 != PRIVATE_DIRECTORY_MODE
+        {
+            return Err(OrchestrationError::SameUserContext);
+        }
+        let fd = open(
+            path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(|_| OrchestrationError::SameUserContext)?;
+        let opened = std::fs::File::from(fd)
+            .metadata()
+            .map_err(|_| OrchestrationError::SameUserContext)?;
+        if !opened.is_dir()
+            || opened.uid() != uid
+            || opened.mode() & 0o777 != PRIVATE_DIRECTORY_MODE
+            || before.dev() != opened.dev()
+            || before.ino() != opened.ino()
         {
             return Err(OrchestrationError::SameUserContext);
         }
@@ -1393,6 +1410,16 @@ mod linux {
             let mut env = FakeEnv::local_only(&root, &config);
             env.values
                 .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            assert_eq!(
+                acquire_user_context(&mut env, true, uid, uid).unwrap_err(),
+                OrchestrationError::SameUserContext
+            );
+            fs::set_permissions(&runtime, Permissions::from_mode(0o700)).unwrap();
+            let runtime_link = root.join("runtime-link");
+            std::os::unix::fs::symlink(&runtime, &runtime_link).unwrap();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime_link.display().to_string());
             assert_eq!(
                 acquire_user_context(&mut env, true, uid, uid).unwrap_err(),
                 OrchestrationError::SameUserContext
