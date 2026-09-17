@@ -59,7 +59,7 @@ pub fn parse_action_args(
 #[cfg(target_os = "linux")]
 mod linux {
     use std::{
-        collections::BTreeMap,
+        collections::{BTreeMap, BTreeSet},
         ffi::OsString,
         fs,
         os::unix::{
@@ -469,7 +469,7 @@ mod linux {
         backend: &mut B,
     ) -> Result<(), OrchestrationError> {
         let baseline = backend.status(context)?;
-        if !baseline.is_active_running() {
+        if !baseline.is_active_running() || !drop_in_paths_are_valid(&baseline.drop_in_paths) {
             return Err(OrchestrationError::BaselineSystemd);
         }
         backend
@@ -488,7 +488,7 @@ mod linux {
             rollback_after_reload(context, backend, recovery, &baseline)?;
             return Err(OrchestrationError::PostReloadState);
         };
-        if !post_reload_matches(context, desired, &baseline, &post_reload) {
+        if !loaded_topology_matches(context, desired, &baseline, &post_reload) {
             rollback_after_reload(context, backend, recovery, &baseline)?;
             return Err(OrchestrationError::PostReloadState);
         }
@@ -496,14 +496,15 @@ mod linux {
             rollback_after_reload(context, backend, recovery, &baseline)?;
             return Err(OrchestrationError::TryRestart);
         }
-        if backend
-            .wait_ready(
-                context,
-                &baseline.unit_file_state,
-                Some(&baseline.invocation_id),
-            )
-            .is_err()
-        {
+        let Ok(post_restart) = backend.wait_ready(
+            context,
+            &baseline.unit_file_state,
+            Some(&baseline.invocation_id),
+        ) else {
+            rollback_after_reload(context, backend, recovery, &baseline)?;
+            return Err(OrchestrationError::PostRestartReadiness);
+        };
+        if !loaded_topology_matches(context, desired, &baseline, &post_restart) {
             rollback_after_reload(context, backend, recovery, &baseline)?;
             return Err(OrchestrationError::PostRestartReadiness);
         }
@@ -526,36 +527,70 @@ mod linux {
         let restored = backend
             .wait_ready(context, &baseline.unit_file_state, None)
             .map_err(|_| OrchestrationError::Rollback)?;
-        if restored.drop_in_paths != baseline.drop_in_paths {
+        if !drop_in_paths_are_valid(&restored.drop_in_paths)
+            || restored.drop_in_paths != baseline.drop_in_paths
+        {
             return Err(OrchestrationError::Rollback);
         }
         Ok(())
     }
 
-    fn post_reload_matches(
+    fn managed_drop_in_paths(context: &UserContext) -> (PathBuf, PathBuf) {
+        let managed = context
+            .systemd
+            .xdg_config_root()
+            .join("systemd/user/prw-agent.service.d");
+        (
+            managed.join(EXECUTION_MODE_DROPIN_NAME),
+            managed.join(CONFIGURED_REMOTE_INPUTS_DROPIN_NAME),
+        )
+    }
+
+    fn drop_in_paths_are_valid(paths: &[PathBuf]) -> bool {
+        let mut seen = BTreeSet::new();
+        paths
+            .iter()
+            .all(|path| path.is_absolute() && seen.insert(path.clone()))
+    }
+
+    fn foreign_drop_in_sequence<'a>(
+        paths: &'a [PathBuf],
+        mode: &Path,
+        remote: &Path,
+    ) -> Vec<&'a Path> {
+        paths
+            .iter()
+            .map(PathBuf::as_path)
+            .filter(|path| *path != mode && *path != remote)
+            .collect()
+    }
+
+    fn loaded_topology_matches(
         context: &UserContext,
         desired: &ManagedAgentConfiguration,
         baseline: &UnitStatus,
         current: &UnitStatus,
     ) -> bool {
-        if current.load_state != "loaded" || current.unit_file_state != baseline.unit_file_state {
+        if current.load_state != "loaded"
+            || current.unit_file_state != baseline.unit_file_state
+            || !drop_in_paths_are_valid(&baseline.drop_in_paths)
+            || !drop_in_paths_are_valid(&current.drop_in_paths)
+        {
             return false;
         }
-        let managed = context
-            .systemd
-            .xdg_config_root()
-            .join("systemd/user/prw-agent.service.d");
-        let mode = managed.join(EXECUTION_MODE_DROPIN_NAME);
-        let remote = managed.join(CONFIGURED_REMOTE_INPUTS_DROPIN_NAME);
+        let (mode, remote) = managed_drop_in_paths(context);
         if !current.drop_in_paths.contains(&mode) {
             return false;
         }
-        match desired {
+        let managed_membership_matches = match desired {
             ManagedAgentConfiguration::LocalOnly => !current.drop_in_paths.contains(&remote),
             ManagedAgentConfiguration::ConfiguredRemote(_) => {
                 current.drop_in_paths.contains(&remote)
             }
-        }
+        };
+        managed_membership_matches
+            && foreign_drop_in_sequence(&current.drop_in_paths, &mode, &remote)
+                == foreign_drop_in_sequence(&baseline.drop_in_paths, &mode, &remote)
     }
 
     fn sanitized_command(path: &str, context: &UserContext) -> Result<Command, OrchestrationError> {
@@ -675,10 +710,11 @@ mod linux {
         if value.is_empty() {
             return Some(Vec::new());
         }
-        value
+        let paths = value
             .split_ascii_whitespace()
             .map(decode_systemd_path)
-            .collect()
+            .collect::<Option<Vec<_>>>()?;
+        drop_in_paths_are_valid(&paths).then_some(paths)
     }
 
     fn decode_systemd_path(value: &str) -> Option<PathBuf> {
@@ -988,9 +1024,14 @@ mod linux {
                 _: Option<&str>,
             ) -> Result<UnitStatus, OrchestrationError> {
                 self.events.push(Event::Wait);
-                (!self.fail_once(FakeFailure::Wait))
-                    .then(|| active_status("after", Vec::new()))
-                    .ok_or(OrchestrationError::PostRestartReadiness)
+                if self.fail_once(FakeFailure::Wait) {
+                    return Err(OrchestrationError::PostRestartReadiness);
+                }
+                if self.statuses.is_empty() {
+                    Ok(active_status("after", Vec::new()))
+                } else {
+                    Ok(self.statuses.remove(0))
+                }
             }
         }
 
@@ -1005,6 +1046,22 @@ mod linux {
                 drop_in_paths,
             }
         }
+
+        fn configured_remote_desired() -> ManagedAgentConfiguration {
+            ManagedAgentConfiguration::ConfiguredRemote(Box::new(
+                ConfiguredRemoteBundle::try_new("127.0.0.1:0", "peer-exact", "1", "60", "0", "0")
+                    .expect("valid configured-remote test bundle"),
+            ))
+        }
+
+        fn active_context(root: &Path, config: &Path, runtime: &Path) -> UserContext {
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(root, config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            acquire_user_context(&mut env, true, uid, uid).expect("valid active test context")
+        }
+
         static SANDBOX_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
         fn sandbox() -> (PathBuf, PathBuf, PathBuf) {
@@ -1197,9 +1254,15 @@ mod linux {
             let mode = config
                 .join("systemd/user/prw-agent.service.d")
                 .join(EXECUTION_MODE_DROPIN_NAME);
-            let baseline = active_status("before", Vec::new());
-            let post = active_status("before", vec![mode]);
-            let mut backend = FakeBackend::new(vec![baseline, post]);
+            let foreign_a = PathBuf::from("/vendor/10-a.conf");
+            let foreign_b = PathBuf::from("/vendor/20-b.conf");
+            let baseline = active_status("before", vec![foreign_a.clone(), foreign_b.clone()]);
+            let post = active_status(
+                "before",
+                vec![foreign_a.clone(), mode.clone(), foreign_b.clone()],
+            );
+            let post_restart = active_status("after", vec![foreign_a, mode, foreign_b]);
+            let mut backend = FakeBackend::new(vec![baseline, post, post_restart]);
             assert_eq!(
                 execute_with_backend(
                     AdministrativeAction::ReconfigureActive,
@@ -1307,6 +1370,203 @@ mod linux {
             );
             assert!(parse_unit_status(b"LoadState=loaded\nLoadState=loaded\n").is_none());
             assert!(decode_systemd_path("/tmp/bad\\q").is_none());
+            assert!(parse_drop_in_paths("relative.conf").is_none());
+            assert!(parse_drop_in_paths("/tmp/a.conf /tmp/a.conf").is_none());
+        }
+
+        #[test]
+        fn selected_loaded_topology_accepts_both_modes_and_rejects_wrong_membership() {
+            let (root, config, runtime) = sandbox();
+            let context = active_context(&root, &config, &runtime);
+            let (mode, remote) = managed_drop_in_paths(&context);
+            let foreign_a = PathBuf::from("/vendor/10-a.conf");
+            let foreign_b = PathBuf::from("/vendor/20-b.conf");
+            let baseline = active_status("before", vec![foreign_a.clone(), foreign_b.clone()]);
+            let local = active_status(
+                "before",
+                vec![foreign_a.clone(), mode.clone(), foreign_b.clone()],
+            );
+            assert!(loaded_topology_matches(
+                &context,
+                &ManagedAgentConfiguration::LocalOnly,
+                &baseline,
+                &local,
+            ));
+            let configured = active_status("before", vec![mode, foreign_a, remote, foreign_b]);
+            let desired_remote = configured_remote_desired();
+            assert!(loaded_topology_matches(
+                &context,
+                &desired_remote,
+                &baseline,
+                &configured,
+            ));
+            assert!(!loaded_topology_matches(
+                &context,
+                &ManagedAgentConfiguration::LocalOnly,
+                &baseline,
+                &configured,
+            ));
+            assert!(!loaded_topology_matches(
+                &context,
+                &desired_remote,
+                &baseline,
+                &local,
+            ));
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn post_reload_foreign_topology_drift_fails_before_forward_restart() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mode = config
+                .join("systemd/user/prw-agent.service.d")
+                .join(EXECUTION_MODE_DROPIN_NAME);
+            let foreign_a = PathBuf::from("/vendor/10-a.conf");
+            let foreign_b = PathBuf::from("/vendor/20-b.conf");
+            let foreign_c = PathBuf::from("/vendor/30-c.conf");
+            let cases = [
+                vec![
+                    foreign_a.clone(),
+                    foreign_c.clone(),
+                    foreign_b.clone(),
+                    mode.clone(),
+                ],
+                vec![foreign_a.clone(), mode.clone()],
+                vec![foreign_a.clone(), foreign_c, mode.clone()],
+                vec![foreign_b.clone(), foreign_a.clone(), mode],
+            ];
+            for post_paths in cases {
+                let mut env = FakeEnv::local_only(&root, &config);
+                env.values
+                    .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+                let baseline_paths = vec![foreign_a.clone(), foreign_b.clone()];
+                let baseline = active_status("before", baseline_paths.clone());
+                let post = active_status("before", post_paths);
+                let restored = active_status("after", baseline_paths);
+                let mut backend = FakeBackend::new(vec![baseline, post, restored]);
+                assert_eq!(
+                    execute_with_backend(
+                        AdministrativeAction::ReconfigureActive,
+                        &mut env,
+                        uid,
+                        uid,
+                        &mut backend,
+                    ),
+                    Err(OrchestrationError::PostReloadState)
+                );
+                assert!(!backend.events.contains(&Event::TryRestart));
+                assert_eq!(
+                    backend
+                        .events
+                        .iter()
+                        .filter(|event| **event == Event::Restart)
+                        .count(),
+                    1
+                );
+            }
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn post_restart_foreign_topology_drift_invokes_rollback() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mode = config
+                .join("systemd/user/prw-agent.service.d")
+                .join(EXECUTION_MODE_DROPIN_NAME);
+            let foreign_a = PathBuf::from("/vendor/10-a.conf");
+            let foreign_b = PathBuf::from("/vendor/20-b.conf");
+            let baseline_paths = vec![foreign_a.clone(), foreign_b.clone()];
+            let baseline = active_status("before", baseline_paths.clone());
+            let post_reload = active_status(
+                "before",
+                vec![foreign_a.clone(), mode.clone(), foreign_b.clone()],
+            );
+            let post_restart = active_status("after", vec![foreign_b, mode, foreign_a]);
+            let restored = active_status("rollback", baseline_paths);
+            let mut backend = FakeBackend::new(vec![baseline, post_reload, post_restart, restored]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::PostRestartReadiness)
+            );
+            assert_eq!(
+                backend.events,
+                [
+                    Event::Status,
+                    Event::Ready,
+                    Event::Recoverable,
+                    Event::Verify,
+                    Event::Reload,
+                    Event::Status,
+                    Event::TryRestart,
+                    Event::Wait,
+                    Event::Restore,
+                    Event::Reload,
+                    Event::Restart,
+                    Event::Wait,
+                ]
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn invalid_baseline_dropin_topology_blocks_before_writer_mutation() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            for paths in [
+                vec![PathBuf::from("relative.conf")],
+                vec![
+                    PathBuf::from("/vendor/a.conf"),
+                    PathBuf::from("/vendor/a.conf"),
+                ],
+            ] {
+                let mut env = FakeEnv::local_only(&root, &config);
+                env.values
+                    .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+                let mut backend = FakeBackend::new(vec![active_status("before", paths)]);
+                assert_eq!(
+                    execute_with_backend(
+                        AdministrativeAction::ReconfigureActive,
+                        &mut env,
+                        uid,
+                        uid,
+                        &mut backend,
+                    ),
+                    Err(OrchestrationError::BaselineSystemd)
+                );
+                assert_eq!(backend.events, [Event::Status]);
+            }
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn rollback_requires_exact_full_ordered_baseline_dropins() {
+            let (root, config, runtime) = sandbox();
+            let context = active_context(&root, &config, &runtime);
+            let foreign_a = PathBuf::from("/vendor/10-a.conf");
+            let foreign_b = PathBuf::from("/vendor/20-b.conf");
+            let baseline = active_status("before", vec![foreign_a.clone(), foreign_b.clone()]);
+            let restored = active_status("rollback", vec![foreign_b, foreign_a]);
+            let mut backend = FakeBackend::new(vec![restored]);
+            assert_eq!(
+                rollback_after_reload(&context, &mut backend, (), &baseline),
+                Err(OrchestrationError::Rollback)
+            );
+            assert_eq!(
+                backend.events,
+                [Event::Restore, Event::Reload, Event::Restart, Event::Wait]
+            );
+            let _ = fs::remove_dir_all(root);
         }
 
         #[test]
