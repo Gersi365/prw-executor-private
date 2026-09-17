@@ -83,9 +83,10 @@ mod linux {
     };
     use prw_agent_configuration::linux_systemd::{
         CONFIGURED_REMOTE_INPUTS_DROPIN_NAME, EXECUTION_MODE_DROPIN_NAME,
-        IntendedUserSystemdContext, ManagedAgentConfiguration, ManagedSystemdWriteResult,
-        RecoverableManagedSystemdTransaction, apply_managed_systemd_configuration,
-        apply_managed_systemd_configuration_recoverable,
+        ExternalSystemdFragmentCustody, IntendedUserSystemdContext, ManagedAgentConfiguration,
+        ManagedSystemdWriteResult, RecoverableManagedSystemdTransaction,
+        apply_managed_systemd_configuration, apply_managed_systemd_configuration_recoverable,
+        capture_external_systemd_fragment_custody, reprove_external_systemd_fragment_custody,
         restore_recoverable_managed_systemd_configuration,
     };
     use prw_agent_configuration::{
@@ -122,6 +123,7 @@ mod linux {
         BaselineSystemd,
         BaselineReadiness,
         ManagedWrite,
+        ExternalConfigurationDrift,
         TargetVerify,
         DaemonReload,
         PostReloadState,
@@ -139,6 +141,7 @@ mod linux {
                 Self::BaselineSystemd => "baseline_systemd",
                 Self::BaselineReadiness => "baseline_readiness",
                 Self::ManagedWrite => "managed_write",
+                Self::ExternalConfigurationDrift => "external_configuration_drift",
                 Self::TargetVerify => "target_verify",
                 Self::DaemonReload => "daemon_reload",
                 Self::PostReloadState => "post_reload_state",
@@ -337,6 +340,7 @@ mod linux {
 
     trait ActivationBackend {
         type Recovery;
+        type ExternalCustody;
 
         fn write_only(
             &mut self,
@@ -345,6 +349,15 @@ mod linux {
         ) -> Result<(), OrchestrationError>;
         fn status(&mut self, context: &UserContext) -> Result<UnitStatus, OrchestrationError>;
         fn ready_once(&mut self, context: &UserContext) -> Result<(), OrchestrationError>;
+        fn capture_external_custody(
+            &mut self,
+            context: &UserContext,
+        ) -> Result<Self::ExternalCustody, OrchestrationError>;
+        fn reprove_external_custody(
+            &mut self,
+            context: &UserContext,
+            custody: &Self::ExternalCustody,
+        ) -> Result<(), OrchestrationError>;
         fn write_recoverable(
             &mut self,
             context: &UserContext,
@@ -371,6 +384,7 @@ mod linux {
 
     impl ActivationBackend for ProductionBackend {
         type Recovery = RecoverableManagedSystemdTransaction;
+        type ExternalCustody = ExternalSystemdFragmentCustody;
 
         fn write_only(
             &mut self,
@@ -388,6 +402,23 @@ mod linux {
 
         fn ready_once(&mut self, context: &UserContext) -> Result<(), OrchestrationError> {
             probe_agent_ready(context)
+        }
+
+        fn capture_external_custody(
+            &mut self,
+            context: &UserContext,
+        ) -> Result<Self::ExternalCustody, OrchestrationError> {
+            capture_external_systemd_fragment_custody(&context.systemd)
+                .map_err(|_| OrchestrationError::BaselineSystemd)
+        }
+
+        fn reprove_external_custody(
+            &mut self,
+            context: &UserContext,
+            custody: &Self::ExternalCustody,
+        ) -> Result<(), OrchestrationError> {
+            reprove_external_systemd_fragment_custody(&context.systemd, custody)
+                .map_err(|_| OrchestrationError::ExternalConfigurationDrift)
         }
 
         fn write_recoverable(
@@ -463,6 +494,63 @@ mod linux {
         }
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum RollbackDisposition {
+        Restored,
+        ExternalDrift,
+    }
+
+    fn fail_after_manager_mutation<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        recovery: B::Recovery,
+        baseline: &UnitStatus,
+        external_custody: &B::ExternalCustody,
+        restart_attempted: bool,
+        original: OrchestrationError,
+    ) -> Result<(), OrchestrationError> {
+        match rollback_after_manager_mutation(
+            context,
+            backend,
+            recovery,
+            baseline,
+            external_custody,
+            restart_attempted,
+        )? {
+            RollbackDisposition::Restored => Err(original),
+            RollbackDisposition::ExternalDrift => {
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            }
+        }
+    }
+
+    fn reprove_or_restore_managed_files<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        recovery: B::Recovery,
+        external_custody: &B::ExternalCustody,
+    ) -> Result<B::Recovery, OrchestrationError> {
+        if backend
+            .reprove_external_custody(context, external_custody)
+            .is_err()
+        {
+            backend.restore(context, recovery)?;
+            Err(OrchestrationError::ExternalConfigurationDrift)
+        } else {
+            Ok(recovery)
+        }
+    }
+
+    fn require_external_reproof<B: ActivationBackend>(
+        context: &UserContext,
+        backend: &mut B,
+        external_custody: &B::ExternalCustody,
+    ) -> Result<(), OrchestrationError> {
+        backend
+            .reprove_external_custody(context, external_custody)
+            .map_err(|_| OrchestrationError::ExternalConfigurationDrift)
+    }
+
     fn reconfigure_active<B: ActivationBackend>(
         context: &UserContext,
         desired: &ManagedAgentConfiguration,
@@ -475,48 +563,122 @@ mod linux {
         backend
             .ready_once(context)
             .map_err(|_| OrchestrationError::BaselineReadiness)?;
+        let external_custody = backend.capture_external_custody(context)?;
         let recovery = backend.write_recoverable(context, desired)?;
+
+        let recovery =
+            reprove_or_restore_managed_files(context, backend, recovery, &external_custody)?;
         if backend.verify_target(context).is_err() {
             backend.restore(context, recovery)?;
             return Err(OrchestrationError::TargetVerify);
         }
+        let recovery =
+            reprove_or_restore_managed_files(context, backend, recovery, &external_custody)?;
         if backend.daemon_reload(context).is_err() {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::DaemonReload);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                false,
+                OrchestrationError::DaemonReload,
+            );
         }
         let Ok(post_reload) = backend.status(context) else {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::PostReloadState);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                false,
+                OrchestrationError::PostReloadState,
+            );
         };
         if !loaded_topology_matches(context, desired, &baseline, &post_reload) {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::PostReloadState);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                false,
+                OrchestrationError::PostReloadState,
+            );
+        }
+        if backend
+            .reprove_external_custody(context, &external_custody)
+            .is_err()
+        {
+            backend.restore(context, recovery)?;
+            backend
+                .daemon_reload(context)
+                .map_err(|_| OrchestrationError::Rollback)?;
+            return Err(OrchestrationError::ExternalConfigurationDrift);
         }
         if backend.try_restart(context).is_err() {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::TryRestart);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                true,
+                OrchestrationError::TryRestart,
+            );
         }
         let Ok(post_restart) = backend.wait_ready(
             context,
             &baseline.unit_file_state,
             Some(&baseline.invocation_id),
         ) else {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::PostRestartReadiness);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                true,
+                OrchestrationError::PostRestartReadiness,
+            );
         };
         if !loaded_topology_matches(context, desired, &baseline, &post_restart) {
-            rollback_after_reload(context, backend, recovery, &baseline)?;
-            return Err(OrchestrationError::PostRestartReadiness);
+            return fail_after_manager_mutation(
+                context,
+                backend,
+                recovery,
+                &baseline,
+                &external_custody,
+                true,
+                OrchestrationError::PostRestartReadiness,
+            );
         }
+        require_external_reproof(context, backend, &external_custody)?;
         Ok(())
     }
 
-    fn rollback_after_reload<B: ActivationBackend>(
+    fn rollback_after_manager_mutation<B: ActivationBackend>(
         context: &UserContext,
         backend: &mut B,
         recovery: B::Recovery,
         baseline: &UnitStatus,
-    ) -> Result<(), OrchestrationError> {
+        external_custody: &B::ExternalCustody,
+        restart_attempted: bool,
+    ) -> Result<RollbackDisposition, OrchestrationError> {
+        if backend
+            .reprove_external_custody(context, external_custody)
+            .is_err()
+        {
+            if restart_attempted {
+                return Ok(RollbackDisposition::ExternalDrift);
+            }
+            backend.restore(context, recovery)?;
+            backend
+                .daemon_reload(context)
+                .map_err(|_| OrchestrationError::Rollback)?;
+            return Ok(RollbackDisposition::ExternalDrift);
+        }
         backend.restore(context, recovery)?;
         backend
             .daemon_reload(context)
@@ -532,7 +694,7 @@ mod linux {
         {
             return Err(OrchestrationError::Rollback);
         }
-        Ok(())
+        Ok(RollbackDisposition::Restored)
     }
 
     fn managed_drop_in_paths(context: &UserContext) -> (PathBuf, PathBuf) {
@@ -916,6 +1078,8 @@ mod linux {
             Write,
             Status,
             Ready,
+            ExternalCapture,
+            ExternalReprove,
             Recoverable,
             Restore,
             Verify,
@@ -927,6 +1091,7 @@ mod linux {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum FakeFailure {
             Ready,
+            ExternalCapture,
             Verify,
             Reload,
             TryRestart,
@@ -936,6 +1101,7 @@ mod linux {
             events: Vec<Event>,
             statuses: Vec<UnitStatus>,
             failure: Option<FakeFailure>,
+            external_reproofs: Vec<bool>,
         }
         impl FakeBackend {
             fn new(statuses: Vec<UnitStatus>) -> Self {
@@ -943,7 +1109,13 @@ mod linux {
                     events: Vec::new(),
                     statuses,
                     failure: None,
+                    external_reproofs: Vec::new(),
                 }
+            }
+
+            fn with_external_reproofs(mut self, results: Vec<bool>) -> Self {
+                self.external_reproofs = results;
+                self
             }
 
             fn fail_once(&mut self, stage: FakeFailure) -> bool {
@@ -957,6 +1129,8 @@ mod linux {
         }
         impl ActivationBackend for FakeBackend {
             type Recovery = ();
+            type ExternalCustody = ();
+
             fn write_only(
                 &mut self,
                 _: &UserContext,
@@ -978,6 +1152,30 @@ mod linux {
                 (!self.fail_once(FakeFailure::Ready))
                     .then_some(())
                     .ok_or(OrchestrationError::BaselineReadiness)
+            }
+            fn capture_external_custody(
+                &mut self,
+                _: &UserContext,
+            ) -> Result<Self::ExternalCustody, OrchestrationError> {
+                self.events.push(Event::ExternalCapture);
+                (!self.fail_once(FakeFailure::ExternalCapture))
+                    .then_some(())
+                    .ok_or(OrchestrationError::BaselineSystemd)
+            }
+            fn reprove_external_custody(
+                &mut self,
+                _: &UserContext,
+                (): &Self::ExternalCustody,
+            ) -> Result<(), OrchestrationError> {
+                self.events.push(Event::ExternalReprove);
+                let unchanged = if self.external_reproofs.is_empty() {
+                    true
+                } else {
+                    self.external_reproofs.remove(0)
+                };
+                unchanged
+                    .then_some(())
+                    .ok_or(OrchestrationError::ExternalConfigurationDrift)
             }
             fn write_recoverable(
                 &mut self,
@@ -1197,6 +1395,32 @@ mod linux {
         }
 
         #[test]
+        fn baseline_external_custody_capture_blocks_before_writer_mutation() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mut backend = FakeBackend::new(vec![active_status("before", Vec::new())]);
+            backend.failure = Some(FakeFailure::ExternalCapture);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::BaselineSystemd)
+            );
+            assert_eq!(
+                backend.events,
+                [Event::Status, Event::Ready, Event::ExternalCapture]
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
         fn configured_remote_with_all_six_inputs_reaches_write_without_manager_calls() {
             let (root, config, _) = sandbox();
             let uid = getuid().as_raw();
@@ -1245,7 +1469,7 @@ mod linux {
         }
 
         #[test]
-        fn successful_active_lane_orders_write_verify_reload_try_restart_and_ready() {
+        fn successful_active_lane_orders_external_custody_with_existing_gates() {
             let (root, config, runtime) = sandbox();
             let uid = getuid().as_raw();
             let mut env = FakeEnv::local_only(&root, &config);
@@ -1278,12 +1502,85 @@ mod linux {
                 [
                     Event::Status,
                     Event::Ready,
+                    Event::ExternalCapture,
                     Event::Recoverable,
+                    Event::ExternalReprove,
                     Event::Verify,
+                    Event::ExternalReprove,
                     Event::Reload,
                     Event::Status,
+                    Event::ExternalReprove,
                     Event::TryRestart,
-                    Event::Wait
+                    Event::Wait,
+                    Event::ExternalReprove,
+                ]
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn postwrite_external_drift_restores_without_verify_or_reload() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mut backend = FakeBackend::new(vec![active_status("before", Vec::new())])
+                .with_external_reproofs(vec![false]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(
+                backend.events,
+                [
+                    Event::Status,
+                    Event::Ready,
+                    Event::ExternalCapture,
+                    Event::Recoverable,
+                    Event::ExternalReprove,
+                    Event::Restore,
+                ]
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn postverify_prereload_external_drift_restores_without_reload() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mut backend = FakeBackend::new(vec![active_status("before", Vec::new())])
+                .with_external_reproofs(vec![true, false]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(
+                backend.events,
+                [
+                    Event::Status,
+                    Event::Ready,
+                    Event::ExternalCapture,
+                    Event::Recoverable,
+                    Event::ExternalReprove,
+                    Event::Verify,
+                    Event::ExternalReprove,
+                    Event::Restore,
                 ]
             );
             let _ = fs::remove_dir_all(root);
@@ -1313,7 +1610,9 @@ mod linux {
                 [
                     Event::Status,
                     Event::Ready,
+                    Event::ExternalCapture,
                     Event::Recoverable,
+                    Event::ExternalReprove,
                     Event::Verify,
                     Event::Restore
                 ]
@@ -1322,7 +1621,7 @@ mod linux {
         }
 
         #[test]
-        fn postreload_failure_rolls_back_files_then_reload_restart_and_ready() {
+        fn postreload_state_failure_with_unchanged_custody_uses_ordinary_rollback() {
             let (root, config, runtime) = sandbox();
             let uid = getuid().as_raw();
             let mut env = FakeEnv::local_only(&root, &config);
@@ -1331,6 +1630,7 @@ mod linux {
             let mut backend = FakeBackend::new(vec![
                 active_status("before", Vec::new()),
                 active_status("before", Vec::new()),
+                active_status("rollback", Vec::new()),
             ]);
             assert_eq!(
                 execute_with_backend(
@@ -1347,15 +1647,182 @@ mod linux {
                 [
                     Event::Status,
                     Event::Ready,
+                    Event::ExternalCapture,
                     Event::Recoverable,
+                    Event::ExternalReprove,
                     Event::Verify,
+                    Event::ExternalReprove,
                     Event::Reload,
                     Event::Status,
+                    Event::ExternalReprove,
                     Event::Restore,
                     Event::Reload,
                     Event::Restart,
-                    Event::Wait
+                    Event::Wait,
                 ]
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn postreload_state_failure_with_external_drift_suppresses_restart() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mut backend = FakeBackend::new(vec![
+                active_status("before", Vec::new()),
+                active_status("before", Vec::new()),
+            ])
+            .with_external_reproofs(vec![true, true, false]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(
+                backend.events,
+                [
+                    Event::Status,
+                    Event::Ready,
+                    Event::ExternalCapture,
+                    Event::Recoverable,
+                    Event::ExternalReprove,
+                    Event::Verify,
+                    Event::ExternalReprove,
+                    Event::Reload,
+                    Event::Status,
+                    Event::ExternalReprove,
+                    Event::Restore,
+                    Event::Reload,
+                ]
+            );
+            assert!(!backend.events.contains(&Event::Restart));
+            assert!(!backend.events.contains(&Event::TryRestart));
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn postreload_external_drift_before_try_restart_restores_and_reloads_once() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mode = config
+                .join("systemd/user/prw-agent.service.d")
+                .join(EXECUTION_MODE_DROPIN_NAME);
+            let baseline = active_status("before", Vec::new());
+            let post_reload = active_status("before", vec![mode]);
+            let mut backend = FakeBackend::new(vec![baseline, post_reload])
+                .with_external_reproofs(vec![true, true, false]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Reload)
+                    .count(),
+                2
+            );
+            assert!(!backend.events.contains(&Event::TryRestart));
+            assert!(!backend.events.contains(&Event::Restart));
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn drift_after_restart_attempt_suppresses_automatic_rollback_mutation() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mode = config
+                .join("systemd/user/prw-agent.service.d")
+                .join(EXECUTION_MODE_DROPIN_NAME);
+            let baseline = active_status("before", Vec::new());
+            let post_reload = active_status("before", vec![mode]);
+            let mut backend = FakeBackend::new(vec![baseline, post_reload])
+                .with_external_reproofs(vec![true, true, true, false]);
+            backend.failure = Some(FakeFailure::TryRestart);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(backend.events.last(), Some(&Event::ExternalReprove));
+            assert_eq!(
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Restore)
+                    .count(),
+                0
+            );
+            assert_eq!(
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Restart)
+                    .count(),
+                0
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn final_postrestart_external_reproof_is_required_before_success() {
+            let (root, config, runtime) = sandbox();
+            let uid = getuid().as_raw();
+            let mut env = FakeEnv::local_only(&root, &config);
+            env.values
+                .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
+            let mode = config
+                .join("systemd/user/prw-agent.service.d")
+                .join(EXECUTION_MODE_DROPIN_NAME);
+            let baseline = active_status("before", Vec::new());
+            let post_reload = active_status("before", vec![mode.clone()]);
+            let post_restart = active_status("after", vec![mode]);
+            let mut backend = FakeBackend::new(vec![baseline, post_reload, post_restart])
+                .with_external_reproofs(vec![true, true, true, false]);
+            assert_eq!(
+                execute_with_backend(
+                    AdministrativeAction::ReconfigureActive,
+                    &mut env,
+                    uid,
+                    uid,
+                    &mut backend,
+                ),
+                Err(OrchestrationError::ExternalConfigurationDrift)
+            );
+            assert_eq!(backend.events.last(), Some(&Event::ExternalReprove));
+            assert_eq!(
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Restart)
+                    .count(),
+                0
             );
             let _ = fs::remove_dir_all(root);
         }
@@ -1469,7 +1936,8 @@ mod linux {
         }
 
         #[test]
-        fn post_restart_foreign_topology_drift_invokes_rollback() {
+        fn post_restart_foreign_topology_drift_invokes_rollback_when_external_custody_is_unchanged()
+        {
             let (root, config, runtime) = sandbox();
             let uid = getuid().as_raw();
             let mut env = FakeEnv::local_only(&root, &config);
@@ -1499,22 +1967,14 @@ mod linux {
                 ),
                 Err(OrchestrationError::PostRestartReadiness)
             );
+            assert!(backend.events.contains(&Event::ExternalReprove));
             assert_eq!(
-                backend.events,
-                [
-                    Event::Status,
-                    Event::Ready,
-                    Event::Recoverable,
-                    Event::Verify,
-                    Event::Reload,
-                    Event::Status,
-                    Event::TryRestart,
-                    Event::Wait,
-                    Event::Restore,
-                    Event::Reload,
-                    Event::Restart,
-                    Event::Wait,
-                ]
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Restart)
+                    .count(),
+                1
             );
             let _ = fs::remove_dir_all(root);
         }
@@ -1559,12 +2019,18 @@ mod linux {
             let restored = active_status("rollback", vec![foreign_b, foreign_a]);
             let mut backend = FakeBackend::new(vec![restored]);
             assert_eq!(
-                rollback_after_reload(&context, &mut backend, (), &baseline),
+                rollback_after_manager_mutation(&context, &mut backend, (), &baseline, &(), false),
                 Err(OrchestrationError::Rollback)
             );
             assert_eq!(
                 backend.events,
-                [Event::Restore, Event::Reload, Event::Restart, Event::Wait]
+                [
+                    Event::ExternalReprove,
+                    Event::Restore,
+                    Event::Reload,
+                    Event::Restart,
+                    Event::Wait,
+                ]
             );
             let _ = fs::remove_dir_all(root);
         }
@@ -1619,18 +2085,19 @@ mod linux {
         }
 
         #[test]
-        fn daemon_reload_failure_rolls_back_then_reloads_restarts_and_reproves_baseline_dropins() {
+        fn daemon_reload_failure_rolls_back_only_after_external_reproof() {
             let (root, config, runtime) = sandbox();
             let uid = getuid().as_raw();
             let mut env = FakeEnv::local_only(&root, &config);
             env.values
                 .insert("XDG_RUNTIME_DIR", runtime.display().to_string());
             let baseline_dropin = PathBuf::from("/vendor/20-device-identity-credential.conf");
-            let mut backend =
-                FakeBackend::new(vec![active_status("before", vec![baseline_dropin])]);
+            let baseline_paths = vec![baseline_dropin];
+            let mut backend = FakeBackend::new(vec![
+                active_status("before", baseline_paths.clone()),
+                active_status("rollback", baseline_paths),
+            ]);
             backend.failure = Some(FakeFailure::Reload);
-            // Rollback wait must report the exact baseline loaded-drop-in set.
-            // The fake's default empty set therefore forces terminal rollback failure.
             assert_eq!(
                 execute_with_backend(
                     AdministrativeAction::ReconfigureActive,
@@ -1639,23 +2106,31 @@ mod linux {
                     uid,
                     &mut backend,
                 ),
-                Err(OrchestrationError::Rollback)
+                Err(OrchestrationError::DaemonReload)
             );
+            assert!(backend.events.contains(&Event::ExternalReprove));
             assert_eq!(
-                backend.events,
-                [
-                    Event::Status,
-                    Event::Ready,
-                    Event::Recoverable,
-                    Event::Verify,
-                    Event::Reload,
-                    Event::Restore,
-                    Event::Reload,
-                    Event::Restart,
-                    Event::Wait,
-                ]
+                backend
+                    .events
+                    .iter()
+                    .filter(|event| **event == Event::Restart)
+                    .count(),
+                1
             );
             let _ = fs::remove_dir_all(root);
+        }
+
+        #[test]
+        fn external_drift_error_text_is_fixed_and_content_free() {
+            assert_eq!(
+                OrchestrationError::ExternalConfigurationDrift.to_string(),
+                "external_configuration_drift"
+            );
+            assert!(
+                !OrchestrationError::ExternalConfigurationDrift
+                    .to_string()
+                    .contains('/')
+            );
         }
 
         #[test]
