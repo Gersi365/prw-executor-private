@@ -8,10 +8,14 @@
 #![cfg(target_os = "linux")]
 
 use std::{
+    env,
     ffi::{OsStr, OsString},
     fmt,
     fs::File,
-    os::unix::fs::{FileExt, MetadataExt},
+    os::unix::{
+        ffi::OsStrExt,
+        fs::{FileExt, MetadataExt},
+    },
     path::{Component, Path, PathBuf},
     process::ExitCode,
 };
@@ -79,8 +83,10 @@ const MAX_MANIFEST_BYTES: u64 = 4096;
 pub enum ReconciliationError {
     /// CLI shape or stage locator is outside the selected invocation surface.
     InvalidInvocation,
-    /// The privileged transaction was not entered with effective UID 0.
+    /// The privileged transaction was not entered with the selected root real/effective UID.
     RootRequired,
+    /// Authenticated sudo invoking-user identity was absent, malformed, or prohibited.
+    InvokingUserIdentityInvalid,
     /// Stage directory custody did not satisfy the selected no-symlink/private-user law.
     StageCustodyInvalid,
     /// Candidate metadata, length, or exact selected hash did not match.
@@ -112,6 +118,7 @@ impl fmt::Display for ReconciliationError {
         formatter.write_str(match self {
             Self::InvalidInvocation => "invalid_invocation",
             Self::RootRequired => "root_required",
+            Self::InvokingUserIdentityInvalid => "invoking_user_identity_invalid",
             Self::StageCustodyInvalid => "stage_custody_invalid",
             Self::CandidateInvalid => "candidate_invalid",
             Self::ManifestInvalid => "manifest_invalid",
@@ -150,7 +157,11 @@ pub fn expected_deployment_manifest() -> String {
 /// Returns a bounded [`ReconciliationError`] for any custody, exact-identity, exchange,
 /// rollback, cleanup, or durability failure.
 pub fn reconcile_current_agent(stage_directory: &Path) -> Result<(), ReconciliationError> {
-    let policy = ProductionPolicy::new();
+    let mut policy = ProductionPolicy::new();
+    validate_required_process_identity(&policy)?;
+    let invoking_user = resolve_invoking_user_identity_from_environment()?;
+    policy.stage_owner_uid = invoking_user.uid;
+    policy.stage_owner_gid = invoking_user.gid;
     let layout = ProductionLayout::new();
     reconcile_with(&layout, &policy, stage_directory, FaultInjection::None).map(|_| ())
 }
@@ -212,10 +223,12 @@ impl ProductionLayout {
 
 #[derive(Clone)]
 struct ProductionPolicy {
+    required_ruid: u32,
     required_euid: u32,
     package_uid: u32,
     package_gid: u32,
     stage_owner_uid: u32,
+    stage_owner_gid: u32,
     old_agent_hash: String,
     new_agent_hash: String,
     unit_hash: String,
@@ -226,10 +239,12 @@ struct ProductionPolicy {
 impl ProductionPolicy {
     fn new() -> Self {
         Self {
+            required_ruid: 0,
             required_euid: 0,
             package_uid: 0,
             package_gid: 0,
-            stage_owner_uid: getuid().as_raw(),
+            stage_owner_uid: 0,
+            stage_owner_gid: 0,
             old_agent_hash: OLD_AGENT_SHA256.to_owned(),
             new_agent_hash: NEW_AGENT_SHA256.to_owned(),
             unit_hash: VENDOR_UNIT_SHA256.to_owned(),
@@ -237,6 +252,64 @@ impl ProductionPolicy {
             new_agent_bytes: NEW_AGENT_BYTES,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct InvokingUserIdentity {
+    uid: u32,
+    gid: u32,
+}
+
+fn validate_required_process_identity(
+    policy: &ProductionPolicy,
+) -> Result<(), ReconciliationError> {
+    if getuid().as_raw() != policy.required_ruid || geteuid().as_raw() != policy.required_euid {
+        return Err(ReconciliationError::RootRequired);
+    }
+    Ok(())
+}
+
+fn resolve_invoking_user_identity_from_environment()
+-> Result<InvokingUserIdentity, ReconciliationError> {
+    let uid = env::var_os("SUDO_UID");
+    let gid = env::var_os("SUDO_GID");
+    let user = env::var_os("SUDO_USER");
+    parse_invoking_user_identity(uid.as_deref(), gid.as_deref(), user.as_deref())
+}
+
+fn parse_invoking_user_identity(
+    uid: Option<&OsStr>,
+    gid: Option<&OsStr>,
+    user: Option<&OsStr>,
+) -> Result<InvokingUserIdentity, ReconciliationError> {
+    let uid = uid
+        .and_then(parse_nonzero_canonical_decimal_id)
+        .ok_or(ReconciliationError::InvokingUserIdentityInvalid)?;
+    let gid = gid
+        .and_then(parse_nonzero_canonical_decimal_id)
+        .ok_or(ReconciliationError::InvokingUserIdentityInvalid)?;
+    let user = user.ok_or(ReconciliationError::InvokingUserIdentityInvalid)?;
+    if user.is_empty() || user.as_bytes() == b"root" {
+        return Err(ReconciliationError::InvokingUserIdentityInvalid);
+    }
+    Ok(InvokingUserIdentity { uid, gid })
+}
+
+fn parse_nonzero_canonical_decimal_id(value: &OsStr) -> Option<u32> {
+    let bytes = value.as_bytes();
+    if bytes.is_empty()
+        || bytes.iter().any(|byte| !byte.is_ascii_digit())
+        || (bytes.len() > 1 && bytes[0] == b'0')
+    {
+        return None;
+    }
+    let mut parsed = 0_u32;
+    for byte in bytes {
+        parsed = parsed
+            .checked_mul(10)?
+            .checked_add(u32::from(byte - b'0'))?;
+    }
+    (parsed != 0).then_some(parsed)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -284,9 +357,7 @@ fn reconcile_with(
     stage_directory: &Path,
     fault: FaultInjection,
 ) -> Result<TransactionReport, ReconciliationError> {
-    if geteuid().as_raw() != policy.required_euid {
-        return Err(ReconciliationError::RootRequired);
-    }
+    validate_required_process_identity(policy)?;
 
     let (stage, stage_uid) = open_validated_stage(stage_directory, policy)?;
     let candidate = open_validated_candidate(&stage, stage_uid, policy)?;
@@ -426,7 +497,9 @@ fn open_validated_stage(
     if !metadata.is_dir()
         || metadata.mode() & 0o7777 != STAGE_MODE
         || policy.stage_owner_uid == 0
+        || policy.stage_owner_gid == 0
         || metadata.uid() != policy.stage_owner_uid
+        || metadata.gid() != policy.stage_owner_gid
         || metadata.mode() & 0o022 != 0
     {
         return Err(ReconciliationError::StageCustodyInvalid);
@@ -947,12 +1020,16 @@ mod tests {
             write_file(&unit_parent.join(UNIT_FILE), &unit_bytes, UNIT_MODE);
 
             let uid = geteuid().as_raw();
+            let ruid = getuid().as_raw();
             let gid = fs::metadata(&agent_parent).expect("metadata").gid();
+            let stage_gid = fs::metadata(&stage).expect("stage metadata").gid();
             let policy = ProductionPolicy {
+                required_ruid: ruid,
                 required_euid: uid,
                 package_uid: uid,
                 package_gid: gid,
                 stage_owner_uid: uid,
+                stage_owner_gid: stage_gid,
                 old_agent_hash: hash_bytes(&old_bytes),
                 new_agent_hash: hash_bytes(&new_bytes),
                 unit_hash: hash_bytes(&unit_bytes),
@@ -1243,6 +1320,120 @@ mod tests {
         assert_eq!(
             fs::read(fixture.destination()).expect("destination"),
             fixture.old_bytes
+        );
+    }
+
+    #[test]
+    fn rejects_stage_group_mismatch() {
+        let mut fixture = Fixture::new();
+        fixture.policy.stage_owner_gid = fixture.policy.stage_owner_gid.saturating_add(1);
+        let error = reconcile_with(
+            &fixture.layout,
+            &fixture.policy,
+            &fixture.stage,
+            FaultInjection::None,
+        )
+        .expect_err("stage group mismatch");
+        assert_eq!(error, ReconciliationError::StageCustodyInvalid);
+        assert_eq!(
+            fs::read(fixture.destination()).expect("destination"),
+            fixture.old_bytes
+        );
+    }
+
+    #[test]
+    fn requires_selected_real_and_effective_process_identity() {
+        let fixture = Fixture::new();
+        let mut real_mismatch = fixture.policy.clone();
+        real_mismatch.required_ruid = u32::from(getuid().as_raw() == 0);
+        assert_eq!(
+            reconcile_with(
+                &fixture.layout,
+                &real_mismatch,
+                &fixture.stage,
+                FaultInjection::None,
+            ),
+            Err(ReconciliationError::RootRequired)
+        );
+
+        let mut effective_mismatch = fixture.policy.clone();
+        effective_mismatch.required_euid = u32::from(geteuid().as_raw() == 0);
+        assert_eq!(
+            reconcile_with(
+                &fixture.layout,
+                &effective_mismatch,
+                &fixture.stage,
+                FaultInjection::None,
+            ),
+            Err(ReconciliationError::RootRequired)
+        );
+    }
+
+    #[test]
+    fn parses_exact_sudo_rs_invoking_user_identity() {
+        let identity = parse_invoking_user_identity(
+            Some(OsStr::new("1000")),
+            Some(OsStr::new("1000")),
+            Some(OsStr::new("gersi365")),
+        )
+        .expect("valid identity");
+        assert_eq!(
+            identity,
+            InvokingUserIdentity {
+                uid: 1000,
+                gid: 1000
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_missing_or_prohibited_sudo_identity_fields() {
+        for (uid, gid, user) in [
+            (None, Some(OsStr::new("1000")), Some(OsStr::new("gersi365"))),
+            (Some(OsStr::new("1000")), None, Some(OsStr::new("gersi365"))),
+            (Some(OsStr::new("1000")), Some(OsStr::new("1000")), None),
+            (
+                Some(OsStr::new("1000")),
+                Some(OsStr::new("1000")),
+                Some(OsStr::new("")),
+            ),
+            (
+                Some(OsStr::new("1000")),
+                Some(OsStr::new("1000")),
+                Some(OsStr::new("root")),
+            ),
+        ] {
+            assert_eq!(
+                parse_invoking_user_identity(uid, gid, user),
+                Err(ReconciliationError::InvokingUserIdentityInvalid)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_noncanonical_or_zero_sudo_numeric_identity() {
+        for invalid in [
+            "",
+            "0",
+            "00",
+            "01000",
+            "+1000",
+            "-1",
+            " 1000",
+            "1000 ",
+            "1_000",
+            "abc",
+            "4294967296",
+        ] {
+            assert_eq!(
+                parse_nonzero_canonical_decimal_id(OsStr::new(invalid)),
+                None
+            );
+        }
+        assert_eq!(parse_nonzero_canonical_decimal_id(OsStr::new("1")), Some(1));
+        assert_eq!(
+            parse_nonzero_canonical_decimal_id(OsStr::new("4294967295")),
+            Some(u32::MAX)
         );
     }
 
