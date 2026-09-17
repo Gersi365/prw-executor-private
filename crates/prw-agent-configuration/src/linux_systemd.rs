@@ -1709,3 +1709,532 @@ mod tests {
         assert_eq!(error, crate::SystemdRecognitionError::NonCanonical);
     }
 }
+
+const EXTERNAL_FRAGMENT_MAX_FILES: usize = 128;
+const EXTERNAL_FRAGMENT_MAX_FILE_BYTES: u64 = 1_048_576;
+const EXTERNAL_FRAGMENT_MAX_TOTAL_BYTES: u64 = 8_388_608;
+const EXTERNAL_AGENT_UNIT_NAME: &str = "prw-agent.service";
+
+/// Opaque in-process snapshot of external systemd fragment identity and exact bytes.
+///
+/// The token intentionally exposes no paths, metadata fingerprints, or bytes through `Debug` or
+/// serialization. It is valid only for one administrative transaction and is never persisted.
+#[derive(PartialEq, Eq)]
+pub struct ExternalSystemdFragmentCustody {
+    unit_paths: Vec<PathBuf>,
+    fragments: Vec<ExternalFragmentSnapshot>,
+}
+
+impl fmt::Debug for ExternalSystemdFragmentCustody {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ExternalSystemdFragmentCustody")
+            .field("fragment_count", &self.fragments.len())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(PartialEq, Eq)]
+struct ExternalFragmentSnapshot {
+    path: PathBuf,
+    device: u64,
+    inode: u64,
+    mode: u32,
+    uid: u32,
+    gid: u32,
+    length: u64,
+    mtime_seconds: i64,
+    mtime_nanoseconds: i64,
+    ctime_seconds: i64,
+    ctime_nanoseconds: i64,
+    bytes: Vec<u8>,
+}
+
+/// Captures exact read-only custody of all external fragments that can affect `prw-agent.service`.
+///
+/// The ordered sanitized user-unit search path is part of the token. Main unit candidates and every
+/// direct non-managed target drop-in are captured with final-component `O_NOFOLLOW`, regular-file
+/// proof, exact selected metadata identity, and exact bytes. Only the exact managed 30/40 leaves in
+/// the intended managed directory are excluded.
+///
+/// # Errors
+///
+/// Fails closed on intended-user mismatch, unit-path discovery failure, unsafe fragment shape,
+/// external selected-variable conflict, unstable capture, or the selected file/byte ceilings.
+pub fn capture_external_systemd_fragment_custody(
+    context: &IntendedUserSystemdContext,
+) -> Result<ExternalSystemdFragmentCustody, ManagedSystemdConfigurationError> {
+    validate_current_user(context)?;
+    let unit_paths = discover_user_unit_search_paths(context)?;
+    capture_external_systemd_fragment_custody_with_unit_paths(context, &unit_paths)
+}
+
+/// Re-proves one original external-fragment custody token without refreshing its baseline.
+///
+/// # Errors
+///
+/// Returns a bounded custody error when the ordered search paths, candidate inventory, file shape,
+/// selected metadata identity, or exact bytes differ from the original snapshot.
+pub fn reprove_external_systemd_fragment_custody(
+    context: &IntendedUserSystemdContext,
+    custody: &ExternalSystemdFragmentCustody,
+) -> Result<(), ManagedSystemdConfigurationError> {
+    validate_current_user(context)?;
+    let unit_paths = discover_user_unit_search_paths(context)?;
+    reprove_external_systemd_fragment_custody_with_unit_paths(context, custody, &unit_paths)
+}
+
+fn reprove_external_systemd_fragment_custody_with_unit_paths(
+    context: &IntendedUserSystemdContext,
+    custody: &ExternalSystemdFragmentCustody,
+    unit_paths: &[PathBuf],
+) -> Result<(), ManagedSystemdConfigurationError> {
+    let current = capture_external_systemd_fragment_custody_with_unit_paths(context, unit_paths)?;
+    if current == *custody {
+        Ok(())
+    } else {
+        Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict)
+    }
+}
+
+fn capture_external_systemd_fragment_custody_with_unit_paths(
+    context: &IntendedUserSystemdContext,
+    unit_paths: &[PathBuf],
+) -> Result<ExternalSystemdFragmentCustody, ManagedSystemdConfigurationError> {
+    if unit_paths.is_empty() {
+        return Err(ManagedSystemdConfigurationError::UnitSearchPathDiscovery);
+    }
+    let mut seen_unit_paths = std::collections::BTreeSet::new();
+    for path in unit_paths {
+        if !path.is_absolute() || !seen_unit_paths.insert(path.clone()) {
+            return Err(ManagedSystemdConfigurationError::UnitSearchPathDiscovery);
+        }
+    }
+
+    let managed_directory = context.managed_directory();
+    let mut candidates = Vec::new();
+    for unit_path in unit_paths {
+        let main_unit = unit_path.join(EXTERNAL_AGENT_UNIT_NAME);
+        match fs::symlink_metadata(&main_unit) {
+            Ok(_) => candidates.push(main_unit),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {
+                return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+            }
+        }
+
+        let drop_in_directory = unit_path.join(MANAGED_DIRECTORY_NAME);
+        match fs::symlink_metadata(&drop_in_directory) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => {
+                return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+            }
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+            }
+            Ok(_) => {}
+        }
+        let entries = fs::read_dir(&drop_in_directory)
+            .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+        let mut entry_paths = entries
+            .map(|entry| {
+                entry
+                    .map(|entry| entry.path())
+                    .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        entry_paths.sort();
+        for path in entry_paths {
+            let excluded_managed_leaf = drop_in_directory == managed_directory
+                && matches!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    Some(EXECUTION_MODE_DROPIN_NAME | CONFIGURED_REMOTE_INPUTS_DROPIN_NAME)
+                );
+            if !excluded_managed_leaf {
+                candidates.push(path);
+            }
+        }
+    }
+
+    if candidates.len() > EXTERNAL_FRAGMENT_MAX_FILES {
+        return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+    }
+    let mut total_bytes = 0_u64;
+    let mut fragments = Vec::with_capacity(candidates.len());
+    for path in candidates {
+        let snapshot = capture_external_fragment(&path)?;
+        total_bytes = total_bytes
+            .checked_add(snapshot.length)
+            .ok_or(ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+        if total_bytes > EXTERNAL_FRAGMENT_MAX_TOTAL_BYTES {
+            return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+        }
+        fragments.push(snapshot);
+    }
+    Ok(ExternalSystemdFragmentCustody {
+        unit_paths: unit_paths.to_vec(),
+        fragments,
+    })
+}
+
+fn external_metadata_identity_matches(
+    left: &std::fs::Metadata,
+    right: &std::fs::Metadata,
+) -> bool {
+    left.is_file()
+        && right.is_file()
+        && left.dev() == right.dev()
+        && left.ino() == right.ino()
+        && left.mode() == right.mode()
+        && left.uid() == right.uid()
+        && left.gid() == right.gid()
+        && left.len() == right.len()
+        && left.mtime() == right.mtime()
+        && left.mtime_nsec() == right.mtime_nsec()
+        && left.ctime() == right.ctime()
+        && left.ctime_nsec() == right.ctime_nsec()
+}
+
+fn capture_external_fragment(
+    path: &Path,
+) -> Result<ExternalFragmentSnapshot, ManagedSystemdConfigurationError> {
+    let fd = open(
+        path,
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )
+    .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    let mut file = File::from(fd);
+    let before = file
+        .metadata()
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    if !before.is_file() || before.len() > EXTERNAL_FRAGMENT_MAX_FILE_BYTES {
+        return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+    }
+
+    let mut bytes = Vec::with_capacity(before.len() as usize);
+    (&mut file)
+        .take(EXTERNAL_FRAGMENT_MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    if bytes.len() as u64 > EXTERNAL_FRAGMENT_MAX_FILE_BYTES {
+        return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+    }
+    let after = file
+        .metadata()
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    let path_after = fs::symlink_metadata(path)
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    if path_after.file_type().is_symlink()
+        || !external_metadata_identity_matches(&before, &after)
+        || !external_metadata_identity_matches(&after, &path_after)
+        || bytes.len() as u64 != after.len()
+    {
+        return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+    }
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| ManagedSystemdConfigurationError::ExternalConfigurationConflict)?;
+    if fragment_text_conflicts(text) {
+        return Err(ManagedSystemdConfigurationError::ExternalConfigurationConflict);
+    }
+    Ok(ExternalFragmentSnapshot {
+        path: path.to_path_buf(),
+        device: after.dev(),
+        inode: after.ino(),
+        mode: after.mode(),
+        uid: after.uid(),
+        gid: after.gid(),
+        length: after.len(),
+        mtime_seconds: after.mtime(),
+        mtime_nanoseconds: after.mtime_nsec(),
+        ctime_seconds: after.ctime(),
+        ctime_nanoseconds: after.ctime_nsec(),
+        bytes,
+    })
+}
+
+#[cfg(test)]
+mod external_custody_tests {
+    use std::{
+        fs,
+        os::unix::fs::{PermissionsExt, symlink},
+        path::{Path, PathBuf},
+    };
+
+    use rustix::process::getuid;
+
+    use super::*;
+
+    struct CustodySandbox {
+        root: PathBuf,
+        context: IntendedUserSystemdContext,
+        user_unit: PathBuf,
+        drop_ins: PathBuf,
+    }
+
+    impl CustodySandbox {
+        fn new() -> Self {
+            let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "prw-agent-external-custody-test-{}-{sequence}",
+                std::process::id()
+            ));
+            let config = root.join("config");
+            let user_unit = config.join("systemd/user");
+            let drop_ins = user_unit.join(MANAGED_DIRECTORY_NAME);
+            fs::create_dir_all(&drop_ins).expect("external custody test directories");
+            for path in [&root, &config, &config.join("systemd"), &user_unit, &drop_ins] {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+                    .expect("external custody test directory mode");
+            }
+            let context = IntendedUserSystemdContext::new(getuid().as_raw(), root.clone(), config)
+                .expect("absolute context");
+            Self {
+                root,
+                context,
+                user_unit,
+                drop_ins,
+            }
+        }
+
+        fn unit_paths(&self) -> Vec<PathBuf> {
+            vec![self.user_unit.clone()]
+        }
+
+        fn write_file(path: &Path, bytes: &[u8], mode: u32) {
+            fs::write(path, bytes).expect("write external fragment");
+            fs::set_permissions(path, fs::Permissions::from_mode(mode))
+                .expect("external fragment mode");
+        }
+    }
+
+    impl Drop for CustodySandbox {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn harmless_fragment(label: &str) -> String {
+        format!("[Unit]\nDescription={label}\n")
+    }
+
+    #[test]
+    fn custody_inventory_includes_main_and_nonmanaged_dropins_only() {
+        let sandbox = CustodySandbox::new();
+        let main = sandbox.user_unit.join(EXTERNAL_AGENT_UNIT_NAME);
+        let identity = sandbox.drop_ins.join(DEVICE_IDENTITY_DROPIN_NAME);
+        let external = sandbox.drop_ins.join("50-external.conf");
+        let managed_mode = sandbox.drop_ins.join(EXECUTION_MODE_DROPIN_NAME);
+        let managed_remote = sandbox.drop_ins.join(CONFIGURED_REMOTE_INPUTS_DROPIN_NAME);
+        CustodySandbox::write_file(&main, harmless_fragment("main").as_bytes(), 0o644);
+        CustodySandbox::write_file(&identity, harmless_fragment("identity").as_bytes(), 0o600);
+        CustodySandbox::write_file(&external, harmless_fragment("external").as_bytes(), 0o600);
+        CustodySandbox::write_file(&managed_mode, b"excluded mode", 0o600);
+        CustodySandbox::write_file(&managed_remote, b"excluded remote", 0o600);
+        let before_identity = fs::read(&identity).expect("identity bytes before capture");
+
+        let custody = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("capture external custody");
+        let paths = custody
+            .fragments
+            .iter()
+            .map(|fragment| fragment.path.as_path())
+            .collect::<Vec<_>>();
+        assert!(paths.contains(&main.as_path()));
+        assert!(paths.contains(&identity.as_path()));
+        assert!(paths.contains(&external.as_path()));
+        assert!(!paths.contains(&managed_mode.as_path()));
+        assert!(!paths.contains(&managed_remote.as_path()));
+        reprove_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &custody,
+            &sandbox.unit_paths(),
+        )
+        .expect("unchanged custody reproves");
+        assert_eq!(fs::read(&identity).expect("identity bytes after reproof"), before_identity);
+        let debug = format!("{custody:?}");
+        assert!(!debug.contains("identity"));
+        assert!(!debug.contains("50-external"));
+        assert!(!debug.contains("Description="));
+    }
+
+    #[test]
+    fn reproof_detects_same_path_bytes_inode_and_metadata_drift() {
+        let sandbox = CustodySandbox::new();
+        let path = sandbox.drop_ins.join("50-external.conf");
+        let original = harmless_fragment("original");
+        CustodySandbox::write_file(&path, original.as_bytes(), 0o600);
+
+        let bytes_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("bytes baseline");
+        CustodySandbox::write_file(&path, harmless_fragment("changed").as_bytes(), 0o600);
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &bytes_baseline,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+
+        CustodySandbox::write_file(&path, original.as_bytes(), 0o600);
+        let inode_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("inode baseline");
+        let replacement = sandbox.drop_ins.join("replacement.tmp");
+        CustodySandbox::write_file(&replacement, original.as_bytes(), 0o600);
+        fs::rename(&replacement, &path).expect("replace same-path inode");
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &inode_baseline,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+
+        let metadata_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("metadata baseline");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).expect("mode drift");
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &metadata_baseline,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn reproof_detects_inventory_and_search_path_sequence_drift() {
+        let sandbox = CustodySandbox::new();
+        let first = sandbox.drop_ins.join("50-first.conf");
+        CustodySandbox::write_file(&first, harmless_fragment("first").as_bytes(), 0o600);
+        let baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("inventory baseline");
+        let added = sandbox.drop_ins.join("60-added.conf");
+        CustodySandbox::write_file(&added, harmless_fragment("added").as_bytes(), 0o600);
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &baseline,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+
+        let added_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &sandbox.unit_paths(),
+        )
+        .expect("added baseline");
+        fs::remove_file(&added).expect("remove external candidate");
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &added_baseline,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+
+        let second_unit_path = sandbox.root.join("second-unit-path");
+        fs::create_dir_all(&second_unit_path).expect("second unit path");
+        let ordered = vec![sandbox.user_unit.clone(), second_unit_path.clone()];
+        let order_baseline = capture_external_systemd_fragment_custody_with_unit_paths(
+            &sandbox.context,
+            &ordered,
+        )
+        .expect("ordered search path baseline");
+        assert!(
+            reprove_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &order_baseline,
+                &[second_unit_path, sandbox.user_unit.clone()],
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn symlink_and_nonregular_external_candidates_fail_closed() {
+        let sandbox = CustodySandbox::new();
+        let target = sandbox.root.join("outside.conf");
+        CustodySandbox::write_file(&target, harmless_fragment("outside").as_bytes(), 0o600);
+        let symlink_path = sandbox.drop_ins.join("50-link.conf");
+        symlink(&target, &symlink_path).expect("external symlink");
+        assert!(
+            capture_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+        fs::remove_file(&symlink_path).expect("remove symlink");
+        fs::create_dir(sandbox.drop_ins.join("50-directory.conf")).expect("nonregular candidate");
+        assert!(
+            capture_external_systemd_fragment_custody_with_unit_paths(
+                &sandbox.context,
+                &sandbox.unit_paths(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn configured_external_custody_bounds_fail_closed() {
+        let per_file = CustodySandbox::new();
+        let large = per_file.drop_ins.join("50-large.conf");
+        let oversized = vec![b'x'; EXTERNAL_FRAGMENT_MAX_FILE_BYTES as usize + 1];
+        CustodySandbox::write_file(&large, &oversized, 0o600);
+        assert!(
+            capture_external_systemd_fragment_custody_with_unit_paths(
+                &per_file.context,
+                &per_file.unit_paths(),
+            )
+            .is_err()
+        );
+
+        let count = CustodySandbox::new();
+        for index in 0..=EXTERNAL_FRAGMENT_MAX_FILES {
+            let path = count.drop_ins.join(format!("{index:03}-count.conf"));
+            CustodySandbox::write_file(&path, harmless_fragment("count").as_bytes(), 0o600);
+        }
+        assert!(
+            capture_external_systemd_fragment_custody_with_unit_paths(
+                &count.context,
+                &count.unit_paths(),
+            )
+            .is_err()
+        );
+
+        let total = CustodySandbox::new();
+        let one_megabyte = vec![b'x'; EXTERNAL_FRAGMENT_MAX_FILE_BYTES as usize];
+        for index in 0..9 {
+            let path = total.drop_ins.join(format!("{index:02}-total.conf"));
+            CustodySandbox::write_file(&path, &one_megabyte, 0o600);
+        }
+        assert!(
+            capture_external_systemd_fragment_custody_with_unit_paths(
+                &total.context,
+                &total.unit_paths(),
+            )
+            .is_err()
+        );
+    }
+}
