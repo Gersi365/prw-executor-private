@@ -28,10 +28,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
       - name: Record toolchain
         run: |
           rustc --version
           cargo --version
+          protoc --version
           bash --version | head -n 1
 
       - name: Verify locked dependency graph
