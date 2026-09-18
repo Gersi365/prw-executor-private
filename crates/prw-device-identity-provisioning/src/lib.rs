@@ -390,13 +390,7 @@ fn commit_device_identity_dropin(
             }
         };
 
-    let commit_result = renameat_with(
-        CWD,
-        &temp_dropin,
-        CWD,
-        final_dropin,
-        RenameFlags::NOREPLACE,
-    );
+    let commit_result = renameat_with(CWD, &temp_dropin, CWD, final_dropin, RenameFlags::NOREPLACE);
     if commit_result.is_err() {
         let _ = fs::remove_file(&temp_dropin);
         return Err(DeviceIdentityProvisioningError::DropinCommitFailed);
