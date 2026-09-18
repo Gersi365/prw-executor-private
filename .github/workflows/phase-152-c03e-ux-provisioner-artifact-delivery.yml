@@ -1,0 +1,122 @@
+name: Phase 152 C03e-UX Provisioner Artifact Delivery
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/prw-device-identity-provisioning/**"
+      - "packaging/systemd/PROVISIONER_ARTIFACT_DELIVERY.md"
+      - "packaging/systemd/PROVISIONER_INSTALL_TRANSACTION.md"
+      - "packaging/systemd/README.md"
+      - "scripts/prepare-phase-152-c03e-ux-provisioner-artifact.sh"
+      - "scripts/validate-phase-152-c03e-uv-provisioner-packaging.sh"
+      - ".github/workflows/phase-152-c03e-ux-provisioner-artifact-delivery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-152-c03e-ux-provisioner-artifact-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    name: Build, validate and retain provisioner artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact source head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record exact source head
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          expected_sha='${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$source_sha" = "$expected_sha"
+          test "${#source_sha}" -eq 40
+          echo "PRW_SOURCE_SHA=$source_sha" >> "$GITHUB_ENV"
+          echo "source_git_sha=$source_sha"
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
+      - name: Record toolchain
+        run: |
+          rustc --version
+          cargo --version
+          protoc --version
+          bash --version | head -n 1
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Reprove disposable package transaction on retained build
+        run: bash scripts/validate-phase-152-c03e-uv-provisioner-packaging.sh
+
+      - name: Prepare checksum-bound delivery bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          delivery="$RUNNER_TEMP/c03e-ux-provisioner-delivery"
+          bash scripts/prepare-phase-152-c03e-ux-provisioner-artifact.sh \
+            --artifact target/debug/prw-device-identity-provision \
+            --output "$delivery" \
+            --source-sha "$PRW_SOURCE_SHA"
+          echo "PRW_DELIVERY_DIR=$delivery" >> "$GITHUB_ENV"
+
+      - name: Validate exact delivery bundle before upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PRW_DELIVERY_DIR"
+          test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+          test "$(find . -mindepth 1 -maxdepth 1 -type l | wc -l)" -eq 0
+          test -f prw-device-identity-provision
+          test -f SHA256SUMS
+          test -f ARTIFACT-MANIFEST.txt
+          sha256sum -c SHA256SUMS
+          cmp -s prw-device-identity-provision "$GITHUB_WORKSPACE/target/debug/prw-device-identity-provision"
+          binary_sha="$(sha256sum prw-device-identity-provision | awk '{print $1}')"
+          grep -Fxq "source_git_sha=$PRW_SOURCE_SHA" ARTIFACT-MANIFEST.txt
+          grep -Fxq "binary_sha256=$binary_sha" ARTIFACT-MANIFEST.txt
+          echo "retained_binary_sha256=$binary_sha"
+
+      - name: Upload retained provisioner artifact
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: c03e-ux-prw-device-identity-provision-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ env.PRW_DELIVERY_DIR }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Record retained artifact identity
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_ID"
+          test -n "$ARTIFACT_URL"
+          test "$ARTIFACT_DIGEST" != ""
+          test "${#ARTIFACT_DIGEST}" -eq 64
+          printf 'retained_artifact_id=%s\n' "$ARTIFACT_ID"
+          printf 'retained_artifact_url=%s\n' "$ARTIFACT_URL"
+          printf 'retained_artifact_digest_sha256=%s\n' "$ARTIFACT_DIGEST"
+          printf 'retained_artifact_source_git_sha=%s\n' "$PRW_SOURCE_SHA"
+          printf 'retained_artifact_retention_days=90\n'
+          printf 'C03E_UX_ARTIFACT_DELIVERY=PASS\n'
