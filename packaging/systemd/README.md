@@ -65,8 +65,20 @@ Its permanent create-only package-file transaction is defined by:
 
 C03e-VE copies validated executable bytes only. The installer never executes `prw-agent-configure`, never writes `30-agent-execution-mode.conf` or `40-configured-remote-inputs.conf`, never calls `daemon-reload`, and never starts or restarts the Agent. Real-root installation remains separately gated; any later `prw-agent-configure write` transaction is a distinct production mutation and requires separate authorization.
 
-The configure executable has no systemd unit, socket unit, enablement relationship, or automatic activation surface. C03e-VE does not define retained artifact delivery or release provenance; those may be materialized by a later separately bounded checkpoint if required before production installation.
+The configure executable has no systemd unit, socket unit, enablement relationship, or automatic activation surface.
+
+## C03e-VG retained agent-configure artifact delivery boundary
+
+The `prw-agent-configure` retained delivery surface is separately defined by:
+
+- `packaging/systemd/AGENT_CONFIGURE_ARTIFACT_DELIVERY.md`;
+- `scripts/prepare-phase-152-c03e-vg-agent-configure-artifact.sh`;
+- `.github/workflows/phase-152-c03e-vg-agent-configure-artifact-delivery.yml`.
+
+The retained Actions artifact contains exactly `prw-agent-configure`, `SHA256SUMS`, and `ARTIFACT-MANIFEST.txt`. The binary checksum is verified before upload and the upload action separately emits an archive-level SHA-256 artifact digest. The manifest binds the retained bytes to the exact checked-out Git head and records explicit `NOT_AUTHORIZED` markers for production transfer, production staging, real-root installation, managed configuration write, daemon reload and Agent activation.
+
+C03e-VG produces a fresh checksum-bound retained build and does not claim byte reproducibility against the earlier ephemeral C03e-VE build. A later production-transfer/install checkpoint must independently download and re-verify the evidence-closed C03e-VG artifact before it may request authorization to place bytes on PowerCode.
 
 ## Activation gate
 
-This repository source does **not** install, enable, start, restart, or reload the real service and does not mutate user lingering. C03e-UV does not install the provisioner on a real host or perform device-identity provisioning. C03e-UX adds only retained provisioner artifact delivery and likewise does not transfer, stage, install, or execute the provisioner on the production host. C03e-VE adds only a non-activating create-only package path for `prw-agent-configure`; it does not install or execute that administrative binary on the production host and does not materialize managed Agent configuration. Real-host file installation, any managed configuration write, any later systemd manager operation, and any identity transaction remain separately gated.
+This repository source does **not** install, enable, start, restart, or reload the real service and does not mutate user lingering. C03e-UV does not install the provisioner on a real host or perform device-identity provisioning. C03e-UX adds only retained provisioner artifact delivery and likewise does not transfer, stage, install, or execute the provisioner on the production host. C03e-VE adds only a non-activating create-only package path for `prw-agent-configure`; it does not install or execute that administrative binary on the production host and does not materialize managed Agent configuration. C03e-VG adds only checksum-bound retained `prw-agent-configure` delivery and likewise does not transfer, stage, install or execute it on PowerCode. Real-host file installation, any managed configuration write, any later systemd manager operation, and any identity transaction remain separately gated.
