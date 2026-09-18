@@ -51,6 +51,22 @@ The retained Actions artifact contains exactly the provisioner binary, `SHA256SU
 
 This retained artifact is a checksum-bound delivery surface, not a GitHub Release and not a signed-release provenance claim. A later production-install checkpoint must independently download and re-verify the evidence-closed artifact before it may request authorization for real-root installation.
 
+## C03e-VE agent-configuration administrative executable boundary
+
+The existing Rust binary target `prw-agent-configure` is packaged as a separate, explicitly invoked administrative executable at:
+
+`/usr/lib/private-remote-workspace/prw-agent-configure`
+
+Its permanent create-only package-file transaction is defined by:
+
+- `packaging/systemd/AGENT_CONFIGURE_INSTALL_TRANSACTION.md`;
+- `packaging/systemd/install-prw-agent-configure.sh`;
+- `scripts/validate-phase-152-c03e-ve-agent-configure-packaging.sh`.
+
+C03e-VE copies validated executable bytes only. The installer never executes `prw-agent-configure`, never writes `30-agent-execution-mode.conf` or `40-configured-remote-inputs.conf`, never calls `daemon-reload`, and never starts or restarts the Agent. Real-root installation remains separately gated; any later `prw-agent-configure write` transaction is a distinct production mutation and requires separate authorization.
+
+The configure executable has no systemd unit, socket unit, enablement relationship, or automatic activation surface. C03e-VE does not define retained artifact delivery or release provenance; those may be materialized by a later separately bounded checkpoint if required before production installation.
+
 ## Activation gate
 
-This repository source does **not** install, enable, start, restart, or reload the real service and does not mutate user lingering. C03e-UV does not install the provisioner on a real host or perform device-identity provisioning. C03e-UX adds only retained artifact delivery and likewise does not transfer, stage, install, or execute the provisioner on the production host. Real-host file installation, any later systemd manager operation, and any identity transaction remain separately gated.
+This repository source does **not** install, enable, start, restart, or reload the real service and does not mutate user lingering. C03e-UV does not install the provisioner on a real host or perform device-identity provisioning. C03e-UX adds only retained provisioner artifact delivery and likewise does not transfer, stage, install, or execute the provisioner on the production host. C03e-VE adds only a non-activating create-only package path for `prw-agent-configure`; it does not install or execute that administrative binary on the production host and does not materialize managed Agent configuration. Real-host file installation, any managed configuration write, any later systemd manager operation, and any identity transaction remain separately gated.
