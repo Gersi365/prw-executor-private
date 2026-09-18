@@ -102,7 +102,7 @@ jobs:
           test -x "$binary"
           test -f "$launcher"
 
-          mkdir -p "$debian_work" "$artifact_dir"
+          mkdir -p "$debian_work" "$pkgroot/DEBIAN" "$artifact_dir"
 
           install -D -m 0755 "$binary" "$pkgroot/usr/lib/private-remote-workspace/prw-desktop"
           install -D -m 0644 "$launcher" "$pkgroot/usr/share/applications/io.patchmirror.prw.desktop.desktop"
