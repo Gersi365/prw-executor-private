@@ -1,0 +1,217 @@
+name: Phase 152 C03e-VO Desktop Debian Package Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase-152-c03e-vo-desktop-deb-package-validation.yml"
+      - "packaging/desktop/debian/**"
+      - "apps/desktop/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c03e-vo-desktop-deb-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build and validate desktop Debian package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          printf 'exact_head=%s\n' "$actual"
+
+      - name: Install bounded build and packaging prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            pkg-config \
+            protobuf-compiler \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            desktop-file-utils \
+            dpkg-dev \
+            binutils \
+            file
+
+      - name: Record build floor
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(dpkg --print-architecture)" = "amd64"
+          rustc --version
+          cargo --version
+          protoc --version
+          dpkg-deb --version | head -n 1
+          dpkg-shlibdeps --version | head -n 1
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Validate desktop launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          desktop-file-validate packaging/desktop/debian/io.patchmirror.prw.desktop.desktop
+
+      - name: Build release desktop binary
+        run: cargo build --locked --release -p prw-desktop
+
+      - name: Build and validate Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          export TZ=UTC
+
+          binary="$GITHUB_WORKSPACE/target/release/prw-desktop"
+          launcher="$GITHUB_WORKSPACE/packaging/desktop/debian/io.patchmirror.prw.desktop.desktop"
+          work="$RUNNER_TEMP/c03e-vo"
+          extract="$work/extract"
+          artifact_dir="$work/artifact"
+          package_name="private-remote-workspace-desktop"
+          package_version="0.1.0-1"
+          debian_work="$work/debian"
+          pkgroot="$debian_work/$package_name"
+          deb="$artifact_dir/${package_name}_${package_version}_amd64.deb"
+
+          test -f "$binary"
+          test -x "$binary"
+          test -f "$launcher"
+
+          mkdir -p "$debian_work" "$pkgroot/DEBIAN" "$artifact_dir"
+
+          install -D -m 0755 "$binary" "$pkgroot/usr/lib/private-remote-workspace/prw-desktop"
+          install -D -m 0644 "$launcher" "$pkgroot/usr/share/applications/io.patchmirror.prw.desktop.desktop"
+
+          cat > "$debian_work/control" <<'EOF'
+          Source: private-remote-workspace-desktop
+          Section: utils
+          Priority: optional
+          Maintainer: Private Remote Workspace <prw@private-remote-workspace.invalid>
+          Standards-Version: 4.6.2
+
+          Package: private-remote-workspace-desktop
+          Architecture: any
+          Description: Private Remote Workspace desktop client
+           Native local desktop client for the Private Remote Workspace Agent.
+          EOF
+
+          shlib_output="$(
+            cd "$work"
+            dpkg-shlibdeps \
+              -O \
+              -e"debian/$package_name/usr/lib/private-remote-workspace/prw-desktop" \
+              2> "$artifact_dir/dpkg-shlibdeps.stderr.txt"
+          )"
+          printf '%s\n' "$shlib_output" | tee "$artifact_dir/dpkg-shlibdeps.txt"
+          if [ -s "$artifact_dir/dpkg-shlibdeps.stderr.txt" ]; then
+            cat "$artifact_dir/dpkg-shlibdeps.stderr.txt"
+          fi
+
+          depends="$(printf '%s\n' "$shlib_output" | sed -n 's/^shlibs:Depends=//p')"
+          test -n "$depends"
+          test "$(printf '%s\n' "$depends" | wc -l)" -eq 1
+
+          mkdir -p "$pkgroot/DEBIAN"
+          cat > "$pkgroot/DEBIAN/control" <<EOF
+          Package: $package_name
+          Version: $package_version
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Private Remote Workspace <prw@private-remote-workspace.invalid>
+          Depends: $depends
+          Description: Private Remote Workspace desktop client
+           Native local desktop client for the Private Remote Workspace Agent.
+          EOF
+
+          test "$(find "$pkgroot/DEBIAN" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)" = "control"
+          test "$(find "$pkgroot" -type l | wc -l)" -eq 0
+          test "$(find "$pkgroot/usr" -type f | wc -l)" -eq 2
+
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          dpkg-deb --root-owner-group --build "$pkgroot" "$deb"
+
+          dpkg-deb --info "$deb" | tee "$artifact_dir/package-info.txt"
+          dpkg-deb --contents "$deb" | tee "$artifact_dir/package-contents.txt"
+          dpkg-deb --field "$deb" | tee "$artifact_dir/package-control.txt"
+
+          test "$(dpkg-deb --field "$deb" Package)" = "$package_name"
+          test "$(dpkg-deb --field "$deb" Version)" = "$package_version"
+          test "$(dpkg-deb --field "$deb" Architecture)" = "amd64"
+          test "$(dpkg-deb --field "$deb" Depends)" = "$depends"
+
+          mkdir -p "$extract"
+          dpkg-deb --extract "$deb" "$extract"
+
+          find "$extract" -type f -printf '%P\n' | sort > "$artifact_dir/extracted-files.txt"
+          cat > "$artifact_dir/expected-files.txt" <<'EOF'
+          usr/lib/private-remote-workspace/prw-desktop
+          usr/share/applications/io.patchmirror.prw.desktop.desktop
+          EOF
+          diff -u "$artifact_dir/expected-files.txt" "$artifact_dir/extracted-files.txt"
+
+          test "$(find "$extract" -type l | wc -l)" -eq 0
+          test "$(stat -c '%a' "$extract/usr/lib/private-remote-workspace/prw-desktop")" = "755"
+          test "$(stat -c '%a' "$extract/usr/share/applications/io.patchmirror.prw.desktop.desktop")" = "644"
+          cmp "$binary" "$extract/usr/lib/private-remote-workspace/prw-desktop"
+          cmp "$launcher" "$extract/usr/share/applications/io.patchmirror.prw.desktop.desktop"
+
+          awk '$1 == "-rwxr-xr-x" && $2 == "root/root" && $6 == "./usr/lib/private-remote-workspace/prw-desktop" { found=1 } END { exit !found }' "$artifact_dir/package-contents.txt"
+          awk '$1 == "-rw-r--r--" && $2 == "root/root" && $6 == "./usr/share/applications/io.patchmirror.prw.desktop.desktop" { found=1 } END { exit !found }' "$artifact_dir/package-contents.txt"
+
+          file "$binary" | tee "$artifact_dir/release-binary-file.txt"
+          readelf -d "$binary" | grep 'NEEDED' | tee "$artifact_dir/release-binary-needed.txt"
+          sha256sum "$binary" | tee "$artifact_dir/release-binary.sha256"
+          sha256sum "$deb" | tee "$artifact_dir/package.sha256"
+          stat -c '%n %s' "$binary" "$deb" | tee "$artifact_dir/sizes.txt"
+
+          {
+            printf 'exact_head=%s\n' "$(git rev-parse HEAD)"
+            printf 'tree=%s\n' "$(git rev-parse HEAD^{tree})"
+            printf 'source_date_epoch=%s\n' "$SOURCE_DATE_EPOCH"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            printf 'dpkg_architecture=%s\n' "$(dpkg --print-architecture)"
+            printf 'rustc=%s\n' "$(rustc --version)"
+            printf 'cargo=%s\n' "$(cargo --version)"
+            printf 'gtk=%s\n' "$(pkg-config --modversion gtk4)"
+            printf 'libadwaita=%s\n' "$(pkg-config --modversion libadwaita-1)"
+            printf 'package=%s\n' "$package_name"
+            printf 'version=%s\n' "$package_version"
+            printf 'depends=%s\n' "$depends"
+            printf 'desktop_file_validate=PASS\n'
+          } | tee "$artifact_dir/build-context.txt"
+
+      - name: Upload exact candidate package evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: c03e-vo-private-remote-workspace-desktop-0.1.0-1-amd64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/c03e-vo/artifact/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
