@@ -90,21 +90,24 @@ jobs:
           binary="$GITHUB_WORKSPACE/target/release/prw-desktop"
           launcher="$GITHUB_WORKSPACE/packaging/desktop/debian/io.patchmirror.prw.desktop.desktop"
           work="$RUNNER_TEMP/c03e-vo"
-          shlib_work="$work/shlib"
-          pkgroot="$work/pkgroot"
           extract="$work/extract"
           artifact_dir="$work/artifact"
           package_name="private-remote-workspace-desktop"
           package_version="0.1.0-1"
+          debian_work="$work/debian"
+          pkgroot="$debian_work/$package_name"
           deb="$artifact_dir/${package_name}_${package_version}_amd64.deb"
 
           test -f "$binary"
           test -x "$binary"
           test -f "$launcher"
 
-          mkdir -p "$shlib_work/debian" "$pkgroot/DEBIAN" "$artifact_dir"
+          mkdir -p "$debian_work" "$artifact_dir"
 
-          cat > "$shlib_work/debian/control" <<'EOF'
+          install -D -m 0755 "$binary" "$pkgroot/usr/lib/private-remote-workspace/prw-desktop"
+          install -D -m 0644 "$launcher" "$pkgroot/usr/share/applications/io.patchmirror.prw.desktop.desktop"
+
+          cat > "$debian_work/control" <<'EOF'
           Source: private-remote-workspace-desktop
           Section: utils
           Priority: optional
@@ -118,18 +121,22 @@ jobs:
           EOF
 
           shlib_output="$(
-            cd "$shlib_work"
-            dpkg-shlibdeps -O -e"$binary"
+            cd "$work"
+            dpkg-shlibdeps \
+              -O \
+              -e"debian/$package_name/usr/lib/private-remote-workspace/prw-desktop" \
+              2> "$artifact_dir/dpkg-shlibdeps.stderr.txt"
           )"
           printf '%s\n' "$shlib_output" | tee "$artifact_dir/dpkg-shlibdeps.txt"
+          if [ -s "$artifact_dir/dpkg-shlibdeps.stderr.txt" ]; then
+            cat "$artifact_dir/dpkg-shlibdeps.stderr.txt"
+          fi
 
           depends="$(printf '%s\n' "$shlib_output" | sed -n 's/^shlibs:Depends=//p')"
           test -n "$depends"
           test "$(printf '%s\n' "$depends" | wc -l)" -eq 1
 
-          install -D -m 0755 "$binary" "$pkgroot/usr/lib/private-remote-workspace/prw-desktop"
-          install -D -m 0644 "$launcher" "$pkgroot/usr/share/applications/io.patchmirror.prw.desktop.desktop"
-
+          mkdir -p "$pkgroot/DEBIAN"
           cat > "$pkgroot/DEBIAN/control" <<EOF
           Package: $package_name
           Version: $package_version
