@@ -1,0 +1,47 @@
+name: Phase 152 C03e-VE Agent Configure Packaging Validation
+
+on:
+  pull_request:
+    paths:
+      - "crates/prw-agent-systemd-orchestration/**"
+      - "packaging/systemd/AGENT_CONFIGURE_INSTALL_TRANSACTION.md"
+      - "packaging/systemd/install-prw-agent-configure.sh"
+      - "packaging/systemd/README.md"
+      - "scripts/validate-phase-152-c03e-ve-agent-configure-packaging.sh"
+      - ".github/workflows/phase-152-c03e-ve-agent-configure-packaging-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-152-c03e-ve-agent-configure-packaging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate non-activating prw-agent-configure package transaction
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y protobuf-compiler
+
+      - name: Record toolchain
+        run: |
+          rustc --version
+          cargo --version
+          protoc --version
+          bash --version | head -n 1
+
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
+      - name: Validate prw-agent-configure packaging in disposable roots
+        run: bash scripts/validate-phase-152-c03e-ve-agent-configure-packaging.sh
