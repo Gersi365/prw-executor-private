@@ -1,16 +1,17 @@
 //! Creation-only Ubuntu device-identity provisioning for Private Remote Workspace.
 //!
 //! This crate generates a new P-256 identity locally and persists only a systemd
-//! encrypted credential. It deliberately exposes no existing-key import/export,
-//! no arbitrary credential name/path selection, no enrollment, and no networking.
+//! encrypted credential plus its fixed per-user service credential binding. It
+//! deliberately exposes no existing-key import/export, no arbitrary credential
+//! name/path selection, no enrollment, and no networking.
 
 #![cfg(target_os = "linux")]
 
 use std::{
     env, fmt,
-    fs::{self, File, Permissions},
+    fs::{self, File, OpenOptions, Permissions},
     io::{self, Write},
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -37,8 +38,10 @@ pub const DEVICE_IDENTITY_DROPIN_RELATIVE_PATH: &str =
 
 const SYSTEMD_CREDS_PATH: &str = "/usr/bin/systemd-creds";
 const MAX_ENCRYPTED_CREDENTIAL_BYTES: u64 = 65_536;
+const MAX_DROPIN_BYTES: usize = 4_096;
 const PRIVATE_DIRECTORY_MODE: u32 = 0o700;
 const CIPHERTEXT_MODE: u32 = 0o600;
+const DROPIN_MODE: u32 = 0o600;
 const FORBIDDEN_INITIAL_CIPHERTEXT_MODE_BITS: u32 = 0o133;
 
 /// Successful creation-only identity provisioning result.
@@ -70,6 +73,8 @@ pub enum DeviceIdentityProvisioningError {
     InvalidStateRoot,
     /// XDG config/HOME did not resolve to an absolute usable config root.
     InvalidConfigRoot,
+    /// The fixed encrypted-credential path cannot be represented safely in systemd syntax.
+    InvalidCredentialBinding,
     /// A required existing directory failed ownership/type/mode validation.
     InsecureDirectory,
     /// A production identity ciphertext or credential drop-in already exists.
@@ -88,6 +93,10 @@ pub enum DeviceIdentityProvisioningError {
     CiphertextWriteFailed,
     /// No-replace atomic ciphertext commit failed.
     CiphertextCommitFailed,
+    /// Temporary credential drop-in persistence or validation failed.
+    DropinWriteFailed,
+    /// No-replace atomic credential drop-in commit failed.
+    DropinCommitFailed,
     /// Final parent-directory durability synchronization failed.
     DirectorySyncFailed,
 }
@@ -97,6 +106,7 @@ impl fmt::Display for DeviceIdentityProvisioningError {
         let message = match self {
             Self::InvalidStateRoot => "invalid device identity state root",
             Self::InvalidConfigRoot => "invalid device identity config root",
+            Self::InvalidCredentialBinding => "invalid device identity credential binding",
             Self::InsecureDirectory => "insecure device identity directory",
             Self::AlreadyProvisioned => "device identity is already provisioned",
             Self::DirectoryCreationFailed => "device identity directory creation failed",
@@ -108,6 +118,8 @@ impl fmt::Display for DeviceIdentityProvisioningError {
             }
             Self::CiphertextWriteFailed => "encrypted device identity persistence failed",
             Self::CiphertextCommitFailed => "encrypted device identity commit failed",
+            Self::DropinWriteFailed => "device identity credential drop-in persistence failed",
+            Self::DropinCommitFailed => "device identity credential drop-in commit failed",
             Self::DirectorySyncFailed => "device identity directory sync failed",
         };
         formatter.write_str(message)
@@ -131,7 +143,8 @@ pub fn sha256_hex(fingerprint: [u8; 32]) -> String {
 /// Generates and atomically commits the first Ubuntu production device identity.
 ///
 /// The private PKCS#8 value exists only in provider/zeroizing process memory and the
-/// stdin pipe to `/usr/bin/systemd-creds`. Only encrypted ciphertext is persisted.
+/// stdin pipe to `/usr/bin/systemd-creds`. Only encrypted ciphertext and the fixed
+/// non-secret per-user systemd credential binding are persisted.
 ///
 /// # Errors
 ///
@@ -153,6 +166,7 @@ pub fn provision_first_ubuntu_device_identity()
 
     let final_ciphertext = state_root.join(DEVICE_IDENTITY_CIPHERTEXT_RELATIVE_PATH);
     let dropin = config_root.join(DEVICE_IDENTITY_DROPIN_RELATIVE_PATH);
+    let dropin_payload = render_device_identity_dropin(&final_ciphertext)?;
     require_absent(&final_ciphertext)?;
     require_absent(&dropin)?;
 
@@ -224,6 +238,8 @@ pub fn provision_first_ubuntu_device_identity()
         return Err(DeviceIdentityProvisioningError::DirectorySyncFailed);
     }
 
+    commit_device_identity_dropin(&config_root, &dropin, &dropin_payload, uid)?;
+
     Ok(ProvisionedDeviceIdentity {
         public_spki_sha256,
         encrypted_credential_path: final_ciphertext,
@@ -294,11 +310,159 @@ fn ensure_private_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityP
     Ok(())
 }
 
+fn ensure_user_directory(path: &Path, uid: u32) -> Result<(), DeviceIdentityProvisioningError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => validate_existing_root(path, uid),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            fs::create_dir(path)
+                .map_err(|_| DeviceIdentityProvisioningError::DirectoryCreationFailed)?;
+            fs::set_permissions(path, Permissions::from_mode(PRIVATE_DIRECTORY_MODE))
+                .map_err(|_| DeviceIdentityProvisioningError::DirectoryCreationFailed)?;
+            validate_existing_root(path, uid)
+        }
+        Err(_) => Err(DeviceIdentityProvisioningError::InsecureDirectory),
+    }
+}
+
 fn require_absent(path: &Path) -> Result<(), DeviceIdentityProvisioningError> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Ok(_) | Err(_) => Err(DeviceIdentityProvisioningError::AlreadyProvisioned),
     }
+}
+
+fn render_device_identity_dropin(
+    encrypted_credential_path: &Path,
+) -> Result<Vec<u8>, DeviceIdentityProvisioningError> {
+    if !encrypted_credential_path.is_absolute() {
+        return Err(DeviceIdentityProvisioningError::InvalidCredentialBinding);
+    }
+    let path = encrypted_credential_path
+        .to_str()
+        .ok_or(DeviceIdentityProvisioningError::InvalidCredentialBinding)?;
+    if path.is_empty()
+        || path.bytes().any(|byte| {
+            byte.is_ascii_control()
+                || byte.is_ascii_whitespace()
+                || matches!(byte, b'\\' | b'\'' | b'"' | b'%')
+        })
+    {
+        return Err(DeviceIdentityProvisioningError::InvalidCredentialBinding);
+    }
+
+    let payload = format!(
+        "[Service]\nLoadCredentialEncrypted={SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME}:{path}\n"
+    )
+    .into_bytes();
+    if payload.is_empty() || payload.len() > MAX_DROPIN_BYTES {
+        return Err(DeviceIdentityProvisioningError::InvalidCredentialBinding);
+    }
+    Ok(payload)
+}
+
+fn commit_device_identity_dropin(
+    config_root: &Path,
+    final_dropin: &Path,
+    payload: &[u8],
+    uid: u32,
+) -> Result<(), DeviceIdentityProvisioningError> {
+    ensure_user_directory(config_root, uid)?;
+    let systemd_dir = config_root.join("systemd");
+    ensure_user_directory(&systemd_dir, uid)?;
+    let user_dir = systemd_dir.join("user");
+    ensure_user_directory(&user_dir, uid)?;
+    let dropin_dir = user_dir.join("prw-agent.service.d");
+    ensure_user_directory(&dropin_dir, uid)?;
+    require_absent(final_dropin)?;
+
+    let temp_dropin = dropin_dir.join(format!(
+        ".20-device-identity-credential.conf.{}.tmp",
+        std::process::id()
+    ));
+    require_absent(&temp_dropin).map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+
+    let (opened_temp, opened_metadata) =
+        match write_validate_and_sync_dropin_temp(&temp_dropin, payload, uid) {
+            Ok(validated) => validated,
+            Err(error) => {
+                let _ = fs::remove_file(&temp_dropin);
+                return Err(error);
+            }
+        };
+
+    let commit_result = renameat_with(
+        CWD,
+        &temp_dropin,
+        CWD,
+        final_dropin,
+        RenameFlags::NOREPLACE,
+    );
+    if commit_result.is_err() {
+        let _ = fs::remove_file(&temp_dropin);
+        return Err(DeviceIdentityProvisioningError::DropinCommitFailed);
+    }
+
+    let Ok(final_metadata) = fs::symlink_metadata(final_dropin) else {
+        return Err(DeviceIdentityProvisioningError::DropinCommitFailed);
+    };
+    if validate_dropin_metadata(&final_metadata, uid).is_err()
+        || final_metadata.dev() != opened_metadata.dev()
+        || final_metadata.ino() != opened_metadata.ino()
+    {
+        let _ = fs::remove_file(final_dropin);
+        let _ = sync_directory(&dropin_dir);
+        return Err(DeviceIdentityProvisioningError::DropinCommitFailed);
+    }
+    drop(opened_temp);
+
+    sync_directory(&dropin_dir).map_err(|_| DeviceIdentityProvisioningError::DirectorySyncFailed)
+}
+
+fn write_validate_and_sync_dropin_temp(
+    path: &Path,
+    payload: &[u8],
+    uid: u32,
+) -> Result<(File, fs::Metadata), DeviceIdentityProvisioningError> {
+    if payload.is_empty() || payload.len() > MAX_DROPIN_BYTES {
+        return Err(DeviceIdentityProvisioningError::DropinWriteFailed);
+    }
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(DROPIN_MODE)
+        .open(path)
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+    file.set_permissions(Permissions::from_mode(DROPIN_MODE))
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+    file.write_all(payload)
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+    file.flush()
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+    file.sync_all()
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+
+    let metadata = file
+        .metadata()
+        .map_err(|_| DeviceIdentityProvisioningError::DropinWriteFailed)?;
+    validate_dropin_metadata(&metadata, uid)?;
+    Ok((file, metadata))
+}
+
+fn validate_dropin_metadata(
+    metadata: &fs::Metadata,
+    uid: u32,
+) -> Result<(), DeviceIdentityProvisioningError> {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.uid() != uid
+        || metadata.mode() & 0o777 != DROPIN_MODE
+        || metadata.len() == 0
+        || metadata.len() > MAX_DROPIN_BYTES as u64
+    {
+        return Err(DeviceIdentityProvisioningError::DropinWriteFailed);
+    }
+    Ok(())
 }
 
 fn encrypt_with_systemd_creds(
@@ -423,7 +587,12 @@ fn sync_directory(path: &Path) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::sha256_hex;
+    use std::path::Path;
+
+    use super::{
+        DeviceIdentityProvisioningError, SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME,
+        render_device_identity_dropin, sha256_hex,
+    };
 
     #[test]
     fn public_fingerprint_hex_is_fixed_lowercase_width() {
@@ -436,5 +605,34 @@ mod tests {
         assert_eq!(&encoded[62..], "ef");
         assert!(encoded.bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert_eq!(encoded, encoded.to_ascii_lowercase());
+    }
+
+    #[test]
+    fn device_identity_dropin_payload_is_exact() {
+        let encrypted_path = Path::new(
+            "/home/gersi365/.local/state/private-remote-workspace/credentials/device-identity-private-key-v1.cred",
+        );
+        let rendered = render_device_identity_dropin(encrypted_path).expect("render fixed binding");
+        let expected = format!(
+            "[Service]\nLoadCredentialEncrypted={SYSTEMD_DEVICE_IDENTITY_CREDENTIAL_NAME}:{}\n",
+            encrypted_path.display()
+        );
+        assert_eq!(rendered, expected.into_bytes());
+    }
+
+    #[test]
+    fn device_identity_dropin_rejects_relative_or_unsafe_paths() {
+        assert_eq!(
+            render_device_identity_dropin(Path::new("relative/device-identity.cred")),
+            Err(DeviceIdentityProvisioningError::InvalidCredentialBinding)
+        );
+        assert_eq!(
+            render_device_identity_dropin(Path::new("/home/user with space/device-identity.cred")),
+            Err(DeviceIdentityProvisioningError::InvalidCredentialBinding)
+        );
+        assert_eq!(
+            render_device_identity_dropin(Path::new("/home/user/%n/device-identity.cred")),
+            Err(DeviceIdentityProvisioningError::InvalidCredentialBinding)
+        );
     }
 }
