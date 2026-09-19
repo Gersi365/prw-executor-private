@@ -32,6 +32,12 @@ pub mod codec;
 pub(crate) mod inbound_state;
 #[allow(
     dead_code,
+    reason = "C02a provider-neutral dispatch proof is intentionally not runtime-wired"
+)]
+pub(crate) mod management_dispatch;
+pub mod management_request;
+#[allow(
+    dead_code,
     reason = "pre-runtime policy response pipeline is intentionally crate-internal"
 )]
 pub(crate) mod policy_response;

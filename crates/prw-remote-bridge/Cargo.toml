@@ -6,7 +6,6 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-prw-agent = { path = "../prw-agent" }
 prw-connectivity = { path = "../prw-connectivity" }
 prw-file-service = { path = "../prw-file-service" }
 prw-file-transfer = { path = "../prw-file-transfer" }

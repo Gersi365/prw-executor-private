@@ -10,7 +10,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
-use prw_agent::local_commands::LocalAgentCommand;
 use prw_connectivity::TransportIdentity;
 use prw_file_service::RemotePath;
 use prw_file_transfer::{TransferId, UploadPlan};
@@ -209,15 +208,6 @@ impl BridgeCommand {
             | Self::TerminalRead { .. }
             | Self::TerminalClose(_) => Capability::TerminalExec,
             Self::ForwardOpen { .. } | Self::ForwardClose(_) => Capability::ForwardingCreate,
-        }
-    }
-
-    /// Returns the existing local Agent command for an Agent-status operation.
-    #[must_use]
-    pub const fn local_agent_command(&self) -> Option<LocalAgentCommand> {
-        match self {
-            Self::AgentStatus => Some(LocalAgentCommand::GetAgentStatus),
-            _ => None,
         }
     }
 

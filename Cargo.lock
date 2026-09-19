@@ -1355,6 +1355,7 @@ dependencies = [
  "prw-files",
  "prw-network",
  "prw-policy",
+ "prw-remote-bridge",
  "rustix",
 ]
 
@@ -1390,6 +1391,14 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "prw-agent",
+ "prw-connectivity",
+ "prw-core",
+ "prw-file-service",
+ "prw-file-transfer",
+ "prw-forwarding",
+ "prw-private-dns",
+ "prw-remote-bridge",
+ "prw-terminal",
  "rustix",
 ]
 
@@ -1539,7 +1548,6 @@ name = "prw-remote-bridge"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
- "prw-agent",
  "prw-connectivity",
  "prw-control-plane",
  "prw-core",

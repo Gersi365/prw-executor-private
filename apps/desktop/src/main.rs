@@ -1,4 +1,11 @@
 mod ipc;
+mod local_management_ipc;
+#[allow(
+    clippy::missing_const_for_fn,
+    clippy::redundant_pub_crate,
+    reason = "Phase 152 Slice A keeps explicit crate-scoped management boundaries and ordinary presentation transitions until desktop authority wiring"
+)]
+pub(crate) mod management;
 mod state;
 mod ui;
 
