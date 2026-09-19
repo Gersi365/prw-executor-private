@@ -208,3 +208,54 @@ VP staging workflow. It must stop again after exact staged-byte verification and
 any package installation or desktop launch.
 
 `NO_RACE_FREE_CLAIM`
+
+
+## 12. Forward-only transport correction after host reconnection
+
+After this preparation checkpoint was recorded, PowerCode was brought online through the
+already authorized Remote Desktop Commander connection. Fresh preflight proved the exact
+host/user/uid/gid, Agent active/local_only, managed 40 absent, desktop install destinations
+absent, and the exact VP stage absent.
+
+The connected GitHub tool surface available to this chat does not expose a
+`workflow_dispatch` mutation, and PowerCode does not have an authenticated `gh` CLI.
+No GitHub token, runner secret, stored credential, sudo grant, or manual user token may be
+read, copied, fabricated, or introduced merely to dispatch the prepared workflow.
+
+Therefore VP additionally binds one equivalent direct connected transport path, with no
+change to candidate authority, stage path, stage payload, install boundary, or
+postconditions:
+
+1. the exact authoritative GitHub Actions artifact ID `10567202652` is downloaded through
+   the connected GitHub application;
+2. its exact archive digest must equal
+   `a324cdfd1350aaed896e1cfedddb1728f024d578e90a105e17815afd09b54402`;
+3. the resulting short-lived authenticated artifact URL may be consumed only by the
+   authorized PowerCode Remote Desktop Commander session;
+4. PowerCode downloads that archive into a temporary user-owned directory;
+5. the archive digest is verified before extraction;
+6. only `private-remote-workspace-desktop_0.1.0-1_amd64.deb` is selected for staging;
+7. that .deb must equal size `418670` and SHA-256
+   `2f29a60187a00101e641499aea68b88abc6ca740bae39d9fc574eb31e5110c71`;
+8. the exact create-only staging law from Sections 4–8 is then executed unchanged;
+9. all temporary transfer/extraction material is removed after successful staged-byte
+   verification;
+10. the transaction stops before any package-manager install or desktop launch.
+
+The direct connected transport must fail closed before staging if any archive digest,
+package size/hash, host identity, Agent/local_only state, managed-40 state, install
+destination, or stage-absence precondition differs.
+
+This correction is a transport-channel substitution only. It does not authorize an
+alternate artifact, package rebuild, package install, desktop launch, Agent mutation,
+configured-remote selection, networking mutation, or cleanup/overwrite of a pre-existing
+stage.
+
+The prepared GitHub workflow remains valid but need not be dispatched when this exact
+direct connected transport path is used.
+
+The corrected execution boundary becomes:
+
+`STOP_AFTER_EXACT_ARTIFACT_TRANSFER_AND_CREATE_ONLY_STAGING_VERIFICATION_AND_BEFORE_ANY_PACKAGE_INSTALL_OR_DESKTOP_LAUNCH`
+
+`NO_RACE_FREE_CLAIM`
