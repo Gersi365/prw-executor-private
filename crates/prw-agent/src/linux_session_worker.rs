@@ -172,12 +172,14 @@ pub(super) fn run_authenticated_session_worker_with_agent_status_management<
         private_dns_snapshot,
         config,
     )
-    .map_err(|error| match error {
-        management_agent_status::LocalLinuxAgentStatusManagementSessionWorkerError::Processing {
-            responses_written,
-        } => LocalLinuxSessionWorkerError::AgentStatusManagementProcessing {
-            responses_written,
-        },
+    .map_err(|error| {
+        match error {
+            management_agent_status::LocalLinuxAgentStatusManagementSessionWorkerError::Processing {
+                responses_written,
+            } => LocalLinuxSessionWorkerError::AgentStatusManagementProcessing {
+                responses_written,
+            },
+        }
     })
 }
 
