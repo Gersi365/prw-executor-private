@@ -162,7 +162,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns LocalLinuxScopedWorkerSpawnError::SpawnFailed when the operating system
+/// Returns `LocalLinuxScopedWorkerSpawnError::SpawnFailed` when the operating system
 /// rejects native scoped-thread creation. Failed spawn does not emit a completion wake.
 pub(super) fn spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake<
     'scope,
