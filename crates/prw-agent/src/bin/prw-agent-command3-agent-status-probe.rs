@@ -1,4 +1,4 @@
-//! Bounded one-shot same-UID command-3 AgentStatus production probe.
+//! Bounded one-shot same-UID command-3 `AgentStatus` production probe.
 //!
 //! This executable is intentionally narrow:
 //! - it derives the Agent endpoint only through `LocalIpcContract`;
