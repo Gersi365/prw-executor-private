@@ -153,7 +153,7 @@ pub fn run_authenticated_session_worker<E: PolicyEvaluator + ?Sized>(
 /// # Errors
 ///
 /// Converts the narrow worker's coarse processing failure into the shared bounded
-/// LocalLinuxSessionWorkerError envelope without exposing provider authority.
+/// `LocalLinuxSessionWorkerError` envelope without exposing provider authority.
 pub(super) fn run_authenticated_session_worker_with_agent_status_management<
     RE: PolicyEvaluator + ?Sized,
 >(
