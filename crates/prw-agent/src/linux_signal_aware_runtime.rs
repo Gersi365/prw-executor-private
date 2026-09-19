@@ -368,7 +368,7 @@ where
     dead_code,
     reason = "C03e-VY materializes the dormant AgentStatus signal-aware companion seam before separately gated Linux bootstrap caller selection"
 )]
-pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion<
+pub fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion<
     F,
     S,
     O,
@@ -426,7 +426,7 @@ where
     dead_code,
     reason = "C03e-VY materializes the dormant AgentStatus signal-aware entry point before separately gated Linux bootstrap caller selection"
 )]
-pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management<F>(
+pub fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management<F>(
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
     on_started: F,
 ) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
