@@ -227,7 +227,6 @@ mod tests {
         LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerStop,
     };
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
-    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
@@ -236,6 +235,7 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
