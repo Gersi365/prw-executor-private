@@ -28,10 +28,10 @@ use prw_agent::frame_object::writer::write_frame;
 use prw_agent::local_commands::LocalAgentResponseStatus;
 use prw_agent::local_commands::management_request::build_local_management_request_frame;
 use prw_agent::local_commands::response_codec::decode_response_status_prefix;
+use prw_agent::local_commands::status_snapshot::codec::decode_status_snapshot;
 use prw_agent::local_commands::status_snapshot::{
     LocalAgentRuntimeState, LocalAgentStatusSnapshot,
 };
-use prw_agent::local_commands::status_snapshot::codec::decode_status_snapshot;
 use prw_agent::local_commands::terminal_response::validate_terminal_response_frame;
 use prw_agent::{LocalIpcContract, LocalIpcRequestId};
 use prw_remote_bridge::BridgeCommand;
@@ -242,13 +242,21 @@ impl fmt::Display for ProbeError {
             Self::ResponseInvalid => formatter.write_str("terminal response validation failed"),
             Self::RequestIdMismatch => formatter.write_str("response request ID mismatch"),
             Self::AgentRejected(status) => {
-                write!(formatter, "Agent rejected command-3 request with status {}", status.code())
+                write!(
+                    formatter,
+                    "Agent rejected command-3 request with status {}",
+                    status.code()
+                )
             }
             Self::ResponseBodyInvalid => {
                 formatter.write_str("AgentStatus management response body is invalid")
             }
             Self::AgentNotReady(state) => {
-                write!(formatter, "AgentStatus reported non-ready state {}", state.code())
+                write!(
+                    formatter,
+                    "AgentStatus reported non-ready state {}",
+                    state.code()
+                )
             }
         }
     }
@@ -306,8 +314,8 @@ mod tests {
         assert_eq!(
             request.payload().as_bytes(),
             &[
-                0x00, 0x03, 0x00, 0x00, 0x00, 0x0c, 0x50, 0x52, 0x57, 0x43, 0x00, 0x01, 0x00,
-                0x00, 0x00, 0x01, 0x00, 0x00,
+                0x00, 0x03, 0x00, 0x00, 0x00, 0x0c, 0x50, 0x52, 0x57, 0x43, 0x00, 0x01, 0x00, 0x00,
+                0x00, 0x01, 0x00, 0x00,
             ]
         );
     }
@@ -330,7 +338,10 @@ mod tests {
         let snapshot =
             validate_agent_status_response(&frame, request_id()).expect("response validates");
         assert!(snapshot.runtime_state().is_ready());
-        assert_eq!(snapshot.protocol_version(), LocalIpcProtocolVersion::current());
+        assert_eq!(
+            snapshot.protocol_version(),
+            LocalIpcProtocolVersion::current()
+        );
     }
 
     #[test]
