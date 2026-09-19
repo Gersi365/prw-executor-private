@@ -601,7 +601,6 @@ mod tests {
     use crate::linux_identity::termination_signal::{
         LocalLinuxTerminationSignal, LocalLinuxTerminationSignalMaskRestore,
     };
-    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
@@ -610,6 +609,7 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -699,48 +699,49 @@ mod tests {
         let client_thread = Arc::new(Mutex::new(None));
         let client_thread_slot = Arc::clone(&client_thread);
 
-        let report = run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
-            &root,
-            inputs_with_request_budget(&dns, 2),
-            move |shutdown| {
-                let path = path.clone();
-                let handle = thread::spawn(move || {
-                    let mut client = UnixStream::connect(path).expect("client connects");
+        let report =
+            run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
+                &root,
+                inputs_with_request_budget(&dns, 2),
+                move |shutdown| {
+                    let path = path.clone();
+                    let handle = thread::spawn(move || {
+                        let mut client = UnixStream::connect(path).expect("client connects");
 
-                    let bridge = BridgeCommand::AgentStatus
-                        .encode()
-                        .expect("AgentStatus command encodes");
-                    let management = build_local_management_request_frame(id(980), &bridge)
-                        .expect("management request builds");
-                    write_frame(&mut client, &management).expect("management request writes");
-                    let management_response =
-                        read_frame(&mut client).expect("management response reads");
-                    let management_terminal =
-                        validate_terminal_response_frame(&management_response)
-                            .expect("management response validates");
-                    assert_eq!(management_terminal.request_id(), id(980));
-                    assert_eq!(management_terminal.status(), LocalAgentResponseStatus::Ok);
+                        let bridge = BridgeCommand::AgentStatus
+                            .encode()
+                            .expect("AgentStatus command encodes");
+                        let management = build_local_management_request_frame(id(980), &bridge)
+                            .expect("management request builds");
+                        write_frame(&mut client, &management).expect("management request writes");
+                        let management_response =
+                            read_frame(&mut client).expect("management response reads");
+                        let management_terminal =
+                            validate_terminal_response_frame(&management_response)
+                                .expect("management response validates");
+                        assert_eq!(management_terminal.request_id(), id(980));
+                        assert_eq!(management_terminal.status(), LocalAgentResponseStatus::Ok);
 
-                    write_local_command_request(
-                        &mut client,
-                        id(981),
-                        LocalAgentCommand::GetAgentStatus,
-                    )
-                    .expect("legacy status request writes");
-                    let legacy_response =
-                        read_frame(&mut client).expect("legacy status response reads");
-                    let legacy_status = decode_success_status_frame(&legacy_response)
-                        .expect("legacy status response decodes");
-                    assert_eq!(legacy_status.request_id(), id(981));
+                        write_local_command_request(
+                            &mut client,
+                            id(981),
+                            LocalAgentCommand::GetAgentStatus,
+                        )
+                        .expect("legacy status request writes");
+                        let legacy_response =
+                            read_frame(&mut client).expect("legacy status response reads");
+                        let legacy_status = decode_success_status_frame(&legacy_response)
+                            .expect("legacy status response decodes");
+                        assert_eq!(legacy_status.request_id(), id(981));
 
-                    shutdown
-                        .request_shutdown_and_wake()
-                        .expect("shutdown after responses posts");
-                });
-                *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
-            },
-        )
-        .expect("AgentStatus signal-aware runtime starts");
+                        shutdown
+                            .request_shutdown_and_wake()
+                            .expect("shutdown after responses posts");
+                    });
+                    *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
+                },
+            )
+            .expect("AgentStatus signal-aware runtime starts");
 
         client_thread
             .lock()
@@ -767,36 +768,34 @@ mod tests {
         let client_thread = Arc::new(Mutex::new(None));
         let client_thread_slot = Arc::clone(&client_thread);
 
-        let report = run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
-            &root,
-            inputs(&dns),
-            move |shutdown| {
-                let path = path.clone();
-                let handle = thread::spawn(move || {
-                    let mut client = UnixStream::connect(path).expect("client connects");
-                    let payload = canonical_file_list_payload("documents");
-                    let request = build_local_management_request_frame(id(982), &payload)
-                        .expect("file-list management request builds");
-                    write_frame(&mut client, &request)
-                        .expect("file-list management request writes");
+        let report =
+            run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
+                &root,
+                inputs(&dns),
+                move |shutdown| {
+                    let path = path.clone();
+                    let handle = thread::spawn(move || {
+                        let mut client = UnixStream::connect(path).expect("client connects");
+                        let payload = canonical_file_list_payload("documents");
+                        let request = build_local_management_request_frame(id(982), &payload)
+                            .expect("file-list management request builds");
+                        write_frame(&mut client, &request)
+                            .expect("file-list management request writes");
 
-                    let response = read_frame(&mut client).expect("denial response reads");
-                    let terminal = validate_terminal_response_frame(&response)
-                        .expect("denial response validates");
-                    assert_eq!(terminal.request_id(), id(982));
-                    assert_eq!(
-                        terminal.status(),
-                        LocalAgentResponseStatus::Unauthorized
-                    );
+                        let response = read_frame(&mut client).expect("denial response reads");
+                        let terminal = validate_terminal_response_frame(&response)
+                            .expect("denial response validates");
+                        assert_eq!(terminal.request_id(), id(982));
+                        assert_eq!(terminal.status(), LocalAgentResponseStatus::Unauthorized);
 
-                    shutdown
-                        .request_shutdown_and_wake()
-                        .expect("shutdown after denial posts");
-                });
-                *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
-            },
-        )
-        .expect("AgentStatus denial runtime starts");
+                        shutdown
+                            .request_shutdown_and_wake()
+                            .expect("shutdown after denial posts");
+                    });
+                    *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
+                },
+            )
+            .expect("AgentStatus denial runtime starts");
 
         client_thread
             .lock()
