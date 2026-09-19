@@ -566,7 +566,6 @@ mod tests {
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
         AgentInstanceLock, acquire_agent_instance_lock,
     };
-    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
@@ -575,6 +574,7 @@ mod tests {
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
     use crate::local_commands::terminal_response::validate_terminal_response_frame;
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
