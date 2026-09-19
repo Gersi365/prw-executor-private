@@ -1,6 +1,6 @@
 //! Fixed-purpose Linux package reconciliation for the PRW Agent executable.
 //!
-//! This crate owns exactly one privileged package-file operation selected by C03e-UF:
+//! This crate owns exactly one privileged package-file operation; C03e-WD retargets its fixed production identities:
 //! replacing the known prior PRW Agent executable with the exact current candidate while the
 //! vendor unit is verification-only. It deliberately exposes no arbitrary destination, shell,
 //! service-manager, identity, managed-drop-in, enablement, or linger authority.
@@ -41,29 +41,29 @@ pub const VENDOR_UNIT_DESTINATION: &str = "/usr/lib/systemd/user/prw-agent.servi
 /// Fixed candidate filename beneath the caller-supplied stage directory.
 pub const CANDIDATE_FILE_NAME: &str = "candidate-prw-agent";
 /// Fixed manifest filename beneath the caller-supplied stage directory.
-pub const MANIFEST_FILE_NAME: &str = "C03E_UF_DEPLOYMENT_MANIFEST";
-/// Exact known prior PRW-managed Agent hash selected by C03e-UF.
+pub const MANIFEST_FILE_NAME: &str = "C03E_WD_DEPLOYMENT_MANIFEST";
+/// Exact installed prior PRW-managed Agent hash selected by C03e-WD.
 pub const OLD_AGENT_SHA256: &str =
-    "4dbb114edc5ad131dd8abcf2ba798a413a249f2a3931a43b59f67b496e0d242e";
-/// Exact current Agent candidate hash selected by C03e-UF.
-pub const NEW_AGENT_SHA256: &str =
     "9db768c1536868662150d9a4de321499fa61813f29fda5bc27cde4a50d61fec7";
-/// Exact vendor-unit hash selected by C03e-UF.
+/// Exact WA Agent candidate hash selected by C03e-WC and bound by C03e-WD.
+pub const NEW_AGENT_SHA256: &str =
+    "6a229c76a6b9cc05a413486dfc5e1c2fb920c2890503fe8091bae91a1cd10c44";
+/// Exact verify-only vendor-unit hash re-proved for C03e-WD.
 pub const VENDOR_UNIT_SHA256: &str =
     "24f646dc96777542904cd824f1678e6c32256b64911d4a031c0315d198c0a909";
-/// Exact previous installed Agent length observed and selected by C03e-UF.
-pub const OLD_AGENT_BYTES: u64 = 2_865_776;
-/// Exact current candidate length selected by C03e-UF.
-pub const NEW_AGENT_BYTES: u64 = 11_068_384;
+/// Exact installed prior Agent length observed and selected by C03e-WD.
+pub const OLD_AGENT_BYTES: u64 = 11_068_384;
+/// Exact WA candidate length selected by C03e-WC and bound by C03e-WD.
+pub const NEW_AGENT_BYTES: u64 = 11_089_904;
 /// Exact source head from which the current candidate was built.
-pub const CANDIDATE_SOURCE_HEAD: &str = "10714024a4df71bd3b5d0232bb0c6b6d7c9fb71f";
+pub const CANDIDATE_SOURCE_HEAD: &str = "fe24713c4a72e7e3ad6048f19df5352b8668f552";
 /// Exact source tree from which the current candidate was built.
-pub const CANDIDATE_SOURCE_TREE: &str = "cd0218229280c470e8995b3341f2461afd660523";
-/// Exact Cargo.lock hash bound by C03e-UF.
+pub const CANDIDATE_SOURCE_TREE: &str = "bcd8ee5d8f1d3e67b68217e77e341c98be5e9e5f";
+/// Exact Cargo.lock hash bound by C03e-WC.
 pub const CANDIDATE_CARGO_LOCK_SHA256: &str =
-    "e2d650e7a60663b651f8dfa3013eda729d1b02e763d2c3d8cf1823f43121e909";
-/// Canonical absolute Cargo target path required by the UF path-bound provenance law.
-pub const CANDIDATE_CANONICAL_TARGET: &str = "/tmp/prw-c03e-uf-canonical-target";
+    "2258f178ab0076cc2899c50074503f7936491af566aa8ec2d35a2c247f4e5ac7";
+/// Canonical absolute Cargo target path required by the WC path-bound provenance law.
+pub const CANDIDATE_CANONICAL_TARGET: &str = "/tmp/prw-c03e-wc-canonical-target";
 
 const AGENT_PARENT: &str = "/usr/lib/private-remote-workspace";
 const AGENT_FILE: &str = "prw-agent";
@@ -148,7 +148,7 @@ pub fn expected_deployment_manifest() -> String {
 /// The only caller-controlled locator is `stage_directory`; production destination paths,
 /// expected old/new/unit hashes, modes, and lengths are compiled into this crate.
 ///
-/// The caller must independently establish the C03e-UF non-running service preflight before
+/// The caller must independently establish the C03e-WB non-running service preflight before
 /// invoking this privileged operation. This function deliberately performs no systemd-manager
 /// call and does not claim a race-free binding to that external preflight.
 ///
@@ -941,7 +941,7 @@ fn sync_directory(directory: &File) -> Result<(), ReconciliationError> {
 fn expected_manifest_for(policy: &ProductionPolicy) -> String {
     format!(
         concat!(
-            "schema=c03e-uf-current-agent-package-reconciliation-v1\n",
+            "schema=c03e-wd-wa-agent-package-reconciliation-v1\n",
             "source_head={}\n",
             "source_tree={}\n",
             "cargo_lock_sha256={}\n",
@@ -1085,13 +1085,16 @@ mod tests {
         assert_eq!(OLD_AGENT_SHA256.len(), 64);
         assert_eq!(NEW_AGENT_SHA256.len(), 64);
         assert_eq!(VENDOR_UNIT_SHA256.len(), 64);
-        assert_eq!(NEW_AGENT_BYTES, 11_068_384);
+        assert_eq!(OLD_AGENT_BYTES, 11_068_384);
+        assert_eq!(NEW_AGENT_BYTES, 11_089_904);
+        assert_eq!(MANIFEST_FILE_NAME, "C03E_WD_DEPLOYMENT_MANIFEST");
         assert_eq!(RECONCILE_CURRENT_AGENT_ACTION, "reconcile-current-agent");
     }
 
     #[test]
-    fn manifest_binds_exact_uf_candidate_provenance() {
+    fn manifest_binds_exact_wc_candidate_provenance() {
         let manifest = expected_deployment_manifest();
+        assert!(manifest.starts_with("schema=c03e-wd-wa-agent-package-reconciliation-v1\n"));
         assert!(manifest.contains(CANDIDATE_SOURCE_HEAD));
         assert!(manifest.contains(CANDIDATE_SOURCE_TREE));
         assert!(manifest.contains(CANDIDATE_CARGO_LOCK_SHA256));
