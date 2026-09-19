@@ -15,6 +15,12 @@ use super::boundary_request_response_transaction::LocalBoundaryRequestResponseOu
 use super::inbound_state::{
     LocalInboundRequestState, LocalInboundTransactionError, process_one_with_inbound_guard,
 };
+#[cfg(target_os = "linux")]
+use super::management_agent_status_boundary::{
+    LocalAgentStatusManagementBoundaryError, process_one_agent_status_management_at_boundary,
+};
+#[cfg(target_os = "linux")]
+use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 use super::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use super::response_writer::LocalTerminalResponseWriteState;
 use super::status_snapshot::LocalAgentStatusSnapshot;
@@ -66,6 +72,51 @@ impl LocalServerConnectionState {
             (false, true) => Some(LocalServerConnectionUnusableReason::ResponseWrite),
             (true, true) => Some(LocalServerConnectionUnusableReason::Both),
         }
+    }
+
+    /// Processes one boundary request through the fixed AgentStatus-only command-3 path.
+    ///
+    /// This preserves aggregate inbound/write poison ownership while accepting no
+    /// caller-supplied management policy or provider authority.
+    #[cfg(target_os = "linux")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "authenticated peer, legacy policy and protocol snapshots remain explicit"
+    )]
+    pub(crate) fn process_one_agent_status_management_at_boundary<R, W, RE, S>(
+        &mut self,
+        reader: &mut R,
+        writer: &mut W,
+        connection: &AuthenticatedLocalLinuxConnection<S>,
+        read_evaluator: &RE,
+        status_snapshot: LocalAgentStatusSnapshot,
+        private_dns_snapshot: &LocalPrivateDnsSnapshot,
+    ) -> Result<
+        LocalBoundaryRequestResponseOutcome,
+        LocalAgentStatusManagementServerConnectionError,
+    >
+    where
+        R: Read,
+        W: Write,
+        RE: PolicyEvaluator + ?Sized,
+    {
+        if let Some(reason) = self.unusable_reason() {
+            return Err(
+                LocalAgentStatusManagementServerConnectionError::ConnectionUnusable(reason),
+            );
+        }
+
+        process_one_agent_status_management_at_boundary(
+            reader,
+            writer,
+            &mut self.inbound,
+            &mut self.response_write,
+            connection,
+            read_evaluator,
+            status_snapshot,
+            private_dns_snapshot,
+        )
+        .map_err(LocalAgentStatusManagementServerConnectionError::Transaction)
     }
 }
 
@@ -146,6 +197,15 @@ pub fn process_one_at_boundary_on_server_connection<
         private_dns_snapshot,
     )
     .map_err(LocalBoundaryServerConnectionProcessError::Transaction)
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalAgentStatusManagementServerConnectionError {
+    /// Aggregate state was already unusable before any I/O.
+    ConnectionUnusable(LocalServerConnectionUnusableReason),
+    /// The fixed AgentStatus boundary failed after authoritative state transitions.
+    Transaction(LocalAgentStatusManagementBoundaryError),
 }
 
 /// Why a server-side connection state cannot process another Request.
