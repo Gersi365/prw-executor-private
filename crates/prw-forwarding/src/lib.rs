@@ -200,6 +200,67 @@ impl ForwardingPrincipal {
     }
 }
 
+/// Same-UID local Linux principal for one Agent-authenticated forwarding session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LocalForwardingPrincipal {
+    uid: u32,
+}
+
+impl LocalForwardingPrincipal {
+    /// Captures the kernel-authenticated local UID selected by the Agent.
+    #[must_use]
+    pub const fn new(uid: u32) -> Self {
+        Self { uid }
+    }
+
+    /// Returns the authenticated local UID.
+    #[must_use]
+    pub const fn uid(self) -> u32 {
+        self.uid
+    }
+}
+
+/// Identity domain attached immutably to one forwarding broker record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ForwardingSessionPrincipal {
+    /// Registry-current authenticated PRW session identity.
+    Registry(ForwardingPrincipal),
+    /// Kernel-authenticated local same-UID identity.
+    LocalSameUid(LocalForwardingPrincipal),
+}
+
+impl From<ForwardingPrincipal> for ForwardingSessionPrincipal {
+    fn from(principal: ForwardingPrincipal) -> Self {
+        Self::Registry(principal)
+    }
+}
+
+impl From<LocalForwardingPrincipal> for ForwardingSessionPrincipal {
+    fn from(principal: LocalForwardingPrincipal) -> Self {
+        Self::LocalSameUid(principal)
+    }
+}
+
+impl ForwardingSessionPrincipal {
+    /// Returns registry identity only for the registry-derived variant.
+    #[must_use]
+    pub const fn registry(&self) -> Option<&ForwardingPrincipal> {
+        match self {
+            Self::Registry(principal) => Some(principal),
+            Self::LocalSameUid(_) => None,
+        }
+    }
+
+    /// Returns local same-UID identity only for the local variant.
+    #[must_use]
+    pub const fn local_same_uid(&self) -> Option<LocalForwardingPrincipal> {
+        match self {
+            Self::Registry(_) => None,
+            Self::LocalSameUid(principal) => Some(*principal),
+        }
+    }
+}
+
 /// Port-forward lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForwardingState {
@@ -242,7 +303,7 @@ pub trait PortForwardBackend {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortForwardSession {
     id: PortForwardId,
-    principal: ForwardingPrincipal,
+    principal: ForwardingSessionPrincipal,
     spec: TcpForwardSpec,
     state: ForwardingState,
 }
@@ -250,7 +311,7 @@ pub struct PortForwardSession {
 impl PortForwardSession {
     const fn opening(
         id: PortForwardId,
-        principal: ForwardingPrincipal,
+        principal: ForwardingSessionPrincipal,
         spec: TcpForwardSpec,
     ) -> Self {
         Self {
@@ -269,7 +330,7 @@ impl PortForwardSession {
 
     /// Returns the immutable registry/authenticated-session identity snapshot.
     #[must_use]
-    pub const fn principal(&self) -> &ForwardingPrincipal {
+    pub const fn principal(&self) -> &ForwardingSessionPrincipal {
         &self.principal
     }
 
@@ -359,12 +420,13 @@ impl<B: PortForwardBackend> PortForwardBroker<B> {
     ///
     /// Duplicate identifiers and broker capacity fail before backend mutation. Backend open
     /// failure returns [`ForwardingError::Backend`] and creates no tracked session.
-    pub fn open_session(
+    pub fn open_session<P: Into<ForwardingSessionPrincipal>>(
         &mut self,
         id: PortForwardId,
-        principal: ForwardingPrincipal,
+        principal: P,
         spec: TcpForwardSpec,
     ) -> Result<&PortForwardSession, ForwardingError> {
+        let principal = principal.into();
         let at_capacity = self.sessions.len() >= MAX_ACTIVE_PORT_FORWARDS;
         match self.sessions.entry(id) {
             Entry::Occupied(_) => Err(ForwardingError::DuplicateSession),
@@ -633,14 +695,28 @@ mod tests {
             .expect("open");
         assert_eq!(session.spec(), expected);
         assert_eq!(session.state(), ForwardingState::Active);
-        assert_eq!(session.principal().workspace_id().as_str(), "workspace-1");
-        assert_eq!(session.principal().user_id().as_str(), "user-1");
-        assert_eq!(session.principal().device_id().as_str(), "device-1");
-        assert_eq!(
-            session.principal().authenticated_session_id().as_str(),
-            "session-1"
-        );
+        let registry = session.principal().registry().expect("registry principal");
+        assert_eq!(registry.workspace_id().as_str(), "workspace-1");
+        assert_eq!(registry.user_id().as_str(), "user-1");
+        assert_eq!(registry.device_id().as_str(), "device-1");
+        assert_eq!(registry.authenticated_session_id().as_str(), "session-1");
+        assert!(session.principal().local_same_uid().is_none());
         assert_eq!(broker.backend.last_spec, Some(expected));
+    }
+
+    #[test]
+    fn local_same_uid_principal_is_distinct_from_registry_identity() {
+        let local = LocalForwardingPrincipal::new(1000);
+        assert_ne!(
+            ForwardingSessionPrincipal::from(local),
+            ForwardingSessionPrincipal::from(principal())
+        );
+        let mut broker = PortForwardBroker::new(SpyBackend::default());
+        let session = broker
+            .open_session(id(99), local, spec(2299))
+            .expect("local open");
+        assert_eq!(session.principal().local_same_uid(), Some(local));
+        assert!(session.principal().registry().is_none());
     }
 
     #[test]

@@ -190,7 +190,9 @@ const fn admission_failure_status(
     }
 }
 
-const fn required_authority_family(command: &BridgeCommand) -> LocalManagementAuthorityFamily {
+pub(super) const fn required_authority_family(
+    command: &BridgeCommand,
+) -> LocalManagementAuthorityFamily {
     match command {
         BridgeCommand::AgentStatus => LocalManagementAuthorityFamily::Agent,
         BridgeCommand::FileList(_)
