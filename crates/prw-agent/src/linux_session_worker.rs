@@ -88,6 +88,11 @@ pub enum LocalLinuxSessionWorkerError {
         /// Existing Phase 074 deadline-aware processing failure.
         error: LocalLinuxDeadlineSessionProcessError,
     },
+    /// One fixed AgentStatus-management request failed after prior responses completed.
+    AgentStatusManagementProcessing {
+        /// Number of terminal responses completed before the failing request.
+        responses_written: usize,
+    },
 }
 
 /// Runs one authenticated session to a finite terminal condition.
@@ -136,6 +141,45 @@ pub fn run_authenticated_session_worker<E: PolicyEvaluator + ?Sized>(
 
     Ok(LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
         responses_written: config.request_budget().get(),
+    })
+}
+
+/// Runs one authenticated session through the fixed AgentStatus-management worker.
+///
+/// This crate-internal adapter preserves the shared worker result envelope used by
+/// scoped spawning, registry ownership, completion classification and runtime teardown.
+/// The underlying VU child worker remains private and owns the fixed management policy.
+///
+/// # Errors
+///
+/// Converts the narrow worker's coarse processing failure into the shared bounded
+/// `LocalLinuxSessionWorkerError` envelope without exposing provider authority.
+pub(super) fn run_authenticated_session_worker_with_agent_status_management<
+    RE: PolicyEvaluator + ?Sized,
+>(
+    session: AuthenticatedLocalLinuxSession<UnixStream>,
+    permit: LocalLinuxWorkerPermit,
+    read_evaluator: &RE,
+    status_snapshot: LocalAgentStatusSnapshot,
+    private_dns_snapshot: &LocalPrivateDnsSnapshot,
+    config: LocalLinuxSessionWorkerConfig,
+) -> Result<LocalLinuxSessionWorkerStop, LocalLinuxSessionWorkerError> {
+    management_agent_status::run_authenticated_session_worker_with_agent_status_management(
+        session,
+        permit,
+        read_evaluator,
+        status_snapshot,
+        private_dns_snapshot,
+        config,
+    )
+    .map_err(|error| {
+        match error {
+            management_agent_status::LocalLinuxAgentStatusManagementSessionWorkerError::Processing {
+                responses_written,
+            } => LocalLinuxSessionWorkerError::AgentStatusManagementProcessing {
+                responses_written,
+            },
+        }
     })
 }
 
