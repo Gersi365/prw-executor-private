@@ -17,6 +17,7 @@ use super::runtime_wake::LocalLinuxRuntimeWakeNotifier;
 use super::session_worker::{
     LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerError, LocalLinuxSessionWorkerStop,
     run_authenticated_session_worker,
+    run_authenticated_session_worker_with_agent_status_management,
 };
 use super::worker_capacity::LocalLinuxWorkerPermit;
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
@@ -153,6 +154,49 @@ where
         .map_err(|_| LocalLinuxScopedWorkerSpawnError::SpawnFailed)
 }
 
+/// Spawns one fixed AgentStatus-management worker with the existing completion wake.
+///
+/// This sibling adapter preserves the Phase 090 wrapper ordering and shared scoped
+/// result type while selecting only the VU AgentStatus-management worker body.
+/// No management policy or provider authority is accepted by this function.
+///
+/// # Errors
+///
+/// Returns LocalLinuxScopedWorkerSpawnError::SpawnFailed when the operating system
+/// rejects native scoped-thread creation. Failed spawn does not emit a completion wake.
+pub(super) fn spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake<
+    'scope,
+    E,
+>(
+    scope: &'scope Scope<'scope, '_>,
+    session: AuthenticatedLocalLinuxSession<UnixStream>,
+    permit: LocalLinuxWorkerPermit,
+    evaluator: &'scope E,
+    status_snapshot: LocalAgentStatusSnapshot,
+    private_dns_snapshot: &'scope LocalPrivateDnsSnapshot,
+    config: LocalLinuxCompletionWakeWorkerConfig,
+) -> Result<ScopedJoinHandle<'scope, LocalLinuxScopedWorkerResult>, LocalLinuxScopedWorkerSpawnError>
+where
+    E: PolicyEvaluator + Sync + ?Sized,
+{
+    Builder::new()
+        .spawn_scoped(scope, move || {
+            let _completion_wake_guard = LocalLinuxWorkerCompletionWakeGuard {
+                notifier: config.completion_wake,
+            };
+
+            run_authenticated_session_worker_with_agent_status_management(
+                session,
+                permit,
+                evaluator,
+                status_snapshot,
+                private_dns_snapshot,
+                config.worker_config,
+            )
+        })
+        .map_err(|_| LocalLinuxScopedWorkerSpawnError::SpawnFailed)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;
@@ -164,14 +208,17 @@ mod tests {
     use std::time::Duration;
 
     use prw_network::PrivateDnsConfig;
-    use prw_policy::{Capability, Decision, PolicyEvaluator};
+    use prw_policy::{BoundedLocalReadPolicy, Capability, Decision, PolicyEvaluator};
+    use prw_remote_bridge::BridgeCommand;
 
     use super::{
         LocalLinuxCompletionWakeWorkerConfig, spawn_authenticated_session_worker,
+        spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake,
         spawn_authenticated_session_worker_with_completion_wake,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
+    use crate::frame_object::writer::write_frame;
     use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
     use crate::linux_identity::authenticated_session::AuthenticatedLocalLinuxSession;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
@@ -180,13 +227,15 @@ mod tests {
         LocalLinuxSessionWorkerConfig, LocalLinuxSessionWorkerStop,
     };
     use crate::linux_identity::worker_capacity::LocalLinuxWorkerCapacity;
-    use crate::local_commands::LocalAgentCommand;
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+    use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
     use crate::local_commands::status_snapshot::response_frame::decode_success_status_frame;
     use crate::local_commands::status_snapshot::{
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
+    use crate::local_commands::terminal_response::validate_terminal_response_frame;
 
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
@@ -359,6 +408,57 @@ mod tests {
 
         let response = read_frame(&mut client).expect("response reads");
         assert_eq!(response.header().request_id(), id(502));
+    }
+
+    #[test]
+    fn agent_status_management_completion_wake_releases_capacity_and_preserves_shared_result() {
+        let (server, mut client) = UnixStream::pair().expect("anonymous Unix pair creates");
+        let capacity = LocalLinuxWorkerCapacity::new(
+            NonZeroUsize::new(1).expect("test worker capacity is non-zero"),
+        );
+        let permit = capacity.try_acquire().expect("worker slot acquires");
+        let policy = BoundedLocalReadPolicy::deny_all();
+        let status = LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready);
+        let dns = dns_snapshot();
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+        let bridge = BridgeCommand::AgentStatus
+            .encode()
+            .expect("AgentStatus command encodes");
+        let frame = build_local_management_request_frame(id(504), &bridge)
+            .expect("management frame builds");
+        write_frame(&mut client, &frame).expect("management request writes");
+
+        thread::scope(|scope| {
+            let config =
+                LocalLinuxCompletionWakeWorkerConfig::new(worker_config(), wake.notifier());
+            let handle =
+                spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake(
+                    scope,
+                    session(server),
+                    permit,
+                    &policy,
+                    status,
+                    &dns,
+                    config,
+                )
+                .expect("AgentStatus completion-wake worker spawns");
+
+            assert_eq!(
+                handle.join().expect("worker does not panic"),
+                Ok(LocalLinuxSessionWorkerStop::RequestBudgetExhausted {
+                    responses_written: 1
+                })
+            );
+        });
+
+        assert_eq!(capacity.active_workers(), 0);
+        assert_eq!(wake.drain(), Ok(()));
+
+        let response = read_frame(&mut client).expect("management response reads");
+        let terminal =
+            validate_terminal_response_frame(&response).expect("management response validates");
+        assert_eq!(terminal.request_id(), id(504));
+        assert_eq!(terminal.status(), LocalAgentResponseStatus::Ok);
     }
 
     #[test]
