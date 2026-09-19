@@ -123,24 +123,43 @@ pub struct LocalLinuxSignalAwareRuntimeLoopExit {
     final_completions: Vec<LocalLinuxScopedWorkerCompletion>,
 }
 
-/// Runs the signal-aware long-running loop over already-live lifecycle resources.
-#[must_use]
-pub fn run_signal_aware_linux_production_runtime_loop(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalLinuxSignalAwareWorkerSelection {
+    LegacyReadOnly,
+    AgentStatusOnlyManagement,
+}
+
+fn run_signal_aware_linux_production_runtime_loop_with_worker_selection(
     listener: &AcceptReadyAgentSocket<'_>,
     signal_source: &LocalLinuxTerminationSignalSource,
     wake: &LocalLinuxRuntimeWake,
     capacity: &LocalLinuxWorkerCapacity,
     control: &LocalLinuxSchedulerControl,
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    worker_selection: LocalLinuxSignalAwareWorkerSelection,
 ) -> LocalLinuxSignalAwareRuntimeLoopExit {
-    let context = LocalLinuxRuntimeSchedulerContext::new(
-        capacity,
-        inputs.policy(),
-        inputs.status_snapshot(),
-        inputs.private_dns_snapshot(),
-        inputs.config().worker_config(),
-        wake.notifier(),
-    );
+    let context = match worker_selection {
+        LocalLinuxSignalAwareWorkerSelection::LegacyReadOnly => {
+            LocalLinuxRuntimeSchedulerContext::new(
+                capacity,
+                inputs.policy(),
+                inputs.status_snapshot(),
+                inputs.private_dns_snapshot(),
+                inputs.config().worker_config(),
+                wake.notifier(),
+            )
+        }
+        LocalLinuxSignalAwareWorkerSelection::AgentStatusOnlyManagement => {
+            LocalLinuxRuntimeSchedulerContext::new_with_agent_status_management(
+                capacity,
+                inputs.policy(),
+                inputs.status_snapshot(),
+                inputs.private_dns_snapshot(),
+                inputs.config().worker_config(),
+                wake.notifier(),
+            )
+        }
+    };
 
     thread::scope(|scope| {
         let mut registry = LocalLinuxScopedWorkerRegistry::new();
@@ -228,6 +247,29 @@ pub fn run_signal_aware_linux_production_runtime_loop(
     })
 }
 
+/// Runs the signal-aware long-running loop over already-live lifecycle resources.
+///
+/// The public Phase 098 entry point remains bound to the historical legacy worker selection.
+#[must_use]
+pub fn run_signal_aware_linux_production_runtime_loop(
+    listener: &AcceptReadyAgentSocket<'_>,
+    signal_source: &LocalLinuxTerminationSignalSource,
+    wake: &LocalLinuxRuntimeWake,
+    capacity: &LocalLinuxWorkerCapacity,
+    control: &LocalLinuxSchedulerControl,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+) -> LocalLinuxSignalAwareRuntimeLoopExit {
+    run_signal_aware_linux_production_runtime_loop_with_worker_selection(
+        listener,
+        signal_source,
+        wake,
+        capacity,
+        control,
+        inputs,
+        LocalLinuxSignalAwareWorkerSelection::LegacyReadOnly,
+    )
+}
+
 /// Runs the complete signal-aware local lifecycle with one owned process companion.
 ///
 /// The companion is started only after the existing signal source and local lifecycle have been
@@ -242,8 +284,9 @@ pub fn run_signal_aware_linux_production_runtime_loop(
 /// Returns the existing bounded signal-source or lifecycle-assembly failure unchanged. Companion
 /// startup/finalization policy is represented by the caller-owned companion value and does not add a
 /// new local startup failure class.
-pub fn run_signal_aware_linux_production_runtime_from_env_with_companion<F, S, O, G>(
+fn run_signal_aware_linux_production_runtime_from_env_with_companion_selection<F, S, O, G>(
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    worker_selection: LocalLinuxSignalAwareWorkerSelection,
     on_started: F,
     start_companion: S,
     finalize_companion: G,
@@ -264,13 +307,14 @@ where
                 wake.notifier(),
             ));
             let companion = start_companion();
-            let exit = run_signal_aware_linux_production_runtime_loop(
+            let exit = run_signal_aware_linux_production_runtime_loop_with_worker_selection(
                 listener,
                 &signal_source,
                 wake,
                 capacity,
                 control,
                 inputs,
+                worker_selection,
             );
             (exit, companion)
         },
@@ -298,6 +342,55 @@ where
         cleanup,
         mask_restore,
     })
+}
+
+pub fn run_signal_aware_linux_production_runtime_from_env_with_companion<F, S, O, G>(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+    start_companion: S,
+    finalize_companion: G,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+    S: FnOnce() -> O,
+    G: FnOnce(O),
+{
+    run_signal_aware_linux_production_runtime_from_env_with_companion_selection(
+        inputs,
+        LocalLinuxSignalAwareWorkerSelection::LegacyReadOnly,
+        on_started,
+        start_companion,
+        finalize_companion,
+    )
+}
+
+#[allow(
+    dead_code,
+    reason = "C03e-VY materializes the dormant AgentStatus signal-aware companion seam before separately gated Linux bootstrap caller selection"
+)]
+pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion<
+    F,
+    S,
+    O,
+    G,
+>(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+    start_companion: S,
+    finalize_companion: G,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+    S: FnOnce() -> O,
+    G: FnOnce(O),
+{
+    run_signal_aware_linux_production_runtime_from_env_with_companion_selection(
+        inputs,
+        LocalLinuxSignalAwareWorkerSelection::AgentStatusOnlyManagement,
+        on_started,
+        start_companion,
+        finalize_companion,
+    )
 }
 
 /// Runs the complete signal-aware production-local runtime from process environment.
@@ -329,10 +422,30 @@ where
     )
 }
 
+#[allow(
+    dead_code,
+    reason = "C03e-VY materializes the dormant AgentStatus signal-aware entry point before separately gated Linux bootstrap caller selection"
+)]
+pub(crate) fn run_signal_aware_linux_production_runtime_from_env_with_agent_status_management<F>(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+{
+    run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion(
+        inputs,
+        on_started,
+        || (),
+        |()| {},
+    )
+}
+
 #[cfg(test)]
-fn run_signal_aware_linux_production_runtime_in_root_path_with_companion<F, S, O, G>(
+fn run_signal_aware_linux_production_runtime_in_root_path_with_companion_selection<F, S, O, G>(
     root_path: &std::path::Path,
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    worker_selection: LocalLinuxSignalAwareWorkerSelection,
     on_started: F,
     start_companion: S,
     finalize_companion: G,
@@ -355,13 +468,14 @@ where
                     wake.notifier(),
                 ));
                 let companion = start_companion();
-                let exit = run_signal_aware_linux_production_runtime_loop(
+                let exit = run_signal_aware_linux_production_runtime_loop_with_worker_selection(
                     listener,
                     &signal_source,
                     wake,
                     capacity,
                     control,
                     inputs,
+                    worker_selection,
                 );
                 (exit, companion)
             },
@@ -392,6 +506,29 @@ where
 }
 
 #[cfg(test)]
+fn run_signal_aware_linux_production_runtime_in_root_path_with_companion<F, S, O, G>(
+    root_path: &std::path::Path,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+    start_companion: S,
+    finalize_companion: G,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+    S: FnOnce() -> O,
+    G: FnOnce(O),
+{
+    run_signal_aware_linux_production_runtime_in_root_path_with_companion_selection(
+        root_path,
+        inputs,
+        LocalLinuxSignalAwareWorkerSelection::LegacyReadOnly,
+        on_started,
+        start_companion,
+        finalize_companion,
+    )
+}
+
+#[cfg(test)]
 fn run_signal_aware_linux_production_runtime_in_root_path<F>(
     root_path: &std::path::Path,
     inputs: LocalLinuxProductionRuntimeInputs<'_>,
@@ -410,6 +547,25 @@ where
 }
 
 #[cfg(test)]
+fn run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management<F>(
+    root_path: &std::path::Path,
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    on_started: F,
+) -> Result<LocalLinuxSignalAwareRuntimeTerminalReport, LocalLinuxSignalAwareRuntimeStartError>
+where
+    F: FnOnce(LocalLinuxRuntimeShutdownHandle),
+{
+    run_signal_aware_linux_production_runtime_in_root_path_with_companion_selection(
+        root_path,
+        inputs,
+        LocalLinuxSignalAwareWorkerSelection::AgentStatusOnlyManagement,
+        on_started,
+        || (),
+        |()| {},
+    )
+}
+
+#[cfg(test)]
 mod tests {
     use std::cell::Cell;
     use std::fs::{self, Permissions};
@@ -419,17 +575,24 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
     use std::time::Duration;
 
     use nix::sys::signal::{SigSet, Signal, raise};
     use prw_network::PrivateDnsConfig;
     use prw_policy::BoundedLocalReadPolicy;
+    use prw_remote_bridge::BridgeCommand;
 
     use super::{
         LocalLinuxSignalAwareRuntimeTerminalReason,
         run_signal_aware_linux_production_runtime_in_root_path,
+        run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management,
         run_signal_aware_linux_production_runtime_in_root_path_with_companion,
     };
+    use crate::LocalIpcRequestId;
+    use crate::frame_object::reader::read_frame;
+    use crate::frame_object::writer::write_frame;
     use crate::linux_identity::deadline_io::LocalLinuxIoBudget;
     use crate::linux_identity::production_runtime_loop::LocalLinuxProductionRuntimeInputs;
     use crate::linux_identity::production_runtime_types::{
@@ -438,10 +601,15 @@ mod tests {
     use crate::linux_identity::termination_signal::{
         LocalLinuxTerminationSignal, LocalLinuxTerminationSignalMaskRestore,
     };
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+    use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
+    use crate::local_commands::request_frame::stream::write_local_command_request;
+    use crate::local_commands::status_snapshot::response_frame::decode_success_status_frame;
     use crate::local_commands::status_snapshot::{
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
+    use crate::local_commands::terminal_response::validate_terminal_response_frame;
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -459,20 +627,36 @@ mod tests {
         root
     }
 
-    fn config() -> LocalLinuxProductionRuntimeConfig {
+    fn config_with_request_budget(request_budget: usize) -> LocalLinuxProductionRuntimeConfig {
         LocalLinuxProductionRuntimeConfig::new(
             NonZeroUsize::new(2).expect("capacity nonzero"),
             NonZeroU16::new(8).expect("backlog nonzero"),
             NonZeroUsize::new(2).expect("attempt budget nonzero"),
-            NonZeroUsize::new(1).expect("request budget nonzero"),
+            NonZeroUsize::new(request_budget).expect("request budget nonzero"),
             LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("read budget nonzero"),
             LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("write budget nonzero"),
         )
     }
 
+    fn config() -> LocalLinuxProductionRuntimeConfig {
+        config_with_request_budget(1)
+    }
+
     fn dns_snapshot() -> LocalPrivateDnsSnapshot {
         LocalPrivateDnsSnapshot::try_from_config(&PrivateDnsConfig::default())
             .expect("default DNS config is bounded")
+    }
+
+    fn inputs_with_request_budget(
+        dns: &LocalPrivateDnsSnapshot,
+        request_budget: usize,
+    ) -> LocalLinuxProductionRuntimeInputs<'_> {
+        LocalLinuxProductionRuntimeInputs::new(
+            config_with_request_budget(request_budget),
+            BoundedLocalReadPolicy::allow_local_reads(),
+            LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready),
+            dns,
+        )
     }
 
     fn inputs(dns: &LocalPrivateDnsSnapshot) -> LocalLinuxProductionRuntimeInputs<'_> {
@@ -487,6 +671,148 @@ mod tests {
     fn socket_path(root: &Path) -> PathBuf {
         root.join(AGENT_RUNTIME_SUBDIRECTORY)
             .join(AGENT_SOCKET_FILENAME)
+    }
+
+    fn id(value: u64) -> LocalIpcRequestId {
+        LocalIpcRequestId::new(value).expect("non-zero request id")
+    }
+
+    fn canonical_file_list_payload(path: &str) -> Vec<u8> {
+        let path = path.as_bytes();
+        let path_len = u16::try_from(path.len()).expect("test path length fits u16");
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"PRWC");
+        payload.extend_from_slice(&1_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&2_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&path_len.to_be_bytes());
+        payload.extend_from_slice(path);
+        payload
+    }
+
+    #[test]
+    fn agent_status_signal_aware_path_handles_management_and_legacy_command_one() {
+        let root = create_root("agent-status-management");
+        let path = socket_path(&root);
+        let dns = dns_snapshot();
+        let client_thread = Arc::new(Mutex::new(None));
+        let client_thread_slot = Arc::clone(&client_thread);
+
+        let report = run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
+            &root,
+            inputs_with_request_budget(&dns, 2),
+            move |shutdown| {
+                let path = path.clone();
+                let handle = thread::spawn(move || {
+                    let mut client = UnixStream::connect(path).expect("client connects");
+
+                    let bridge = BridgeCommand::AgentStatus
+                        .encode()
+                        .expect("AgentStatus command encodes");
+                    let management = build_local_management_request_frame(id(980), &bridge)
+                        .expect("management request builds");
+                    write_frame(&mut client, &management).expect("management request writes");
+                    let management_response =
+                        read_frame(&mut client).expect("management response reads");
+                    let management_terminal =
+                        validate_terminal_response_frame(&management_response)
+                            .expect("management response validates");
+                    assert_eq!(management_terminal.request_id(), id(980));
+                    assert_eq!(management_terminal.status(), LocalAgentResponseStatus::Ok);
+
+                    write_local_command_request(
+                        &mut client,
+                        id(981),
+                        LocalAgentCommand::GetAgentStatus,
+                    )
+                    .expect("legacy status request writes");
+                    let legacy_response =
+                        read_frame(&mut client).expect("legacy status response reads");
+                    let legacy_status = decode_success_status_frame(&legacy_response)
+                        .expect("legacy status response decodes");
+                    assert_eq!(legacy_status.request_id(), id(981));
+
+                    shutdown
+                        .request_shutdown_and_wake()
+                        .expect("shutdown after responses posts");
+                });
+                *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
+            },
+        )
+        .expect("AgentStatus signal-aware runtime starts");
+
+        client_thread
+            .lock()
+            .expect("client thread slot locks after runtime")
+            .take()
+            .expect("client thread was registered")
+            .join()
+            .expect("client thread exits cleanly");
+
+        assert_eq!(
+            report.reason(),
+            LocalLinuxSignalAwareRuntimeTerminalReason::ProgrammaticShutdown
+        );
+        assert_eq!(report.cleanup(), LocalLinuxProductionRuntimeCleanup::Clean);
+        assert!(!socket_path(&root).exists());
+        fs::remove_dir_all(root).expect("temporary AgentStatus management root removes");
+    }
+
+    #[test]
+    fn agent_status_signal_aware_path_denies_non_agent_status_management() {
+        let root = create_root("agent-status-deny");
+        let path = socket_path(&root);
+        let dns = dns_snapshot();
+        let client_thread = Arc::new(Mutex::new(None));
+        let client_thread_slot = Arc::clone(&client_thread);
+
+        let report = run_signal_aware_linux_production_runtime_in_root_path_with_agent_status_management(
+            &root,
+            inputs(&dns),
+            move |shutdown| {
+                let path = path.clone();
+                let handle = thread::spawn(move || {
+                    let mut client = UnixStream::connect(path).expect("client connects");
+                    let payload = canonical_file_list_payload("documents");
+                    let request = build_local_management_request_frame(id(982), &payload)
+                        .expect("file-list management request builds");
+                    write_frame(&mut client, &request)
+                        .expect("file-list management request writes");
+
+                    let response = read_frame(&mut client).expect("denial response reads");
+                    let terminal = validate_terminal_response_frame(&response)
+                        .expect("denial response validates");
+                    assert_eq!(terminal.request_id(), id(982));
+                    assert_eq!(
+                        terminal.status(),
+                        LocalAgentResponseStatus::Unauthorized
+                    );
+
+                    shutdown
+                        .request_shutdown_and_wake()
+                        .expect("shutdown after denial posts");
+                });
+                *client_thread_slot.lock().expect("client thread slot locks") = Some(handle);
+            },
+        )
+        .expect("AgentStatus denial runtime starts");
+
+        client_thread
+            .lock()
+            .expect("client thread slot locks after runtime")
+            .take()
+            .expect("client thread was registered")
+            .join()
+            .expect("client thread exits cleanly");
+
+        assert_eq!(
+            report.reason(),
+            LocalLinuxSignalAwareRuntimeTerminalReason::ProgrammaticShutdown
+        );
+        assert_eq!(report.cleanup(), LocalLinuxProductionRuntimeCleanup::Clean);
+        assert!(!socket_path(&root).exists());
+        fs::remove_dir_all(root).expect("temporary AgentStatus denial root removes");
     }
 
     #[test]
