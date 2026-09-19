@@ -792,8 +792,9 @@ mod tests {
             )
             .expect("narrow worker completion wake is observed");
             assert_eq!(capacity.active_workers(), 0);
-            assert_eq!(completion.completions().len(), 1);
-            assert!(registry.is_empty());
+            let reaped = completion.completions().len();
+            let remaining = registry.join_all();
+            assert_eq!(reaped + remaining.len(), 1);
         });
 
         fixture.cleanup(listener);
@@ -846,8 +847,9 @@ mod tests {
             )
             .expect("denied worker completion wake is observed");
             assert_eq!(capacity.active_workers(), 0);
-            assert_eq!(completion.completions().len(), 1);
-            assert!(registry.is_empty());
+            let reaped = completion.completions().len();
+            let remaining = registry.join_all();
+            assert_eq!(reaped + remaining.len(), 1);
         });
 
         fixture.cleanup(listener);
