@@ -1,0 +1,125 @@
+name: Phase 152 C03e-VP Production Desktop Debian Artifact Staging
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stage:
+    name: Stage exact desktop Debian artifact on PowerCode
+    runs-on: [self-hosted, prw-host]
+    timeout-minutes: 10
+
+    steps:
+      - name: Download exact validated VO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c03e-vo-private-remote-workspace-desktop-0.1.0-1-amd64-643f9bc942e94dbaad54050461f104117e08c2c3
+          path: ${{ runner.temp }}/c03e-vp-download
+          github-token: ${{ github.token }}
+          repository: Gersi365/prw-executor-private
+          run-id: 35394772792
+
+      - name: Preflight and stage exact package
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          export LANG=C
+
+          expected_host="PowerCode"
+          expected_user="gersi365"
+          expected_uid="1000"
+          expected_gid="1000"
+          package_name="private-remote-workspace-desktop_0.1.0-1_amd64.deb"
+          expected_size="418670"
+          expected_sha256="2f29a60187a00101e641499aea68b88abc6ca740bae39d9fc574eb31e5110c71"
+          source_head="643f9bc942e94dbaad54050461f104117e08c2c3"
+          source_tree="3d39fa70945b9e8d6a0922ed41f6a6783ef2e9e1"
+          artifact_id="10567202652"
+          artifact_digest="a324cdfd1350aaed896e1cfedddb1728f024d578e90a105e17815afd09b54402"
+          artifact_run="35394772792"
+          download_root="${RUNNER_TEMP}/c03e-vp-download"
+          source_deb="${download_root}/${package_name}"
+          stage="/home/gersi365/.local/state/private-remote-workspace/phase152/c03e-vp/staging/${source_head}"
+
+          test "$(hostname)" = "$expected_host"
+          test "$(id -un)" = "$expected_user"
+          test "$(id -u)" = "$expected_uid"
+          test "$(id -g)" = "$expected_gid"
+          test "$HOME" = "/home/gersi365"
+
+          test -f "$source_deb"
+          test ! -L "$source_deb"
+          test "$(stat -c '%s' "$source_deb")" = "$expected_size"
+          test "$(sha256sum "$source_deb" | awk '{print $1}')" = "$expected_sha256"
+
+          test "$(systemctl --user is-active prw-agent.service)" = "active"
+          systemctl --user show prw-agent.service -p Environment --value |
+            tr ' ' '\n' |
+            grep -Fx 'PRW_AGENT_EXECUTION_MODE=local_only' >/dev/null
+
+          test ! -e /home/gersi365/.config/systemd/user/prw-agent.service.d/40-configured-remote-inputs.conf
+          test ! -e /usr/lib/private-remote-workspace/prw-desktop
+          test ! -e /usr/share/applications/io.patchmirror.prw.desktop.desktop
+          test ! -e "$stage"
+
+          umask 077
+          mkdir -p "$(dirname "$stage")"
+          install -d -m 0700 "$stage"
+          install -m 0600 "$source_deb" "$stage/$package_name"
+
+          printf '%s  %s\n' "$expected_sha256" "$package_name" > "$stage/SHA256SUMS"
+          chmod 0600 "$stage/SHA256SUMS"
+
+          cat > "$stage/ARTIFACT-MANIFEST" <<EOF
+          checkpoint=C03e-VP
+          source_head=$source_head
+          source_tree=$source_tree
+          artifact_run=$artifact_run
+          artifact_id=$artifact_id
+          artifact_digest_sha256=$artifact_digest
+          package_file=$package_name
+          package_size=$expected_size
+          package_sha256=$expected_sha256
+          install_authorized=no
+          launch_authorized=no
+          EOF
+          chmod 0600 "$stage/ARTIFACT-MANIFEST"
+
+          test "$(stat -c '%F' "$stage")" = "directory"
+          test "$(stat -c '%a' "$stage")" = "700"
+          test "$(stat -c '%u:%g' "$stage")" = "1000:1000"
+
+          for file in "$stage/$package_name" "$stage/SHA256SUMS" "$stage/ARTIFACT-MANIFEST"; do
+            test -f "$file"
+            test ! -L "$file"
+            test "$(stat -c '%a' "$file")" = "600"
+            test "$(stat -c '%u:%g' "$file")" = "1000:1000"
+          done
+
+          test "$(stat -c '%s' "$stage/$package_name")" = "$expected_size"
+          test "$(sha256sum "$stage/$package_name" | awk '{print $1}')" = "$expected_sha256"
+          (
+            cd "$stage"
+            sha256sum --check --strict SHA256SUMS
+          )
+
+          test "$(systemctl --user is-active prw-agent.service)" = "active"
+          systemctl --user show prw-agent.service -p Environment --value |
+            tr ' ' '\n' |
+            grep -Fx 'PRW_AGENT_EXECUTION_MODE=local_only' >/dev/null
+          test ! -e /home/gersi365/.config/systemd/user/prw-agent.service.d/40-configured-remote-inputs.conf
+          test ! -e /usr/lib/private-remote-workspace/prw-desktop
+          test ! -e /usr/share/applications/io.patchmirror.prw.desktop.desktop
+
+          printf 'C03E_VP_STAGE=%s\n' "$stage"
+          printf 'C03E_VP_PACKAGE_SHA256=%s\n' "$expected_sha256"
+          printf 'C03E_VP_PACKAGE_SIZE=%s\n' "$expected_size"
+          printf 'C03E_VP_STAGING=PASS\n'
+          printf 'C03E_VP_INSTALL=NOT_EXECUTED\n'
+          printf 'C03E_VP_LAUNCH=NOT_EXECUTED\n'
+          printf 'NO_RACE_FREE_CLAIM\n'
