@@ -26,7 +26,9 @@ use super::runtime_wake::{
 };
 use super::session_worker::LocalLinuxSessionWorkerConfig;
 use super::session_worker_thread::{
-    LocalLinuxCompletionWakeWorkerConfig, spawn_authenticated_session_worker_with_completion_wake,
+    LocalLinuxCompletionWakeWorkerConfig,
+    spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake,
+    spawn_authenticated_session_worker_with_completion_wake,
 };
 use super::worker_cancellation::LocalLinuxWorkerCancellation;
 use super::worker_capacity::{LocalLinuxWorkerCapacity, LocalLinuxWorkerCapacityError};
@@ -34,6 +36,12 @@ use super::worker_completion::LocalLinuxScopedWorkerCompletion;
 use super::worker_registry::LocalLinuxScopedWorkerRegistry;
 use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use crate::local_commands::status_snapshot::LocalAgentStatusSnapshot;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalLinuxRuntimeWorkerSelection {
+    LegacyReadOnly,
+    AgentStatusOnlyManagement,
+}
 
 /// Runtime-specific scheduling context whose workers emit completion wake.
 #[derive(Debug, Clone)]
@@ -44,6 +52,7 @@ pub struct LocalLinuxRuntimeSchedulerContext<'a> {
     private_dns_snapshot: &'a LocalPrivateDnsSnapshot,
     worker_config: LocalLinuxSessionWorkerConfig,
     completion_wake: LocalLinuxRuntimeWakeNotifier,
+    worker_selection: LocalLinuxRuntimeWorkerSelection,
 }
 
 impl<'a> LocalLinuxRuntimeSchedulerContext<'a> {
@@ -64,6 +73,31 @@ impl<'a> LocalLinuxRuntimeSchedulerContext<'a> {
             private_dns_snapshot,
             worker_config,
             completion_wake,
+            worker_selection: LocalLinuxRuntimeWorkerSelection::LegacyReadOnly,
+        }
+    }
+
+    /// Creates a scheduler context that selects the fixed AgentStatus-management worker.
+    ///
+    /// This constructor carries no management policy or provider authority. Commands 1/2
+    /// continue to use the existing bounded read policy stored in the context.
+    #[must_use]
+    pub(super) const fn new_with_agent_status_management(
+        capacity: &'a LocalLinuxWorkerCapacity,
+        policy: &'a BoundedLocalReadPolicy,
+        status_snapshot: LocalAgentStatusSnapshot,
+        private_dns_snapshot: &'a LocalPrivateDnsSnapshot,
+        worker_config: LocalLinuxSessionWorkerConfig,
+        completion_wake: LocalLinuxRuntimeWakeNotifier,
+    ) -> Self {
+        Self {
+            capacity,
+            policy,
+            status_snapshot,
+            private_dns_snapshot,
+            worker_config,
+            completion_wake,
+            worker_selection: LocalLinuxRuntimeWorkerSelection::AgentStatusOnlyManagement,
         }
     }
 
@@ -293,15 +327,30 @@ pub fn schedule_one_authenticated_runtime_worker<'scope>(
         context.worker_config,
         context.completion_wake.clone(),
     );
-    let handle = spawn_authenticated_session_worker_with_completion_wake(
-        scope,
-        session,
-        permit,
-        context.policy,
-        context.status_snapshot,
-        context.private_dns_snapshot,
-        config,
-    )
+    let handle = match context.worker_selection {
+        LocalLinuxRuntimeWorkerSelection::LegacyReadOnly => {
+            spawn_authenticated_session_worker_with_completion_wake(
+                scope,
+                session,
+                permit,
+                context.policy,
+                context.status_snapshot,
+                context.private_dns_snapshot,
+                config,
+            )
+        }
+        LocalLinuxRuntimeWorkerSelection::AgentStatusOnlyManagement => {
+            spawn_authenticated_session_worker_with_agent_status_management_and_completion_wake(
+                scope,
+                session,
+                permit,
+                context.policy,
+                context.status_snapshot,
+                context.private_dns_snapshot,
+                config,
+            )
+        }
+    }
     .map_err(LocalLinuxOneShotScheduleError::Spawn)?;
 
     registry.register(handle, cancellation);
@@ -487,14 +536,16 @@ mod tests {
 
     use prw_network::PrivateDnsConfig;
     use prw_policy::BoundedLocalReadPolicy;
+    use prw_remote_bridge::BridgeCommand;
 
     use super::{
         LocalLinuxRuntimeOrchestrationStop, LocalLinuxRuntimeSchedulerContext,
-        LocalLinuxRuntimeShutdownHandle, run_finite_linux_runtime_orchestration,
-        wait_once_for_linux_runtime_readiness,
+        LocalLinuxRuntimeShutdownHandle, LocalLinuxRuntimeWorkerSelection,
+        run_finite_linux_runtime_orchestration, wait_once_for_linux_runtime_readiness,
     };
     use crate::LocalIpcRequestId;
     use crate::frame_object::reader::read_frame;
+    use crate::frame_object::writer::write_frame;
     use crate::linux_identity::accept_ready::{
         AcceptReadyAgentSocket, AuthenticatedAgentAcceptOutcome, prepare_accept_ready_agent_socket,
     };
@@ -515,13 +566,15 @@ mod tests {
     use crate::linux_identity::xdg_runtime_root::prw_runtime_directory::agent_instance_lock::{
         AgentInstanceLock, acquire_agent_instance_lock,
     };
-    use crate::local_commands::LocalAgentCommand;
+    use crate::local_commands::{LocalAgentCommand, LocalAgentResponseStatus};
+    use crate::local_commands::management_request::build_local_management_request_frame;
     use crate::local_commands::private_dns_snapshot::LocalPrivateDnsSnapshot;
     use crate::local_commands::request_frame::stream::write_local_command_request;
     use crate::local_commands::status_snapshot::response_frame::decode_success_status_frame;
     use crate::local_commands::status_snapshot::{
         LocalAgentRuntimeState, LocalAgentStatusSnapshot,
     };
+    use crate::local_commands::terminal_response::validate_terminal_response_frame;
     use crate::{AGENT_RUNTIME_SUBDIRECTORY, AGENT_SOCKET_FILENAME};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
@@ -627,8 +680,177 @@ mod tests {
         )
     }
 
+    fn agent_status_context<'a>(
+        capacity: &'a LocalLinuxWorkerCapacity,
+        policy: &'a BoundedLocalReadPolicy,
+        dns: &'a LocalPrivateDnsSnapshot,
+        wake: &LocalLinuxRuntimeWake,
+        request_budget: usize,
+    ) -> LocalLinuxRuntimeSchedulerContext<'a> {
+        LocalLinuxRuntimeSchedulerContext::new_with_agent_status_management(
+            capacity,
+            policy,
+            LocalAgentStatusSnapshot::current(LocalAgentRuntimeState::Ready),
+            dns,
+            worker_config(request_budget),
+            wake.notifier(),
+        )
+    }
+
+    fn canonical_file_list_payload(path: &str) -> Vec<u8> {
+        let path = path.as_bytes();
+        let path_len = u16::try_from(path.len()).expect("test path length fits u16");
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"PRWC");
+        payload.extend_from_slice(&1_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&2_u16.to_be_bytes());
+        payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.extend_from_slice(&path_len.to_be_bytes());
+        payload.extend_from_slice(path);
+        payload
+    }
+
     fn id(value: u64) -> LocalIpcRequestId {
         LocalIpcRequestId::new(value).expect("non-zero request id")
+    }
+
+    #[test]
+    fn runtime_context_constructors_select_legacy_and_agent_status_workers_explicitly() {
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+        let capacity = worker_capacity(1);
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
+        let dns = dns_snapshot();
+
+        let legacy = context(&capacity, &policy, &dns, &wake, 1);
+        let agent_status = agent_status_context(&capacity, &policy, &dns, &wake, 1);
+
+        assert_eq!(
+            legacy.worker_selection,
+            LocalLinuxRuntimeWorkerSelection::LegacyReadOnly
+        );
+        assert_eq!(
+            agent_status.worker_selection,
+            LocalLinuxRuntimeWorkerSelection::AgentStatusOnlyManagement
+        );
+    }
+
+    #[test]
+    fn agent_status_worker_selection_routes_management_and_preserves_legacy_command_one() {
+        let fixture = RuntimeFixture::new("agent-status-selection");
+        let socket_path = fixture.socket_path();
+        let listener = fixture.listener();
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+        let capacity = worker_capacity(1);
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
+        let dns = dns_snapshot();
+        let control = LocalLinuxSchedulerControl::new();
+        let context = agent_status_context(&capacity, &policy, &dns, &wake, 2);
+        let mut client = UnixStream::connect(socket_path).expect("test client connects");
+
+        let bridge = BridgeCommand::AgentStatus
+            .encode()
+            .expect("AgentStatus command encodes");
+        let management = build_local_management_request_frame(id(710), &bridge)
+            .expect("management frame builds");
+        write_frame(&mut client, &management).expect("management request writes");
+        write_local_command_request(&mut client, id(711), LocalAgentCommand::GetAgentStatus)
+            .expect("legacy request writes");
+
+        thread::scope(|scope| {
+            let mut registry = LocalLinuxScopedWorkerRegistry::new();
+            let report = run_finite_linux_runtime_orchestration(
+                scope,
+                &listener,
+                &wake,
+                &mut registry,
+                &control,
+                &context,
+                NonZeroUsize::new(1).expect("attempt budget is nonzero"),
+            )
+            .expect("AgentStatus-selected orchestration succeeds");
+
+            assert_eq!(report.workers_registered(), 1);
+
+            let management_response = read_frame(&mut client).expect("management response reads");
+            let management_terminal = validate_terminal_response_frame(&management_response)
+                .expect("management response validates");
+            assert_eq!(management_terminal.request_id(), id(710));
+            assert_eq!(management_terminal.status(), LocalAgentResponseStatus::Ok);
+
+            let legacy_response = read_frame(&mut client).expect("legacy response reads");
+            let legacy_status = decode_success_status_frame(&legacy_response)
+                .expect("legacy status response decodes");
+            assert_eq!(legacy_status.request_id(), id(711));
+
+            let completion = wait_once_for_linux_runtime_readiness(
+                &listener,
+                &wake,
+                &capacity,
+                &mut registry,
+                &control,
+            )
+            .expect("narrow worker completion wake is observed");
+            assert_eq!(capacity.active_workers(), 0);
+            assert_eq!(completion.completions().len(), 1);
+            assert!(registry.is_empty());
+        });
+
+        fixture.cleanup(listener);
+    }
+
+    #[test]
+    fn agent_status_worker_selection_denies_non_agent_status_management_command() {
+        let fixture = RuntimeFixture::new("agent-status-deny");
+        let socket_path = fixture.socket_path();
+        let listener = fixture.listener();
+        let wake = LocalLinuxRuntimeWake::create().expect("Phase 089 wake creates");
+        let capacity = worker_capacity(1);
+        let policy = BoundedLocalReadPolicy::allow_local_reads();
+        let dns = dns_snapshot();
+        let control = LocalLinuxSchedulerControl::new();
+        let context = agent_status_context(&capacity, &policy, &dns, &wake, 1);
+        let mut client = UnixStream::connect(socket_path).expect("test client connects");
+        let file_list = canonical_file_list_payload("documents");
+        let request = build_local_management_request_frame(id(712), &file_list)
+            .expect("file-list management frame builds");
+        write_frame(&mut client, &request).expect("file-list management request writes");
+
+        thread::scope(|scope| {
+            let mut registry = LocalLinuxScopedWorkerRegistry::new();
+            let report = run_finite_linux_runtime_orchestration(
+                scope,
+                &listener,
+                &wake,
+                &mut registry,
+                &control,
+                &context,
+                NonZeroUsize::new(1).expect("attempt budget is nonzero"),
+            )
+            .expect("denied management command still receives terminal response");
+
+            assert_eq!(report.workers_registered(), 1);
+
+            let response = read_frame(&mut client).expect("denial response reads");
+            let terminal =
+                validate_terminal_response_frame(&response).expect("denial response validates");
+            assert_eq!(terminal.request_id(), id(712));
+            assert_eq!(terminal.status(), LocalAgentResponseStatus::Unauthorized);
+
+            let completion = wait_once_for_linux_runtime_readiness(
+                &listener,
+                &wake,
+                &capacity,
+                &mut registry,
+                &control,
+            )
+            .expect("denied worker completion wake is observed");
+            assert_eq!(capacity.active_workers(), 0);
+            assert_eq!(completion.completions().len(), 1);
+            assert!(registry.is_empty());
+        });
+
+        fixture.cleanup(listener);
     }
 
     #[test]
