@@ -32,7 +32,6 @@ use crate::linux_identity::production_runtime_types::{
 };
 use crate::linux_identity::signal_aware_runtime::{
     LocalLinuxSignalAwareRuntimeStartError, LocalLinuxSignalAwareRuntimeTerminalReason,
-    run_signal_aware_linux_production_runtime_from_env,
     run_signal_aware_linux_production_runtime_from_env_with_agent_status_management,
     run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion,
     run_signal_aware_linux_production_runtime_from_env_with_companion,
@@ -2381,7 +2380,7 @@ where
     Ok((map_terminal_report(&report), remote_finalization))
 }
 
-/// Runs the active configured-production remote process companion with the VY AgentStatus worker.
+/// Runs the active configured-production remote process companion with the VY `AgentStatus` worker.
 ///
 /// The generic injected-remote companion path remains bound to the legacy read-only worker.
 fn run_with_agent_status_management_remote_process_companion_inputs<F>(
