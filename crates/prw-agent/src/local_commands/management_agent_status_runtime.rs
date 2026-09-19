@@ -2,7 +2,7 @@
 //!
 //! This module intentionally omits filesystem authority, provider lifecycle and
 //! terminal/forwarding backends. The management policy is fixed inside the adapter:
-//! AgentStatusRead is allowed and every other represented capability is denied.
+//! `AgentStatusRead` is allowed and every other represented capability is denied.
 //! Callers cannot widen that policy through runtime assembly.
 
 #![cfg(target_os = "linux")]
@@ -39,7 +39,7 @@ const fn agent_status_only_policy() -> BoundedLocalManagementPolicy {
 ///
 /// The caller supplies no management policy, filesystem authority or provider lifecycle.
 /// Canonical admission still binds the request to the authenticated same-UID Linux peer.
-/// Any represented command other than AgentStatus fails closed before a success response.
+/// Any represented command other than `AgentStatus` fails closed before a success response.
 ///
 /// # Errors
 ///

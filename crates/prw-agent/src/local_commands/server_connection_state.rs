@@ -198,10 +198,10 @@ pub fn process_one_at_boundary_on_server_connection<
 
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalAgentStatusManagementServerConnectionError {
+pub enum LocalAgentStatusManagementServerConnectionError {
     /// Aggregate state was already unusable before any I/O.
     ConnectionUnusable(LocalServerConnectionUnusableReason),
-    /// The fixed AgentStatus boundary failed after authoritative state transitions.
+    /// The fixed `AgentStatus` boundary failed after authoritative state transitions.
     Transaction(LocalAgentStatusManagementBoundaryError),
 }
 

@@ -62,9 +62,9 @@ impl AuthenticatedLocalLinuxSession<UnixStream> {
     }
 }
 
-/// Crate-internal failure for the narrow AgentStatus management deadline path.
+/// Crate-internal failure for the narrow `AgentStatus` management deadline path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalLinuxAgentStatusManagementDeadlineSessionProcessError {
+pub enum LocalLinuxAgentStatusManagementDeadlineSessionProcessError {
     /// The absolute request-read deadline could not be constructed.
     ReadDeadlineStart(LocalLinuxDeadlineStartError),
     /// The narrow aggregate request pipeline failed.

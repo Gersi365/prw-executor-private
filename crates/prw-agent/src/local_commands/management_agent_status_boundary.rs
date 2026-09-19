@@ -1,4 +1,4 @@
-//! Shared local boundary for legacy commands 1/2 plus fixed command-3 AgentStatus.
+//! Shared local boundary for legacy commands 1/2 plus fixed command-3 `AgentStatus`.
 //!
 //! Generic framing is acquired before command classification. Legacy commands retain
 //! their existing decoder/policy/responder path. Code 3 is delegated only to the
@@ -30,16 +30,16 @@ use crate::frame_object::boundary_reader::{LocalIpcFrameBoundaryRead, read_frame
 use crate::frame_object::reader::LocalIpcFrameReadError;
 use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 
-/// One narrow AgentStatus management boundary failure after authoritative state transitions.
+/// One narrow `AgentStatus` management boundary failure after authoritative state transitions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocalAgentStatusManagementBoundaryError {
+pub enum LocalAgentStatusManagementBoundaryError {
     /// Generic frame acquisition failed and poisoned the inbound direction.
     FrameRead(LocalIpcFrameReadError),
     /// A non-management frame failed the exact legacy decoder and poisoned inbound.
     ReadOnlyDecode(LocalAgentRequestFrameDecodeError),
     /// Legacy policy-response construction failed before response write.
     ReadOnlyResponse(LocalPolicyResponseBuildError),
-    /// Fixed AgentStatus management response construction failed before response write.
+    /// Fixed `AgentStatus` management response construction failed before response write.
     ManagementResponse(LocalTerminalResponseBuildError),
     /// Guarded response writing failed.
     ResponseWrite(LocalTerminalResponseWriteError),
@@ -59,7 +59,7 @@ pub(crate) enum LocalAgentStatusManagementBoundaryError {
     clippy::too_many_arguments,
     reason = "authenticated connection, legacy policy and protocol snapshots remain explicit"
 )]
-pub(crate) fn process_one_agent_status_management_at_boundary<R, W, RE, S>(
+pub fn process_one_agent_status_management_at_boundary<R, W, RE, S>(
     reader: &mut R,
     writer: &mut W,
     inbound_state: &mut LocalInboundRequestState,

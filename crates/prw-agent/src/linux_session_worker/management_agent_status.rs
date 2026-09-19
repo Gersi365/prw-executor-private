@@ -1,4 +1,4 @@
-//! Finite worker for legacy commands plus fixed command-3 AgentStatus.
+//! Finite worker for legacy commands plus fixed command-3 `AgentStatus`.
 //!
 //! The existing public legacy worker is unchanged. This child function consumes the same
 //! permit, request budget and per-request I/O budgets while delegating to the narrow
@@ -25,7 +25,7 @@ pub(super) enum LocalLinuxAgentStatusManagementSessionWorkerError {
     },
 }
 
-/// Runs one authenticated local session through the fixed AgentStatus command-3 slice.
+/// Runs one authenticated local session through the fixed `AgentStatus` command-3 slice.
 ///
 /// Permit RAII, request-budget exhaustion, fresh read deadlines and deferred write deadlines
 /// are identical to the existing finite worker. No caller can supply management policy,
