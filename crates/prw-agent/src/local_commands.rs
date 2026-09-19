@@ -37,6 +37,11 @@ pub(crate) mod inbound_state;
 pub(crate) mod management_authority;
 #[allow(
     dead_code,
+    reason = "C03 management-capable boundary transaction is staged before runtime wiring"
+)]
+pub(crate) mod management_boundary_transaction;
+#[allow(
+    dead_code,
     reason = "C02a provider-neutral dispatch proof is intentionally not runtime-wired"
 )]
 pub(crate) mod management_dispatch;
