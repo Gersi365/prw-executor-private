@@ -51,17 +51,12 @@ pub(super) fn process_authenticated_linux_agent_status_management<S>(
 ) -> Result<LocalIpcFrame, LocalTerminalResponseBuildError> {
     let request_id = frame.header().request_id();
     let policy = agent_status_only_policy();
-    let admission =
-        match admit_authenticated_linux_management_request(frame, connection, &policy) {
-            Ok(admission) => admission,
-            Err(error) => {
-                return build_terminal_response_frame(
-                    request_id,
-                    admission_error_status(error),
-                    &[],
-                );
-            }
-        };
+    let admission = match admit_authenticated_linux_management_request(frame, connection, &policy) {
+        Ok(admission) => admission,
+        Err(error) => {
+            return build_terminal_response_frame(request_id, admission_error_status(error), &[]);
+        }
+    };
 
     if !matches!(admission.command(), BridgeCommand::AgentStatus) {
         return build_terminal_response_frame(
@@ -73,7 +68,9 @@ pub(super) fn process_authenticated_linux_agent_status_management<S>(
 
     build_management_provider_response(
         request_id,
-        Ok(LocalManagementTypedProviderResult::AgentStatus(agent_status)),
+        Ok(LocalManagementTypedProviderResult::AgentStatus(
+            agent_status,
+        )),
     )
 }
 

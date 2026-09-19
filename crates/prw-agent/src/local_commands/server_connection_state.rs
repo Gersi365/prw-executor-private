@@ -19,11 +19,11 @@ use super::inbound_state::{
 use super::management_agent_status_boundary::{
     LocalAgentStatusManagementBoundaryError, process_one_agent_status_management_at_boundary,
 };
-#[cfg(target_os = "linux")]
-use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 use super::private_dns_snapshot::LocalPrivateDnsSnapshot;
 use super::response_writer::LocalTerminalResponseWriteState;
 use super::status_snapshot::LocalAgentStatusSnapshot;
+#[cfg(target_os = "linux")]
+use crate::linux_identity::authenticated_connection::AuthenticatedLocalLinuxConnection;
 
 /// Aggregate server-side protocol safety state for one connection instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -91,10 +91,7 @@ impl LocalServerConnectionState {
         read_evaluator: &RE,
         status_snapshot: LocalAgentStatusSnapshot,
         private_dns_snapshot: &LocalPrivateDnsSnapshot,
-    ) -> Result<
-        LocalBoundaryRequestResponseOutcome,
-        LocalAgentStatusManagementServerConnectionError,
-    >
+    ) -> Result<LocalBoundaryRequestResponseOutcome, LocalAgentStatusManagementServerConnectionError>
     where
         R: Read,
         W: Write,

@@ -127,10 +127,8 @@ mod tests {
     fn config() -> LocalLinuxSessionWorkerConfig {
         LocalLinuxSessionWorkerConfig::new(
             NonZeroUsize::new(1).expect("request budget is non-zero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("read budget is non-zero"),
-            LocalLinuxIoBudget::try_new(Duration::from_secs(2))
-                .expect("write budget is non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("read budget is non-zero"),
+            LocalLinuxIoBudget::try_new(Duration::from_secs(2)).expect("write budget is non-zero"),
         )
     }
 
@@ -143,8 +141,8 @@ mod tests {
         let bridge = BridgeCommand::AgentStatus
             .encode()
             .expect("AgentStatus command encodes");
-        let frame =
-            build_local_management_request_frame(id(951), &bridge).expect("management frame builds");
+        let frame = build_local_management_request_frame(id(951), &bridge)
+            .expect("management frame builds");
         write_frame(&mut client, &frame).expect("management request writes");
 
         let stop = run_authenticated_session_worker_with_agent_status_management(
@@ -200,7 +198,9 @@ mod tests {
 
         let mut trailing = [0_u8; 1];
         assert_eq!(
-            client.read(&mut trailing).expect("worker stream reaches EOF"),
+            client
+                .read(&mut trailing)
+                .expect("worker stream reaches EOF"),
             0
         );
     }
