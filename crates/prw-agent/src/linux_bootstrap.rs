@@ -32,7 +32,8 @@ use crate::linux_identity::production_runtime_types::{
 };
 use crate::linux_identity::signal_aware_runtime::{
     LocalLinuxSignalAwareRuntimeStartError, LocalLinuxSignalAwareRuntimeTerminalReason,
-    run_signal_aware_linux_production_runtime_from_env,
+    run_signal_aware_linux_production_runtime_from_env_with_agent_status_management,
+    run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion,
     run_signal_aware_linux_production_runtime_from_env_with_companion,
 };
 use crate::linux_identity::termination_signal::{
@@ -2094,9 +2095,12 @@ fn with_initial_runtime_inputs<R>(
 /// setup, or descriptor-anchored local lifecycle assembly cannot complete.
 pub fn run() -> Result<LinuxAgentBootstrapReport, LinuxAgentBootstrapStartFailure> {
     with_initial_runtime_inputs(|inputs| {
-        run_signal_aware_linux_production_runtime_from_env(inputs, |_| {})
-            .map(|report| map_terminal_report(&report))
-            .map_err(map_start_failure)
+        run_signal_aware_linux_production_runtime_from_env_with_agent_status_management(
+            inputs,
+            |_| {},
+        )
+        .map(|report| map_terminal_report(&report))
+        .map_err(map_start_failure)
     })
 }
 
@@ -2369,6 +2373,44 @@ where
         },
     )
     .map_err(map_start_failure)?;
+
+    let remote_finalization = remote_finalization
+        .expect("signal-aware companion finalizer runs before successful bootstrap return");
+
+    Ok((map_terminal_report(&report), remote_finalization))
+}
+
+/// Runs the active configured-production remote process companion with the VY `AgentStatus` worker.
+///
+/// The generic injected-remote companion path remains bound to the legacy read-only worker.
+fn run_with_agent_status_management_remote_process_companion_inputs<F>(
+    inputs: LocalLinuxProductionRuntimeInputs<'_>,
+    operation: F,
+) -> Result<
+    (
+        LinuxAgentBootstrapReport,
+        LinuxAgentRemoteProcessCompanionFinalization,
+    ),
+    LinuxAgentBootstrapStartFailure,
+>
+where
+    F: FnOnce(LinuxAgentRemoteSupervisorShutdownPublisher) + Send + 'static,
+{
+    let mut remote_finalization = None;
+    let report =
+        run_signal_aware_linux_production_runtime_from_env_with_agent_status_management_and_companion(
+            inputs,
+            |_| {},
+            || {
+                RemoteSessionProcessLifecycleOwner::spawn(move |publisher| {
+                    operation(LinuxAgentRemoteSupervisorShutdownPublisher { publisher });
+                })
+            },
+            |companion| {
+                remote_finalization = Some(finalize_remote_process_companion(companion));
+            },
+        )
+        .map_err(map_start_failure)?;
 
     let remote_finalization = remote_finalization
         .expect("signal-aware companion finalizer runs before successful bootstrap return");
@@ -4471,7 +4513,7 @@ where
             );
         };
 
-        run_with_remote_process_companion_inputs(runtime_inputs, operation)
+        run_with_agent_status_management_remote_process_companion_inputs(runtime_inputs, operation)
             .map(|(local, remote)| LinuxAgentBootstrapWithRemoteReport { local, remote })
     })
 }
